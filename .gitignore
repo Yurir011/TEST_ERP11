@@ -12,3 +12,6 @@ frontend/dist/
 # Editor / OS
 .DS_Store
 Thumbs.db
+
+# 백업/압축 아카이브
+archieve/
