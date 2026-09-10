@@ -34,10 +34,12 @@
 ### 방법 1 — 배치 파일 (권장)
 루트의 `start.bat`을 더블클릭하면 백엔드/프론트엔드가 각각 새 창으로 실행되고 브라우저가 자동으로 열린다. 종료는 `stop.bat` 또는 두 콘솔 창을 직접 닫으면 된다.
 
-### 방법 2 — 수동 실행
+### 방법 2 — 수동 실행 (최초 1회는 의존성 설치 필요)
 ```bash
-# 백엔드
+# 백엔드 (최초 1회: 가상환경 생성 + 패키지 설치)
 cd backend
+python -m venv venv
+./venv/Scripts/python.exe -m pip install -r requirements.txt
 ./venv/Scripts/python.exe -m uvicorn app.main:app --port 8000
 
 # 프론트엔드
@@ -45,6 +47,8 @@ cd frontend
 npm install
 npm run dev
 ```
+
+`backend/.env`가 없다면 `backend/.env.example`을 복사해서 값을 채운다 (DB 접속정보, JWT 시크릿, 회사정보 등).
 
 - 프론트엔드: http://localhost:5173
 - 백엔드 헬스체크: http://localhost:8000/api/health
