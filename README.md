@@ -50,6 +50,14 @@ npm run dev
 
 `backend/.env`가 없다면 `backend/.env.example`을 복사해서 값을 채운다 (DB 접속정보, JWT 시크릿, 회사정보 등).
 
+### 같은 사무실 네트워크의 다른 PC에서 테스트하기
+`start.bat`으로 서버를 켠 PC와 같은 공유기(네트워크)에 연결돼 있다면, 별도 서버 없이 그 PC의 IP로 접속해서 테스트할 수 있다.
+
+- 서버 PC의 IP 확인: PowerShell에서 `ipconfig` → "IPv4 주소" 확인
+- 다른 PC 브라우저에서 `http://<서버 PC의 IP>:5173` 접속 (예: `http://192.168.0.10:5173`)
+- 서버 PC의 IP가 바뀌면 `backend/app/config.py`의 `cors_origins`도 함께 갱신해야 한다
+- Windows 방화벽에서 5173, 8000 포트 인바운드 허용이 필요하다 (사설 네트워크 기준)
+
 - 프론트엔드: http://localhost:5173
 - 백엔드 헬스체크: http://localhost:8000/api/health
 - DB 접속 정보는 `backend/.env.example` 참고 (실제 값은 `backend/.env`에 별도 관리, git 미포함)
