@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     app_name: str = "BENCH ERP"
     log_level: str = "DEBUG"
     database_url: str = "postgresql+psycopg2://erp_user:erp_password@localhost:5432/erp_db"
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://192.168.0.10:5173"]
 
     jwt_secret_key: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"
