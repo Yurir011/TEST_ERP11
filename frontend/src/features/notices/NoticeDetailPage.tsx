@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet } from "../../lib/api";
+import { isAdminRole } from "../../lib/auth";
 import { formatDate } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { Notice } from "./types";
@@ -54,7 +55,7 @@ export function NoticeDetailPage() {
         <div className="bg-surface border border-border rounded-2xl p-6">
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-xl font-semibold">{notice.title}</h1>
-            {user?.role === "admin" && (
+            {isAdminRole(user?.role) && (
               <div className="flex items-center gap-2 shrink-0">
                 <Link
                   to={`/notices/${notice.id}/edit`}

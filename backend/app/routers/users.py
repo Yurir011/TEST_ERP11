@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import require_admin
+from app.core.deps import require_admin_or_site_admin
 from app.core.security import hash_password
 from app.database import get_db
 from app.logging_config import get_logger
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, resolve_role
 from app.schemas.user import PasswordResetRequest, UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -13,12 +13,12 @@ logger = get_logger("Users")
 
 
 @router.get("", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     return db.query(User).order_by(User.employee_no).all()
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용 중인 이메일입니다.")
     if db.query(User).filter(User.employee_no == payload.employee_no).first():
@@ -30,8 +30,9 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user
         email=payload.email,
         name=payload.name,
         hashed_password=hash_password(payload.password),
-        role=payload.role,
-        department=payload.department,
+        role=resolve_role(payload.title),
+        grade=payload.grade,
+        title=payload.title,
         hire_date=payload.hire_date,
     )
     db.add(user)
@@ -42,18 +43,22 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user
 
 @router.put("/{user_id}", response_model=UserOut)
 def update_user(
-    user_id: int, payload: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)
+    user_id: int, payload: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
-    if user.id == current_user.id and payload.role != UserRole.admin:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="본인의 관리자 권한은 해제할 수 없습니다.")
+
+    # 사이트 관리자 계정은 직책이 없으므로 직책 기반 권한 계산 대상에서 제외하고 role을 그대로 유지한다.
+    new_role = user.role if user.role == UserRole.site_admin else resolve_role(payload.title)
+    if user.id == current_user.id and user.role == UserRole.admin and new_role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="본인의 직책을 변경하여 관리자 권한을 해제할 수 없습니다.")
 
     user.name = payload.name
-    user.department = payload.department
+    user.grade = payload.grade
+    user.title = payload.title
     user.hire_date = payload.hire_date
-    user.role = payload.role
+    user.role = new_role
     db.commit()
     db.refresh(user)
     logger.debug(f"[Users] 수정: id={user_id}, by={current_user.id}")
@@ -61,7 +66,7 @@ def update_user(
 
 
 @router.put("/{user_id}/activate", response_model=UserOut)
-def activate_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def activate_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
@@ -73,7 +78,7 @@ def activate_user(user_id: int, db: Session = Depends(get_db), current_user: Use
 
 
 @router.put("/{user_id}/deactivate", response_model=UserOut)
-def deactivate_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def deactivate_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
@@ -91,7 +96,7 @@ def reset_password(
     user_id: int,
     payload: PasswordResetRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_admin_or_site_admin),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:

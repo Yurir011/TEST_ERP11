@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
+import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { DayView } from "./DayView";
 import { addDays, getMonthGridDays, getWeekDays, toISODate } from "./dateUtils";
@@ -137,7 +138,7 @@ export function CalendarPage() {
       ? `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월 ${anchor.getDate()}일`
       : `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월`;
 
-  const canEditModalEvent = !modalEvent || modalEvent.created_by === user?.id || user?.role === "admin";
+  const canEditModalEvent = !modalEvent || modalEvent.created_by === user?.id || isAdminRole(user?.role);
 
   return (
     <MainLayout

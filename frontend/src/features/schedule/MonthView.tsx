@@ -62,8 +62,8 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
                     e.stopPropagation();
                     onDayNumberClick(day);
                   }}
-                  className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${
-                    isToday ? "bg-primary text-white font-medium" : `${numberColorClass} hover:bg-border`
+                  className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-base font-semibold ${
+                    isToday ? "bg-primary text-white" : `${numberColorClass} hover:bg-border`
                   }`}
                 >
                   {day.getDate()}

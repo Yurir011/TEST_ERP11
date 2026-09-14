@@ -21,7 +21,7 @@ const menuItems = [
   { to: "/schedule", label: "일정관리", icon: CalendarDays, adminOnly: false, colorClass: "" },
   { to: "/attendance", label: "출퇴근기록", icon: Timer, adminOnly: false, colorClass: "" },
   { to: "/leaves", label: "연차관리", icon: ClipboardList, adminOnly: false, colorClass: "" },
-  { to: "/documents", label: "재직증명서", icon: FileText, adminOnly: false, colorClass: "" },
+  { to: "/documents", label: "증빙서류발급", icon: FileText, adminOnly: false, colorClass: "" },
   { to: "/projects", label: "프로젝트관리", icon: FileText, adminOnly: false, colorClass: "" },
   { to: "/clients", label: "거래처관리", icon: Building2, adminOnly: false, colorClass: "" },
   { to: "/transactions", label: "매입매출관리", icon: Receipt, adminOnly: true, colorClass: "text-primary" },

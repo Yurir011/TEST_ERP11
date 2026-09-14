@@ -32,8 +32,8 @@ export function WeekView({ days, eventsByDate, onDayClick, onDayNumberClick, onE
               <p className="text-xs">{WEEKDAY_LABELS[i]}</p>
               <button
                 onClick={() => onDayNumberClick(day)}
-                className={`text-sm mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full hover:bg-bg ${
-                  isToday ? "bg-primary text-white font-semibold" : ""
+                className={`text-lg font-semibold mt-0.5 inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-bg ${
+                  isToday ? "bg-primary text-white" : ""
                 }`}
               >
                 {day.getDate()}

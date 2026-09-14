@@ -1,6 +1,8 @@
 import { Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
+import { useAuth } from "./context/AuthContext";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { SiteAdminDashboardPage } from "./features/dashboard/SiteAdminDashboardPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { NoticesPage } from "./features/notices/NoticesPage";
 import { NoticeDetailPage } from "./features/notices/NoticeDetailPage";
@@ -23,6 +25,11 @@ import { UsersPage } from "./features/settings/UsersPage";
 import { UserFormPage } from "./features/settings/UserFormPage";
 import { CalendarPage } from "./features/schedule/CalendarPage";
 
+function DashboardRoute() {
+  const { user } = useAuth();
+  return user?.role === "site_admin" ? <SiteAdminDashboardPage /> : <DashboardPage />;
+}
+
 function App() {
   return (
     <Routes>
@@ -31,15 +38,15 @@ function App() {
       <Route
         path="/"
         element={
-          <ProtectedRoute>
-            <DashboardPage />
+          <ProtectedRoute siteAdminAllowed>
+            <DashboardRoute />
           </ProtectedRoute>
         }
       />
       <Route
         path="/schedule"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute siteAdminAllowed>
             <CalendarPage />
           </ProtectedRoute>
         }
@@ -167,7 +174,7 @@ function App() {
       <Route
         path="/notices"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute siteAdminAllowed>
             <NoticesPage />
           </ProtectedRoute>
         }
@@ -175,7 +182,7 @@ function App() {
       <Route
         path="/notices/new"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute requireAdmin siteAdminAllowed>
             <NoticeFormPage />
           </ProtectedRoute>
         }
@@ -183,7 +190,7 @@ function App() {
       <Route
         path="/notices/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute siteAdminAllowed>
             <NoticeDetailPage />
           </ProtectedRoute>
         }
@@ -191,7 +198,7 @@ function App() {
       <Route
         path="/notices/:id/edit"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute requireAdmin siteAdminAllowed>
             <NoticeFormPage />
           </ProtectedRoute>
         }
@@ -199,7 +206,7 @@ function App() {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute requireAdmin siteAdminAllowed>
             <UsersPage />
           </ProtectedRoute>
         }
@@ -207,7 +214,7 @@ function App() {
       <Route
         path="/settings/users/new"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute requireAdmin siteAdminAllowed>
             <UserFormPage />
           </ProtectedRoute>
         }
@@ -215,7 +222,7 @@ function App() {
       <Route
         path="/settings/users/:id/edit"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute requireAdmin siteAdminAllowed>
             <UserFormPage />
           </ProtectedRoute>
         }

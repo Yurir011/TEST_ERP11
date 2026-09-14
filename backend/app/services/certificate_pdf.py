@@ -6,22 +6,88 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.config import settings
 from app.models.document import DocumentType
-from app.models.user import User, UserRole
+from app.models.user import JobGrade, JobTitle, User
 
 FONT_REGULAR = "MalgunGothic"
 FONT_BOLD = "MalgunGothic-Bold"
 
+STAMP_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "stamp.png")
+STAMP_SIZE = 20 * mm
+SEAL_MARKER = "(인)"
+
 _fonts_registered = False
+_stamp_image: ImageReader | None = None
+
+
+def _get_stamp_image() -> ImageReader | None:
+    global _stamp_image
+    if _stamp_image is None and os.path.exists(STAMP_PATH):
+        _stamp_image = ImageReader(STAMP_PATH)
+    return _stamp_image
+
+
+class _StampedSignatureLine(Flowable):
+    """'대표자 : 홍길동 (인)' 문구를 그리면서 '(인)' 자리에 회사 직인 이미지를 겹쳐서 찍는 flowable."""
+
+    def __init__(self, text: str, font_name: str, font_size: int, width: float):
+        super().__init__()
+        self.text = text
+        self.font_name = font_name
+        self.font_size = font_size
+        self.width = width
+        self.height = max(STAMP_SIZE, font_size * 2)
+
+    def wrap(self, available_width, available_height):
+        return self.width, self.height
+
+    def draw(self):
+        canvas = self.canv
+        canvas.setFont(self.font_name, self.font_size)
+        text_width = canvas.stringWidth(self.text, self.font_name, self.font_size)
+        start_x = (self.width - text_width) / 2
+        baseline_y = self.height / 2 - self.font_size * 0.35
+        canvas.drawString(start_x, baseline_y, self.text)
+
+        stamp_image = _get_stamp_image()
+        marker_index = self.text.rfind(SEAL_MARKER)
+        if stamp_image is not None and marker_index != -1:
+            prefix_width = canvas.stringWidth(self.text[:marker_index], self.font_name, self.font_size)
+            marker_width = canvas.stringWidth(SEAL_MARKER, self.font_name, self.font_size)
+            center_x = start_x + prefix_width + marker_width / 2
+            center_y = self.height / 2
+            canvas.drawImage(
+                stamp_image,
+                center_x - STAMP_SIZE / 2,
+                center_y - STAMP_SIZE / 2,
+                width=STAMP_SIZE,
+                height=STAMP_SIZE,
+                mask="auto",
+            )
+
 
 DOC_TITLES = {
     DocumentType.employment: "재직증명서",
     DocumentType.career: "경력증명서",
+}
+
+GRADE_LABELS = {
+    JobGrade.staff: "사원",
+    JobGrade.assistant_manager: "대리",
+    JobGrade.manager: "과장",
+    JobGrade.director: "이사",
+    JobGrade.chief: "소장",
+}
+
+TITLE_LABELS = {
+    JobTitle.ceo: "대표",
+    JobTitle.team_lead: "팀장",
 }
 
 
@@ -75,13 +141,14 @@ def generate_certificate_pdf(
     footer_style = ParagraphStyle("Footer", fontName=FONT_REGULAR, fontSize=11, alignment=1, leading=20)
 
     issued_date = issued_at.date()
-    role_label = "관리자" if user.role == UserRole.admin else "일반직원"
+    grade_label = GRADE_LABELS.get(user.grade, "-")
+    title_label = TITLE_LABELS.get(user.title, "-") if user.title else "-"
 
     rows = [
         ["성 명", user.name],
         ["사 번", user.employee_no],
-        ["부 서", user.department or "-"],
-        ["구 분", role_label],
+        ["직 급", grade_label],
+        ["직 책", title_label],
         ["입 사 일", user.hire_date.isoformat()],
     ]
     if doc_type == DocumentType.career:
@@ -118,7 +185,12 @@ def generate_certificate_pdf(
         Paragraph(f"발급일 : {issued_date.isoformat()}", footer_style),
         Spacer(1, 10 * mm),
         Paragraph(f"{settings.company_name}", footer_style),
-        Paragraph(f"대표자 : {settings.company_ceo_name or '-'} (인)", footer_style),
+        _StampedSignatureLine(
+            f"대표자 : {settings.company_ceo_name or '-'} {SEAL_MARKER}",
+            font_name=FONT_REGULAR,
+            font_size=11,
+            width=doc.width,
+        ),
         Paragraph(f"주소 : {settings.company_address or '-'}", footer_style),
         Paragraph(f"사업자등록번호 : {settings.company_reg_no or '-'}", footer_style),
     ]

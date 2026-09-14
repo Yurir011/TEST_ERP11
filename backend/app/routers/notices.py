@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import get_current_user, require_admin_or_site_admin
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.notice import Notice
@@ -41,7 +41,7 @@ def get_notice(notice_id: int, db: Session = Depends(get_db), current_user: User
 
 
 @router.post("", response_model=NoticeOut, status_code=status.HTTP_201_CREATED)
-def create_notice(payload: NoticeCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def create_notice(payload: NoticeCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     logger.debug(f"[Notices] 생성 시도: title={payload.title}, author_id={current_user.id}")
     notice = Notice(title=payload.title, content=payload.content, author_id=current_user.id)
     db.add(notice)
@@ -57,7 +57,7 @@ def update_notice(
     notice_id: int,
     payload: NoticeUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_admin_or_site_admin),
 ):
     notice = db.query(Notice).options(joinedload(Notice.author)).filter(Notice.id == notice_id).first()
     if notice is None:
@@ -72,7 +72,7 @@ def update_notice(
 
 
 @router.delete("/{notice_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_notice(notice_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def delete_notice(notice_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     notice = db.query(Notice).filter(Notice.id == notice_id).first()
     if notice is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="공지사항을 찾을 수 없습니다.")

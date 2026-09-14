@@ -1,13 +1,27 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import type { CurrentUser, UserRole } from "../../lib/auth";
+import type { CurrentUser, JobGrade, JobTitle } from "../../lib/auth";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logError } from "../../lib/logger";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
+
+const GRADE_OPTIONS: { value: JobGrade; label: string }[] = [
+  { value: "staff", label: "사원" },
+  { value: "assistant_manager", label: "대리" },
+  { value: "manager", label: "과장" },
+  { value: "director", label: "이사" },
+  { value: "chief", label: "소장" },
+];
+
+const TITLE_OPTIONS: { value: JobTitle | null; label: string }[] = [
+  { value: null, label: "없음" },
+  { value: "team_lead", label: "팀장" },
+  { value: "ceo", label: "대표" },
+];
 
 export function UserFormPage() {
   const { id } = useParams<{ id: string }>();
@@ -18,8 +32,8 @@ export function UserFormPage() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("employee");
-  const [department, setDepartment] = useState("");
+  const [grade, setGrade] = useState<JobGrade>("staff");
+  const [title, setTitle] = useState<JobTitle | null>(null);
   const [hireDate, setHireDate] = useState(todayISO());
 
   const [isLoading, setIsLoading] = useState(isEdit);
@@ -38,8 +52,8 @@ export function UserFormPage() {
         setEmployeeNo(found.employee_no);
         setEmail(found.email);
         setName(found.name);
-        setRole(found.role);
-        setDepartment(found.department ?? "");
+        setGrade(found.grade);
+        setTitle(found.title);
         setHireDate(found.hire_date);
       })
       .catch((err) => {
@@ -57,9 +71,9 @@ export function UserFormPage() {
       if (isEdit) {
         await apiPut(`/api/users/${id}`, {
           name,
-          department: department || null,
+          grade,
+          title,
           hire_date: hireDate,
-          role,
         });
       } else {
         await apiPost("/api/users", {
@@ -67,8 +81,8 @@ export function UserFormPage() {
           email,
           name,
           password,
-          role,
-          department: department || null,
+          grade,
+          title,
           hire_date: hireDate,
         });
       }
@@ -137,12 +151,18 @@ export function UserFormPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-text-muted mb-1.5">부서</label>
-              <input
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
+              <label className="block text-xs text-text-muted mb-1.5">직급</label>
+              <select
+                value={grade}
+                onChange={(e) => setGrade(e.target.value as JobGrade)}
                 className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-              />
+              >
+                {GRADE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs text-text-muted mb-1.5">입사일</label>
@@ -157,23 +177,26 @@ export function UserFormPage() {
           </div>
 
           <div>
-            <label className="block text-xs text-text-muted mb-1.5">역할</label>
+            <label className="block text-xs text-text-muted mb-1.5">직책</label>
             <div className="flex gap-2">
-              {(["employee", "admin"] as UserRole[]).map((r) => (
+              {TITLE_OPTIONS.map((opt) => (
                 <button
-                  key={r}
+                  key={opt.label}
                   type="button"
-                  onClick={() => setRole(r)}
+                  onClick={() => setTitle(opt.value)}
                   className={`flex-1 rounded-lg border px-4 py-2.5 text-sm transition-colors ${
-                    role === r
+                    title === opt.value
                       ? "border-primary bg-tile-blue text-tile-blue-fg font-medium"
                       : "border-border text-text-muted hover:bg-bg"
                   }`}
                 >
-                  {r === "admin" ? "관리자" : "일반직원"}
+                  {opt.label}
                 </button>
               ))}
             </div>
+            <p className="text-xs text-text-muted mt-1.5">
+              대표로 지정하면 관리자 권한이, 그 외에는 일반직원 권한이 자동으로 부여됩니다.
+            </p>
           </div>
 
           {error && <p className="text-xs text-danger">{error}</p>}

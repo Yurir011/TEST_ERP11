@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { useAuth } from "../../context/AuthContext";
 import { Sidebar } from "./Sidebar";
+import { SiteAdminSidebar } from "./SiteAdminSidebar";
 
 interface MainLayoutProps {
   title: string;
@@ -9,9 +11,11 @@ interface MainLayoutProps {
 }
 
 export function MainLayout({ title, description, actions, children }: MainLayoutProps) {
+  const { user } = useAuth();
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      {user?.role === "site_admin" ? <SiteAdminSidebar /> : <Sidebar />}
       <main className="flex-1 px-10 py-8">
         <div className="flex items-start justify-between mb-8">
           <div>

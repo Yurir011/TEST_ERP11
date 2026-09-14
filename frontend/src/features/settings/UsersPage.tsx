@@ -2,11 +2,22 @@ import { KeyRound, Plus, UserX, UserCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import type { CurrentUser } from "../../lib/auth";
+import type { CurrentUser, JobGrade, JobTitle } from "../../lib/auth";
 import { apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 
-const ROLE_LABELS = { admin: "관리자", employee: "일반직원" } as const;
+const GRADE_LABELS: Record<JobGrade, string> = {
+  staff: "사원",
+  assistant_manager: "대리",
+  manager: "과장",
+  director: "이사",
+  chief: "소장",
+};
+
+const TITLE_LABELS: Record<JobTitle, string> = {
+  ceo: "대표",
+  team_lead: "팀장",
+};
 
 export function UsersPage() {
   const [users, setUsers] = useState<CurrentUser[] | null>(null);
@@ -81,8 +92,8 @@ export function UsersPage() {
                 <th className="py-2.5 px-4 font-medium">사번</th>
                 <th className="py-2.5 px-4 font-medium">이름</th>
                 <th className="py-2.5 px-4 font-medium">이메일</th>
-                <th className="py-2.5 px-4 font-medium">부서</th>
-                <th className="py-2.5 px-4 font-medium">역할</th>
+                <th className="py-2.5 px-4 font-medium">직급</th>
+                <th className="py-2.5 px-4 font-medium">직책</th>
                 <th className="py-2.5 px-4 font-medium">상태</th>
                 <th className="py-2.5 px-4 font-medium w-64"></th>
               </tr>
@@ -93,8 +104,8 @@ export function UsersPage() {
                   <td className="py-2.5 px-4">{u.employee_no}</td>
                   <td className="py-2.5 px-4 font-medium">{u.name}</td>
                   <td className="py-2.5 px-4 text-text-muted">{u.email}</td>
-                  <td className="py-2.5 px-4">{u.department ?? "-"}</td>
-                  <td className="py-2.5 px-4">{ROLE_LABELS[u.role]}</td>
+                  <td className="py-2.5 px-4">{GRADE_LABELS[u.grade]}</td>
+                  <td className="py-2.5 px-4">{u.title ? TITLE_LABELS[u.title] : "-"}</td>
                   <td className="py-2.5 px-4">
                     <span
                       className={`text-xs px-2 py-1 rounded-full font-medium ${

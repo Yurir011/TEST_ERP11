@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiGet } from "../../lib/api";
+import { isAdminRole } from "../../lib/auth";
 import { formatDate } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { Notice } from "./types";
@@ -28,7 +29,7 @@ export function NoticesPage() {
       title="공지사항"
       description="전 직원에게 전달되는 공지사항입니다."
       actions={
-        user?.role === "admin" && (
+        isAdminRole(user?.role) && (
           <Link
             to="/notices/new"
             className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"

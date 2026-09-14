@@ -8,7 +8,7 @@ from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.schedule import ScheduleEvent
-from app.models.user import User, UserRole
+from app.models.user import User, is_admin_role
 from app.schemas.schedule import MAX_OCCURRENCES, ScheduleEventCreate, ScheduleEventOut, ScheduleReorderRequest
 
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
@@ -140,7 +140,7 @@ def _get_editable_event(db: Session, event_id: int, current_user: User) -> Sched
     event = db.query(ScheduleEvent).options(joinedload(ScheduleEvent.creator)).filter(ScheduleEvent.id == event_id).first()
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="일정을 찾을 수 없습니다.")
-    if event.created_by != current_user.id and current_user.role != UserRole.admin:
+    if event.created_by != current_user.id and not is_admin_role(current_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="본인이 등록한 일정만 수정·삭제할 수 있습니다.")
     return event
 

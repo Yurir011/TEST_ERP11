@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.logging_config import get_logger
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, is_admin_role
 
 logger = get_logger("Deps")
 
@@ -35,5 +35,13 @@ def get_current_user(
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != UserRole.admin:
         logger.debug(f"[Auth] 관리자 권한 필요, 접근 거부: user_id={current_user.id}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자 권한이 필요합니다.")
+    return current_user
+
+
+def require_admin_or_site_admin(current_user: User = Depends(get_current_user)) -> User:
+    """대표(admin) 또는 사이트 관리자(site_admin) 전용 — 설정/공지사항 관리처럼 사이트 관리자 모드에도 열려있는 기능에 사용."""
+    if not is_admin_role(current_user.role):
+        logger.debug(f"[Auth] 관리자/사이트 관리자 권한 필요, 접근 거부: user_id={current_user.id}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자 권한이 필요합니다.")
     return current_user
