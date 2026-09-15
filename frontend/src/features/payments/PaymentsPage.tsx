@@ -9,6 +9,7 @@ import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
+  PROOF_TYPE_LABELS,
   type CsvImportResult,
   type Payment,
   type PaymentReport,
@@ -219,6 +220,7 @@ export function PaymentsPage() {
                 <th className="py-2.5 px-4 font-medium">분류</th>
                 <th className="py-2.5 px-4 font-medium">내용</th>
                 <th className="py-2.5 px-4 font-medium">수단</th>
+                <th className="py-2.5 px-4 font-medium">증빙발행</th>
                 <th className="py-2.5 px-4 font-medium text-right">금액</th>
                 <th className="py-2.5 px-4 font-medium w-10">영수증</th>
                 <th className="w-10"></th>
@@ -239,6 +241,17 @@ export function PaymentsPage() {
                     {p.client_name && <span className="text-text-muted"> · {p.client_name}</span>}
                   </td>
                   <td className="py-2.5 px-4">{PAYMENT_METHOD_LABELS[p.method]}</td>
+                  <td className="py-2.5 px-4">
+                    {p.proof_type ? (
+                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-purple text-tile-purple-fg">
+                        {p.proof_type === "other" && p.proof_type_detail ? p.proof_type_detail : PROOF_TYPE_LABELS[p.proof_type]}
+                      </span>
+                    ) : p.method === "bank_transfer" ? (
+                      <span className="text-xs text-text-muted">미발행</span>
+                    ) : (
+                      <span className="text-xs text-text-muted">-</span>
+                    )}
+                  </td>
                   <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(p.amount)}</td>
                   <td className="py-2.5 px-4">
                     {p.has_receipt && (

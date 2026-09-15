@@ -7,7 +7,7 @@ const menuItems = [
   { to: "/", label: "대시보드", icon: LayoutGrid, end: true },
   { to: "/schedule", label: "일정관리", icon: CalendarDays },
   { to: "/notices", label: "공지사항", icon: Megaphone },
-  { to: "/settings", label: "설정", icon: Settings },
+  { to: "/settings", label: "직원등록", icon: Settings },
 ];
 
 export function SiteAdminSidebar() {

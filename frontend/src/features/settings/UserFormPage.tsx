@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import type { CurrentUser, JobGrade, JobTitle } from "../../lib/auth";
+import { MENU_PERMISSION_OPTIONS, type CurrentUser, type JobGrade, type JobTitle, type MenuPermissionKey } from "../../lib/auth";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logError } from "../../lib/logger";
 
@@ -35,6 +35,9 @@ export function UserFormPage() {
   const [grade, setGrade] = useState<JobGrade>("staff");
   const [title, setTitle] = useState<JobTitle | null>(null);
   const [hireDate, setHireDate] = useState(todayISO());
+  const [birthDate, setBirthDate] = useState("");
+  const [address, setAddress] = useState("");
+  const [menuPermissions, setMenuPermissions] = useState<MenuPermissionKey[]>([]);
 
   const [isLoading, setIsLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,6 +58,9 @@ export function UserFormPage() {
         setGrade(found.grade);
         setTitle(found.title);
         setHireDate(found.hire_date);
+        setBirthDate(found.birth_date ?? "");
+        setAddress(found.address ?? "");
+        setMenuPermissions(found.menu_permissions ?? []);
       })
       .catch((err) => {
         logError("UserForm", "조회 실패", err);
@@ -62,6 +68,10 @@ export function UserFormPage() {
       })
       .finally(() => setIsLoading(false));
   }, [id, isEdit]);
+
+  function toggleMenuPermission(key: MenuPermissionKey) {
+    setMenuPermissions((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -74,6 +84,9 @@ export function UserFormPage() {
           grade,
           title,
           hire_date: hireDate,
+          birth_date: birthDate || null,
+          address: address.trim() || null,
+          menu_permissions: menuPermissions,
         });
       } else {
         await apiPost("/api/users", {
@@ -84,6 +97,9 @@ export function UserFormPage() {
           grade,
           title,
           hire_date: hireDate,
+          birth_date: birthDate || null,
+          address: address.trim() || null,
+          menu_permissions: menuPermissions,
         });
       }
       navigate("/settings", { replace: true });
@@ -176,6 +192,26 @@ export function UserFormPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">생년월일</label>
+              <input
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">주소</label>
+              <input
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs text-text-muted mb-1.5">직책</label>
             <div className="flex gap-2">
@@ -198,6 +234,31 @@ export function UserFormPage() {
               대표로 지정하면 관리자 권한이, 그 외에는 일반직원 권한이 자동으로 부여됩니다.
             </p>
           </div>
+
+          {title !== "ceo" && (
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">메뉴 열람 권한</label>
+              <div className="grid grid-cols-2 gap-2">
+                {MENU_PERMISSION_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm cursor-pointer hover:bg-bg"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={menuPermissions.includes(opt.value)}
+                      onChange={() => toggleMenuPermission(opt.value)}
+                      className="accent-primary"
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-text-muted mt-1.5">
+                체크한 메뉴만 사이드바에 표시되며 해당 화면에 접근할 수 있습니다. 기본값은 전부 비활성화입니다.
+              </p>
+            </div>
+          )}
 
           {error && <p className="text-xs text-danger">{error}</p>}
 

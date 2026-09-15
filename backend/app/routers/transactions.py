@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.deps import require_admin
+from app.core.deps import require_menu_access
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
@@ -14,6 +14,7 @@ from app.schemas.transaction import TransactionCreate, TransactionOut, VatReport
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 logger = get_logger("Transactions")
+require_transactions_access = require_menu_access("transactions")
 
 
 def _to_out(tx: Transaction) -> TransactionOut:
@@ -39,9 +40,15 @@ def list_transactions(
     type_filter: TransactionType | None = Query(default=None, alias="type"),
     year: int | None = Query(default=None),
     month: int | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_transactions_access),
 ):
+    logger.debug(
+        f"[Transactions] 목록 조회: type={type_filter}, year={year}, month={month}, "
+        f"start_date={start_date}, end_date={end_date}, by={current_user.id}"
+    )
     query = db.query(Transaction).options(joinedload(Transaction.client))
     if type_filter is not None:
         query = query.filter(Transaction.type == type_filter)
@@ -49,6 +56,10 @@ def list_transactions(
         query = query.filter(extract("year", Transaction.transaction_date) == year)
     if month is not None:
         query = query.filter(extract("month", Transaction.transaction_date) == month)
+    if start_date is not None:
+        query = query.filter(Transaction.transaction_date >= start_date)
+    if end_date is not None:
+        query = query.filter(Transaction.transaction_date <= end_date)
     transactions = query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
     return [_to_out(t) for t in transactions]
 
@@ -58,7 +69,7 @@ def get_vat_report(
     year: int = Query(default_factory=lambda: date.today().year),
     month: int = Query(default_factory=lambda: date.today().month),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_transactions_access),
 ):
     def sums(tx_type: TransactionType) -> tuple[int, int]:
         row = (
@@ -88,7 +99,7 @@ def get_vat_report(
 
 
 @router.get("/{tx_id}", response_model=TransactionOut)
-def get_transaction(tx_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def get_transaction(tx_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_transactions_access)):
     tx = db.query(Transaction).options(joinedload(Transaction.client)).filter(Transaction.id == tx_id).first()
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래 내역을 찾을 수 없습니다.")
@@ -97,7 +108,7 @@ def get_transaction(tx_id: int, db: Session = Depends(get_db), current_user: Use
 
 @router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
 def create_transaction(
-    payload: TransactionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)
+    payload: TransactionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_transactions_access)
 ):
     if payload.client_id is not None:
         client = db.query(Client).filter(Client.id == payload.client_id).first()
@@ -129,7 +140,7 @@ def update_transaction(
     tx_id: int,
     payload: TransactionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_transactions_access),
 ):
     tx = db.query(Transaction).options(joinedload(Transaction.client)).filter(Transaction.id == tx_id).first()
     if tx is None:
@@ -157,7 +168,7 @@ def update_transaction(
 
 
 @router.delete("/{tx_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_transaction(tx_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def delete_transaction(tx_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_transactions_access)):
     tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래 내역을 찾을 수 없습니다.")

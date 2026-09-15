@@ -13,8 +13,25 @@ const TABS: { key: TransactionType | "all"; label: string }[] = [
   { key: "purchase", label: "매입" },
 ];
 
+const PERIOD_PRESETS = [
+  { months: 1, label: "1개월" },
+  { months: 3, label: "3개월" },
+  { months: 6, label: "6개월" },
+  { months: 12, label: "12개월" },
+];
+
 function toMonthValue(year: number, month: number) {
   return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function monthsAgoISO(months: number) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().slice(0, 10);
 }
 
 export function TransactionsPage() {
@@ -23,13 +40,17 @@ export function TransactionsPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [tab, setTab] = useState<TransactionType | "all">("all");
 
+  const [startDate, setStartDate] = useState(monthsAgoISO(1));
+  const [endDate, setEndDate] = useState(todayISO());
+  const [activePreset, setActivePreset] = useState<number | null>(1);
+
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [report, setReport] = useState<VatReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function loadTransactions() {
-    logDebug("Transactions", `목록 조회: ${year}-${month}, type=${tab}`);
-    const params = new URLSearchParams({ year: String(year), month: String(month) });
+    logDebug("Transactions", `목록 조회: ${startDate} ~ ${endDate}, type=${tab}`);
+    const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
     if (tab !== "all") params.set("type", tab);
     apiGet<Transaction[]>(`/api/transactions?${params.toString()}`)
       .then(setTransactions)
@@ -47,9 +68,13 @@ export function TransactionsPage() {
 
   useEffect(() => {
     loadTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate, tab]);
+
+  useEffect(() => {
     loadReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month, tab]);
+  }, [year, month]);
 
   function shiftMonth(delta: number) {
     let m = month + delta;
@@ -63,6 +88,12 @@ export function TransactionsPage() {
     }
     setYear(y);
     setMonth(m);
+  }
+
+  function applyPreset(months: number) {
+    setActivePreset(months);
+    setStartDate(monthsAgoISO(months));
+    setEndDate(todayISO());
   }
 
   async function handleDelete(id: number) {
@@ -106,6 +137,7 @@ export function TransactionsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <span className="text-xs text-text-muted">부가세 리포트 기준월</span>
           <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded-lg hover:bg-surface text-text-muted">
             <ChevronLeft size={16} />
           </button>
@@ -149,12 +181,54 @@ export function TransactionsPage() {
         </section>
       )}
 
+      <div className="bg-surface border border-border rounded-2xl p-4 mb-5 flex flex-wrap items-center gap-3">
+        <span className="text-xs text-text-muted shrink-0">조회 기간</span>
+        <div className="flex gap-1">
+          {PERIOD_PRESETS.map((p) => (
+            <button
+              key={p.months}
+              onClick={() => applyPreset(p.months)}
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                activePreset === p.months
+                  ? "border border-primary bg-tile-blue text-tile-blue-fg font-medium"
+                  : "border border-border text-text-muted hover:bg-bg"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={startDate}
+            max={endDate}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              setActivePreset(null);
+            }}
+            className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-bg"
+          />
+          <span className="text-text-muted text-sm">~</span>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              setActivePreset(null);
+            }}
+            className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-bg"
+          />
+        </div>
+      </div>
+
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
       {transactions !== null && transactions.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <Receipt className="mx-auto mb-2 text-text-muted" size={24} />
-          <p className="text-sm text-text-muted">해당 월의 거래 내역이 없습니다.</p>
+          <p className="text-sm text-text-muted">해당 기간의 거래 내역이 없습니다.</p>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Landmark, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -24,6 +24,7 @@ export function ClientDetailPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showBankInfo, setShowBankInfo] = useState(false);
 
   useEffect(() => {
     apiGet<Client>(`/api/clients/${id}`)
@@ -96,18 +97,57 @@ export function ClientDetailPage() {
             </div>
           </div>
 
+          <button
+            type="button"
+            onClick={() => setShowBankInfo((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5 mt-3"
+          >
+            <Landmark size={14} />
+            {showBankInfo ? "계좌 정보 숨기기" : "계좌 정보 보기"}
+          </button>
+
+          {showBankInfo && (
+            <div className="mt-1">
+              <Field label="은행" value={client.bank_name} />
+              <Field label="계좌번호" value={client.bank_account} />
+            </div>
+          )}
+
           <div className="mt-2">
             <Field label="사업자등록번호" value={client.biz_reg_no} />
             <Field label="대표자명" value={client.ceo_name} />
             <Field label="업종/업태" value={client.business_type} />
             <Field label="전화번호(유선)" value={client.phone} />
-            <Field label="담당자" value={client.contact_name} />
-            <Field label="담당자 연락처" value={client.contact_phone} />
-            <Field label="담당자 이메일" value={client.contact_email} />
-            <Field label="은행" value={client.bank_name} />
-            <Field label="계좌번호" value={client.bank_account} />
             <Field label="주소" value={client.address} />
             <Field label="메모" value={client.memo} />
+          </div>
+
+          <div className="mt-2 pt-3 border-t border-border">
+            <p className="text-xs text-text-muted mb-2">담당자 {client.contacts.length > 0 && `(${client.contacts.length})`}</p>
+            {client.contacts.length === 0 ? (
+              <p className="text-sm text-text-muted py-2">등록된 담당자가 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {client.contacts.map((c) => (
+                  <div key={c.id} className="bg-bg rounded-xl p-3 text-sm">
+                    <p className="font-medium">
+                      {c.name}
+                      {c.title && <span className="text-text-muted font-normal"> · {c.title}</span>}
+                    </p>
+                    <p className="text-xs text-text-muted mt-0.5">
+                      {[
+                        c.landline_phone && `유선 ${c.landline_phone}`,
+                        c.mobile_phone && `휴대폰 ${c.mobile_phone}`,
+                        c.email,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "-"}
+                    </p>
+                    {c.memo && <p className="text-xs text-text-muted mt-1.5 whitespace-pre-wrap">{c.memo}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -2,10 +2,14 @@ import enum
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, Enum, String
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.database import Base
+
+# 일반직원에게 관리자가 개별로 열람 권한을 부여할 수 있는 메뉴 목록 (체크리스트에서 사용)
+MENU_PERMISSION_KEYS = ("projects", "clients", "transactions", "payments", "notices")
 
 
 class UserRole(str, enum.Enum):
@@ -53,5 +57,9 @@ class User(Base):
     grade: Mapped[JobGrade] = mapped_column(Enum(JobGrade, name="jobgrade"), default=JobGrade.staff)
     title: Mapped[JobTitle | None] = mapped_column(Enum(JobTitle, name="jobtitle"), nullable=True)
     hire_date: Mapped[date] = mapped_column(Date, server_default=func.current_date())
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 일반직원(employee)에게 개별로 열람을 허용한 메뉴 키 목록. admin/site_admin은 이 값과 무관하게 항상 전체 접근 가능.
+    menu_permissions: Mapped[list[str]] = mapped_column(ARRAY(String(50)), default=list, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

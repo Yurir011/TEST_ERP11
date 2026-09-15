@@ -114,7 +114,7 @@ export function ProjectFormPage() {
                     className="w-full text-left px-3 py-2 text-sm hover:bg-bg"
                   >
                     {c.name}
-                    {c.contact_name && <span className="text-text-muted"> · {c.contact_name}</span>}
+                    {c.contacts[0] && <span className="text-text-muted"> · {c.contacts[0].name}</span>}
                   </button>
                 </li>
               ))}

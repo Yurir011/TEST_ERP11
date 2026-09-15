@@ -5,7 +5,18 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import type { Client } from "../clients/types";
 import { ApiError, apiGet, apiPost, apiUpload } from "../../lib/api";
 import { logError } from "../../lib/logger";
-import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, type Payment, type PaymentMethod, type PaymentType } from "./types";
+import {
+  PAYMENT_CATEGORIES,
+  PAYMENT_CATEGORY_ITEMS,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_TYPE_LABELS,
+  PROOF_TYPE_LABELS,
+  type Payment,
+  type PaymentCategory,
+  type PaymentMethod,
+  type PaymentType,
+  type ProofType,
+} from "./types";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -16,8 +27,9 @@ export function PaymentFormPage() {
 
   const [type, setType] = useState<PaymentType>("withdrawal");
   const [paymentDate, setPaymentDate] = useState(todayISO());
-  const [category, setCategory] = useState("");
-  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<PaymentCategory>(PAYMENT_CATEGORIES[0]);
+  const [item, setItem] = useState("");
+  const [customText, setCustomText] = useState("");
   const [amount, setAmount] = useState("0");
   const [method, setMethod] = useState<PaymentMethod>("corporate_card");
   const [partyQuery, setPartyQuery] = useState("");
@@ -26,6 +38,8 @@ export function PaymentFormPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [memo, setMemo] = useState("");
+  const [proofType, setProofType] = useState<ProofType | null>(null);
+  const [proofTypeDetail, setProofTypeDetail] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +68,21 @@ export function PaymentFormPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (method !== "bank_transfer") {
+      setProofType(null);
+      setProofTypeDetail("");
+    }
+  }, [method]);
+
+  const categoryItems = PAYMENT_CATEGORY_ITEMS[category];
+  const needsCustomText = category === "기타" || item === "기타";
+
+  useEffect(() => {
+    setItem("");
+    setCustomText("");
+  }, [category]);
+
   function pickClient(client: Client) {
     setSelectedClient(client);
     setPartyQuery(client.name);
@@ -63,6 +92,22 @@ export function PaymentFormPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (method === "bank_transfer" && proofType === "other" && !proofTypeDetail.trim()) {
+      setError("증빙 종류를 '기타'로 선택한 경우 내용을 입력해주세요.");
+      return;
+    }
+    if (categoryItems && !item) {
+      setError("항목을 선택해주세요.");
+      return;
+    }
+    if (needsCustomText && !customText.trim()) {
+      setError("내용을 직접 입력해주세요.");
+      return;
+    }
+
+    const description = category === "기타" ? customText.trim() : categoryItems ? (item === "기타" ? customText.trim() : item) : category;
+
     setIsSubmitting(true);
     try {
       const created = await apiPost<Payment>("/api/payments", {
@@ -74,6 +119,8 @@ export function PaymentFormPage() {
         method,
         client_id: selectedClient?.id ?? null,
         memo: memo || null,
+        proof_type: method === "bank_transfer" ? proofType : null,
+        proof_type_detail: method === "bank_transfer" && proofType === "other" ? proofTypeDetail : null,
       });
 
       if (receiptFile) {
@@ -139,26 +186,87 @@ export function PaymentFormPage() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs text-text-muted mb-1.5">분류</label>
-          <input
-            required
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="예: 경비, 급여, 매출입금"
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-          />
+        {method === "bank_transfer" && (
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">증빙 발행 여부</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(Object.keys(PROOF_TYPE_LABELS) as ProofType[]).map((pt) => (
+                <button
+                  key={pt}
+                  type="button"
+                  onClick={() => setProofType(proofType === pt ? null : pt)}
+                  className={`rounded-lg border px-4 py-2.5 text-sm transition-colors ${
+                    proofType === pt
+                      ? "border-primary bg-tile-blue text-tile-blue-fg font-medium"
+                      : "border-border text-text-muted hover:bg-bg"
+                  }`}
+                >
+                  {PROOF_TYPE_LABELS[pt]}
+                </button>
+              ))}
+            </div>
+            {proofType === "other" && (
+              <input
+                required
+                value={proofTypeDetail}
+                onChange={(e) => setProofTypeDetail(e.target.value)}
+                placeholder="증빙 내용을 직접 입력하세요"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg mt-2"
+              />
+            )}
+            <p className="text-xs text-text-muted mt-1.5">계좌이체 건은 세금계산서/영수증 등 증빙 발행 여부를 선택할 수 있습니다.</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">분류</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as PaymentCategory)}
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+            >
+              {PAYMENT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          {categoryItems && (
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">항목</label>
+              <select
+                required
+                value={item}
+                onChange={(e) => setItem(e.target.value)}
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              >
+                <option value="" disabled>
+                  선택
+                </option>
+                {categoryItems.map((it) => (
+                  <option key={it} value={it}>
+                    {it}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
-        <div>
-          <label className="block text-xs text-text-muted mb-1.5">내용</label>
-          <input
-            required
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-          />
-        </div>
+        {needsCustomText && (
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">내용 직접 입력</label>
+            <input
+              required
+              value={customText}
+              onChange={(e) => setCustomText(e.target.value)}
+              placeholder="내용을 입력하세요"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+            />
+          </div>
+        )}
 
         <div>
           <label className="block text-xs text-text-muted mb-1.5">금액</label>

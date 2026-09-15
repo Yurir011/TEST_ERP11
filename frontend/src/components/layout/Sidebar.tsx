@@ -14,25 +14,38 @@ import {
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { TodoPanel } from "../../features/todos/TodoPanel";
+import { hasMenuPermission, type MenuPermissionKey } from "../../lib/auth";
 import { Logo } from "../ui/Logo";
 
-const menuItems = [
+const menuItems: {
+  to: string;
+  label: string;
+  icon: typeof LayoutGrid;
+  end?: boolean;
+  adminOnly: boolean;
+  menuKey?: MenuPermissionKey;
+  colorClass: string;
+}[] = [
   { to: "/", label: "대시보드", icon: LayoutGrid, end: true, adminOnly: false, colorClass: "" },
   { to: "/schedule", label: "일정관리", icon: CalendarDays, adminOnly: false, colorClass: "" },
   { to: "/attendance", label: "출퇴근기록", icon: Timer, adminOnly: false, colorClass: "" },
   { to: "/leaves", label: "연차관리", icon: ClipboardList, adminOnly: false, colorClass: "" },
   { to: "/documents", label: "증빙서류발급", icon: FileText, adminOnly: false, colorClass: "" },
-  { to: "/projects", label: "프로젝트관리", icon: FileText, adminOnly: false, colorClass: "" },
-  { to: "/clients", label: "거래처관리", icon: Building2, adminOnly: false, colorClass: "" },
-  { to: "/transactions", label: "매입매출관리", icon: Receipt, adminOnly: true, colorClass: "text-primary" },
-  { to: "/payments", label: "입출금관리", icon: Banknote, adminOnly: true, colorClass: "text-primary" },
-  { to: "/notices", label: "공지사항", icon: Megaphone, adminOnly: false, colorClass: "text-danger" },
-  { to: "/settings", label: "설정", icon: Settings, adminOnly: true, colorClass: "text-primary" },
+  { to: "/projects", label: "프로젝트관리", icon: FileText, adminOnly: false, menuKey: "projects", colorClass: "" },
+  { to: "/clients", label: "거래처관리", icon: Building2, adminOnly: false, menuKey: "clients", colorClass: "" },
+  { to: "/transactions", label: "매입매출관리", icon: Receipt, adminOnly: false, menuKey: "transactions", colorClass: "text-primary" },
+  { to: "/payments", label: "입출금관리", icon: Banknote, adminOnly: false, menuKey: "payments", colorClass: "text-primary" },
+  { to: "/notices", label: "공지사항", icon: Megaphone, adminOnly: false, menuKey: "notices", colorClass: "text-danger" },
+  { to: "/settings", label: "직원등록", icon: Settings, adminOnly: true, colorClass: "text-primary" },
 ];
 
 export function Sidebar() {
   const { user, logout } = useAuth();
-  const visibleItems = menuItems.filter((item) => !item.adminOnly || user?.role === "admin");
+  const visibleItems = menuItems.filter((item) => {
+    if (item.adminOnly) return user?.role === "admin";
+    if (item.menuKey) return hasMenuPermission(user, item.menuKey);
+    return true;
+  });
 
   return (
     <aside className="w-64 shrink-0 bg-sidebar border-r border-border h-screen sticky top-0 flex flex-col">

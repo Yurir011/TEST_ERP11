@@ -78,7 +78,7 @@ function App() {
       <Route
         path="/projects"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute menuKey="projects">
             <ProjectsPage />
           </ProtectedRoute>
         }
@@ -86,7 +86,7 @@ function App() {
       <Route
         path="/projects/new"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute menuKey="projects">
             <ProjectFormPage />
           </ProtectedRoute>
         }
@@ -94,7 +94,7 @@ function App() {
       <Route
         path="/projects/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute menuKey="projects">
             <ProjectDetailPage />
           </ProtectedRoute>
         }
@@ -102,7 +102,7 @@ function App() {
       <Route
         path="/projects/:id/documents/new"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute menuKey="projects">
             <SalesDocumentFormPage />
           </ProtectedRoute>
         }
@@ -110,7 +110,7 @@ function App() {
       <Route
         path="/clients"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute menuKey="clients">
             <ClientsPage />
           </ProtectedRoute>
         }
@@ -118,7 +118,7 @@ function App() {
       <Route
         path="/clients/new"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute menuKey="clients">
             <ClientFormPage />
           </ProtectedRoute>
         }
@@ -126,7 +126,7 @@ function App() {
       <Route
         path="/clients/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute menuKey="clients">
             <ClientDetailPage />
           </ProtectedRoute>
         }
@@ -134,7 +134,7 @@ function App() {
       <Route
         path="/clients/:id/edit"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute menuKey="clients">
             <ClientFormPage />
           </ProtectedRoute>
         }
@@ -142,7 +142,7 @@ function App() {
       <Route
         path="/transactions"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute menuKey="transactions">
             <TransactionsPage />
           </ProtectedRoute>
         }
@@ -150,7 +150,7 @@ function App() {
       <Route
         path="/transactions/new"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute menuKey="transactions">
             <TransactionFormPage />
           </ProtectedRoute>
         }
@@ -158,7 +158,7 @@ function App() {
       <Route
         path="/payments"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute menuKey="payments">
             <PaymentsPage />
           </ProtectedRoute>
         }
@@ -166,7 +166,7 @@ function App() {
       <Route
         path="/payments/new"
         element={
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute menuKey="payments">
             <PaymentFormPage />
           </ProtectedRoute>
         }
@@ -174,7 +174,7 @@ function App() {
       <Route
         path="/notices"
         element={
-          <ProtectedRoute siteAdminAllowed>
+          <ProtectedRoute siteAdminAllowed menuKey="notices">
             <NoticesPage />
           </ProtectedRoute>
         }
@@ -190,7 +190,7 @@ function App() {
       <Route
         path="/notices/:id"
         element={
-          <ProtectedRoute siteAdminAllowed>
+          <ProtectedRoute siteAdminAllowed menuKey="notices">
             <NoticeDetailPage />
           </ProtectedRoute>
         }

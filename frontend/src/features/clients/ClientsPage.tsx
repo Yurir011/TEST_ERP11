@@ -78,8 +78,16 @@ export function ClientsPage() {
                 {client.ceo_name && ` · 대표 ${client.ceo_name}`}
               </p>
               <div className="mt-3 text-sm text-text-muted space-y-0.5">
-                {client.contact_name && <p>담당자: {client.contact_name}</p>}
-                {client.contact_phone && <p>연락처: {client.contact_phone}</p>}
+                {client.contacts.length > 0 && (
+                  <p>
+                    담당자: {client.contacts[0].name}
+                    {client.contacts[0].title && ` (${client.contacts[0].title})`}
+                    {client.contacts.length > 1 && ` 외 ${client.contacts.length - 1}명`}
+                  </p>
+                )}
+                {client.contacts.length > 0 && (client.contacts[0].mobile_phone || client.contacts[0].landline_phone) && (
+                  <p>연락처: {client.contacts[0].mobile_phone || client.contacts[0].landline_phone}</p>
+                )}
               </div>
               {(client.receivable_amount > 0 || client.payable_amount > 0) && (
                 <div className="mt-3 flex gap-2 text-xs">

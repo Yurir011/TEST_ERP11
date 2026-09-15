@@ -24,7 +24,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user
     if db.query(User).filter(User.employee_no == payload.employee_no).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용 중인 사번입니다.")
 
-    logger.debug(f"[Users] 계정 생성: email={payload.email}, by={current_user.id}")
+    logger.debug(f"[Users] 계정 생성: email={payload.email}, menu_permissions={payload.menu_permissions}, by={current_user.id}")
     user = User(
         employee_no=payload.employee_no,
         email=payload.email,
@@ -34,6 +34,9 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user
         grade=payload.grade,
         title=payload.title,
         hire_date=payload.hire_date,
+        birth_date=payload.birth_date,
+        address=payload.address,
+        menu_permissions=payload.menu_permissions,
     )
     db.add(user)
     db.commit()
@@ -58,10 +61,13 @@ def update_user(
     user.grade = payload.grade
     user.title = payload.title
     user.hire_date = payload.hire_date
+    user.birth_date = payload.birth_date
+    user.address = payload.address
     user.role = new_role
+    user.menu_permissions = payload.menu_permissions
     db.commit()
     db.refresh(user)
-    logger.debug(f"[Users] 수정: id={user_id}, by={current_user.id}")
+    logger.debug(f"[Users] 수정: id={user_id}, menu_permissions={payload.menu_permissions}, by={current_user.id}")
     return user
 
 

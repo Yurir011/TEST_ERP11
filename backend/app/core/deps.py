@@ -45,3 +45,19 @@ def require_admin_or_site_admin(current_user: User = Depends(get_current_user)) 
         logger.debug(f"[Auth] 관리자/사이트 관리자 권한 필요, 접근 거부: user_id={current_user.id}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자 권한이 필요합니다.")
     return current_user
+
+
+def require_menu_access(menu_key: str):
+    """대표(admin)는 항상 허용, 일반직원은 관리자가 개별로 부여한 menu_permissions에 포함된 경우에만 허용.
+    사이트 관리자(site_admin)는 이 메뉴들의 사용 대상이 아니므로 제외한다.
+    """
+
+    def _dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role == UserRole.admin:
+            return current_user
+        if current_user.role == UserRole.employee and menu_key in (current_user.menu_permissions or []):
+            return current_user
+        logger.debug(f"[Auth] 메뉴 권한 없음, 접근 거부: user_id={current_user.id}, menu={menu_key}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")
+
+    return _dependency

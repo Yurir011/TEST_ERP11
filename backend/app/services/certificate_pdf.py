@@ -146,14 +146,15 @@ def generate_certificate_pdf(
 
     rows = [
         ["성 명", user.name],
+        ["생년월일", user.birth_date.isoformat() if user.birth_date else "-"],
+        ["주 소", user.address or "-"],
         ["사 번", user.employee_no],
         ["직 급", grade_label],
         ["직 책", title_label],
         ["입 사 일", user.hire_date.isoformat()],
+        ["재직기간", f"{user.hire_date.isoformat()} ~ {issued_date.isoformat()} ({_tenure_label(user.hire_date, issued_date)})"],
+        ["용 도", purpose or "제출용"],
     ]
-    if doc_type == DocumentType.career:
-        rows.append(["재직기간", f"{user.hire_date.isoformat()} ~ {issued_date.isoformat()} ({_tenure_label(user.hire_date, issued_date)})"])
-    rows.append(["용 도", purpose or "제출용"])
 
     table = Table(
         [[Paragraph(k, label_style), Paragraph(v, body_style)] for k, v in rows],

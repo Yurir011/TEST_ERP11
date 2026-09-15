@@ -1,4 +1,4 @@
-import { CheckSquare, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logError } from "../../lib/logger";
@@ -49,17 +49,27 @@ export function TodoPanel() {
   }
 
   const doneCount = todos?.filter((t) => t.is_done).length ?? 0;
+  const totalCount = todos?.length ?? 0;
+  const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col border-t border-border">
-      <div className="px-5 py-3 shrink-0">
-        <p className="text-xs font-medium text-text-muted flex items-center gap-1.5">
-          <CheckSquare size={14} />
-          오늘의 할일 {todos && `(${doneCount}/${todos.length})`}
-        </p>
+    <div className="flex-1 min-h-0 flex flex-col border-t border-border border-l-[3px] border-l-primary bg-surface">
+      <div className="pl-3 pr-4 pt-3 pb-2.5 shrink-0">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-text">오늘의 할일</p>
+          <span className="text-[9px] font-bold tracking-wide text-tile-blue-fg bg-tile-blue rounded px-1.5 py-0.5 uppercase">
+            Today
+          </span>
+        </div>
+        <div className="h-1 rounded-full bg-border overflow-hidden mt-2">
+          <div
+            className="h-full rounded-full bg-primary transition-[width]"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
       </div>
 
-      <div className="px-3 flex-1 min-h-0 flex flex-col">
+      <div className="pl-3 pr-4 flex-1 min-h-0 flex flex-col">
         <form onSubmit={handleAdd} className="flex items-center gap-1.5 mb-2 shrink-0">
           <input
             value={content}
@@ -72,14 +82,17 @@ export function TodoPanel() {
           </button>
         </form>
 
-        <ul className="space-y-1 flex-1 min-h-0 overflow-y-auto pb-3">
+        <ul className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pb-3">
           {todos?.length === 0 && <li className="text-xs text-text-muted px-2 py-2">할 일이 없습니다.</li>}
           {todos?.map((todo) => (
-            <li key={todo.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface group">
+            <li
+              key={todo.id}
+              className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-bg hover:bg-border/50 transition-colors group"
+            >
               <button
                 onClick={() => handleToggle(todo)}
-                className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                  todo.is_done ? "bg-success border-success text-white" : "border-border"
+                className={`w-4 h-4 rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0 ${
+                  todo.is_done ? "bg-primary border-primary text-white" : "border-border"
                 }`}
               >
                 {todo.is_done && <span className="text-[9px] leading-none">✓</span>}

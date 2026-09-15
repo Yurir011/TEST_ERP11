@@ -7,7 +7,9 @@ from sqlalchemy import extract, func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.core.deps import require_admin
+from app.core.deps import require_menu_access
+
+require_payments_access = require_menu_access("payments")
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
@@ -35,6 +37,8 @@ def _to_out(p: Payment) -> PaymentOut:
         client_name=p.client.name if p.client else None,
         has_receipt=bool(p.receipt_path),
         memo=p.memo,
+        proof_type=p.proof_type,
+        proof_type_detail=p.proof_type_detail,
         created_at=p.created_at,
     )
 
@@ -45,7 +49,7 @@ def list_payments(
     year: int | None = Query(default=None),
     month: int | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_payments_access),
 ):
     query = db.query(Payment).options(joinedload(Payment.client))
     if type_filter is not None:
@@ -63,7 +67,7 @@ def get_monthly_report(
     year: int = Query(default_factory=lambda: date.today().year),
     month: int = Query(default_factory=lambda: date.today().month),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_payments_access),
 ):
     def total(payment_type: PaymentType) -> int:
         value = (
@@ -84,7 +88,7 @@ def get_monthly_report(
 
 @router.post("", response_model=PaymentOut, status_code=status.HTTP_201_CREATED)
 def create_payment(
-    payload: PaymentCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin)
+    payload: PaymentCreate, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
 ):
     if payload.client_id is not None:
         client = db.query(Client).filter(Client.id == payload.client_id).first()
@@ -101,6 +105,8 @@ def create_payment(
         method=payload.method,
         client_id=payload.client_id,
         memo=payload.memo,
+        proof_type=payload.proof_type,
+        proof_type_detail=payload.proof_type_detail,
         created_by=current_user.id,
     )
     db.add(payment)
@@ -111,7 +117,7 @@ def create_payment(
 
 @router.post("/import-csv", response_model=CsvImportResult)
 def import_card_statement(
-    file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(require_admin)
+    file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
 ):
     raw = file.file.read()
     logger.debug(f"[Payments] CSV 업로드: filename={file.filename}, size={len(raw)}, by={current_user.id}")
@@ -148,7 +154,7 @@ def upload_receipt(
     payment_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_payments_access),
 ):
     payment = db.query(Payment).options(joinedload(Payment.client)).filter(Payment.id == payment_id).first()
     if payment is None:
@@ -170,7 +176,7 @@ def upload_receipt(
 
 
 @router.get("/{payment_id}/receipt")
-def get_receipt(payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def get_receipt(payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)):
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if payment is None or not payment.receipt_path or not os.path.exists(payment.receipt_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="영수증 이미지를 찾을 수 없습니다.")
@@ -182,7 +188,7 @@ def update_payment(
     payment_id: int,
     payload: PaymentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_payments_access),
 ):
     payment = db.query(Payment).options(joinedload(Payment.client)).filter(Payment.id == payment_id).first()
     if payment is None:
@@ -201,6 +207,8 @@ def update_payment(
     payment.method = payload.method
     payment.client_id = payload.client_id
     payment.memo = payload.memo
+    payment.proof_type = payload.proof_type
+    payment.proof_type_detail = payload.proof_type_detail
     db.commit()
     db.refresh(payment)
     logger.debug(f"[Payments] 수정: id={payment_id}, by={current_user.id}")
@@ -208,7 +216,7 @@ def update_payment(
 
 
 @router.delete("/{payment_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_payment(payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def delete_payment(payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)):
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
