@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 class DocumentType(str, enum.Enum):
     employment = "employment"  # 재직증명서
     career = "career"  # 경력증명서
+    employment_en = "employment_en"  # 재직증명서 (영문)
 
 
 class DocumentIssue(Base):

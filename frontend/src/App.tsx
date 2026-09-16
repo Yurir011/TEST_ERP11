@@ -17,6 +17,8 @@ import { ProjectsPage } from "./features/projects/ProjectsPage";
 import { ProjectFormPage } from "./features/projects/ProjectFormPage";
 import { ProjectDetailPage } from "./features/projects/ProjectDetailPage";
 import { SalesDocumentFormPage } from "./features/projects/SalesDocumentFormPage";
+import { ProjectDocumentsPage } from "./features/projectDocuments/ProjectDocumentsPage";
+import { ProjectDocumentFormPage } from "./features/projectDocuments/ProjectDocumentFormPage";
 import { TransactionsPage } from "./features/transactions/TransactionsPage";
 import { TransactionFormPage } from "./features/transactions/TransactionFormPage";
 import { PaymentsPage } from "./features/payments/PaymentsPage";
@@ -104,6 +106,22 @@ function App() {
         element={
           <ProtectedRoute menuKey="projects">
             <SalesDocumentFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/project-documents"
+        element={
+          <ProtectedRoute>
+            <ProjectDocumentsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/project-documents/new"
+        element={
+          <ProtectedRoute>
+            <ProjectDocumentFormPage />
           </ProtectedRoute>
         }
       />

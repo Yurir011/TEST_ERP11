@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     documents_dir: str = "storage/documents"
     receipts_dir: str = "storage/receipts"
+    project_documents_dir: str = "storage/project_documents"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

@@ -50,26 +50,16 @@ export function TodoPanel() {
 
   const doneCount = todos?.filter((t) => t.is_done).length ?? 0;
   const totalCount = todos?.length ?? 0;
-  const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col border-t border-border border-l-[3px] border-l-primary bg-surface">
-      <div className="pl-3 pr-4 pt-3 pb-2.5 shrink-0">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-text">오늘의 할일</p>
-          <span className="text-[9px] font-bold tracking-wide text-tile-blue-fg bg-tile-blue rounded px-1.5 py-0.5 uppercase">
-            Today
-          </span>
-        </div>
-        <div className="h-1 rounded-full bg-border overflow-hidden mt-2">
-          <div
-            className="h-full rounded-full bg-primary transition-[width]"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+    <div className="mx-3 mb-3 flex-1 min-h-0 flex flex-col rounded-xl border border-text-muted/25 shadow-sm bg-sidebar overflow-hidden">
+      <div className="px-3 pt-3 pb-2 shrink-0">
+        <p className="text-xs font-semibold text-text-muted">
+          오늘의 할일 {todos && `(${doneCount}/${totalCount})`}
+        </p>
       </div>
 
-      <div className="pl-3 pr-4 flex-1 min-h-0 flex flex-col">
+      <div className="px-3 pb-3 flex-1 min-h-0 flex flex-col overflow-y-auto">
         <form onSubmit={handleAdd} className="flex items-center gap-1.5 mb-2 shrink-0">
           <input
             value={content}
@@ -82,33 +72,35 @@ export function TodoPanel() {
           </button>
         </form>
 
-        <ul className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pb-3">
-          {todos?.length === 0 && <li className="text-xs text-text-muted px-2 py-2">할 일이 없습니다.</li>}
-          {todos?.map((todo) => (
-            <li
-              key={todo.id}
-              className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-bg hover:bg-border/50 transition-colors group"
-            >
-              <button
-                onClick={() => handleToggle(todo)}
-                className={`w-4 h-4 rounded-[5px] border-[1.5px] flex items-center justify-center shrink-0 ${
-                  todo.is_done ? "bg-primary border-primary text-white" : "border-border"
-                }`}
+        <div className="rounded-lg bg-bg shadow-[inset_0_1px_3px_rgba(20,20,20,0.10),inset_0_-1px_0_rgba(255,255,255,0.6)] p-1.5 flex-1 min-h-0 overflow-y-auto">
+          {todos?.length === 0 && <p className="text-xs text-text-muted px-2 py-2">할 일이 없습니다.</p>}
+          <div className="space-y-1.5">
+            {todos?.map((todo) => (
+              <div
+                key={todo.id}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-surface shadow-[0_1px_3px_rgba(20,20,20,0.08)] group"
               >
-                {todo.is_done && <span className="text-[9px] leading-none">✓</span>}
-              </button>
-              <span className={`flex-1 text-xs break-words ${todo.is_done ? "line-through text-text-muted" : ""}`}>
-                {todo.content}
-              </span>
-              <button
-                onClick={() => handleDelete(todo.id)}
-                className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-danger shrink-0"
-              >
-                <Trash2 size={11} />
-              </button>
-            </li>
-          ))}
-        </ul>
+                <button
+                  onClick={() => handleToggle(todo)}
+                  className={`w-3.5 h-3.5 rounded-full border-[1.4px] flex items-center justify-center shrink-0 ${
+                    todo.is_done ? "bg-success border-success text-white" : "border-border bg-bg"
+                  }`}
+                >
+                  {todo.is_done && <span className="text-[8px] leading-none">✓</span>}
+                </button>
+                <span className={`flex-1 text-xs break-words ${todo.is_done ? "line-through text-text-muted" : ""}`}>
+                  {todo.content}
+                </span>
+                <button
+                  onClick={() => handleDelete(todo.id)}
+                  className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-danger shrink-0"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  FileStack,
   FileText,
   LayoutGrid,
   LogOut,
@@ -32,6 +33,7 @@ const menuItems: {
   { to: "/leaves", label: "연차관리", icon: ClipboardList, adminOnly: false, colorClass: "" },
   { to: "/documents", label: "증빙서류발급", icon: FileText, adminOnly: false, colorClass: "" },
   { to: "/projects", label: "프로젝트관리", icon: FileText, adminOnly: false, menuKey: "projects", colorClass: "" },
+  { to: "/project-documents", label: "문서관리", icon: FileStack, adminOnly: false, colorClass: "" },
   { to: "/clients", label: "거래처관리", icon: Building2, adminOnly: false, menuKey: "clients", colorClass: "" },
   { to: "/transactions", label: "매입매출관리", icon: Receipt, adminOnly: false, menuKey: "transactions", colorClass: "text-primary" },
   { to: "/payments", label: "입출금관리", icon: Banknote, adminOnly: false, menuKey: "payments", colorClass: "text-primary" },
@@ -73,7 +75,9 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <TodoPanel />
+      <div className="mt-14 flex-1 min-h-0 flex flex-col">
+        <TodoPanel />
+      </div>
 
       {user && (
         <div className="px-3 py-4 border-t border-border">

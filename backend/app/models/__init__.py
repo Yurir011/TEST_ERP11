@@ -6,6 +6,7 @@ from app.models.leave import LeaveRequest
 from app.models.notice import Notice
 from app.models.payment import Payment
 from app.models.project import Project
+from app.models.project_document import ProjectDocument, ProjectDocumentItem
 from app.models.sales_document import SalesDocument, SalesDocumentItem
 from app.models.schedule import ScheduleEvent
 from app.models.todo import TodoItem
@@ -20,6 +21,8 @@ __all__ = [
     "DocumentIssue",
     "Client",
     "Project",
+    "ProjectDocument",
+    "ProjectDocumentItem",
     "DocumentSet",
     "SalesDocument",
     "SalesDocumentItem",

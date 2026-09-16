@@ -14,6 +14,7 @@ from app.routers import (
     leaves,
     notices,
     payments,
+    project_documents,
     projects,
     sales_documents,
     schedule,
@@ -42,6 +43,7 @@ app.include_router(leaves.router)
 app.include_router(documents.router)
 app.include_router(clients.router)
 app.include_router(projects.router)
+app.include_router(project_documents.router)
 app.include_router(sales_documents.router)
 app.include_router(transactions.router)
 app.include_router(payments.router)

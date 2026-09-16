@@ -21,6 +21,9 @@ FONT_BOLD = "MalgunGothic-Bold"
 STAMP_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "stamp.png")
 STAMP_SIZE = 20 * mm
 SEAL_MARKER = "(인)"
+SEAL_MARKER_EN = "(seal)"
+# 직인 이미지를 찍지 않는 문서(재직증명서)에서, 대표자명과 "(인)" 사이에 오프라인 날인용으로 남겨두는 여백
+OFFLINE_SEAL_GAP = "&nbsp;" * 12
 
 _fonts_registered = False
 _stamp_image: ImageReader | None = None
@@ -75,7 +78,11 @@ class _StampedSignatureLine(Flowable):
 DOC_TITLES = {
     DocumentType.employment: "재직증명서",
     DocumentType.career: "경력증명서",
+    DocumentType.employment_en: "Certificate of Employment",
 }
+
+# 경력증명서만 회사 직인을 찍는다 (재직증명서/영문 재직증명서는 직인 없이 발급).
+STAMPED_DOC_TYPES = {DocumentType.career}
 
 GRADE_LABELS = {
     JobGrade.staff: "사원",
@@ -90,9 +97,22 @@ TITLE_LABELS = {
     JobTitle.team_lead: "팀장",
 }
 
+GRADE_LABELS_EN = {
+    JobGrade.staff: "Staff",
+    JobGrade.assistant_manager: "Assistant Manager",
+    JobGrade.manager: "Manager",
+    JobGrade.director: "Director",
+    JobGrade.chief: "Chief",
+}
+
+TITLE_LABELS_EN = {
+    JobTitle.ceo: "CEO",
+    JobTitle.team_lead: "Team Lead",
+}
+
 
 def _ensure_fonts_registered() -> None:
-    """Windows 기본 제공 맑은 고딕 폰트를 reportlab에 등록한다 (한글 출력을 위해 필요)."""
+    """Windows 기본 제공 맑은 고딕 폰트를 reportlab에 등록한다 (한글/영문 출력을 위해 필요)."""
     global _fonts_registered
     if _fonts_registered:
         return
@@ -113,6 +133,23 @@ def _tenure_label(hire_date: date, as_of: date) -> str:
     if years:
         return f"{years}년"
     return f"{rem_months}개월"
+
+
+def _tenure_label_en(hire_date: date, as_of: date) -> str:
+    months = (as_of.year - hire_date.year) * 12 + (as_of.month - hire_date.month)
+    if as_of.day < hire_date.day:
+        months -= 1
+    months = max(months, 0)
+    years, rem_months = divmod(months, 12)
+
+    def _plural(n: int, unit: str) -> str:
+        return f"{n} {unit}{'s' if n != 1 else ''}"
+
+    if years and rem_months:
+        return f"{_plural(years, 'year')} {_plural(rem_months, 'month')}"
+    if years:
+        return _plural(years, "year")
+    return _plural(rem_months, "month")
 
 
 def generate_certificate_pdf(
@@ -141,20 +178,67 @@ def generate_certificate_pdf(
     footer_style = ParagraphStyle("Footer", fontName=FONT_REGULAR, fontSize=11, alignment=1, leading=20)
 
     issued_date = issued_at.date()
-    grade_label = GRADE_LABELS.get(user.grade, "-")
-    title_label = TITLE_LABELS.get(user.title, "-") if user.title else "-"
+    is_en = doc_type == DocumentType.employment_en
+    use_stamp = doc_type in STAMPED_DOC_TYPES
 
-    rows = [
-        ["성 명", user.name],
-        ["생년월일", user.birth_date.isoformat() if user.birth_date else "-"],
-        ["주 소", user.address or "-"],
-        ["사 번", user.employee_no],
-        ["직 급", grade_label],
-        ["직 책", title_label],
-        ["입 사 일", user.hire_date.isoformat()],
-        ["재직기간", f"{user.hire_date.isoformat()} ~ {issued_date.isoformat()} ({_tenure_label(user.hire_date, issued_date)})"],
-        ["용 도", purpose or "제출용"],
-    ]
+    if is_en:
+        grade_label = GRADE_LABELS_EN.get(user.grade, "-")
+        title_label = TITLE_LABELS_EN.get(user.title, "-") if user.title else "-"
+        rows = [
+            ["Name", user.name],
+            ["Date of Birth", user.birth_date.isoformat() if user.birth_date else "-"],
+            ["Address", user.address or "-"],
+            ["Employee No.", user.employee_no],
+            ["Grade", grade_label],
+            ["Title", title_label],
+            ["Date of Hire", user.hire_date.isoformat()],
+            [
+                "Period of Employment",
+                f"{user.hire_date.isoformat()} ~ {issued_date.isoformat()} ({_tenure_label_en(user.hire_date, issued_date)})",
+            ],
+            ["Purpose", purpose or "For submission"],
+        ]
+        certify_sentence = "This is to certify that the above-named person is currently employed at our company."
+        signature_text = f"CEO: {settings.company_ceo_name or '-'}{OFFLINE_SEAL_GAP}{SEAL_MARKER_EN}"
+        footer_lines = [
+            f"Date Issued: {issued_date.isoformat()}",
+            f"{settings.company_name}",
+            signature_text,
+            f"Address: {settings.company_address or '-'}",
+            f"Business Registration No.: {settings.company_reg_no or '-'}",
+        ]
+    else:
+        grade_label = GRADE_LABELS.get(user.grade, "-")
+        title_label = TITLE_LABELS.get(user.title, "-") if user.title else "-"
+        rows = [
+            ["성 명", user.name],
+            ["생년월일", user.birth_date.isoformat() if user.birth_date else "-"],
+            ["주 소", user.address or "-"],
+            ["사 번", user.employee_no],
+            ["직 급", grade_label],
+            ["직 책", title_label],
+            ["입 사 일", user.hire_date.isoformat()],
+            [
+                "재직기간",
+                f"{user.hire_date.isoformat()} ~ {issued_date.isoformat()} ({_tenure_label(user.hire_date, issued_date)})",
+            ],
+            ["용 도", purpose or "제출용"],
+        ]
+        certify_sentence = (
+            "위 사람은 상기 내용과 같이 재직 중임을 증명합니다."
+            if doc_type == DocumentType.employment
+            else "위 사람은 상기 내용과 같이 근무하였음을 증명합니다."
+        )
+        signature_text = f"대표자 : {settings.company_ceo_name or '-'}" + (
+            f" {SEAL_MARKER}" if use_stamp else f"{OFFLINE_SEAL_GAP}{SEAL_MARKER}"
+        )
+        footer_lines = [
+            f"발급일 : {issued_date.isoformat()}",
+            f"{settings.company_name}",
+            signature_text,
+            f"주소 : {settings.company_address or '-'}",
+            f"사업자등록번호 : {settings.company_reg_no or '-'}",
+        ]
 
     table = Table(
         [[Paragraph(k, label_style), Paragraph(v, body_style)] for k, v in rows],
@@ -171,10 +255,10 @@ def generate_certificate_pdf(
         )
     )
 
-    certify_sentence = (
-        "위 사람은 상기 내용과 같이 재직 중임을 증명합니다."
-        if doc_type == DocumentType.employment
-        else "위 사람은 상기 내용과 같이 근무하였음을 증명합니다."
+    signature_flowable = (
+        _StampedSignatureLine(signature_text, font_name=FONT_REGULAR, font_size=11, width=doc.width)
+        if use_stamp
+        else Paragraph(signature_text, footer_style)
     )
 
     elements = [
@@ -183,17 +267,12 @@ def generate_certificate_pdf(
         Spacer(1, 18 * mm),
         Paragraph(certify_sentence, footer_style),
         Spacer(1, 14 * mm),
-        Paragraph(f"발급일 : {issued_date.isoformat()}", footer_style),
+        Paragraph(footer_lines[0], footer_style),
         Spacer(1, 10 * mm),
-        Paragraph(f"{settings.company_name}", footer_style),
-        _StampedSignatureLine(
-            f"대표자 : {settings.company_ceo_name or '-'} {SEAL_MARKER}",
-            font_name=FONT_REGULAR,
-            font_size=11,
-            width=doc.width,
-        ),
-        Paragraph(f"주소 : {settings.company_address or '-'}", footer_style),
-        Paragraph(f"사업자등록번호 : {settings.company_reg_no or '-'}", footer_style),
+        Paragraph(footer_lines[1], footer_style),
+        signature_flowable,
+        Paragraph(footer_lines[3], footer_style),
+        Paragraph(footer_lines[4], footer_style),
     ]
 
     doc.build(elements)
