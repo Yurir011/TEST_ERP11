@@ -181,6 +181,9 @@ def generate_certificate_pdf(
     is_en = doc_type == DocumentType.employment_en
     use_stamp = doc_type in STAMPED_DOC_TYPES
 
+    # 재직증명서(한글/영문)는 재직기간·사업자등록번호를 표기하지 않는다. 경력증명서는 그대로 유지.
+    is_career = doc_type == DocumentType.career
+
     if is_en:
         grade_label = GRADE_LABELS_EN.get(user.grade, "-")
         title_label = TITLE_LABELS_EN.get(user.title, "-") if user.title else "-"
@@ -192,10 +195,6 @@ def generate_certificate_pdf(
             ["Grade", grade_label],
             ["Title", title_label],
             ["Date of Hire", user.hire_date.isoformat()],
-            [
-                "Period of Employment",
-                f"{user.hire_date.isoformat()} ~ {issued_date.isoformat()} ({_tenure_label_en(user.hire_date, issued_date)})",
-            ],
             ["Purpose", purpose or "For submission"],
         ]
         certify_sentence = "This is to certify that the above-named person is currently employed at our company."
@@ -205,7 +204,6 @@ def generate_certificate_pdf(
             f"{settings.company_name}",
             signature_text,
             f"Address: {settings.company_address or '-'}",
-            f"Business Registration No.: {settings.company_reg_no or '-'}",
         ]
     else:
         grade_label = GRADE_LABELS.get(user.grade, "-")
@@ -218,12 +216,15 @@ def generate_certificate_pdf(
             ["직 급", grade_label],
             ["직 책", title_label],
             ["입 사 일", user.hire_date.isoformat()],
-            [
-                "재직기간",
-                f"{user.hire_date.isoformat()} ~ {issued_date.isoformat()} ({_tenure_label(user.hire_date, issued_date)})",
-            ],
-            ["용 도", purpose or "제출용"],
         ]
+        if is_career:
+            rows.append(
+                [
+                    "재직기간",
+                    f"{user.hire_date.isoformat()} ~ {issued_date.isoformat()} ({_tenure_label(user.hire_date, issued_date)})",
+                ]
+            )
+        rows.append(["용 도", purpose or "제출용"])
         certify_sentence = (
             "위 사람은 상기 내용과 같이 재직 중임을 증명합니다."
             if doc_type == DocumentType.employment
@@ -237,8 +238,9 @@ def generate_certificate_pdf(
             f"{settings.company_name}",
             signature_text,
             f"주소 : {settings.company_address or '-'}",
-            f"사업자등록번호 : {settings.company_reg_no or '-'}",
         ]
+        if is_career:
+            footer_lines.append(f"사업자등록번호 : {settings.company_reg_no or '-'}")
 
     table = Table(
         [[Paragraph(k, label_style), Paragraph(v, body_style)] for k, v in rows],
@@ -261,18 +263,19 @@ def generate_certificate_pdf(
         else Paragraph(signature_text, footer_style)
     )
 
+    # footer_lines: [발급일, 회사명, 서명(직인/여백), 주소, (경력증명서만) 사업자등록번호]
+    issued_line, company_line, _signature_placeholder, *trailing_lines = footer_lines
     elements = [
         Paragraph(DOC_TITLES[doc_type], title_style),
         table,
         Spacer(1, 18 * mm),
         Paragraph(certify_sentence, footer_style),
         Spacer(1, 14 * mm),
-        Paragraph(footer_lines[0], footer_style),
+        Paragraph(issued_line, footer_style),
         Spacer(1, 10 * mm),
-        Paragraph(footer_lines[1], footer_style),
+        Paragraph(company_line, footer_style),
         signature_flowable,
-        Paragraph(footer_lines[3], footer_style),
-        Paragraph(footer_lines[4], footer_style),
+        *[Paragraph(line, footer_style) for line in trailing_lines],
     ]
 
     doc.build(elements)

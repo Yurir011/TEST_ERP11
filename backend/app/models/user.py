@@ -9,7 +9,7 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 # 일반직원에게 관리자가 개별로 열람 권한을 부여할 수 있는 메뉴 목록 (체크리스트에서 사용)
-MENU_PERMISSION_KEYS = ("projects", "clients", "transactions", "payments", "notices")
+MENU_PERMISSION_KEYS = ("projects", "clients", "transactions", "payments", "notices", "tax_invoice")
 
 
 class UserRole(str, enum.Enum):
@@ -43,6 +43,15 @@ def resolve_role(title: JobTitle | None) -> UserRole:
 def is_admin_role(role: UserRole) -> bool:
     """대표(admin)와 사이트 관리자(site_admin) 모두 관리자 권한이 필요한 화면에 접근할 수 있다."""
     return role in (UserRole.admin, UserRole.site_admin)
+
+
+def has_menu_permission(user: "User", menu_key: str) -> bool:
+    """대표(admin)는 항상 허용, 일반직원은 관리자가 개별로 부여한 menu_permissions에 포함된 경우에만 허용.
+    사이트 관리자(site_admin)는 이 메뉴들의 사용 대상이 아니므로 제외한다.
+    """
+    if user.role == UserRole.admin:
+        return True
+    return user.role == UserRole.employee and menu_key in (user.menu_permissions or [])
 
 
 class User(Base):

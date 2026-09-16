@@ -10,7 +10,7 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.project import Project
 from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentItem
-from app.models.user import User
+from app.models.user import User, has_menu_permission
 from app.schemas.project_document import ProjectDocumentCreate, ProjectDocumentOut
 from app.services.quotation_excel import generate_quotation_excel
 from app.services.statement_excel import generate_statement_excel
@@ -68,6 +68,10 @@ def list_project_documents(
 def create_project_document(
     payload: ProjectDocumentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
+    if payload.doc_type == ProjectDocType.tax_invoice and not has_menu_permission(current_user, "tax_invoice"):
+        logger.debug(f"[ProjectDocuments] 세금계산서 권한 없음, 접근 거부: user_id={current_user.id}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 작성 권한이 없습니다.")
+
     project = db.query(Project).filter(Project.id == payload.project_id).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 프로젝트입니다.")

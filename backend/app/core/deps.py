@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.logging_config import get_logger
-from app.models.user import User, UserRole, is_admin_role
+from app.models.user import User, UserRole, has_menu_permission, is_admin_role
 
 logger = get_logger("Deps")
 
@@ -53,9 +53,7 @@ def require_menu_access(menu_key: str):
     """
 
     def _dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role == UserRole.admin:
-            return current_user
-        if current_user.role == UserRole.employee and menu_key in (current_user.menu_permissions or []):
+        if has_menu_permission(current_user, menu_key):
             return current_user
         logger.debug(f"[Auth] 메뉴 권한 없음, 접근 거부: user_id={current_user.id}, menu={menu_key}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")

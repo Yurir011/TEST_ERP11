@@ -30,7 +30,7 @@ export const GRADE_LABELS: Record<JobGrade, string> = {
 };
 
 // 관리자가 직원별로 개별 열람 권한을 부여할 수 있는 메뉴 키. 대표(admin)/사이트 관리자는 이 값과 무관하게 항상 전체 접근 가능.
-export type MenuPermissionKey = "projects" | "clients" | "transactions" | "payments" | "notices";
+export type MenuPermissionKey = "projects" | "clients" | "transactions" | "payments" | "notices" | "tax_invoice";
 
 export const MENU_PERMISSION_OPTIONS: { value: MenuPermissionKey; label: string }[] = [
   { value: "projects", label: "프로젝트관리" },
@@ -38,6 +38,7 @@ export const MENU_PERMISSION_OPTIONS: { value: MenuPermissionKey; label: string 
   { value: "transactions", label: "매입매출관리" },
   { value: "payments", label: "입출금관리" },
   { value: "notices", label: "공지사항" },
+  { value: "tax_invoice", label: "세금계산서" },
 ];
 
 export interface CurrentUser {

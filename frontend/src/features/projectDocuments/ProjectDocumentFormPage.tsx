@@ -1,9 +1,11 @@
 import { Info, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import { useAuth } from "../../context/AuthContext";
 import type { Project } from "../projects/types";
 import { ApiError, apiGet, apiPost, downloadFile } from "../../lib/api";
+import { hasMenuPermission } from "../../lib/auth";
 import { logError } from "../../lib/logger";
 import {
   EMPTY_PROJECT_DOC_ITEM,
@@ -27,6 +29,7 @@ export function ProjectDocumentFormPage() {
   const [searchParams] = useSearchParams();
   const docType: ProjectDocType = isProjectDocType(searchParams.get("type")) ? searchParams.get("type")! : "quotation";
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState("");
@@ -101,6 +104,10 @@ export function ProjectDocumentFormPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (docType === "tax_invoice" && !hasMenuPermission(user, "tax_invoice")) {
+    return <Navigate to="/project-documents" replace />;
   }
 
   return (

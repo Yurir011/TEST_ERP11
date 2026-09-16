@@ -2,8 +2,10 @@ import { Download, FileSpreadsheet, FileText, Plus, Receipt, Trash2 } from "luci
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet, downloadFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
+import { hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { PROJECT_DOC_EXCEL_EXT, PROJECT_DOC_TYPE_LABELS, type ProjectDocType, type ProjectDocument } from "./types";
 
@@ -31,6 +33,10 @@ function itemsTotal(doc: ProjectDocument): number {
 }
 
 export function ProjectDocumentsPage() {
+  const { user } = useAuth();
+  const visibleActions = NEW_DOC_ACTIONS.filter(
+    (action) => action.type !== "tax_invoice" || hasMenuPermission(user, "tax_invoice")
+  );
   const [tab, setTab] = useState<ProjectDocType | "all">("all");
   const [docs, setDocs] = useState<ProjectDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,8 +89,8 @@ export function ProjectDocumentsPage() {
       title="문서관리"
       description="프로젝트별 견적서·거래명세서·세금계산서를 작성하고 관리합니다."
     >
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {NEW_DOC_ACTIONS.map(({ type, icon: Icon, colorClass }) => (
+      <div className={`grid gap-4 mb-6 ${visibleActions.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+        {visibleActions.map(({ type, icon: Icon, colorClass }) => (
           <Link
             key={type}
             to={`/project-documents/new?type=${type}`}
