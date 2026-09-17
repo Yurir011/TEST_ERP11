@@ -2,7 +2,7 @@ import os
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import extract, func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
@@ -17,6 +17,8 @@ from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.user import User
 from app.schemas.payment import CsvImportResult, PaymentCreate, PaymentOut, PaymentReportOut
 from app.services.payment_csv import CsvParseError, parse_card_statement_csv
+from app.services.payment_voucher_excel import generate_payment_voucher_excel
+from app.services.payment_voucher_pdf import generate_payment_voucher_pdf
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 logger = get_logger("Payments")
@@ -181,6 +183,41 @@ def get_receipt(payment_id: int, db: Session = Depends(get_db), current_user: Us
     if payment is None or not payment.receipt_path or not os.path.exists(payment.receipt_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="영수증 이미지를 찾을 수 없습니다.")
     return FileResponse(payment.receipt_path)
+
+
+def _get_payment_with_voucher_relations(db: Session, payment_id: int) -> Payment:
+    payment = (
+        db.query(Payment)
+        .options(joinedload(Payment.client), joinedload(Payment.creator))
+        .filter(Payment.id == payment_id)
+        .first()
+    )
+    if payment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
+    return payment
+
+
+@router.get("/{payment_id}/pdf")
+def get_payment_voucher_pdf(
+    payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
+):
+    payment = _get_payment_with_voucher_relations(db, payment_id)
+    logger.debug(f"[Payments] 전표 PDF 생성: payment_id={payment_id}, by={current_user.id}")
+    pdf_bytes = generate_payment_voucher_pdf(payment)
+    return Response(content=pdf_bytes, media_type="application/pdf")
+
+
+@router.get("/{payment_id}/excel")
+def get_payment_voucher_excel(
+    payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
+):
+    payment = _get_payment_with_voucher_relations(db, payment_id)
+    logger.debug(f"[Payments] 전표 엑셀 생성: payment_id={payment_id}, by={current_user.id}")
+    excel_bytes = generate_payment_voucher_excel(payment)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @router.put("/{payment_id}", response_model=PaymentOut)

@@ -21,6 +21,19 @@ class ProjectDocType(str, enum.Enum):
     tax_invoice = "tax_invoice"  # 세금계산서 (홈택스/팝빌 연동 전까지는 큰 틀만)
 
 
+class ProjectDocumentStatus(str, enum.Enum):
+    draft = "draft"  # 작성 중 (결재 요청 전, 수정 가능)
+    pending = "pending"  # 결재 요청됨, 승인 대기 중
+    approved = "approved"  # 결재 승인 완료 - PDF에 직인 날인됨, 저장/발송/출력 가능
+    rejected = "rejected"  # 반려됨 - 재수정 후 재요청 가능
+
+
+class ApprovalRoute(str, enum.Enum):
+    chief = "chief"  # 소장
+    manager = "manager"  # 과장
+    self_decision = "self_decision"  # 전결 - 작성자 본인이 즉시 승인
+
+
 class ProjectDocument(Base):
     """문서관리에서 작성하는 견적서/거래명세서/세금계산서.
     프로젝트 상세 화면의 SalesDocument(품목별 PDF 발행)과는 별개로,
@@ -35,12 +48,22 @@ class ProjectDocument(Base):
     issue_date: Mapped[date] = mapped_column(Date)
     client_name: Mapped[str] = mapped_column(String(200))  # 거래처명
     manager_name: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 담당자
-    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 자동 생성된 엑셀 파일 경로
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 자동 생성된 PDF 파일 경로
+    status: Mapped[ProjectDocumentStatus] = mapped_column(
+        Enum(ProjectDocumentStatus, name="projectdocumentstatus"), default=ProjectDocumentStatus.draft
+    )
+    approval_route: Mapped[ApprovalRoute | None] = mapped_column(
+        Enum(ApprovalRoute, name="approvalroute"), nullable=True
+    )
+    approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # 배정된 결재권자
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     project: Mapped["Project"] = relationship()
-    creator: Mapped["User"] = relationship()
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+    approver: Mapped["User | None"] = relationship(foreign_keys=[approver_id])
     items: Mapped[list["ProjectDocumentItem"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="ProjectDocumentItem.sort_order"
     )

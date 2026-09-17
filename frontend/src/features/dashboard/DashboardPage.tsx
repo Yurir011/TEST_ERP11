@@ -22,6 +22,7 @@ import type { LeaveBalance } from "../leaves/types";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
 import type { PaymentReport } from "../payments/types";
+import type { ProjectDocument } from "../projectDocuments/types";
 
 interface HealthResponse {
   status: string;
@@ -37,6 +38,7 @@ export function DashboardPage() {
   const [inProgressCount, setInProgressCount] = useState<number | null>(null);
   const [pendingEstimateCount, setPendingEstimateCount] = useState<number | null>(null);
   const [paymentReport, setPaymentReport] = useState<PaymentReport | null>(null);
+  const [myPendingApprovalCount, setMyPendingApprovalCount] = useState<number | null>(null);
 
   useEffect(() => {
     logDebug("Dashboard", "백엔드 헬스체크 시작");
@@ -69,6 +71,11 @@ export function DashboardPage() {
     apiGet<Project[]>("/api/projects?status=estimate")
       .then((projects) => setPendingEstimateCount(projects.length))
       .catch((err) => logError("Dashboard", "미결 견적 조회 실패", err));
+
+    logDebug("Dashboard", "내 결재 대기 조회 시작");
+    apiGet<ProjectDocument[]>("/api/project-documents?status=pending&approver_mine=true")
+      .then((docs) => setMyPendingApprovalCount(docs.length))
+      .catch((err) => logError("Dashboard", "내 결재 대기 조회 실패", err));
 
     if (user?.role === "admin") {
       const now = new Date();
@@ -186,6 +193,12 @@ export function DashboardPage() {
             <li className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
               <span>내 연차 승인 대기</span>
               <span className="font-medium text-text px-2 py-0.5 text-xs">{leaveBalance?.pending ?? "-"}일</span>
+            </li>
+            <li className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
+              <span>내 결재 대기</span>
+              <span className="font-medium bg-danger/10 text-danger px-2 py-0.5 rounded-full text-xs">
+                {myPendingApprovalCount ?? "-"}
+              </span>
             </li>
             {user?.role === "admin" && (
               <li className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">

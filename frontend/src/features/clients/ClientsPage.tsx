@@ -1,16 +1,19 @@
-import { Building2, Plus, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Building2, Plus, Search, Trash2 } from "lucide-react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { apiGet } from "../../lib/api";
+import { useAuth } from "../../context/AuthContext";
+import { apiDelete, apiGet } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { Client } from "./types";
 
 export function ClientsPage() {
+  const { user } = useAuth();
   const [clients, setClients] = useState<Client[] | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   function loadClients(q: string) {
     logDebug("Clients", `목록 조회: q=${q}`);
@@ -28,6 +31,23 @@ export function ClientsPage() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  async function handleDelete(e: MouseEvent, client: Client) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm(`"${client.name}" 거래처를 삭제하시겠습니까?`)) return;
+    logDebug("Clients", `삭제 시도: id=${client.id}`);
+    setDeletingId(client.id);
+    try {
+      await apiDelete(`/api/clients/${client.id}`);
+      loadClients(query);
+    } catch (err) {
+      logError("Clients", "삭제 실패", err);
+      setError("삭제 중 오류가 발생했습니다.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <MainLayout
@@ -70,9 +90,19 @@ export function ClientsPage() {
             <Link
               key={client.id}
               to={`/clients/${client.id}`}
-              className="bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors"
+              className="relative group bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors"
             >
-              <h2 className="font-medium text-text">{client.name}</h2>
+              {user?.role === "admin" && (
+                <button
+                  onClick={(e) => handleDelete(e, client)}
+                  disabled={deletingId === client.id}
+                  title="거래처 삭제"
+                  className="absolute top-4 right-4 p-1.5 rounded-lg text-text-muted opacity-0 group-hover:opacity-100 hover:text-danger hover:bg-danger/10 transition disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+              <h2 className="font-medium text-text pr-6">{client.name}</h2>
               <p className="text-xs text-text-muted mt-1">
                 {client.biz_reg_no || "사업자번호 미등록"}
                 {client.ceo_name && ` · 대표 ${client.ceo_name}`}

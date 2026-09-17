@@ -30,6 +30,7 @@ export function PaymentFormPage() {
   const [category, setCategory] = useState<PaymentCategory>(PAYMENT_CATEGORIES[0]);
   const [item, setItem] = useState("");
   const [customText, setCustomText] = useState("");
+  const [manualItem, setManualItem] = useState("");
   const [amount, setAmount] = useState("0");
   const [method, setMethod] = useState<PaymentMethod>("corporate_card");
   const [partyQuery, setPartyQuery] = useState("");
@@ -76,11 +77,15 @@ export function PaymentFormPage() {
   }, [method]);
 
   const categoryItems = PAYMENT_CATEGORY_ITEMS[category];
-  const needsCustomText = category === "기타" || item === "기타";
+  // 항목 목록이 없는 분류(기타 포함)는 "항목" 칸에 직접 입력한다. 항목 목록이 있는 분류에서 "기타"를 고른 경우는
+  // 별도의 "내용 직접 입력" 칸을 쓴다 (기존 동작 유지).
+  const needsManualItem = !categoryItems;
+  const needsCustomText = !needsManualItem && item === "기타";
 
   useEffect(() => {
     setItem("");
     setCustomText("");
+    setManualItem("");
   }, [category]);
 
   function pickClient(client: Client) {
@@ -105,8 +110,12 @@ export function PaymentFormPage() {
       setError("내용을 직접 입력해주세요.");
       return;
     }
+    if (needsManualItem && !manualItem.trim()) {
+      setError("항목을 입력해주세요.");
+      return;
+    }
 
-    const description = category === "기타" ? customText.trim() : categoryItems ? (item === "기타" ? customText.trim() : item) : category;
+    const description = needsManualItem ? manualItem.trim() : item === "기타" ? customText.trim() : item;
 
     setIsSubmitting(true);
     try {
@@ -251,6 +260,18 @@ export function PaymentFormPage() {
                   </option>
                 ))}
               </select>
+            </div>
+          )}
+          {needsManualItem && (
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5">항목</label>
+              <input
+                required
+                value={manualItem}
+                onChange={(e) => setManualItem(e.target.value)}
+                placeholder="항목을 직접 입력하세요"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              />
             </div>
           )}
         </div>

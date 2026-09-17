@@ -6,12 +6,13 @@ import { useAuth } from "../../context/AuthContext";
 import type { Project } from "../projects/types";
 import { ApiError, apiGet, apiPost, downloadFile } from "../../lib/api";
 import { hasMenuPermission } from "../../lib/auth";
-import { logError } from "../../lib/logger";
+import { logDebug, logError } from "../../lib/logger";
+import { ApproverPickerModal } from "./ApproverPickerModal";
 import {
   EMPTY_PROJECT_DOC_ITEM,
   MAX_PROJECT_DOC_ITEMS,
-  PROJECT_DOC_EXCEL_EXT,
   PROJECT_DOC_TYPE_LABELS,
+  type ApprovalRoute,
   type ProjectDocType,
   type ProjectDocument,
   type ProjectDocumentItemFormValues,
@@ -40,6 +41,7 @@ export function ProjectDocumentFormPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showApproverPicker, setShowApproverPicker] = useState(false);
 
   useEffect(() => {
     apiGet<Project[]>("/api/projects")
@@ -67,15 +69,20 @@ export function ProjectDocumentFormPage() {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, [key]: value } : it)));
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     if (!projectId) {
       setError("관련 프로젝트를 선택해주세요.");
       return;
     }
+    setShowApproverPicker(true);
+  }
+
+  async function handleRequestApproval(approvalRoute: ApprovalRoute, approverId: number | null) {
     setIsSubmitting(true);
     try {
+      logDebug("ProjectDocumentForm", `결재요청 시도: route=${approvalRoute}, approver_id=${approverId}`);
       const created = await apiPost<ProjectDocument>("/api/project-documents", {
         project_id: Number(projectId),
         doc_type: docType,
@@ -88,19 +95,19 @@ export function ProjectDocumentFormPage() {
           unit_price: Number(it.unit_price) || 0,
           note: it.note || null,
         })),
+        approval_route: approvalRoute,
+        approver_id: approverId,
       });
 
-      if (created.has_excel) {
-        await downloadFile(
-          `/api/project-documents/${created.id}/excel`,
-          `${PROJECT_DOC_TYPE_LABELS[docType]}_${issueDate}${PROJECT_DOC_EXCEL_EXT[docType]}`
-        );
+      if (created.status === "approved" && created.has_pdf) {
+        await downloadFile(`/api/project-documents/${created.id}/pdf`, `${PROJECT_DOC_TYPE_LABELS[docType]}_${issueDate}.pdf`);
       }
 
       navigate("/project-documents", { replace: true });
     } catch (err) {
-      logError("ProjectDocumentForm", "등록 실패", err);
-      setError(err instanceof ApiError ? err.message : "등록 중 오류가 발생했습니다.");
+      logError("ProjectDocumentForm", "결재요청 실패", err);
+      setError(err instanceof ApiError ? err.message : "결재요청 중 오류가 발생했습니다.");
+      setShowApproverPicker(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -261,7 +268,7 @@ export function ProjectDocumentFormPage() {
             disabled={isSubmitting}
             className="rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60"
           >
-            {isSubmitting ? "저장 중..." : "저장"}
+            결재요청
           </button>
           <button
             type="button"
@@ -272,6 +279,14 @@ export function ProjectDocumentFormPage() {
           </button>
         </div>
       </form>
+
+      {showApproverPicker && (
+        <ApproverPickerModal
+          isSubmitting={isSubmitting}
+          onConfirm={handleRequestApproval}
+          onCancel={() => setShowApproverPicker(false)}
+        />
+      )}
     </MainLayout>
   );
 }

@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
@@ -17,9 +18,12 @@ logger = get_logger("Todos")
 
 @router.get("", response_model=list[TodoOut])
 def list_todos(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    today = date.today()
     return (
         db.query(TodoItem)
         .filter(TodoItem.user_id == current_user.id)
+        # 완료된 항목은 완료 당일에만 노출하고, 날짜가 지나면 목록에서 자동으로 사라지게 한다.
+        .filter(or_(TodoItem.is_done.is_(False), TodoItem.completed_on == today))
         .order_by(TodoItem.is_done, TodoItem.created_at)
         .all()
     )
@@ -57,6 +61,8 @@ def toggle_todo(todo_id: int, db: Session = Depends(get_db), current_user: User 
     if todo is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="할 일을 찾을 수 없습니다.")
     todo.is_done = not todo.is_done
+    todo.completed_on = date.today() if todo.is_done else None
+    logger.debug(f"[Todos] 토글: todo_id={todo.id}, is_done={todo.is_done}, completed_on={todo.completed_on}")
 
     if todo.schedule_event_id:
         event = db.query(ScheduleEvent).filter(ScheduleEvent.id == todo.schedule_event_id).first()

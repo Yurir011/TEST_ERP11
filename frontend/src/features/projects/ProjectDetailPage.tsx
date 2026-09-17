@@ -5,6 +5,8 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet, apiPut, downloadFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logError } from "../../lib/logger";
+import { ProgressStagesCard } from "./ProgressStagesCard";
+import { PurchaseProgressCard } from "./PurchaseProgressCard";
 import {
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_STYLES,
@@ -153,6 +155,9 @@ export function ProjectDetailPage() {
               </div>
             </div>
           </div>
+
+          <ProgressStagesCard projectId={project.id} />
+          <PurchaseProgressCard projectId={project.id} />
 
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-text-muted">견적서 · 거래명세서</h2>

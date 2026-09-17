@@ -61,3 +61,24 @@ export interface SalesDocumentSet {
   estimate: SalesDocument;
   statement: SalesDocument;
 }
+
+export const MAX_PROGRESS_STAGES = 5;
+
+export interface ProgressStage {
+  id: number;
+  name: string;
+  order_index: number;
+  is_done: boolean;
+  completed_on: string | null;
+}
+
+export type PurchaseStepKey = "request" | "approval" | "purchase" | "payment" | "delivery";
+
+export interface PurchaseStep {
+  id: number;
+  step_key: PurchaseStepKey;
+  label: string;
+  order_index: number;
+  is_done: boolean;
+  completed_on: string | null;
+}

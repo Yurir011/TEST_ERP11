@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -13,4 +13,5 @@ class TodoOut(BaseModel):
     id: int
     content: str
     is_done: bool
+    completed_on: date | None = None
     created_at: datetime

@@ -43,6 +43,16 @@ class UserOut(BaseModel):
     menu_permissions: list[str]
 
 
+class ApproverOut(BaseModel):
+    """결재권자 후보 선택용 최소 정보 (일반 직원도 조회 가능하므로 email 등 민감정보는 제외)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    grade: JobGrade
+
+
 class UserCreate(BaseModel):
     employee_no: str
     email: str = Field(pattern=EMAIL_PATTERN)

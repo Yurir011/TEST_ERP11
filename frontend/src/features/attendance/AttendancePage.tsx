@@ -1,8 +1,8 @@
-import { ChevronLeft, ChevronRight, LogIn, LogOut } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
-import { ApiError, apiGet, apiPost } from "../../lib/api";
+import { ApiError, apiGet } from "../../lib/api";
 import { formatDuration, formatTime } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "./types";
@@ -65,8 +65,6 @@ export function AttendancePage() {
   const [today, setToday] = useState<AttendanceRecord | null>(null);
   const [myRecords, setMyRecords] = useState<AttendanceRecord[]>([]);
   const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
-  const [isBusy, setIsBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [monthError, setMonthError] = useState<string | null>(null);
 
   function loadToday() {
@@ -125,69 +123,12 @@ export function AttendancePage() {
     setMonth(m);
   }
 
-  async function handleClockIn() {
-    setIsBusy(true);
-    setError(null);
-    try {
-      const record = await apiPost<AttendanceRecord>("/api/attendance/clock-in");
-      setToday(record);
-      loadMonth();
-    } catch (err) {
-      logError("Attendance", "출근 처리 실패", err);
-      setError(err instanceof ApiError ? err.message : "출근 처리 중 오류가 발생했습니다.");
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function handleClockOut() {
-    setIsBusy(true);
-    setError(null);
-    try {
-      const record = await apiPost<AttendanceRecord>("/api/attendance/clock-out");
-      setToday(record);
-      loadMonth();
-    } catch (err) {
-      logError("Attendance", "퇴근 처리 실패", err);
-      setError(err instanceof ApiError ? err.message : "퇴근 처리 중 오류가 발생했습니다.");
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  const canClockIn = !today || !today.clock_in;
-  const canClockOut = today && today.clock_in && !today.clock_out;
-
   return (
     <MainLayout title="출퇴근기록" description="출근/퇴근을 기록하고 근태 이력을 확인합니다.">
-      <div className="bg-surface border border-border rounded-2xl p-5 mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium">오늘 근태</p>
-          <p className="text-sm text-text-muted mt-1">{todayLabel(today)}</p>
-          {error && <p className="text-xs text-danger mt-1">{error}</p>}
-        </div>
-        <div className="flex items-center gap-2">
-          {canClockIn && (
-            <button
-              onClick={handleClockIn}
-              disabled={isBusy}
-              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
-            >
-              <LogIn size={16} />
-              출근하기
-            </button>
-          )}
-          {canClockOut && (
-            <button
-              onClick={handleClockOut}
-              disabled={isBusy}
-              className="flex items-center gap-1.5 bg-text hover:opacity-90 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-60"
-            >
-              <LogOut size={16} />
-              퇴근하기
-            </button>
-          )}
-        </div>
+      <div className="bg-surface border border-border rounded-2xl p-5 mb-6">
+        <p className="text-sm font-medium">오늘 근태</p>
+        <p className="text-sm text-text-muted mt-1">{todayLabel(today)}</p>
+        <p className="text-xs text-text-muted mt-2">출근·퇴근 체크는 화면 오른쪽 위 이름 옆 스위치를 이용해주세요.</p>
       </div>
 
       <div className="flex items-center justify-between mb-3">

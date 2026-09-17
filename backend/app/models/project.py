@@ -10,6 +10,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.client import Client
+    from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
     from app.models.user import User
 
 
@@ -35,3 +36,9 @@ class Project(Base):
 
     client: Mapped["Client"] = relationship()
     creator: Mapped["User"] = relationship()
+    progress_stages: Mapped[list["ProjectProgressStage"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", order_by="ProjectProgressStage.order_index"
+    )
+    purchase_steps: Mapped[list["ProjectPurchaseStep"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", order_by="ProjectPurchaseStep.order_index"
+    )

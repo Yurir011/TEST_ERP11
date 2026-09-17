@@ -1,6 +1,7 @@
 import { LogOut } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { AttendanceToggle } from "../../features/attendance/AttendanceToggle";
 import { GRADE_LABELS } from "../../lib/auth";
 import { Sidebar } from "./Sidebar";
 import { SiteAdminSidebar } from "./SiteAdminSidebar";
@@ -24,6 +25,7 @@ export function MainLayout({ title, description, actions, children }: MainLayout
             <span className="text-sm text-text">
               {user.name} <span className="text-text-muted">{GRADE_LABELS[user.grade]}</span>
             </span>
+            <AttendanceToggle />
             <span className="w-px h-4 bg-border" />
             <button
               onClick={logout}

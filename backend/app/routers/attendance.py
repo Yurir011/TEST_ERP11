@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract
@@ -15,6 +15,47 @@ router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 logger = get_logger("Attendance")
 
 MAX_HISTORY_MONTHS = 36  # 개인 근태 조회는 최근 36개월(현재월 포함)까지만 허용
+
+KST = timezone(timedelta(hours=9))
+AUTO_CLOCK_OUT_TIME = time(17, 0)  # 퇴근을 누르지 않고 하루가 지나면 자동으로 처리할 퇴근 시각(오후 5시, KST)
+
+
+def _auto_close_stale_record(record: Attendance) -> None:
+    target = datetime.combine(record.work_date, AUTO_CLOCK_OUT_TIME, tzinfo=KST)
+    if record.clock_in and record.clock_in > target:
+        target = record.clock_in
+    record.clock_out = target
+    logger.debug(
+        f"[Attendance] 퇴근 미기록 자동 처리: user_id={record.user_id}, work_date={record.work_date}, "
+        f"auto_clock_out={target.isoformat()}"
+    )
+
+
+def _stale_records_query(db: Session):
+    today = date.today()
+    return db.query(Attendance).filter(
+        Attendance.work_date < today,
+        Attendance.clock_in.isnot(None),
+        Attendance.clock_out.is_(None),
+    )
+
+
+def _auto_close_stale_records_for_user(db: Session, user_id: int) -> None:
+    stale = _stale_records_query(db).filter(Attendance.user_id == user_id).all()
+    if not stale:
+        return
+    for record in stale:
+        _auto_close_stale_record(record)
+    db.commit()
+
+
+def _auto_close_all_stale_records(db: Session) -> None:
+    stale = _stale_records_query(db).all()
+    if not stale:
+        return
+    for record in stale:
+        _auto_close_stale_record(record)
+    db.commit()
 
 
 def _assert_within_history_window(year: int, month: int) -> None:
@@ -51,6 +92,7 @@ def _month_query(db: Session, year: int, month: int):
 
 @router.post("/clock-in", response_model=AttendanceOut)
 def clock_in(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _auto_close_stale_records_for_user(db, current_user.id)
     today = date.today()
     logger.debug(f"[Attendance] 출근 기록 시도: user_id={current_user.id}, date={today}")
 
@@ -75,6 +117,7 @@ def clock_in(db: Session = Depends(get_db), current_user: User = Depends(get_cur
 
 @router.post("/clock-out", response_model=AttendanceOut)
 def clock_out(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _auto_close_stale_records_for_user(db, current_user.id)
     today = date.today()
     logger.debug(f"[Attendance] 퇴근 기록 시도: user_id={current_user.id}, date={today}")
 
@@ -93,6 +136,7 @@ def clock_out(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 
 @router.get("/today", response_model=AttendanceOut | None)
 def get_today(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _auto_close_stale_records_for_user(db, current_user.id)
     today = date.today()
     record = (
         db.query(Attendance)
@@ -111,6 +155,7 @@ def get_my_attendance(
     current_user: User = Depends(get_current_user),
 ):
     logger.debug(f"[Attendance] 내 근태 조회: user_id={current_user.id}, {year}-{month}")
+    _auto_close_stale_records_for_user(db, current_user.id)
     _assert_within_history_window(year, month)
     records = (
         _month_query(db, year, month)
@@ -130,6 +175,7 @@ def get_all_attendance(
     current_user: User = Depends(require_admin),
 ):
     logger.debug(f"[Attendance] 전체 근태 조회(관리자): by={current_user.id}, {year}-{month}, user_id={user_id}")
+    _auto_close_all_stale_records(db)
     query = _month_query(db, year, month)
     if user_id is not None:
         query = query.filter(Attendance.user_id == user_id)

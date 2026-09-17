@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import type { AttendanceRecord } from "../features/attendance/types";
 import { apiGet, apiPost } from "../lib/api";
 import { clearToken, getToken, setToken, type CurrentUser } from "../lib/auth";
 import { logDebug, logError } from "../lib/logger";
@@ -39,6 +40,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const me = await apiGet<CurrentUser>("/api/auth/me");
     setUser(me);
     logDebug("Auth", `로그인 성공: role=${me.role}`);
+    await promptClockInIfNeeded();
+  }
+
+  async function promptClockInIfNeeded() {
+    try {
+      const today = await apiGet<AttendanceRecord | null>("/api/attendance/today");
+      if (today?.clock_in) return;
+      logDebug("Auth", "로그인 시 출근 여부 확인 팝업 표시");
+      if (window.confirm("오늘 출근 처리 하시겠습니까?")) {
+        await apiPost<AttendanceRecord>("/api/attendance/clock-in");
+        logDebug("Auth", "로그인 시 출근 처리 완료");
+      }
+    } catch (err) {
+      logError("Auth", "로그인 시 출근 확인 실패", err);
+    }
   }
 
   function logout() {

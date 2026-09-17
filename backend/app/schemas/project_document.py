@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.project_document import MAX_ITEMS, ProjectDocType
+from app.models.project_document import MAX_ITEMS, ApprovalRoute, ProjectDocType, ProjectDocumentStatus
 
 
 class ProjectDocumentItemIn(BaseModel):
@@ -29,6 +29,8 @@ class ProjectDocumentCreate(BaseModel):
     client_name: str
     manager_name: str | None = None
     items: list[ProjectDocumentItemIn] = Field(default_factory=list)
+    approval_route: ApprovalRoute
+    approver_id: int | None = None  # 전결(self_decision)이면 불필요, 소장/과장이면 필수
 
     @field_validator("items")
     @classmethod
@@ -38,6 +40,35 @@ class ProjectDocumentCreate(BaseModel):
         if len(v) > MAX_ITEMS:
             raise ValueError(f"항목은 최대 {MAX_ITEMS}개까지 입력할 수 있습니다.")
         return v
+
+
+class ProjectDocumentUpdate(BaseModel):
+    """반려된 문서를 재수정할 때 사용 (draft/rejected 상태에서만 허용)."""
+
+    issue_date: date
+    client_name: str
+    manager_name: str | None = None
+    items: list[ProjectDocumentItemIn] = Field(default_factory=list)
+
+    @field_validator("items")
+    @classmethod
+    def validate_items(cls, v: list[ProjectDocumentItemIn]) -> list[ProjectDocumentItemIn]:
+        if not v:
+            raise ValueError("항목을 1개 이상 입력해주세요.")
+        if len(v) > MAX_ITEMS:
+            raise ValueError(f"항목은 최대 {MAX_ITEMS}개까지 입력할 수 있습니다.")
+        return v
+
+
+class ApprovalRequestIn(BaseModel):
+    """반려된 문서를 다시 결재 요청할 때 사용."""
+
+    approval_route: ApprovalRoute
+    approver_id: int | None = None
+
+
+class RejectIn(BaseModel):
+    reason: str
 
 
 class ProjectDocumentOut(BaseModel):
@@ -51,6 +82,13 @@ class ProjectDocumentOut(BaseModel):
     client_name: str
     manager_name: str | None
     items: list[ProjectDocumentItemOut]
-    has_excel: bool
+    has_pdf: bool
+    status: ProjectDocumentStatus
+    approval_route: ApprovalRoute | None
+    approver_id: int | None
+    approver_name: str | None
+    reviewed_at: datetime | None
+    reject_reason: str | None
+    client_contact_email: str | None
     created_by: int
     created_at: datetime

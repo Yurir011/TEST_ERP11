@@ -1,10 +1,11 @@
-import { ChevronLeft, ChevronRight, Image, Plus, Trash2, Upload, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSpreadsheet, Image, Plus, Printer, Trash2, Upload, Wallet } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { ApiError, apiDelete, apiGet, apiUpload, openFile } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiUpload, downloadFile, openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
+import { PaymentDetailModal } from "./PaymentDetailModal";
 import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_TYPE_LABELS,
@@ -26,6 +27,10 @@ function toMonthValue(year: number, month: number) {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
+function voucherFilename(p: Payment, ext: string) {
+  return `${PAYMENT_TYPE_LABELS[p.type]}전표_${p.payment_date}${ext}`;
+}
+
 export function PaymentsPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -38,6 +43,7 @@ export function PaymentsPage() {
   const [importResult, setImportResult] = useState<CsvImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
 
   function loadPayments() {
     logDebug("Payments", `목록 조회: ${year}-${month}, type=${tab}`);
@@ -75,6 +81,22 @@ export function PaymentsPage() {
     }
     setYear(y);
     setMonth(m);
+  }
+
+  async function handlePrint(id: number) {
+    try {
+      await openFile(`/api/payments/${id}/pdf`);
+    } catch (err) {
+      logError("Payments", "전표 인쇄 열기 실패", err);
+    }
+  }
+
+  async function handleDownloadExcel(p: Payment) {
+    try {
+      await downloadFile(`/api/payments/${p.id}/excel`, voucherFilename(p, ".xlsx"));
+    } catch (err) {
+      logError("Payments", "전표 엑셀 다운로드 실패", err);
+    }
   }
 
   async function handleDelete(id: number) {
@@ -222,13 +244,16 @@ export function PaymentsPage() {
                 <th className="py-2.5 px-4 font-medium">수단</th>
                 <th className="py-2.5 px-4 font-medium">증빙발행</th>
                 <th className="py-2.5 px-4 font-medium text-right">금액</th>
-                <th className="py-2.5 px-4 font-medium w-10">영수증</th>
-                <th className="w-10"></th>
+                <th className="w-24"></th>
               </tr>
             </thead>
             <tbody>
               {payments.map((p) => (
-                <tr key={p.id} className="border-b border-border last:border-0">
+                <tr
+                  key={p.id}
+                  onClick={() => setSelectedPayment(p)}
+                  className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60 transition-colors"
+                >
                   <td className="py-2.5 px-4">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${PAYMENT_TYPE_STYLES[p.type]}`}>
                       {PAYMENT_TYPE_LABELS[p.type]}
@@ -253,23 +278,61 @@ export function PaymentsPage() {
                     )}
                   </td>
                   <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(p.amount)}</td>
-                  <td className="py-2.5 px-4">
-                    {p.has_receipt && (
-                      <button onClick={() => openFile(`/api/payments/${p.id}/receipt`)} className="text-text-muted hover:text-text">
-                        <Image size={15} />
-                      </button>
-                    )}
-                  </td>
                   <td className="py-2.5 px-2">
-                    <button onClick={() => handleDelete(p.id)} className="p-1.5 text-text-muted hover:text-danger">
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      {p.has_receipt && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openFile(`/api/payments/${p.id}/receipt`);
+                          }}
+                          className="p-1.5 text-text-muted hover:text-text"
+                          title="영수증 보기"
+                        >
+                          <Image size={14} />
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePrint(p.id);
+                        }}
+                        className="p-1.5 text-text-muted hover:text-primary"
+                        title="전표 인쇄"
+                      >
+                        <Printer size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadExcel(p);
+                        }}
+                        className="p-1.5 text-text-muted hover:text-primary"
+                        title="엑셀 다운로드"
+                      >
+                        <FileSpreadsheet size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(p.id);
+                        }}
+                        className="p-1.5 text-text-muted hover:text-danger"
+                        title="삭제"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedPayment && (
+        <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} />
       )}
     </MainLayout>
   );
