@@ -6,11 +6,15 @@ import type { Client } from "../clients/types";
 import { ApiError, apiGet, apiPost, apiUpload } from "../../lib/api";
 import { logError } from "../../lib/logger";
 import {
+  BANK_TYPE_LABELS,
+  CARD_TYPE_LABELS,
   PAYMENT_CATEGORIES,
   PAYMENT_CATEGORY_ITEMS,
   PAYMENT_METHOD_LABELS,
   PAYMENT_TYPE_LABELS,
   PROOF_TYPE_LABELS,
+  type BankType,
+  type CardType,
   type Payment,
   type PaymentCategory,
   type PaymentMethod,
@@ -41,6 +45,8 @@ export function PaymentFormPage() {
   const [memo, setMemo] = useState("");
   const [proofType, setProofType] = useState<ProofType | null>(null);
   const [proofTypeDetail, setProofTypeDetail] = useState("");
+  const [cardType, setCardType] = useState<CardType | null>(null);
+  const [bankType, setBankType] = useState<BankType | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +79,10 @@ export function PaymentFormPage() {
     if (method !== "bank_transfer") {
       setProofType(null);
       setProofTypeDetail("");
+      setBankType(null);
+    }
+    if (method !== "corporate_card") {
+      setCardType(null);
     }
   }, [method]);
 
@@ -100,6 +110,14 @@ export function PaymentFormPage() {
 
     if (method === "bank_transfer" && proofType === "other" && !proofTypeDetail.trim()) {
       setError("증빙 종류를 '기타'로 선택한 경우 내용을 입력해주세요.");
+      return;
+    }
+    if (method === "corporate_card" && !cardType) {
+      setError("카드 종류를 선택해주세요.");
+      return;
+    }
+    if (method === "bank_transfer" && !bankType) {
+      setError("계좌 종류를 선택해주세요.");
       return;
     }
     if (categoryItems && !item) {
@@ -130,6 +148,8 @@ export function PaymentFormPage() {
         memo: memo || null,
         proof_type: method === "bank_transfer" ? proofType : null,
         proof_type_detail: method === "bank_transfer" && proofType === "other" ? proofTypeDetail : null,
+        card_type: method === "corporate_card" ? cardType : null,
+        bank_type: method === "bank_transfer" ? bankType : null,
       });
 
       if (receiptFile) {
@@ -194,6 +214,50 @@ export function PaymentFormPage() {
             </select>
           </div>
         </div>
+
+        {method === "corporate_card" && (
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">카드 종류</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(Object.keys(CARD_TYPE_LABELS) as CardType[]).map((ct) => (
+                <button
+                  key={ct}
+                  type="button"
+                  onClick={() => setCardType(ct)}
+                  className={`rounded-lg border px-4 py-2.5 text-sm transition-colors ${
+                    cardType === ct
+                      ? "border-primary bg-tile-blue text-tile-blue-fg font-medium"
+                      : "border-border text-text-muted hover:bg-bg"
+                  }`}
+                >
+                  {CARD_TYPE_LABELS[ct]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {method === "bank_transfer" && (
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">계좌 종류</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(Object.keys(BANK_TYPE_LABELS) as BankType[]).map((bt) => (
+                <button
+                  key={bt}
+                  type="button"
+                  onClick={() => setBankType(bt)}
+                  className={`rounded-lg border px-4 py-2.5 text-sm transition-colors ${
+                    bankType === bt
+                      ? "border-primary bg-tile-blue text-tile-blue-fg font-medium"
+                      : "border-border text-text-muted hover:bg-bg"
+                  }`}
+                >
+                  {BANK_TYPE_LABELS[bt]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {method === "bank_transfer" && (
           <div>

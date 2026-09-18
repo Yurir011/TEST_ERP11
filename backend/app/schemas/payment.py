@@ -2,7 +2,15 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.models.payment import PAYMENT_CATEGORIES, PAYMENT_CATEGORY_ITEMS, PaymentMethod, PaymentType, ProofType
+from app.models.payment import (
+    PAYMENT_CATEGORIES,
+    PAYMENT_CATEGORY_ITEMS,
+    BankType,
+    CardType,
+    PaymentMethod,
+    PaymentType,
+    ProofType,
+)
 
 
 class PaymentCreate(BaseModel):
@@ -16,6 +24,8 @@ class PaymentCreate(BaseModel):
     memo: str | None = None
     proof_type: ProofType | None = None
     proof_type_detail: str | None = None
+    card_type: CardType | None = None
+    bank_type: BankType | None = None
 
     @model_validator(mode="after")
     def _validate_proof(self):
@@ -30,6 +40,21 @@ class PaymentCreate(BaseModel):
                 raise ValueError("증빙 종류를 '기타'로 선택한 경우 내용을 입력해주세요.")
         else:
             self.proof_type_detail = None
+        return self
+
+    @model_validator(mode="after")
+    def _validate_method_detail(self):
+        if self.method == PaymentMethod.corporate_card:
+            if self.card_type is None:
+                raise ValueError("카드 종류를 선택해주세요.")
+            self.bank_type = None
+        elif self.method == PaymentMethod.bank_transfer:
+            if self.bank_type is None:
+                raise ValueError("계좌 종류를 선택해주세요.")
+            self.card_type = None
+        else:
+            self.card_type = None
+            self.bank_type = None
         return self
 
     @model_validator(mode="after")
@@ -64,6 +89,8 @@ class PaymentOut(BaseModel):
     memo: str | None
     proof_type: ProofType | None
     proof_type_detail: str | None
+    card_type: CardType | None
+    bank_type: BankType | None
     created_at: datetime
 
 

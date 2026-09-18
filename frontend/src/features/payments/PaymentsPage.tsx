@@ -1,4 +1,17 @@
-import { ChevronLeft, ChevronRight, FileSpreadsheet, Image, Plus, Printer, Trash2, Upload, Wallet } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileSpreadsheet,
+  Image,
+  Plus,
+  Printer,
+  Search,
+  Trash2,
+  Upload,
+  Wallet,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -7,10 +20,10 @@ import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { PaymentDetailModal } from "./PaymentDetailModal";
 import {
-  PAYMENT_METHOD_LABELS,
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
   PROOF_TYPE_LABELS,
+  paymentMethodDetailLabel,
   type CsvImportResult,
   type Payment,
   type PaymentReport,
@@ -42,13 +55,32 @@ export function PaymentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<CsvImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const usingCustomRange = Boolean(dateFrom || dateTo);
+
+  function buildFilterParams() {
+    const params = new URLSearchParams();
+    if (tab !== "all") params.set("type", tab);
+    if (usingCustomRange) {
+      if (dateFrom) params.set("date_from", dateFrom);
+      if (dateTo) params.set("date_to", dateTo);
+    } else {
+      params.set("year", String(year));
+      params.set("month", String(month));
+    }
+    if (keyword.trim()) params.set("q", keyword.trim());
+    return params;
+  }
 
   function loadPayments() {
-    logDebug("Payments", `목록 조회: ${year}-${month}, type=${tab}`);
-    const params = new URLSearchParams({ year: String(year), month: String(month) });
-    if (tab !== "all") params.set("type", tab);
+    const params = buildFilterParams();
+    logDebug("Payments", `목록 조회: ${params.toString()}`);
     apiGet<Payment[]>(`/api/payments?${params.toString()}`)
       .then(setPayments)
       .catch((err) => {
@@ -64,10 +96,35 @@ export function PaymentsPage() {
   }
 
   useEffect(() => {
-    loadPayments();
-    loadReport();
+    const timer = setTimeout(() => {
+      loadPayments();
+      loadReport();
+    }, 250);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month, tab]);
+  }, [year, month, tab, keyword, dateFrom, dateTo]);
+
+  function clearFilters() {
+    setKeyword("");
+    setDateFrom("");
+    setDateTo("");
+  }
+
+  async function handleExportExcel() {
+    setIsExporting(true);
+    try {
+      const params = buildFilterParams();
+      const filenameRange = usingCustomRange
+        ? `${dateFrom || "처음"}~${dateTo || "지금"}`
+        : toMonthValue(year, month);
+      await downloadFile(`/api/payments/export/excel?${params.toString()}`, `입출금내역_${filenameRange}.xlsx`);
+    } catch (err) {
+      logError("Payments", "목록 엑셀 다운로드 실패", err);
+      setError("목록을 다운로드하지 못했습니다.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   function shiftMonth(delta: number) {
     let m = month + delta;
@@ -144,6 +201,14 @@ export function PaymentsPage() {
             <Upload size={14} />
             {isImporting ? "가져오는 중..." : "법인카드 CSV 가져오기"}
           </button>
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
+          >
+            <Download size={14} />
+            {isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"}
+          </button>
           <Link
             to="/payments/new"
             className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
@@ -182,7 +247,7 @@ export function PaymentsPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${usingCustomRange ? "opacity-40 pointer-events-none" : ""}`}>
           <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded-lg hover:bg-surface text-text-muted">
             <ChevronLeft size={16} />
           </button>
@@ -202,6 +267,46 @@ export function PaymentsPage() {
             <ChevronRight size={16} />
           </button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="분류/내용/메모/거래처로 검색"
+            className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-surface"
+          />
+        </div>
+        <label className="text-xs text-text-muted">기간</label>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface"
+        />
+        <span className="text-text-muted text-sm">~</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface"
+        />
+        {(keyword || usingCustomRange) && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1 text-xs text-text-muted hover:text-text px-2 py-1.5"
+          >
+            <X size={13} />
+            검색 초기화
+          </button>
+        )}
+        {usingCustomRange && (
+          <span className="text-xs text-tile-blue-fg bg-tile-blue px-2 py-1 rounded-full">
+            기간 검색 중 (월별 보기 대신 적용)
+          </span>
+        )}
       </div>
 
       {report && (
@@ -228,7 +333,9 @@ export function PaymentsPage() {
       {payments !== null && payments.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <Wallet className="mx-auto mb-2 text-text-muted" size={24} />
-          <p className="text-sm text-text-muted">해당 월의 입출금 내역이 없습니다.</p>
+          <p className="text-sm text-text-muted">
+            {keyword || usingCustomRange ? "검색 조건에 맞는 내역이 없습니다." : "해당 월의 입출금 내역이 없습니다."}
+          </p>
         </div>
       )}
 
@@ -265,7 +372,7 @@ export function PaymentsPage() {
                     {p.description}
                     {p.client_name && <span className="text-text-muted"> · {p.client_name}</span>}
                   </td>
-                  <td className="py-2.5 px-4">{PAYMENT_METHOD_LABELS[p.method]}</td>
+                  <td className="py-2.5 px-4">{paymentMethodDetailLabel(p)}</td>
                   <td className="py-2.5 px-4">
                     {p.proof_type ? (
                       <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-purple text-tile-purple-fg">

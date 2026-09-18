@@ -3,10 +3,10 @@ import { downloadFile, openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logError } from "../../lib/logger";
 import {
-  PAYMENT_METHOD_LABELS,
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
   PROOF_TYPE_LABELS,
+  paymentMethodDetailLabel,
   type Payment,
 } from "./types";
 
@@ -67,7 +67,7 @@ export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onC
         <div>
           <Row label="날짜" value={payment.payment_date} />
           <Row label="금액" value={formatCurrency(payment.amount)} />
-          <Row label="결제수단" value={PAYMENT_METHOD_LABELS[payment.method]} />
+          <Row label="결제수단" value={paymentMethodDetailLabel(payment)} />
           <Row label="거래처" value={payment.client_name ?? "-"} />
           <Row label="증빙발행" value={proofText} />
           <Row label="메모" value={payment.memo ?? "-"} />

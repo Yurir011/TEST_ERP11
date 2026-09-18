@@ -4,8 +4,8 @@ import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from app.config import settings
-from app.models.payment import Payment, ProofType
-from app.services.payment_voucher_pdf import METHOD_LABELS, PROOF_LABELS, TYPE_LABELS
+from app.models.payment import Payment
+from app.services.payment_voucher_pdf import TYPE_LABELS, method_detail_text, proof_text
 
 
 def generate_payment_voucher_excel(payment: Payment) -> bytes:
@@ -16,21 +16,14 @@ def generate_payment_voucher_excel(payment: Payment) -> bytes:
 
     type_label = TYPE_LABELS[payment.type]
 
-    proof_text = "-"
-    if payment.proof_type:
-        if payment.proof_type == ProofType.other and payment.proof_type_detail:
-            proof_text = payment.proof_type_detail
-        else:
-            proof_text = PROOF_LABELS[payment.proof_type]
-
     rows: list[tuple[str, str | int]] = [
         ("구분", type_label),
         ("날짜", payment.payment_date.isoformat()),
         ("분류", payment.category),
         ("항목", payment.description),
         ("거래처", payment.client.name if payment.client else "-"),
-        ("결제수단", METHOD_LABELS[payment.method]),
-        ("증빙발행", proof_text),
+        ("결제수단", method_detail_text(payment)),
+        ("증빙발행", proof_text(payment)),
         ("금액", payment.amount),
         ("메모", payment.memo or "-"),
         ("작성자", payment.creator.name if payment.creator else "-"),

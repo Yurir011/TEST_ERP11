@@ -34,6 +34,21 @@ class ProofType(str, enum.Enum):
     other = "other"  # 기타 (자유 입력)
 
 
+class CardType(str, enum.Enum):
+    """법인카드 건의 카드 종류"""
+
+    bc = "bc"  # BC카드
+    kb_kookmin = "kb_kookmin"  # KB국민카드
+
+
+class BankType(str, enum.Enum):
+    """계좌이체 건의 계좌 종류"""
+
+    ibk = "ibk"  # 기업은행
+    kb_kookmin = "kb_kookmin"  # KB국민은행
+    woori = "woori"  # 우리은행
+
+
 # 입출금 분류(12개). 콤보박스 선택지로 사용 — category 컬럼은 자유 입력 String이지만 이 목록으로 값을 제한한다.
 PAYMENT_CATEGORIES = (
     "소모품비",
@@ -74,6 +89,10 @@ class Payment(Base):
     # 계좌이체 건의 증빙 발행 여부/종류. 계좌이체가 아닌 경우 항상 None.
     proof_type: Mapped[ProofType | None] = mapped_column(Enum(ProofType, name="prooftype"), nullable=True)
     proof_type_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # 법인카드 건의 카드 종류. 법인카드가 아닌 경우 항상 None.
+    card_type: Mapped[CardType | None] = mapped_column(Enum(CardType, name="cardtype"), nullable=True)
+    # 계좌이체 건의 계좌 종류. 계좌이체가 아닌 경우 항상 None.
+    bank_type: Mapped[BankType | None] = mapped_column(Enum(BankType, name="banktype"), nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

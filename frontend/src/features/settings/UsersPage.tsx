@@ -5,6 +5,7 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import type { CurrentUser, JobGrade, JobTitle } from "../../lib/auth";
 import { apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { UserDetailModal } from "./UserDetailModal";
 
 const GRADE_LABELS: Record<JobGrade, string> = {
   staff: "사원",
@@ -25,6 +26,7 @@ export function UsersPage() {
   const [resetTargetId, setResetTargetId] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<CurrentUser | null>(null);
 
   function loadUsers() {
     logDebug("Users", "직원 목록 조회");
@@ -100,7 +102,11 @@ export function UsersPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id} className="border-b border-border last:border-0">
+                <tr
+                  key={u.id}
+                  onClick={() => setSelectedUser(u)}
+                  className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60 transition-colors"
+                >
                   <td className="py-2.5 px-4">{u.employee_no}</td>
                   <td className="py-2.5 px-4 font-medium">{u.name}</td>
                   <td className="py-2.5 px-4 text-text-muted">{u.email}</td>
@@ -115,7 +121,7 @@ export function UsersPage() {
                       {u.is_active ? "활성" : "비활성"}
                     </span>
                   </td>
-                  <td className="py-2.5 px-4">
+                  <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-2 justify-end">
                       <Link
                         to={`/settings/users/${u.id}/edit`}
@@ -170,6 +176,8 @@ export function UsersPage() {
           </table>
         </div>
       )}
+
+      {selectedUser && <UserDetailModal user={selectedUser} onClose={() => setSelectedUser(null)} />}
     </MainLayout>
   );
 }

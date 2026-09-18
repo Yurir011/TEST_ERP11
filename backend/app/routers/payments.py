@@ -3,7 +3,8 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import extract, func as sa_func
+from sqlalchemy import extract, or_
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
@@ -17,6 +18,7 @@ from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.user import User
 from app.schemas.payment import CsvImportResult, PaymentCreate, PaymentOut, PaymentReportOut
 from app.services.payment_csv import CsvParseError, parse_card_statement_csv
+from app.services.payment_list_excel import generate_payment_list_excel
 from app.services.payment_voucher_excel import generate_payment_voucher_excel
 from app.services.payment_voucher_pdf import generate_payment_voucher_pdf
 
@@ -41,8 +43,49 @@ def _to_out(p: Payment) -> PaymentOut:
         memo=p.memo,
         proof_type=p.proof_type,
         proof_type_detail=p.proof_type_detail,
+        card_type=p.card_type,
+        bank_type=p.bank_type,
         created_at=p.created_at,
     )
+
+
+def _build_payment_query(
+    db: Session,
+    type_filter: PaymentType | None,
+    year: int | None,
+    month: int | None,
+    date_from: date | None,
+    date_to: date | None,
+    q: str | None,
+):
+    query = db.query(Payment).options(joinedload(Payment.client), joinedload(Payment.creator))
+    if type_filter is not None:
+        query = query.filter(Payment.type == type_filter)
+
+    # 기간(date_from/date_to) 지정이 있으면 그걸 우선하고, 없을 때만 기존 연/월 필터를 적용한다.
+    if date_from is not None or date_to is not None:
+        if date_from is not None:
+            query = query.filter(Payment.payment_date >= date_from)
+        if date_to is not None:
+            query = query.filter(Payment.payment_date <= date_to)
+    else:
+        if year is not None:
+            query = query.filter(extract("year", Payment.payment_date) == year)
+        if month is not None:
+            query = query.filter(extract("month", Payment.payment_date) == month)
+
+    if q:
+        keyword = f"%{q}%"
+        query = query.outerjoin(Client, Payment.client_id == Client.id).filter(
+            or_(
+                Payment.category.ilike(keyword),
+                Payment.description.ilike(keyword),
+                Payment.memo.ilike(keyword),
+                Client.name.ilike(keyword),
+            )
+        )
+
+    return query.order_by(Payment.payment_date.desc(), Payment.id.desc())
 
 
 @router.get("", response_model=list[PaymentOut])
@@ -50,18 +93,37 @@ def list_payments(
     type_filter: PaymentType | None = Query(default=None, alias="type"),
     year: int | None = Query(default=None),
     month: int | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    q: str | None = Query(default=None, description="분류/내용/메모/거래처명 검색어"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
-    query = db.query(Payment).options(joinedload(Payment.client))
-    if type_filter is not None:
-        query = query.filter(Payment.type == type_filter)
-    if year is not None:
-        query = query.filter(extract("year", Payment.payment_date) == year)
-    if month is not None:
-        query = query.filter(extract("month", Payment.payment_date) == month)
-    payments = query.order_by(Payment.payment_date.desc(), Payment.id.desc()).all()
+    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q).all()
     return [_to_out(p) for p in payments]
+
+
+@router.get("/export/excel")
+def export_payments_excel(
+    type_filter: PaymentType | None = Query(default=None, alias="type"),
+    year: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    q: str | None = Query(default=None, description="분류/내용/메모/거래처명 검색어"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_payments_access),
+):
+    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q).all()
+    logger.debug(
+        f"[Payments] 목록 엑셀 내보내기: count={len(payments)}, date_from={date_from}, date_to={date_to}, "
+        f"q={q}, by={current_user.id}"
+    )
+    excel_bytes = generate_payment_list_excel(payments)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @router.get("/report/monthly", response_model=PaymentReportOut)
@@ -109,6 +171,8 @@ def create_payment(
         memo=payload.memo,
         proof_type=payload.proof_type,
         proof_type_detail=payload.proof_type_detail,
+        card_type=payload.card_type,
+        bank_type=payload.bank_type,
         created_by=current_user.id,
     )
     db.add(payment)
@@ -246,6 +310,8 @@ def update_payment(
     payment.memo = payload.memo
     payment.proof_type = payload.proof_type
     payment.proof_type_detail = payload.proof_type_detail
+    payment.card_type = payload.card_type
+    payment.bank_type = payload.bank_type
     db.commit()
     db.refresh(payment)
     logger.debug(f"[Payments] 수정: id={payment_id}, by={current_user.id}")

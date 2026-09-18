@@ -8,7 +8,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.config import settings
-from app.models.payment import Payment, PaymentMethod, PaymentType, ProofType
+from app.models.payment import BankType, CardType, Payment, PaymentMethod, PaymentType, ProofType
 from app.services.certificate_pdf import FONT_BOLD, FONT_REGULAR, _ensure_fonts_registered
 
 TYPE_LABELS = {PaymentType.deposit: "입금", PaymentType.withdrawal: "출금"}
@@ -27,10 +27,40 @@ PROOF_LABELS = {
     ProofType.other: "기타",
 }
 
+CARD_TYPE_LABELS = {
+    CardType.bc: "BC",
+    CardType.kb_kookmin: "KB국민",
+}
+
+BANK_TYPE_LABELS = {
+    BankType.ibk: "기업",
+    BankType.kb_kookmin: "국민",
+    BankType.woori: "우리",
+}
+
 
 def _esc(value: str) -> str:
     """사용자가 직접 입력한 자유 텍스트(메모/내용 등)에 &, <, > 가 있어도 reportlab Paragraph가 깨지지 않도록 이스케이프."""
     return escape(value)
+
+
+def method_detail_text(payment: Payment) -> str:
+    """결제수단 옆에 표시할 카드/계좌 종류 텍스트. 예: '법인카드 (BC)', '계좌이체 (국민)'."""
+    base = METHOD_LABELS[payment.method]
+    if payment.method == PaymentMethod.corporate_card and payment.card_type:
+        return f"{base} ({CARD_TYPE_LABELS[payment.card_type]})"
+    if payment.method == PaymentMethod.bank_transfer and payment.bank_type:
+        return f"{base} ({BANK_TYPE_LABELS[payment.bank_type]})"
+    return base
+
+
+def proof_text(payment: Payment) -> str:
+    """증빙발행 칸에 표시할 텍스트."""
+    if not payment.proof_type:
+        return "-"
+    if payment.proof_type == ProofType.other and payment.proof_type_detail:
+        return payment.proof_type_detail
+    return PROOF_LABELS[payment.proof_type]
 
 
 def generate_payment_voucher_pdf(payment: Payment) -> bytes:
@@ -50,21 +80,14 @@ def generate_payment_voucher_pdf(payment: Payment) -> bytes:
 
     type_label = TYPE_LABELS[payment.type]
 
-    proof_text = "-"
-    if payment.proof_type:
-        if payment.proof_type == ProofType.other and payment.proof_type_detail:
-            proof_text = payment.proof_type_detail
-        else:
-            proof_text = PROOF_LABELS[payment.proof_type]
-
     rows = [
         ("구 분", type_label),
         ("날 짜", payment.payment_date.isoformat()),
         ("분 류", payment.category),
         ("항 목", payment.description),
         ("거래처", payment.client.name if payment.client else "-"),
-        ("결제수단", METHOD_LABELS[payment.method]),
-        ("증빙발행", proof_text),
+        ("결제수단", method_detail_text(payment)),
+        ("증빙발행", proof_text(payment)),
         ("금 액", f"{payment.amount:,} 원"),
         ("메 모", payment.memo or "-"),
         ("작성자", payment.creator.name if payment.creator else "-"),
