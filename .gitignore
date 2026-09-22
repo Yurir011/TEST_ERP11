@@ -15,3 +15,10 @@ Thumbs.db
 
 # 백업/압축 아카이브
 archieve/
+
+# 팝빌 테스트 도구 (별도 실행, 실제 API 인증정보 포함 — 절대 커밋 금지)
+PopBill/
+PopBill.zip
+
+# 참고용 원본 템플릿/DB 백업 (앱 내부는 backend/app/assets/templates 사용)
+Doc/

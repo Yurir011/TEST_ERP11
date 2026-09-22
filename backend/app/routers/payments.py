@@ -27,6 +27,32 @@ logger = get_logger("Payments")
 
 ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
+# 미수금(외상매출금) 수금 / 미지급금 지급 정산 처리 시, 거래처의 잔액을 자동으로 갱신하기 위한 매핑.
+# 이 분류/구분 조합에 해당하는 결제만 거래처 잔액에 영향을 준다 (그 외 일반 입출금은 잔액에 영향 없음).
+SETTLEMENT_RECEIVABLE_CATEGORY = "외상매출금"
+SETTLEMENT_PAYABLE_CATEGORIES = ("외상매입금", "미지급금")
+
+
+def _settlement_field(payment_type: PaymentType, category: str) -> str | None:
+    if payment_type == PaymentType.deposit and category == SETTLEMENT_RECEIVABLE_CATEGORY:
+        return "receivable_amount"
+    if payment_type == PaymentType.withdrawal and category in SETTLEMENT_PAYABLE_CATEGORIES:
+        return "payable_amount"
+    return None
+
+
+def _apply_settlement(client: Client, field: str, amount: int) -> None:
+    current = getattr(client, field)
+    new_value = max(0, current - amount)
+    logger.debug(f"[Payments] 거래처 {field} 자동 차감: client_id={client.id}, {current} -> {new_value}")
+    setattr(client, field, new_value)
+
+
+def _revert_settlement(client: Client, field: str, amount: int) -> None:
+    current = getattr(client, field)
+    logger.debug(f"[Payments] 거래처 {field} 자동 복원: client_id={client.id}, {current} -> {current + amount}")
+    setattr(client, field, current + amount)
+
 
 def _to_out(p: Payment) -> PaymentOut:
     return PaymentOut(
@@ -154,12 +180,18 @@ def get_monthly_report(
 def create_payment(
     payload: PaymentCreate, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
 ):
+    client = None
     if payload.client_id is not None:
         client = db.query(Client).filter(Client.id == payload.client_id).first()
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
     logger.debug(f"[Payments] 등록: type={payload.type}, amount={payload.amount}, by={current_user.id}")
+
+    settlement_field = _settlement_field(payload.type, payload.category)
+    if client is not None and settlement_field is not None:
+        _apply_settlement(client, settlement_field, payload.amount)
+
     payment = Payment(
         type=payload.type,
         payment_date=payload.payment_date,
@@ -295,10 +327,20 @@ def update_payment(
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
 
+    # 기존 내역이 정산(미수금 수금/미지급금 지급) 처리였다면, 거래처 잔액에 반영했던 금액을 먼저 되돌린다.
+    old_settlement_field = _settlement_field(payment.type, payment.category)
+    if payment.client is not None and old_settlement_field is not None:
+        _revert_settlement(payment.client, old_settlement_field, payment.amount)
+
+    client = None
     if payload.client_id is not None:
         client = db.query(Client).filter(Client.id == payload.client_id).first()
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
+
+    new_settlement_field = _settlement_field(payload.type, payload.category)
+    if client is not None and new_settlement_field is not None:
+        _apply_settlement(client, new_settlement_field, payload.amount)
 
     payment.type = payload.type
     payment.payment_date = payload.payment_date
@@ -320,9 +362,14 @@ def update_payment(
 
 @router.delete("/{payment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_payment(payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    payment = db.query(Payment).options(joinedload(Payment.client)).filter(Payment.id == payment_id).first()
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
+
+    settlement_field = _settlement_field(payment.type, payment.category)
+    if payment.client is not None and settlement_field is not None:
+        _revert_settlement(payment.client, settlement_field, payment.amount)
+
     db.delete(payment)
     db.commit()
     logger.debug(f"[Payments] 삭제: id={payment_id}, by={current_user.id}")

@@ -50,7 +50,7 @@ class ApproverOut(BaseModel):
 
     id: int
     name: str
-    grade: JobGrade
+    title: JobTitle
 
 
 class UserCreate(BaseModel):

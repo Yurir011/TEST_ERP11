@@ -3,20 +3,28 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
+import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
 import { ApiError, apiGet, apiPost, downloadFile } from "../../lib/api";
 import { hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import {
+  DOC_CURRENCY_LABELS,
+  DOC_CURRENCY_SYMBOLS,
   EMPTY_PROJECT_DOC_ITEM,
   MAX_PROJECT_DOC_ITEMS,
   PROJECT_DOC_TYPE_LABELS,
-  type ApprovalRoute,
+  TAX_INVOICE_PURPOSE_HELP,
+  type DocCurrency,
   type ProjectDocType,
   type ProjectDocument,
   type ProjectDocumentItemFormValues,
+  type TaxInvoicePurpose,
 } from "./types";
+
+const CURRENCY_OPTIONS: DocCurrency[] = ["KRW", "USD", "JPY"];
+const PURPOSE_OPTIONS: TaxInvoicePurpose[] = ["청구", "영수"];
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -33,10 +41,13 @@ export function ProjectDocumentFormPage() {
   const { user } = useAuth();
 
   const [projects, setProjects] = useState<Project[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [projectId, setProjectId] = useState("");
   const [issueDate, setIssueDate] = useState(todayISO());
   const [clientName, setClientName] = useState("");
   const [managerName, setManagerName] = useState("");
+  const [currency, setCurrency] = useState<DocCurrency>("KRW");
+  const [purposeType, setPurposeType] = useState<TaxInvoicePurpose>("청구");
   const [items, setItems] = useState<ProjectDocumentItemFormValues[]>([{ ...EMPTY_PROJECT_DOC_ITEM }]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,6 +58,11 @@ export function ProjectDocumentFormPage() {
     apiGet<Project[]>("/api/projects")
       .then((list) => setProjects(list.filter((p) => p.status !== "completed")))
       .catch((err) => logError("ProjectDocumentForm", "프로젝트 목록 조회 실패", err));
+
+    logDebug("ProjectDocumentForm", "거래처 목록 조회 시작 (거래처명 자동완성)");
+    apiGet<Client[]>("/api/clients")
+      .then(setClients)
+      .catch((err) => logError("ProjectDocumentForm", "거래처 목록 조회 실패", err));
   }, []);
 
   function handleProjectChange(id: string) {
@@ -79,14 +95,16 @@ export function ProjectDocumentFormPage() {
     setShowApproverPicker(true);
   }
 
-  async function handleRequestApproval(approvalRoute: ApprovalRoute, approverId: number | null) {
+  async function handleRequestApproval(approverId: number) {
     setIsSubmitting(true);
     try {
-      logDebug("ProjectDocumentForm", `결재요청 시도: route=${approvalRoute}, approver_id=${approverId}`);
+      logDebug("ProjectDocumentForm", `결재요청 시도: approver_id=${approverId}`);
       const created = await apiPost<ProjectDocument>("/api/project-documents", {
         project_id: Number(projectId),
         doc_type: docType,
         issue_date: issueDate,
+        currency,
+        purpose_type: purposeType,
         client_name: clientName,
         manager_name: managerName || null,
         items: items.map((it) => ({
@@ -95,7 +113,6 @@ export function ProjectDocumentFormPage() {
           unit_price: Number(it.unit_price) || 0,
           note: it.note || null,
         })),
-        approval_route: approvalRoute,
         approver_id: approverId,
       });
 
@@ -103,7 +120,7 @@ export function ProjectDocumentFormPage() {
         await downloadFile(`/api/project-documents/${created.id}/pdf`, `${PROJECT_DOC_TYPE_LABELS[docType]}_${issueDate}.pdf`);
       }
 
-      navigate("/project-documents", { replace: true });
+      navigate(docType === "tax_invoice" ? "/tax-invoices" : "/project-documents", { replace: true });
     } catch (err) {
       logError("ProjectDocumentForm", "결재요청 실패", err);
       setError(err instanceof ApiError ? err.message : "결재요청 중 오류가 발생했습니다.");
@@ -114,7 +131,7 @@ export function ProjectDocumentFormPage() {
   }
 
   if (docType === "tax_invoice" && !hasMenuPermission(user, "tax_invoice")) {
-    return <Navigate to="/project-documents" replace />;
+    return <Navigate to="/tax-invoices" replace />;
   }
 
   return (
@@ -167,10 +184,16 @@ export function ProjectDocumentFormPage() {
             <label className="block text-xs text-text-muted mb-1.5">거래처명</label>
             <input
               required
+              list="client-name-options"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
+            <datalist id="client-name-options">
+              {clients.map((c) => (
+                <option key={c.id} value={c.name} />
+              ))}
+            </datalist>
           </div>
         </div>
 
@@ -184,20 +207,58 @@ export function ProjectDocumentFormPage() {
           />
         </div>
 
+        {docType === "tax_invoice" && (
+          <div>
+            <div className="flex items-center gap-2.5">
+              <label className="text-xs text-text-muted shrink-0">작성목적</label>
+              <select
+                value={purposeType}
+                onChange={(e) => setPurposeType(e.target.value as TaxInvoicePurpose)}
+                className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg min-w-[140px]"
+              >
+                {PURPOSE_OPTIONS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-[11px] text-text-muted mt-1.5">{TAX_INVOICE_PURPOSE_HELP[purposeType]}</p>
+          </div>
+        )}
+
         <div className="pt-2 border-t border-border">
           <div className="flex items-center justify-between mb-2 mt-3">
             <label className="block text-xs text-text-muted">
               품목 ({items.length}/{MAX_PROJECT_DOC_ITEMS})
             </label>
-            <button
-              type="button"
-              onClick={addItem}
-              disabled={items.length >= MAX_PROJECT_DOC_ITEMS}
-              className="flex items-center gap-1 text-xs text-primary hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Plus size={14} />
-              항목 추가
-            </button>
+            <div className="flex items-center gap-3">
+              {docType !== "tax_invoice" && (
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-text-muted">단가 단위</label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value as DocCurrency)}
+                    className="rounded-lg border border-border px-2 py-1 text-xs outline-none focus:border-primary bg-bg"
+                  >
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {DOC_CURRENCY_LABELS[c]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={addItem}
+                disabled={items.length >= MAX_PROJECT_DOC_ITEMS}
+                className="flex items-center gap-1 text-xs text-primary hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Plus size={14} />
+                항목 추가
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -236,7 +297,7 @@ export function ProjectDocumentFormPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-text-muted mb-1">단가</label>
+                    <label className="block text-[11px] text-text-muted mb-1">단가 ({DOC_CURRENCY_SYMBOLS[currency]})</label>
                     <input
                       type="number"
                       min={0}

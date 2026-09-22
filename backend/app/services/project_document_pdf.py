@@ -9,19 +9,13 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from app.config import settings
 from app.models.client import Client
 from app.models.project import Project
-from app.models.project_document import ApprovalRoute, ProjectDocType, ProjectDocument, ProjectDocumentStatus
+from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus
 from app.services.certificate_pdf import FONT_BOLD, FONT_REGULAR, SEAL_MARKER, _ensure_fonts_registered, _StampedSignatureLine
 
 DOC_TITLES = {
     ProjectDocType.quotation: "견 적 서",
     ProjectDocType.statement: "거 래 명 세 서",
     ProjectDocType.tax_invoice: "세 금 계 산 서",
-}
-
-ROUTE_LABELS = {
-    ApprovalRoute.chief: "소장 결재",
-    ApprovalRoute.manager: "과장 결재",
-    ApprovalRoute.self_decision: "전결",
 }
 
 
@@ -151,9 +145,8 @@ def generate_project_document_pdf(doc: ProjectDocument, project: Project, client
     ]
 
     if doc.status == ProjectDocumentStatus.approved:
-        route_label = ROUTE_LABELS.get(doc.approval_route, "") if doc.approval_route else ""
         approver_name = doc.approver.name if doc.approver else "-"
-        signature_text = f"결재자 : {approver_name} ({route_label}) {SEAL_MARKER}"
+        signature_text = f"결재자 : {approver_name} {SEAL_MARKER}"
         elements.append(
             _StampedSignatureLine(signature_text, font_name=FONT_REGULAR, font_size=11, width=pdf.width)
         )

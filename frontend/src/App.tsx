@@ -8,6 +8,7 @@ import { NoticesPage } from "./features/notices/NoticesPage";
 import { NoticeDetailPage } from "./features/notices/NoticeDetailPage";
 import { NoticeFormPage } from "./features/notices/NoticeFormPage";
 import { AttendancePage } from "./features/attendance/AttendancePage";
+import { ApprovalHubPage } from "./features/approvalHub/ApprovalHubPage";
 import { LeavesPage } from "./features/leaves/LeavesPage";
 import { DocumentsPage } from "./features/documents/DocumentsPage";
 import { ClientsPage } from "./features/clients/ClientsPage";
@@ -58,6 +59,14 @@ function App() {
         element={
           <ProtectedRoute>
             <AttendancePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/approval"
+        element={
+          <ProtectedRoute>
+            <ApprovalHubPage />
           </ProtectedRoute>
         }
       />
@@ -154,6 +163,14 @@ function App() {
         element={
           <ProtectedRoute menuKey="clients">
             <ClientFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tax-invoices"
+        element={
+          <ProtectedRoute menuKey="tax_invoice">
+            <ProjectDocumentsPage lockedDocType="tax_invoice" />
           </ProtectedRoute>
         }
       />

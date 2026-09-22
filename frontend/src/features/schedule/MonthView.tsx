@@ -87,6 +87,7 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
                     style={{ backgroundColor: EVENT_COLOR_HEX[ev.color] }}
                     title={ev.title}
                   >
+                    {ev.is_lunar && "[음] "}
                     {ev.title}
                   </div>
                 ))}

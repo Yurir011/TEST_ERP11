@@ -20,6 +20,7 @@ export interface ScheduleEvent {
   start_date: string;
   end_date: string;
   color: EventColor;
+  is_lunar: boolean;
   is_completed: boolean;
   sort_order: number;
   recurrence_group_id: string | null;
@@ -36,9 +37,11 @@ export interface ScheduleEventInput {
   start_date: string;
   end_date: string;
   color: EventColor;
+  is_lunar?: boolean;
   recurrence_freq?: RecurrenceFreq;
   recurrence_weekdays?: number[] | null;
   recurrence_until?: string | null;
+  lunar_occurrence_dates?: string[] | null;
 }
 
 export type CalendarView = "month" | "week" | "day";

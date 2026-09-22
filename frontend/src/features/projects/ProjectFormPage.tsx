@@ -12,6 +12,8 @@ export function ProjectFormPage() {
 
   const [name, setName] = useState("");
   const [memo, setMemo] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [clientQuery, setClientQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [suggestions, setSuggestions] = useState<Client[]>([]);
@@ -22,17 +24,17 @@ export function ProjectFormPage() {
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!clientQuery || selectedClient) {
-      setSuggestions([]);
+    if (selectedClient || !showSuggestions) {
       return;
     }
     const timer = setTimeout(() => {
-      apiGet<Client[]>(`/api/clients?q=${encodeURIComponent(clientQuery)}`)
+      const qs = clientQuery ? `?q=${encodeURIComponent(clientQuery)}` : "";
+      apiGet<Client[]>(`/api/clients${qs}`)
         .then(setSuggestions)
         .catch((err) => logError("ProjectForm", "거래처 검색 실패", err));
     }, 200);
     return () => clearTimeout(timer);
-  }, [clientQuery, selectedClient]);
+  }, [clientQuery, selectedClient, showSuggestions]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -57,12 +59,18 @@ export function ProjectFormPage() {
       setError("거래처를 목록에서 선택해주세요.");
       return;
     }
+    if (startDate && endDate && startDate > endDate) {
+      setError("종료일은 시작일보다 빠를 수 없습니다.");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const created = await apiPost<Project>("/api/projects", {
         name,
         client_id: selectedClient.id,
         memo: memo || null,
+        start_date: startDate || null,
+        end_date: endDate || null,
       });
       navigate(`/projects/${created.id}`, { replace: true });
     } catch (err) {
@@ -122,6 +130,30 @@ export function ProjectFormPage() {
           )}
           {selectedClient && <p className="text-xs text-success mt-1.5">선택됨: {selectedClient.name}</p>}
         </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">시작일 (선택)</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">종료일 (선택)</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-text-muted -mt-2">
+          시작일·종료일을 입력하면 대시보드의 '프로젝트 진행 현황' 차트에 표시됩니다.
+        </p>
 
         <div>
           <label className="block text-xs text-text-muted mb-1.5">메모 (선택)</label>

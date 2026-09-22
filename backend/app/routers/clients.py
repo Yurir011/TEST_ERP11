@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -7,10 +7,13 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client, ClientContact
 from app.models.user import User
-from app.schemas.client import ClientCreate, ClientOut
+from app.schemas.client import BusinessRegOcrOut, ClientCreate, ClientOut
+from app.services.business_reg_ocr import recognize_business_registration
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 logger = get_logger("Clients")
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 def _is_korean_char(ch: str) -> bool:
@@ -59,6 +62,36 @@ def list_clients(
     clients = query.all()
     clients.sort(key=_client_sort_key)
     return clients
+
+
+@router.post("/ocr/business-registration", response_model=BusinessRegOcrOut)
+def ocr_business_registration(
+    file: UploadFile = File(...), current_user: User = Depends(get_current_user)
+):
+    """사업자등록증 이미지를 인식해 상호/사업자번호/대표자/주소/업태·업종을 추출한다(참조용 - 저장 전 반드시 확인 필요)."""
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
+
+    raw = file.file.read()
+    logger.debug(f"[Clients] 사업자등록증 인식 시도: filename={file.filename}, size={len(raw)}, by={current_user.id}")
+    try:
+        fields = recognize_business_registration(raw)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"[Clients] 사업자등록증 인식 실패: {exc}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지를 인식하지 못했습니다. 다른 사진으로 시도해주세요.")
+
+    logger.debug(
+        f"[Clients] 사업자등록증 인식 완료: name={fields.name}, biz_reg_no={fields.biz_reg_no}, by={current_user.id}"
+    )
+    return BusinessRegOcrOut(
+        name=fields.name,
+        biz_reg_no=fields.biz_reg_no,
+        ceo_name=fields.ceo_name,
+        address=fields.address,
+        biz_type=fields.biz_type,
+        biz_class=fields.biz_class,
+        raw_text=fields.raw_text,
+    )
 
 
 @router.get("/{client_id}", response_model=ClientOut)

@@ -18,8 +18,10 @@ class Client(Base):
     name: Mapped[str] = mapped_column(String(200), index=True)
     biz_reg_no: Mapped[str | None] = mapped_column(String(20), nullable=True)
     ceo_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    business_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    biz_type: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 업태
+    biz_class: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 종목
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     bank_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     bank_account: Mapped[str | None] = mapped_column(String(100), nullable=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)

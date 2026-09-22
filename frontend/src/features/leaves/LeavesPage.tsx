@@ -1,8 +1,8 @@
 import { CalendarRange, ChevronLeft, ChevronRight, Check, Plus, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { ApproverSelect } from "../../components/approval/ApproverSelect";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { StatusBadge } from "../../components/ui/StatusBadge";
-import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { LeaveBalance, LeaveRecord } from "./types";
@@ -11,8 +11,11 @@ function toMonthValue(year: number, month: number) {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
-export function LeavesPage() {
-  const { user } = useAuth();
+interface LeavesPageProps {
+  embedded?: boolean;
+}
+
+export function LeavesPage({ embedded = false }: LeavesPageProps) {
   const now = new Date();
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
@@ -26,8 +29,10 @@ export function LeavesPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
+  const [approverId, setApproverId] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   function loadBalance() {
     apiGet<LeaveBalance>("/api/leaves/balance")
@@ -42,8 +47,7 @@ export function LeavesPage() {
   }
 
   function loadPending() {
-    if (user?.role !== "admin") return;
-    apiGet<LeaveRecord[]>("/api/leaves?status=pending")
+    apiGet<LeaveRecord[]>("/api/leaves?status=pending&approver_mine=true")
       .then(setPendingLeaves)
       .catch((err) => logError("Leaves", "승인 대기 목록 조회 실패", err));
   }
@@ -83,15 +87,26 @@ export function LeavesPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
+    if (!approverId) {
+      setFormError("결재권자를 선택해주세요.");
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await apiPost("/api/leaves", { start_date: startDate, end_date: endDate, reason });
+      await apiPost("/api/leaves", {
+        start_date: startDate,
+        end_date: endDate,
+        reason,
+        approver_id: Number(approverId),
+      });
       setShowForm(false);
       setStartDate("");
       setEndDate("");
       setReason("");
+      setApproverId("");
       loadBalance();
       loadMyLeaves();
+      loadPending();
       logDebug("Leaves", "신청 완료, 목록 새로고침");
     } catch (err) {
       logError("Leaves", "신청 실패", err);
@@ -112,23 +127,41 @@ export function LeavesPage() {
     }
   }
 
-  async function handleDecision(id: number, decision: "approve" | "reject") {
+  async function handleApprove(id: number) {
+    setBusyId(id);
     try {
-      await apiPut(`/api/leaves/${id}/${decision}`);
+      await apiPut(`/api/leaves/${id}/approve`);
       loadPending();
       loadMyLeaves();
       loadBalance();
       loadTeamCalendar();
     } catch (err) {
-      logError("Leaves", `${decision} 처리 실패`, err);
+      logError("Leaves", "승인 처리 실패", err);
+    } finally {
+      setBusyId(null);
     }
   }
 
-  return (
-    <MainLayout
-      title="연차관리"
-      description="연차를 신청하고 승인 현황을 확인합니다."
-      actions={
+  async function handleReject(id: number) {
+    const reason = window.prompt("반려 사유를 입력해주세요.");
+    if (!reason || !reason.trim()) return;
+    setBusyId(id);
+    try {
+      await apiPut(`/api/leaves/${id}/reject`, { reason: reason.trim() });
+      loadPending();
+      loadMyLeaves();
+      loadBalance();
+      loadTeamCalendar();
+    } catch (err) {
+      logError("Leaves", "반려 처리 실패", err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const content = (
+    <>
+      <div className="flex justify-end mb-4">
         <button
           onClick={() => setShowForm((v) => !v)}
           className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
@@ -136,8 +169,8 @@ export function LeavesPage() {
           {showForm ? <X size={16} /> : <Plus size={16} />}
           {showForm ? "닫기" : "연차 신청"}
         </button>
-      }
-    >
+      </div>
+
       {balance && (
         <section className="grid grid-cols-4 gap-4 mb-6">
           <div className="bg-surface border border-border rounded-2xl p-5">
@@ -199,6 +232,7 @@ export function LeavesPage() {
               placeholder="연차 사유를 입력하세요"
             />
           </div>
+          <ApproverSelect value={approverId} onChange={setApproverId} />
           {formError && <p className="text-xs text-danger">{formError}</p>}
           <button
             type="submit"
@@ -210,9 +244,9 @@ export function LeavesPage() {
         </form>
       )}
 
-      {user?.role === "admin" && pendingLeaves.length > 0 && (
+      {pendingLeaves.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-sm font-medium text-text-muted mb-3">승인 대기 중인 신청</h2>
+          <h2 className="text-sm font-medium text-text-muted mb-3">내 결재함 - 승인 대기 중인 신청</h2>
           <div className="bg-surface border border-border rounded-2xl divide-y divide-border">
             {pendingLeaves.map((l) => (
               <div key={l.id} className="flex items-center justify-between px-5 py-4">
@@ -224,15 +258,17 @@ export function LeavesPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => handleDecision(l.id, "approve")}
-                    className="flex items-center gap-1 text-xs text-success border border-success/30 rounded-lg px-3 py-1.5 hover:bg-tile-green"
+                    onClick={() => handleApprove(l.id)}
+                    disabled={busyId === l.id}
+                    className="flex items-center gap-1 text-xs text-success border border-success/30 rounded-lg px-3 py-1.5 hover:bg-tile-green disabled:opacity-50"
                   >
                     <Check size={14} />
                     승인
                   </button>
                   <button
-                    onClick={() => handleDecision(l.id, "reject")}
-                    className="flex items-center gap-1 text-xs text-danger border border-danger/30 rounded-lg px-3 py-1.5 hover:bg-red-50"
+                    onClick={() => handleReject(l.id)}
+                    disabled={busyId === l.id}
+                    className="flex items-center gap-1 text-xs text-danger border border-danger/30 rounded-lg px-3 py-1.5 hover:bg-red-50 disabled:opacity-50"
                   >
                     <X size={14} />
                     반려
@@ -262,6 +298,12 @@ export function LeavesPage() {
                     <StatusBadge status={l.status} />
                   </div>
                   <p className="text-xs text-text-muted mt-1">{l.reason}</p>
+                  {l.approver_name && (
+                    <p className="text-xs text-text-muted mt-0.5">결재권자: {l.approver_name}</p>
+                  )}
+                  {l.status === "rejected" && l.reject_reason && (
+                    <p className="text-xs text-danger mt-0.5">반려 사유: {l.reject_reason}</p>
+                  )}
                 </div>
                 {l.status === "pending" && (
                   <button
@@ -320,6 +362,14 @@ export function LeavesPage() {
           )}
         </div>
       </section>
+    </>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <MainLayout title="연차관리" description="연차를 신청하고 승인 현황을 확인합니다.">
+      {content}
     </MainLayout>
   );
 }

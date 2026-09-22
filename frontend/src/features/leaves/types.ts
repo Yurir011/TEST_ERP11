@@ -9,6 +9,9 @@ export interface LeaveRecord {
   days: number;
   reason: string;
   status: LeaveStatus;
+  approver_id: number | null;
+  approver_name: string | null;
+  reject_reason: string | null;
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   created_at: string;

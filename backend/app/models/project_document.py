@@ -24,14 +24,26 @@ class ProjectDocType(str, enum.Enum):
 class ProjectDocumentStatus(str, enum.Enum):
     draft = "draft"  # 작성 중 (결재 요청 전, 수정 가능)
     pending = "pending"  # 결재 요청됨, 승인 대기 중
-    approved = "approved"  # 결재 승인 완료 - PDF에 직인 날인됨, 저장/발송/출력 가능
+    approved = "approved"  # 결재 승인 완료 - PDF/엑셀에 직인 날인됨, 저장/발송/출력 가능
     rejected = "rejected"  # 반려됨 - 재수정 후 재요청 가능
 
 
-class ApprovalRoute(str, enum.Enum):
-    chief = "chief"  # 소장
-    manager = "manager"  # 과장
-    self_decision = "self_decision"  # 전결 - 작성자 본인이 즉시 승인
+class DocCurrency(str, enum.Enum):
+    KRW = "KRW"  # 원
+    USD = "USD"  # 달러
+    JPY = "JPY"  # 엔
+
+
+DOC_CURRENCY_SYMBOLS: dict[DocCurrency, str] = {
+    DocCurrency.KRW: "₩",
+    DocCurrency.USD: "$",
+    DocCurrency.JPY: "¥",
+}
+
+
+class TaxInvoicePurpose(str, enum.Enum):
+    billing = "청구"  # 대금 입금 전, 청구용으로 발행
+    receipt = "영수"  # 대금 입금 후, 영수증 대용으로 발행
 
 
 class ProjectDocument(Base):
@@ -46,20 +58,26 @@ class ProjectDocument(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
     doc_type: Mapped[ProjectDocType] = mapped_column(Enum(ProjectDocType, name="projectdoctype"), index=True)
     issue_date: Mapped[date] = mapped_column(Date)
+    doc_no: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 견적번호 (MMDD-NN, 당일 발행 순번). 견적서/거래명세서만 사용
+    currency: Mapped[str] = mapped_column(String(3), default=DocCurrency.KRW.value)  # 금액 단위 (KRW/USD/JPY)
+    purpose_type: Mapped[str] = mapped_column(String(10), default=TaxInvoicePurpose.billing.value)  # 청구/영수 (세금계산서만 사용)
     client_name: Mapped[str] = mapped_column(String(200))  # 거래처명
     manager_name: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 담당자
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 자동 생성된 PDF 파일 경로
+    excel_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 승인 시 함께 생성되는 엑셀 파일 경로
     status: Mapped[ProjectDocumentStatus] = mapped_column(
         Enum(ProjectDocumentStatus, name="projectdocumentstatus"), default=ProjectDocumentStatus.draft
     )
-    approval_route: Mapped[ApprovalRoute | None] = mapped_column(
-        Enum(ApprovalRoute, name="approvalroute"), nullable=True
-    )
-    approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # 배정된 결재권자
+    approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # 배정된 결재권자 (팀장/대표)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # 세금계산서 팝빌 발행 상태 (승인 완료 후에만 발행 가능). 발행되면 팝빌 서버가 원본을 보관한다.
+    popbill_mgt_key: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    popbill_nts_confirm_num: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 국세청 승인번호
+    popbill_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     project: Mapped["Project"] = relationship()
     creator: Mapped["User"] = relationship(foreign_keys=[created_by])

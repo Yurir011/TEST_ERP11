@@ -31,7 +31,7 @@ PURCHASE_STEP_LABELS: dict[PurchaseStepKey, str] = {
 
 
 class ProjectProgressStage(Base):
-    """프로젝트별로 자유롭게 등록하는 진행 상황 단계(최대 MAX_PROGRESS_STAGES개). 체크박스처럼 수동으로 완료 처리한다."""
+    """프로젝트별로 자유롭게 등록하는 진행 상황 단계(최대 MAX_PROGRESS_STAGES개). 10% 단위로 진행률을 직접 체크한다."""
 
     __tablename__ = "project_progress_stages"
 
@@ -39,7 +39,7 @@ class ProjectProgressStage(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(50))
     order_index: Mapped[int] = mapped_column(Integer, default=0)
-    is_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    progress_percent: Mapped[int] = mapped_column(Integer, default=0)
     completed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="progress_stages")

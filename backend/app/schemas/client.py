@@ -28,8 +28,10 @@ class ClientCreate(BaseModel):
     name: str
     biz_reg_no: str | None = None
     ceo_name: str | None = None
-    business_type: str | None = None
+    biz_type: str | None = None
+    biz_class: str | None = None
     phone: str | None = None
+    email: str | None = None
     bank_name: str | None = None
     bank_account: str | None = None
     address: str | None = None
@@ -39,6 +41,18 @@ class ClientCreate(BaseModel):
     contacts: list[ClientContactIn] = Field(default_factory=list)
 
 
+class BusinessRegOcrOut(BaseModel):
+    """사업자등록증 이미지 인식(OCR) 결과. 로컬 OCR 특성상 완벽하지 않을 수 있어 사용자가 반드시 값을 확인해야 한다."""
+
+    name: str | None = None
+    biz_reg_no: str | None = None
+    ceo_name: str | None = None
+    address: str | None = None
+    biz_type: str | None = None
+    biz_class: str | None = None
+    raw_text: str = ""
+
+
 class ClientOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -46,8 +60,10 @@ class ClientOut(BaseModel):
     name: str
     biz_reg_no: str | None
     ceo_name: str | None
-    business_type: str | None
+    biz_type: str | None
+    biz_class: str | None
     phone: str | None
+    email: str | None
     bank_name: str | None
     bank_account: str | None
     address: str | None

@@ -15,7 +15,13 @@ from app.models.project_progress import (
     PurchaseStepKey,
 )
 from app.models.user import User
-from app.schemas.project_progress import ProgressStageCreate, ProgressStageOut, PurchaseStepOut, PurchaseStepRename
+from app.schemas.project_progress import (
+    ProgressStageCreate,
+    ProgressStageOut,
+    ProgressStageProgressUpdate,
+    PurchaseStepOut,
+    PurchaseStepRename,
+)
 
 router = APIRouter(prefix="/api/projects", tags=["project-progress"])
 logger = get_logger("ProjectProgress")
@@ -107,9 +113,13 @@ def delete_progress_stage(
     return None
 
 
-@router.put("/{project_id}/progress-stages/{stage_id}/toggle", response_model=ProgressStageOut)
-def toggle_progress_stage(
-    project_id: int, stage_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+@router.put("/{project_id}/progress-stages/{stage_id}/progress", response_model=ProgressStageOut)
+def set_progress_stage_progress(
+    project_id: int,
+    stage_id: int,
+    payload: ProgressStageProgressUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     stage = (
         db.query(ProjectProgressStage)
@@ -119,12 +129,15 @@ def toggle_progress_stage(
     if stage is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="진행 상황 항목을 찾을 수 없습니다.")
 
-    stage.is_done = not stage.is_done
-    stage.completed_on = date.today() if stage.is_done else None
+    if payload.progress_percent < 0 or payload.progress_percent > 100 or payload.progress_percent % 10 != 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="진행율은 0~100% 사이 10 단위여야 합니다.")
+
+    stage.progress_percent = payload.progress_percent
+    stage.completed_on = date.today() if stage.progress_percent == 100 else None
     db.commit()
     db.refresh(stage)
     logger.debug(
-        f"[ProjectProgress] 진행 상황 단계 토글: id={stage_id}, is_done={stage.is_done}, completed_on={stage.completed_on}"
+        f"[ProjectProgress] 진행 상황 단계 진행율 변경: id={stage_id}, progress_percent={stage.progress_percent}"
     )
     return stage
 

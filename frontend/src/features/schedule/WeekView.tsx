@@ -49,6 +49,7 @@ export function WeekView({ days, eventsByDate, onDayClick, onDayNumberClick, onE
                   style={{ backgroundColor: EVENT_COLOR_HEX[ev.color] }}
                   title={ev.title}
                 >
+                  {ev.is_lunar && "[음] "}
                   {ev.title}
                 </div>
               ))}

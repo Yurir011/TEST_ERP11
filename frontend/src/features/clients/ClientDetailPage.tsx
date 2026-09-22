@@ -116,8 +116,10 @@ export function ClientDetailPage() {
           <div className="mt-2">
             <Field label="사업자등록번호" value={client.biz_reg_no} />
             <Field label="대표자명" value={client.ceo_name} />
-            <Field label="업종/업태" value={client.business_type} />
+            <Field label="업태" value={client.biz_type} />
+            <Field label="종목" value={client.biz_class} />
             <Field label="전화번호(유선)" value={client.phone} />
+            <Field label="이메일" value={client.email} />
             <Field label="주소" value={client.address} />
             <Field label="메모" value={client.memo} />
           </div>

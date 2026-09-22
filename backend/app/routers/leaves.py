@@ -3,14 +3,15 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.deps import get_current_user, require_admin
+from app.core.approval import is_self_approval, resolve_approver
+from app.core.deps import get_current_user
 from app.core.leave_calc import calculate_annual_leave_days, count_business_days, get_leave_year_window
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.leave import LeaveRequest, LeaveStatus
-from app.models.notice import Notice
-from app.models.user import User
-from app.schemas.leave import LeaveBalanceOut, LeaveCreate, LeaveOut
+from app.models.user import User, is_admin_role
+from app.schemas.leave import LeaveBalanceOut, LeaveCreate, LeaveOut, RejectIn
+from app.services.approval_notice import create_decision_notice
 
 router = APIRouter(prefix="/api/leaves", tags=["leaves"])
 logger = get_logger("Leaves")
@@ -26,6 +27,9 @@ def _to_out(record: LeaveRequest) -> LeaveOut:
         days=record.days,
         reason=record.reason,
         status=record.status,
+        approver_id=record.approver_id,
+        approver_name=record.approver.name if record.approver else None,
+        reject_reason=record.reject_reason,
         reviewed_by_name=record.reviewer.name if record.reviewer else None,
         reviewed_at=record.reviewed_at,
         created_at=record.created_at,
@@ -84,6 +88,8 @@ def create_leave(
             detail=f"잔여 연차({balance.remaining}일)보다 많은 {days}일을 신청할 수 없습니다.",
         )
 
+    approver = resolve_approver(db, payload.approver_id)
+
     record = LeaveRequest(
         user_id=current_user.id,
         start_date=payload.start_date,
@@ -91,20 +97,45 @@ def create_leave(
         days=days,
         reason=payload.reason,
         status=LeaveStatus.pending,
+        approver_id=approver.id,
     )
+    record.user = current_user
+    record.approver = approver
+
+    if is_self_approval(approver, current_user):
+        record.status = LeaveStatus.approved
+        record.reviewed_by = current_user.id
+        record.reviewed_at = datetime.now(timezone.utc)
+        create_decision_notice(
+            db,
+            category="연차",
+            target_name=current_user.name,
+            doc_label=f"연차 ({payload.start_date} ~ {payload.end_date}, {days}일)",
+            approved=True,
+            author_id=current_user.id,
+        )
+        logger.debug(f"[Leaves] 자기결재 처리(즉시 승인): user_id={current_user.id}")
+
     db.add(record)
     db.commit()
     db.refresh(record)
     record.user = current_user
-    logger.debug(f"[Leaves] 신청 완료: id={record.id}, days={days}")
+    logger.debug(f"[Leaves] 신청 완료: id={record.id}, days={days}, approver_id={approver.id}")
     return _to_out(record)
+
+
+_LEAVE_QUERY_OPTIONS = (
+    joinedload(LeaveRequest.user),
+    joinedload(LeaveRequest.approver),
+    joinedload(LeaveRequest.reviewer),
+)
 
 
 @router.get("/me", response_model=list[LeaveOut])
 def get_my_leaves(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     records = (
         db.query(LeaveRequest)
-        .options(joinedload(LeaveRequest.user), joinedload(LeaveRequest.reviewer))
+        .options(*_LEAVE_QUERY_OPTIONS)
         .filter(LeaveRequest.user_id == current_user.id)
         .order_by(LeaveRequest.created_at.desc())
         .all()
@@ -115,11 +146,19 @@ def get_my_leaves(db: Session = Depends(get_db), current_user: User = Depends(ge
 @router.get("", response_model=list[LeaveOut])
 def get_all_leaves(
     status_filter: LeaveStatus | None = Query(default=None, alias="status"),
+    approver_mine: bool = Query(default=False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    logger.debug(f"[Leaves] 전체 조회(관리자): by={current_user.id}, status={status_filter}")
-    query = db.query(LeaveRequest).options(joinedload(LeaveRequest.user), joinedload(LeaveRequest.reviewer))
+    query = db.query(LeaveRequest).options(*_LEAVE_QUERY_OPTIONS)
+    if approver_mine:
+        logger.debug(f"[Leaves] 내 결재함 조회: by={current_user.id}, status={status_filter}")
+        query = query.filter(LeaveRequest.approver_id == current_user.id)
+    else:
+        if not is_admin_role(current_user.role):
+            logger.debug(f"[Leaves] 전체 조회 권한 없음, 접근 거부: user_id={current_user.id}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자 권한이 필요합니다.")
+        logger.debug(f"[Leaves] 전체 조회(관리자): by={current_user.id}, status={status_filter}")
     if status_filter is not None:
         query = query.filter(LeaveRequest.status == status_filter)
     records = query.order_by(LeaveRequest.created_at.desc()).all()
@@ -172,58 +211,63 @@ def cancel_leave(leave_id: int, db: Session = Depends(get_db), current_user: Use
     return None
 
 
-@router.put("/{leave_id}/approve", response_model=LeaveOut)
-def approve_leave(leave_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
-    record = (
-        db.query(LeaveRequest)
-        .options(joinedload(LeaveRequest.user))
-        .filter(LeaveRequest.id == leave_id)
-        .first()
-    )
+def _get_leave_for_approver(db: Session, leave_id: int, current_user: User) -> LeaveRequest:
+    record = db.query(LeaveRequest).options(*_LEAVE_QUERY_OPTIONS).filter(LeaveRequest.id == leave_id).first()
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="연차 신청 내역을 찾을 수 없습니다.")
+    if record.approver_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="배정된 결재권자만 처리할 수 있습니다.")
     if record.status != LeaveStatus.pending:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 처리된 신청입니다.")
+    return record
+
+
+@router.put("/{leave_id}/approve", response_model=LeaveOut)
+def approve_leave(leave_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    logger.debug(f"[Leaves] 승인 시도: id={leave_id}, by={current_user.id}")
+    record = _get_leave_for_approver(db, leave_id, current_user)
 
     record.status = LeaveStatus.approved
     record.reviewed_by = current_user.id
     record.reviewed_at = datetime.now(timezone.utc)
-
-    notice = Notice(
-        title=f"[연차] {record.user.name}님 연차 승인 안내",
-        content=(
-            f"{record.user.name}님의 연차 사용이 승인되었습니다.\n"
-            f"기간: {record.start_date} ~ {record.end_date} ({record.days}일)"
-        ),
+    create_decision_notice(
+        db,
+        category="연차",
+        target_name=record.user.name,
+        doc_label=f"연차 ({record.start_date} ~ {record.end_date}, {record.days}일)",
+        approved=True,
         author_id=current_user.id,
     )
-    db.add(notice)
 
     db.commit()
     db.refresh(record)
     record.reviewer = current_user
-    logger.debug(f"[Leaves] 승인: id={leave_id}, by={current_user.id}, 공지 등록: {notice.title}")
+    logger.debug(f"[Leaves] 승인 완료: id={leave_id}, by={current_user.id}")
     return _to_out(record)
 
 
 @router.put("/{leave_id}/reject", response_model=LeaveOut)
-def reject_leave(leave_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
-    record = (
-        db.query(LeaveRequest)
-        .options(joinedload(LeaveRequest.user))
-        .filter(LeaveRequest.id == leave_id)
-        .first()
-    )
-    if record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="연차 신청 내역을 찾을 수 없습니다.")
-    if record.status != LeaveStatus.pending:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 처리된 신청입니다.")
+def reject_leave(
+    leave_id: int, payload: RejectIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    logger.debug(f"[Leaves] 반려 시도: id={leave_id}, by={current_user.id}")
+    record = _get_leave_for_approver(db, leave_id, current_user)
 
     record.status = LeaveStatus.rejected
+    record.reject_reason = payload.reason
     record.reviewed_by = current_user.id
     record.reviewed_at = datetime.now(timezone.utc)
+    create_decision_notice(
+        db,
+        category="연차",
+        target_name=record.user.name,
+        doc_label=f"연차 ({record.start_date} ~ {record.end_date}, {record.days}일)",
+        approved=False,
+        author_id=current_user.id,
+        detail=f"반려 사유: {payload.reason}",
+    )
     db.commit()
     db.refresh(record)
     record.reviewer = current_user
-    logger.debug(f"[Leaves] 반려: id={leave_id}, by={current_user.id}")
+    logger.debug(f"[Leaves] 반려 완료: id={leave_id}, by={current_user.id}, reason={payload.reason}")
     return _to_out(record)

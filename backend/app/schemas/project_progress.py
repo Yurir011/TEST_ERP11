@@ -9,13 +9,17 @@ class ProgressStageCreate(BaseModel):
     name: str
 
 
+class ProgressStageProgressUpdate(BaseModel):
+    progress_percent: int
+
+
 class ProgressStageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     order_index: int
-    is_done: bool
+    progress_percent: int
     completed_on: date | None
 
 

@@ -2,16 +2,27 @@ import { Check, ListChecks, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { PercentPickerPopover } from "./PercentPickerPopover";
+import { PROGRESS_ROW_STYLES } from "./progressRowStyles";
 import { MAX_PROGRESS_STAGES, type ProgressStage } from "./types";
 
-export function ProgressStagesCard({ projectId }: { projectId: number }) {
+interface ProgressStagesCardProps {
+  projectId: number;
+  onStagesChange?: (stages: ProgressStage[]) => void;
+}
+
+export function ProgressStagesCard({ projectId, onStagesChange }: ProgressStagesCardProps) {
   const [stages, setStages] = useState<ProgressStage[] | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [openPickerId, setOpenPickerId] = useState<number | null>(null);
 
   function loadStages() {
     apiGet<ProgressStage[]>(`/api/projects/${projectId}/progress-stages`)
-      .then(setStages)
+      .then((data) => {
+        setStages(data);
+        onStagesChange?.(data);
+      })
       .catch((err) => logError("ProjectProgress", "진행 상황 목록 조회 실패", err));
   }
 
@@ -35,13 +46,13 @@ export function ProgressStagesCard({ projectId }: { projectId: number }) {
     }
   }
 
-  async function handleToggle(stage: ProgressStage) {
-    logDebug("ProjectProgress", `진행 상황 단계 토글: id=${stage.id}`);
+  async function handleSetProgress(stage: ProgressStage, value: number) {
+    logDebug("ProjectProgress", `진행 상황 단계 진행율 변경 시도: id=${stage.id}, value=${value}`);
     try {
-      await apiPut(`/api/projects/${projectId}/progress-stages/${stage.id}/toggle`);
+      await apiPut(`/api/projects/${projectId}/progress-stages/${stage.id}/progress`, { progress_percent: value });
       loadStages();
     } catch (err) {
-      logError("ProjectProgress", "진행 상황 단계 토글 실패", err);
+      logError("ProjectProgress", "진행 상황 단계 진행율 변경 실패", err);
     }
   }
 
@@ -78,43 +89,66 @@ export function ProgressStagesCard({ projectId }: { projectId: number }) {
       )}
 
       {stages !== null && stages.length > 0 && (
-        <div className="flex items-start mb-5 px-8">
-          {stages.map((stage, i) => (
-            <div key={stage.id} className="flex items-center flex-1 last:flex-none">
-              <div className="flex flex-col items-center gap-1.5 group/stage">
+        <div className="space-y-4 mb-5">
+          {stages.map((stage, i) => {
+            const style = PROGRESS_ROW_STYLES[i % PROGRESS_ROW_STYLES.length];
+            const done = stage.progress_percent === 100;
+            return (
+              <div key={stage.id} className="flex items-center gap-3 group/stage">
                 <button
-                  onClick={() => handleToggle(stage)}
-                  className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-sm font-medium shrink-0 transition-colors ${
-                    stage.is_done
-                      ? "bg-success border-success text-white"
+                  onClick={() => handleSetProgress(stage, done ? 0 : 100)}
+                  title={done ? "클릭하여 0%로 초기화" : "클릭하여 100% 완료 처리"}
+                  className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-medium shrink-0 transition-colors ${
+                    done
+                      ? `${style.dot} border-transparent text-white`
                       : "border-border bg-bg text-text-muted hover:border-primary/50"
                   }`}
-                  title={stage.is_done ? "완료 취소" : "완료 체크"}
                 >
-                  {stage.is_done ? <Check size={16} /> : i + 1}
+                  {done ? <Check size={14} /> : i + 1}
                 </button>
-                <div className="flex items-center gap-1 max-w-[120px]">
-                  <span
-                    className={`text-xs text-center break-words ${
-                      stage.is_done ? "text-text" : "text-text-muted"
-                    }`}
-                  >
-                    {stage.name}
-                  </span>
-                  <button
-                    onClick={() => handleDelete(stage)}
-                    className="opacity-0 group-hover/stage:opacity-100 text-text-muted hover:text-danger shrink-0"
-                    title="삭제"
-                  >
-                    <Trash2 size={11} />
-                  </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className={`text-xs truncate ${done ? "text-text" : "text-text-muted"}`}>
+                      {stage.name}
+                    </span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] font-medium text-text-muted tabular-nums">
+                        {stage.progress_percent}%
+                      </span>
+                      <button
+                        onClick={() => handleDelete(stage)}
+                        className="opacity-0 group-hover/stage:opacity-100 text-text-muted hover:text-danger"
+                        title="삭제"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <div
+                      onClick={() => setOpenPickerId(stage.id)}
+                      title="클릭하여 진행율을 선택합니다"
+                      className="h-6 rounded-lg bg-bg overflow-hidden cursor-pointer"
+                    >
+                      <div
+                        className={`h-full rounded-lg transition-all duration-300 ${
+                          stage.progress_percent > 0 ? style.bar : ""
+                        }`}
+                        style={{ width: `${stage.progress_percent}%` }}
+                      />
+                    </div>
+                    {openPickerId === stage.id && (
+                      <PercentPickerPopover
+                        value={stage.progress_percent}
+                        onSelect={(v) => handleSetProgress(stage, v)}
+                        onClose={() => setOpenPickerId(null)}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
-              {i < stages.length - 1 && (
-                <div className={`h-0.5 flex-1 mx-1 mb-6 ${stage.is_done ? "bg-success/40" : "bg-border"}`} />
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

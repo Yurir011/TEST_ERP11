@@ -53,13 +53,13 @@ export function AttendanceToggle() {
         onClick={handleToggle}
         disabled={isBusy || isDone}
         aria-label={isWorking ? "퇴근하기" : "출근하기"}
-        className={`relative w-16 h-8 rounded-full transition-colors shrink-0 disabled:cursor-not-allowed ${
+        className={`relative w-9 h-5 rounded-full transition-colors shrink-0 disabled:cursor-not-allowed ${
           isOn ? "bg-success" : "bg-border"
         } ${isDone ? "opacity-60" : ""}`}
       >
         <span
-          className={`absolute top-0.5 left-0.5 w-7 h-7 rounded-full bg-white shadow-md transition-transform ${
-            isOn ? "translate-x-8" : "translate-x-0"
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform ${
+            isOn ? "translate-x-4" : "translate-x-0"
           }`}
         />
       </button>

@@ -14,9 +14,13 @@ class ScheduleEventCreate(BaseModel):
     start_date: date
     end_date: date
     color: str = "blue"
+    is_lunar: bool = False
     recurrence_freq: str = "none"
     recurrence_weekdays: list[int] | None = None  # 0=일 ... 6=토 (JS Date.getDay() 기준)
     recurrence_until: date | None = None
+    # 음력 + 매년 반복일 때, 프런트(lunar-javascript)에서 음력 기준으로 계산한 각 회차의 양력 날짜 목록.
+    # 음력은 해마다 대응 양력 날짜가 달라 서버에서 solar+N년 방식으로 생성할 수 없어 이 목록을 그대로 사용한다.
+    lunar_occurrence_dates: list[date] | None = None
 
     @field_validator("color")
     @classmethod
@@ -34,6 +38,18 @@ class ScheduleEventCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_recurrence(self):
+        if self.is_lunar:
+            if self.start_date != self.end_date:
+                raise ValueError("음력 일정은 하루짜리 일정만 등록할 수 있습니다.")
+            if self.recurrence_freq not in ("none", "yearly"):
+                raise ValueError("음력 일정은 반복 없음 또는 매년 반복만 선택할 수 있습니다.")
+            if self.recurrence_freq == "yearly":
+                if not self.lunar_occurrence_dates:
+                    raise ValueError("음력 매년 반복 날짜 목록이 필요합니다.")
+                if len(self.lunar_occurrence_dates) > MAX_OCCURRENCES:
+                    raise ValueError(f"반복 일정은 최대 {MAX_OCCURRENCES}회까지 생성할 수 있습니다.")
+            return self
+
         if self.recurrence_freq != "none":
             if self.recurrence_until is None:
                 raise ValueError("반복 종료일(recurrence_until)이 필요합니다.")
@@ -53,6 +69,7 @@ class ScheduleEventOut(BaseModel):
     start_date: date
     end_date: date
     color: str
+    is_lunar: bool
     is_completed: bool
     sort_order: int
     recurrence_group_id: str | None

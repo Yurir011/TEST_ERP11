@@ -9,6 +9,11 @@ class LeaveCreate(BaseModel):
     start_date: date
     end_date: date
     reason: str
+    approver_id: int
+
+
+class RejectIn(BaseModel):
+    reason: str
 
 
 class LeaveOut(BaseModel):
@@ -22,6 +27,9 @@ class LeaveOut(BaseModel):
     days: int
     reason: str
     status: LeaveStatus
+    approver_id: int | None
+    approver_name: str | None
+    reject_reason: str | None
     reviewed_by_name: str | None
     reviewed_at: datetime | None
     created_at: datetime

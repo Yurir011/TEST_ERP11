@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.approval import APPROVER_TITLES
 from app.core.deps import get_current_user, require_admin_or_site_admin
 from app.core.security import hash_password
 from app.database import get_db
 from app.logging_config import get_logger
-from app.models.user import JobGrade, User, UserRole, resolve_role
+from app.models.user import User, UserRole, resolve_role
 from app.schemas.user import ApproverOut, PasswordResetRequest, UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -18,16 +19,14 @@ def list_users(db: Session = Depends(get_db), current_user: User = Depends(requi
 
 
 @router.get("/approvers", response_model=list[ApproverOut])
-def list_approvers(
-    grade: JobGrade, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
-):
-    """결재요청 시 소장/과장 등 직급으로 실제 결재권자를 고르기 위한 최소 정보 목록.
-    일반 직원도 결재요청을 위해 호출해야 하므로 admin 제한 없이 로그인한 누구나 조회 가능하다."""
-    logger.debug(f"[Users] 결재권자 후보 조회: grade={grade}, by={current_user.id}")
+def list_approvers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """결재권자(팀장/대표) 후보 목록. 일반 직원도 결재요청을 위해 호출해야 하므로
+    admin 제한 없이 로그인한 누구나 조회 가능하다."""
+    logger.debug(f"[Users] 결재권자 후보 조회: by={current_user.id}")
     return (
         db.query(User)
-        .filter(User.grade == grade, User.is_active.is_(True))
-        .order_by(User.name)
+        .filter(User.title.in_(APPROVER_TITLES), User.is_active.is_(True))
+        .order_by(User.title, User.name)
         .all()
     )
 

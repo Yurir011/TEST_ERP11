@@ -72,6 +72,7 @@ export function DayView({ day, eventsByDate, onAddClick, onEventClick, onToggleC
                 onClick={() => onEventClick(ev)}
                 className={`flex-1 text-left text-sm ${ev.is_completed ? "line-through text-text-muted" : ""}`}
               >
+                {ev.is_lunar && "[음] "}
                 {ev.title}
               </button>
               <span className="text-xs text-text-muted shrink-0">{ev.created_by_name}</span>

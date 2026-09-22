@@ -15,10 +15,12 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import type { Client } from "../clients/types";
 import { ApiError, apiDelete, apiGet, apiUpload, downloadFile, openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { PaymentDetailModal } from "./PaymentDetailModal";
+import { SettleModal } from "./SettleModal";
 import {
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
@@ -61,6 +63,8 @@ export function PaymentsPage() {
   const [keyword, setKeyword] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [clients, setClients] = useState<Client[]>([]);
+  const [settleTarget, setSettleTarget] = useState<{ kind: "receivable" | "payable"; client: Client } | null>(null);
 
   const usingCustomRange = Boolean(dateFrom || dateTo);
 
@@ -95,6 +99,13 @@ export function PaymentsPage() {
       .catch((err) => logError("Payments", "월별 리포트 조회 실패", err));
   }
 
+  function loadClients() {
+    logDebug("Payments", "미수금/미지급금 현황용 거래처 목록 조회 시작");
+    apiGet<Client[]>("/api/clients")
+      .then(setClients)
+      .catch((err) => logError("Payments", "거래처 목록 조회 실패", err));
+  }
+
   useEffect(() => {
     const timer = setTimeout(() => {
       loadPayments();
@@ -103,6 +114,20 @@ export function PaymentsPage() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, month, tab, keyword, dateFrom, dateTo]);
+
+  useEffect(() => {
+    loadClients();
+  }, []);
+
+  function handleSettleSuccess() {
+    setSettleTarget(null);
+    loadClients();
+    loadPayments();
+    loadReport();
+  }
+
+  const receivableClients = clients.filter((c) => c.receivable_amount > 0);
+  const payableClients = clients.filter((c) => c.payable_amount > 0);
 
   function clearFilters() {
     setKeyword("");
@@ -328,6 +353,58 @@ export function PaymentsPage() {
         </section>
       )}
 
+      {(receivableClients.length > 0 || payableClients.length > 0) && (
+        <section className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-surface border border-border rounded-2xl p-5">
+            <h2 className="text-sm font-medium mb-3">미수금 현황</h2>
+            {receivableClients.length === 0 ? (
+              <p className="text-sm text-text-muted">미수금이 있는 거래처가 없습니다.</p>
+            ) : (
+              <ul className="space-y-2">
+                {receivableClients.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium">{c.name}</p>
+                      <p className="text-xs text-text-muted mt-0.5">{formatCurrency(c.receivable_amount)}</p>
+                    </div>
+                    <button
+                      onClick={() => setSettleTarget({ kind: "receivable", client: c })}
+                      className="text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-tile-blue shrink-0"
+                    >
+                      수금완료
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="bg-surface border border-border rounded-2xl p-5">
+            <h2 className="text-sm font-medium mb-3">미지급금 현황</h2>
+            {payableClients.length === 0 ? (
+              <p className="text-sm text-text-muted">미지급금이 있는 거래처가 없습니다.</p>
+            ) : (
+              <ul className="space-y-2">
+                {payableClients.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium">{c.name}</p>
+                      <p className="text-xs text-text-muted mt-0.5">{formatCurrency(c.payable_amount)}</p>
+                    </div>
+                    <button
+                      onClick={() => setSettleTarget({ kind: "payable", client: c })}
+                      className="text-xs text-danger border border-danger/30 rounded-lg px-3 py-1.5 hover:bg-red-50 shrink-0"
+                    >
+                      지급완료
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
       {payments !== null && payments.length === 0 && (
@@ -440,6 +517,15 @@ export function PaymentsPage() {
 
       {selectedPayment && (
         <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} />
+      )}
+
+      {settleTarget && (
+        <SettleModal
+          kind={settleTarget.kind}
+          client={settleTarget.client}
+          onClose={() => setSettleTarget(null)}
+          onSuccess={handleSettleSuccess}
+        />
       )}
     </MainLayout>
   );

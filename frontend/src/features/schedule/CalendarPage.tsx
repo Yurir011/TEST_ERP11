@@ -143,7 +143,7 @@ export function CalendarPage() {
   return (
     <MainLayout
       title="일정관리"
-      description="팀 일정을 캘린더로 확인합니다."
+      description="나의 개인 일정을 캘린더로 확인합니다. (다른 직원에게 공유되지 않습니다)"
       actions={
         <button
           onClick={() => openCreate(anchor)}

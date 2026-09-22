@@ -1,10 +1,21 @@
 import { FolderKanban, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { ProjectStageBoard } from "./ProjectStageBoard";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES, type Project, type ProjectStatus } from "./types";
+
+function isOverdue(p: Project, today: string): boolean {
+  return p.status === "in_progress" && !!p.end_date && p.end_date < today;
+}
+
+const BAR_COLOR: Record<ProjectStatus, string> = {
+  estimate: "bg-tile-orange-fg",
+  in_progress: "bg-tile-blue-fg",
+  completed: "bg-tile-green-fg",
+};
 
 const TABS: { key: ProjectStatus | "all"; label: string }[] = [
   { key: "all", label: "전체" },
@@ -14,7 +25,9 @@ const TABS: { key: ProjectStatus | "all"; label: string }[] = [
 ];
 
 export function ProjectsPage() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[] | null>(null);
+  const [allProjects, setAllProjects] = useState<Project[] | null>(null);
   const [tab, setTab] = useState<ProjectStatus | "all">("all");
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +52,15 @@ export function ProjectsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, query]);
 
+  useEffect(() => {
+    logDebug("Projects", "프로젝트 진행 현황(단계별 보드) 조회 시작");
+    apiGet<Project[]>("/api/projects")
+      .then(setAllProjects)
+      .catch((err) => logError("Projects", "프로젝트 진행 현황 조회 실패", err));
+  }, []);
+
+  const todayISO = new Date().toISOString().slice(0, 10);
+
   return (
     <MainLayout
       title="프로젝트관리"
@@ -53,6 +75,15 @@ export function ProjectsPage() {
         </Link>
       }
     >
+      <section className="mb-8">
+        <h2 className="text-sm font-medium text-text-muted mb-3">프로젝트 진행 현황</h2>
+        {allProjects === null ? (
+          <p className="text-sm text-text-muted">불러오는 중...</p>
+        ) : (
+          <ProjectStageBoard projects={allProjects} />
+        )}
+      </section>
+
       <div className="flex items-center gap-3 mb-5">
         <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit">
           {TABS.map((t) => (
@@ -90,22 +121,51 @@ export function ProjectsPage() {
       )}
 
       {projects !== null && projects.length > 0 && (
-        <div className="space-y-3">
-          {projects.map((p) => (
-            <Link
-              key={p.id}
-              to={`/projects/${p.id}`}
-              className="flex items-center justify-between bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors"
-            >
-              <div>
-                <h2 className="font-medium text-text">{p.name}</h2>
-                <p className="text-xs text-text-muted mt-1">{p.client_name}</p>
-              </div>
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${PROJECT_STATUS_STYLES[p.status]}`}>
-                {PROJECT_STATUS_LABELS[p.status]}
-              </span>
-            </Link>
-          ))}
+        <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-text-muted border-b border-border">
+                <th className="py-2.5 px-4 font-medium">프로젝트</th>
+                <th className="py-2.5 px-4 font-medium">거래처</th>
+                <th className="py-2.5 px-4 font-medium">진행률</th>
+                <th className="py-2.5 px-4 font-medium">상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map((p) => {
+                const overdue = isOverdue(p, todayISO);
+                return (
+                  <tr
+                    key={p.id}
+                    onClick={() => navigate(`/projects/${p.id}`)}
+                    className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
+                  >
+                    <td className={`py-3 px-4 font-medium ${overdue ? "text-danger" : "text-text"}`}>
+                      {p.name}
+                      {overdue && <span className="text-[11px] font-normal ml-1.5">· 지연</span>}
+                    </td>
+                    <td className="py-3 px-4 text-text-muted">{p.client_name}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 h-1.5 rounded-full bg-bg overflow-hidden shrink-0">
+                          <div
+                            className={`h-full rounded-full ${overdue ? "bg-danger" : BAR_COLOR[p.status]}`}
+                            style={{ width: `${p.progress_percent}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-text-muted tabular-nums">{p.progress_percent}%</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${PROJECT_STATUS_STYLES[p.status]}`}>
+                        {PROJECT_STATUS_LABELS[p.status]}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </MainLayout>

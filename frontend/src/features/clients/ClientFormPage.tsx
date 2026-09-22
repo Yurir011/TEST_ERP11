@@ -1,9 +1,10 @@
-import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { FileScan, Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
-import { logError } from "../../lib/logger";
+import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
+import { logDebug, logError } from "../../lib/logger";
+import type { BusinessRegOcrResult } from "./types";
 import {
   EMPTY_CLIENT_CONTACT,
   EMPTY_CLIENT_FORM,
@@ -14,12 +15,22 @@ import {
 
 const NUMBER_FIELDS = new Set<keyof ClientFormValues>(["receivable_amount", "payable_amount"]);
 
+// 사업자등록번호는 어디든 3자리-2자리-5자리 형식이므로, 숫자만 남긴 뒤 하이픈을 자동으로 붙여준다.
+function formatBizRegNo(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
 const FIELDS_TOP: { key: keyof ClientFormValues; label: string; required?: boolean }[] = [
   { key: "name", label: "상호", required: true },
   { key: "biz_reg_no", label: "사업자등록번호" },
   { key: "ceo_name", label: "대표자명" },
-  { key: "business_type", label: "업종/업태" },
+  { key: "biz_type", label: "업태" },
+  { key: "biz_class", label: "종목" },
   { key: "phone", label: "전화번호(유선)" },
+  { key: "email", label: "이메일" },
 ];
 
 const FIELDS_BOTTOM: { key: keyof ClientFormValues; label: string; span2?: boolean }[] = [
@@ -31,10 +42,12 @@ const FIELDS_BOTTOM: { key: keyof ClientFormValues; label: string; span2?: boole
 function toFormValues(client: Client): ClientFormValues {
   return {
     name: client.name,
-    biz_reg_no: client.biz_reg_no ?? "",
+    biz_reg_no: formatBizRegNo(client.biz_reg_no ?? ""),
     ceo_name: client.ceo_name ?? "",
-    business_type: client.business_type ?? "",
+    biz_type: client.biz_type ?? "",
+    biz_class: client.biz_class ?? "",
     phone: client.phone ?? "",
+    email: client.email ?? "",
     bank_name: client.bank_name ?? "",
     bank_account: client.bank_account ?? "",
     address: client.address ?? "",
@@ -87,6 +100,13 @@ export function ClientFormPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const ocrInputRef = useRef<HTMLInputElement>(null);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrFilledCount, setOcrFilledCount] = useState<number | null>(null);
+  const [ocrRawText, setOcrRawText] = useState<string | null>(null);
+  const [showOcrRawText, setShowOcrRawText] = useState(false);
+
   useEffect(() => {
     if (!isEdit) return;
     apiGet<Client>(`/api/clients/${id}`)
@@ -117,6 +137,49 @@ export function ClientFormPage() {
     }));
   }
 
+  async function handleOcrFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 같은 파일을 다시 선택해도 onChange가 발생하도록 초기화
+    if (!file) return;
+
+    setOcrError(null);
+    setOcrFilledCount(null);
+    setOcrRawText(null);
+    setShowOcrRawText(false);
+    setIsOcrLoading(true);
+    try {
+      logDebug("ClientForm", `사업자등록증 인식 시도: ${file.name}`);
+      const result = await apiUpload<BusinessRegOcrResult>("/api/clients/ocr/business-registration", file);
+      setOcrRawText(result.raw_text || null);
+      const updates: [keyof ClientFormValues, string | null][] = [
+        ["name", result.name],
+        ["biz_reg_no", result.biz_reg_no ? formatBizRegNo(result.biz_reg_no) : null],
+        ["ceo_name", result.ceo_name],
+        ["address", result.address],
+        ["biz_type", result.biz_type],
+        ["biz_class", result.biz_class],
+      ];
+      const filled = updates.filter(([, v]) => v);
+      setValues((prev) => {
+        const next = { ...prev };
+        for (const [key, v] of filled) {
+          if (v) next[key] = v as ClientFormValues[typeof key];
+        }
+        return next;
+      });
+      setOcrFilledCount(filled.length);
+      if (filled.length === 0) {
+        setOcrError("이미지에서 항목을 인식하지 못했습니다. 항목을 직접 입력해주세요.");
+      }
+      logDebug("ClientForm", `사업자등록증 인식 완료: ${filled.length}개 항목 채움`);
+    } catch (err) {
+      logError("ClientForm", "사업자등록증 인식 실패", err);
+      setOcrError(err instanceof ApiError ? err.message : "인식 중 오류가 발생했습니다.");
+    } finally {
+      setIsOcrLoading(false);
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -144,15 +207,62 @@ export function ClientFormPage() {
         <p className="text-sm text-text-muted">불러오는 중...</p>
       ) : (
         <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 max-w-2xl">
+          {!isEdit && (
+            <div className="mb-5 pb-5 border-b border-border">
+              <label className="block text-xs text-text-muted mb-1.5">참조 (사업자등록증으로 자동 입력)</label>
+              <input
+                ref={ocrInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleOcrFileSelect}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => ocrInputRef.current?.click()}
+                disabled={isOcrLoading}
+                className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg disabled:opacity-60"
+              >
+                <FileScan size={14} />
+                {isOcrLoading ? "인식 중..." : "사업자등록증 이미지 업로드"}
+              </button>
+              {ocrFilledCount !== null && ocrFilledCount > 0 && (
+                <p className="text-xs text-success mt-1.5">
+                  {ocrFilledCount}개 항목을 자동으로 채웠습니다. 저장 전 내용을 꼭 확인해주세요 (OCR 인식은 오류가 있을 수 있습니다).
+                </p>
+              )}
+              {ocrError && <p className="text-xs text-danger mt-1.5">{ocrError}</p>}
+              {ocrRawText && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowOcrRawText((v) => !v)}
+                    className="text-xs text-primary hover:opacity-80"
+                  >
+                    {showOcrRawText ? "인식된 원문 숨기기" : "인식된 원문 보기 (일부 항목이 비었다면 확인해보세요)"}
+                  </button>
+                  {showOcrRawText && (
+                    <pre className="mt-1.5 whitespace-pre-wrap break-words text-[11px] text-text-muted bg-bg rounded-lg p-3 max-h-48 overflow-y-auto">
+                      {ocrRawText}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             {FIELDS_TOP.map(({ key, label, required }) => (
               <div key={key}>
                 <label className="block text-xs text-text-muted mb-1.5">{label}</label>
                 <input
-                  type="text"
+                  type={key === "email" ? "email" : "text"}
                   required={required}
+                  inputMode={key === "biz_reg_no" ? "numeric" : undefined}
+                  placeholder={key === "biz_reg_no" ? "123-45-67890" : undefined}
+                  maxLength={key === "biz_reg_no" ? 12 : undefined}
                   value={values[key] as string}
-                  onChange={(e) => update(key, e.target.value)}
+                  onChange={(e) => update(key, key === "biz_reg_no" ? formatBizRegNo(e.target.value) : e.target.value)}
                   className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
                 />
               </div>

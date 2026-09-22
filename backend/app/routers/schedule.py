@@ -23,6 +23,7 @@ def _to_out(event: ScheduleEvent) -> ScheduleEventOut:
         start_date=event.start_date,
         end_date=event.end_date,
         color=event.color,
+        is_lunar=event.is_lunar,
         is_completed=event.is_completed,
         sort_order=event.sort_order,
         recurrence_group_id=event.recurrence_group_id,
@@ -39,11 +40,16 @@ def list_events(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """일정관리는 개인 일정이므로 다른 직원의 일정 내용은 절대 노출하지 않고 본인이 등록한 일정만 반환한다."""
     range_end_exclusive = end + timedelta(days=1)
     events = (
         db.query(ScheduleEvent)
         .options(joinedload(ScheduleEvent.creator))
-        .filter(ScheduleEvent.start_date < range_end_exclusive, ScheduleEvent.end_date >= start)
+        .filter(
+            ScheduleEvent.created_by == current_user.id,
+            ScheduleEvent.start_date < range_end_exclusive,
+            ScheduleEvent.end_date >= start,
+        )
         .order_by(ScheduleEvent.sort_order, ScheduleEvent.id)
         .all()
     )
@@ -103,12 +109,16 @@ def create_event(
     if payload.end_date < payload.start_date:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="종료일은 시작일보다 빠를 수 없습니다.")
 
-    occurrence_starts = _generate_occurrence_starts(payload)
+    if payload.is_lunar and payload.recurrence_freq == "yearly":
+        occurrence_starts = payload.lunar_occurrence_dates
+    else:
+        occurrence_starts = _generate_occurrence_starts(payload)
     duration = (payload.end_date - payload.start_date).days
     group_id = str(uuid.uuid4()) if payload.recurrence_freq != "none" else None
 
     logger.debug(
-        f"[Schedule] 일정 등록: title={payload.title}, occurrences={len(occurrence_starts)}, by={current_user.id}"
+        f"[Schedule] 일정 등록: title={payload.title}, is_lunar={payload.is_lunar}, "
+        f"occurrences={len(occurrence_starts)}, by={current_user.id}"
     )
 
     created_events = []
@@ -119,6 +129,7 @@ def create_event(
             start_date=occ_start,
             end_date=occ_start + timedelta(days=duration),
             color=payload.color,
+            is_lunar=payload.is_lunar,
             recurrence_group_id=group_id,
             created_by=current_user.id,
         )
@@ -161,6 +172,7 @@ def update_event(
     event.start_date = payload.start_date
     event.end_date = payload.end_date
     event.color = payload.color
+    event.is_lunar = payload.is_lunar
     db.commit()
     db.refresh(event)
     logger.debug(f"[Schedule] 일정 수정: id={event_id}, by={current_user.id}")
@@ -192,7 +204,11 @@ def reorder_event(
     day_events = (
         db.query(ScheduleEvent)
         .options(joinedload(ScheduleEvent.creator))
-        .filter(ScheduleEvent.start_date <= payload.date, ScheduleEvent.end_date >= payload.date)
+        .filter(
+            ScheduleEvent.created_by == current_user.id,
+            ScheduleEvent.start_date <= payload.date,
+            ScheduleEvent.end_date >= payload.date,
+        )
         .order_by(ScheduleEvent.sort_order, ScheduleEvent.id)
         .all()
     )

@@ -22,6 +22,7 @@ class ScheduleEvent(Base):
     start_date: Mapped[date] = mapped_column(Date, index=True)
     end_date: Mapped[date] = mapped_column(Date, index=True)
     color: Mapped[str] = mapped_column(String(20), default="blue")
+    is_lunar: Mapped[bool] = mapped_column(Boolean, default=False)  # 음력 날짜로 입력된 일정인지 (저장은 항상 환산된 양력 날짜)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     recurrence_group_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)

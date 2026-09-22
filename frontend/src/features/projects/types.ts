@@ -7,6 +7,10 @@ export interface Project {
   client_name: string;
   status: ProjectStatus;
   memo: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  progress_percent: number;
+  creator_name: string;
   created_at: string;
   updated_at: string;
 }
@@ -68,7 +72,7 @@ export interface ProgressStage {
   id: number;
   name: string;
   order_index: number;
-  is_done: boolean;
+  progress_percent: number;
   completed_on: string | null;
 }
 

@@ -22,19 +22,32 @@ export const PROJECT_DOC_STATUS_STYLES: Record<ProjectDocumentStatus, string> = 
   rejected: "bg-red-50 text-danger",
 };
 
-export type ApprovalRoute = "chief" | "manager" | "self_decision";
-
-export const APPROVAL_ROUTE_LABELS: Record<ApprovalRoute, string> = {
-  chief: "소장",
-  manager: "과장",
-  self_decision: "전결",
-};
-
 export interface Approver {
   id: number;
   name: string;
-  grade: string;
+  title: "team_lead" | "ceo";
 }
+
+export type DocCurrency = "KRW" | "USD" | "JPY";
+
+export const DOC_CURRENCY_LABELS: Record<DocCurrency, string> = {
+  KRW: "원 (KRW)",
+  USD: "달러 (USD)",
+  JPY: "엔 (JPY)",
+};
+
+export const DOC_CURRENCY_SYMBOLS: Record<DocCurrency, string> = {
+  KRW: "₩",
+  USD: "$",
+  JPY: "¥",
+};
+
+export type TaxInvoicePurpose = "청구" | "영수";
+
+export const TAX_INVOICE_PURPOSE_HELP: Record<TaxInvoicePurpose, string> = {
+  청구: "대금 입금 전, 청구용으로 발행",
+  영수: "대금 입금 후, 영수증 대용으로 발행",
+};
 
 export interface ProjectDocumentItem {
   id: number;
@@ -50,12 +63,15 @@ export interface ProjectDocument {
   project_name: string;
   doc_type: ProjectDocType;
   issue_date: string;
+  doc_no: string | null;
+  currency: DocCurrency;
+  purpose_type: TaxInvoicePurpose;
   client_name: string;
   manager_name: string | null;
   items: ProjectDocumentItem[];
   has_pdf: boolean;
+  has_excel: boolean;
   status: ProjectDocumentStatus;
-  approval_route: ApprovalRoute | null;
   approver_id: number | null;
   approver_name: string | null;
   reviewed_at: string | null;
@@ -63,6 +79,9 @@ export interface ProjectDocument {
   client_contact_email: string | null;
   created_by: number;
   created_at: string;
+  popbill_issued: boolean;
+  popbill_nts_confirm_num: string | null;
+  popbill_issued_at: string | null;
 }
 
 export interface ProjectDocumentItemFormValues {
