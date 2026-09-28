@@ -19,7 +19,7 @@ export function isAdminRole(role: UserRole | undefined): boolean {
   return role === "admin" || role === "site_admin";
 }
 export type JobGrade = "staff" | "assistant_manager" | "manager" | "director" | "chief";
-export type JobTitle = "ceo" | "team_lead";
+export type JobTitle = "ceo" | "team_lead" | "dept_head";
 
 export const GRADE_LABELS: Record<JobGrade, string> = {
   staff: "사원",

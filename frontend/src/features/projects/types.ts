@@ -74,6 +74,8 @@ export interface ProgressStage {
   order_index: number;
   progress_percent: number;
   completed_on: string | null;
+  start_date: string | null;
+  end_date: string | null;
 }
 
 export type PurchaseStepKey = "request" | "approval" | "purchase" | "payment" | "delivery";

@@ -28,6 +28,7 @@ class Client(Base):
     receivable_amount: Mapped[int] = mapped_column(BigInteger, default=0)
     payable_amount: Mapped[int] = mapped_column(BigInteger, default=0)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    biz_reg_image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 사업자등록증 첨부파일
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -38,6 +39,10 @@ class Client(Base):
     contacts: Mapped[list["ClientContact"]] = relationship(
         back_populates="client", cascade="all, delete-orphan", order_by="ClientContact.sort_order"
     )
+
+    @property
+    def has_biz_reg_image(self) -> bool:
+        return bool(self.biz_reg_image_path)
 
 
 class ClientContact(Base):

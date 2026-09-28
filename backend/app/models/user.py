@@ -33,6 +33,7 @@ class JobTitle(str, enum.Enum):
 
     ceo = "ceo"  # 대표
     team_lead = "team_lead"  # 팀장
+    dept_head = "dept_head"  # 부서장
 
 
 def resolve_role(title: JobTitle | None) -> UserRole:

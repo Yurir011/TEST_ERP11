@@ -27,7 +27,7 @@ from app.schemas.project_document import (
     ProjectDocumentUpdate,
     RejectIn,
 )
-from app.services.approval_notice import create_decision_notice
+from app.services.approval_notice import create_decision_notification
 from app.services.excel_to_pdf import convert_xlsx_to_pdf
 from app.services import popbill_service
 from app.services.project_document_excel import generate_project_document_excel
@@ -45,6 +45,10 @@ DOC_TYPE_LABELS_KO = {
     ProjectDocType.statement: "거래명세서",
     ProjectDocType.tax_invoice: "세금계산서",
 }
+
+def _doc_link(doc_type: ProjectDocType) -> str:
+    return "/tax-invoices" if doc_type == ProjectDocType.tax_invoice else "/project-documents"
+
 
 _DOC_QUERY_OPTIONS = (
     joinedload(ProjectDocument.project).joinedload(Project.client).joinedload(Client.contacts),
@@ -107,13 +111,13 @@ def _apply_approval_request(db: Session, doc: ProjectDocument, approver_id: int,
     if is_self_approval(approver, current_user):
         doc.status = ProjectDocumentStatus.approved
         doc.reviewed_at = datetime.now(timezone.utc)
-        create_decision_notice(
+        create_decision_notification(
             db,
-            category=DOC_TYPE_LABELS_KO[doc.doc_type],
             target_name=doc.creator.name,
+            target_user_id=doc.created_by,
             doc_label=f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})",
             approved=True,
-            author_id=current_user.id,
+            link=_doc_link(doc.doc_type),
         )
         logger.debug(f"[ProjectDocuments] 자기결재 처리(즉시 승인): doc_id={doc.id}, by={current_user.id}")
     else:
@@ -295,13 +299,13 @@ def approve_project_document(doc_id: int, db: Session = Depends(get_db), current
     logger.debug(f"[ProjectDocuments] 결재 승인 시도: id={doc_id}, by={current_user.id}")
     doc.status = ProjectDocumentStatus.approved
     doc.reviewed_at = datetime.now(timezone.utc)
-    create_decision_notice(
+    create_decision_notification(
         db,
-        category=DOC_TYPE_LABELS_KO[doc.doc_type],
         target_name=doc.creator.name,
+        target_user_id=doc.created_by,
         doc_label=f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})",
         approved=True,
-        author_id=current_user.id,
+        link=_doc_link(doc.doc_type),
     )
     db.commit()
 
@@ -326,14 +330,14 @@ def reject_project_document(
     doc.status = ProjectDocumentStatus.rejected
     doc.reject_reason = payload.reason
     doc.reviewed_at = datetime.now(timezone.utc)
-    create_decision_notice(
+    create_decision_notification(
         db,
-        category=DOC_TYPE_LABELS_KO[doc.doc_type],
         target_name=doc.creator.name,
+        target_user_id=doc.created_by,
         doc_label=f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})",
         approved=False,
-        author_id=current_user.id,
         detail=f"반려 사유: {payload.reason}",
+        link=_doc_link(doc.doc_type),
     )
     db.commit()
 

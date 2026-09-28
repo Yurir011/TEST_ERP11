@@ -13,6 +13,11 @@ class ProgressStageProgressUpdate(BaseModel):
     progress_percent: int
 
 
+class ProgressStageScheduleUpdate(BaseModel):
+    start_date: date | None = None
+    end_date: date | None = None
+
+
 class ProgressStageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,6 +26,8 @@ class ProgressStageOut(BaseModel):
     order_index: int
     progress_percent: int
     completed_on: date | None
+    start_date: date | None
+    end_date: date | None
 
 
 class PurchaseStepOut(BaseModel):

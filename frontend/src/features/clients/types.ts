@@ -23,6 +23,7 @@ export interface Client {
   receivable_amount: number;
   payable_amount: number;
   memo: string | null;
+  has_biz_reg_image: boolean;
   contacts: ClientContact[];
   created_at: string;
   updated_at: string;

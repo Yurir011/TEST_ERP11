@@ -1,15 +1,19 @@
 import { Building2, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet } from "../../lib/api";
-import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { Client } from "./types";
 
+function primaryContact(client: Client) {
+  return client.contacts[0] ?? null;
+}
+
 export function ClientsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [clients, setClients] = useState<Client[] | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -85,56 +89,59 @@ export function ClientsPage() {
       )}
 
       {clients !== null && clients.length > 0 && (
-        <div className="grid grid-cols-2 gap-4">
-          {clients.map((client) => (
-            <Link
-              key={client.id}
-              to={`/clients/${client.id}`}
-              className="relative group bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors"
-            >
-              {user?.role === "admin" && (
-                <button
-                  onClick={(e) => handleDelete(e, client)}
-                  disabled={deletingId === client.id}
-                  title="거래처 삭제"
-                  className="absolute top-4 right-4 p-1.5 rounded-lg text-text-muted opacity-0 group-hover:opacity-100 hover:text-danger hover:bg-danger/10 transition disabled:opacity-50"
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
-              <h2 className="font-medium text-text pr-6">{client.name}</h2>
-              <p className="text-xs text-text-muted mt-1">
-                {client.biz_reg_no || "사업자번호 미등록"}
-                {client.ceo_name && ` · 대표 ${client.ceo_name}`}
-              </p>
-              <div className="mt-3 text-sm text-text-muted space-y-0.5">
-                {client.contacts.length > 0 && (
-                  <p>
-                    담당자: {client.contacts[0].name}
-                    {client.contacts[0].title && ` (${client.contacts[0].title})`}
-                    {client.contacts.length > 1 && ` 외 ${client.contacts.length - 1}명`}
-                  </p>
-                )}
-                {client.contacts.length > 0 && (client.contacts[0].mobile_phone || client.contacts[0].landline_phone) && (
-                  <p>연락처: {client.contacts[0].mobile_phone || client.contacts[0].landline_phone}</p>
-                )}
-              </div>
-              {(client.receivable_amount > 0 || client.payable_amount > 0) && (
-                <div className="mt-3 flex gap-2 text-xs">
-                  {client.receivable_amount > 0 && (
-                    <span className="bg-red-50 text-danger px-2 py-1 rounded-full">
-                      미수금 {formatCurrency(client.receivable_amount)}
-                    </span>
-                  )}
-                  {client.payable_amount > 0 && (
-                    <span className="bg-tile-blue text-tile-blue-fg px-2 py-1 rounded-full">
-                      미지급금 {formatCurrency(client.payable_amount)}
-                    </span>
-                  )}
-                </div>
-              )}
-            </Link>
-          ))}
+        <div className="border border-border rounded-2xl overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-left bg-primary/10 border-b-2 border-border">
+                <th className="py-3 px-4 font-semibold text-text border border-border">업체명</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border">사업자번호</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border">담당자</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border">담당자 연락처</th>
+                <th className="w-12 border border-border"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {clients.map((client, index) => {
+                const contact = primaryContact(client);
+                return (
+                  <tr
+                    key={client.id}
+                    onClick={() => navigate(`/clients/${client.id}`)}
+                    className={`cursor-pointer hover:bg-bg/60 ${index % 2 === 1 ? "bg-bg/40" : "bg-surface"}`}
+                  >
+                    <td className="py-3 px-4 font-medium text-text border border-border">{client.name}</td>
+                    <td className="py-3 px-4 border border-border">{client.biz_reg_no || "-"}</td>
+                    <td className="py-3 px-4 border border-border">
+                      {contact ? (
+                        <>
+                          {contact.name}
+                          {contact.title && ` (${contact.title})`}
+                          {client.contacts.length > 1 && ` 외 ${client.contacts.length - 1}명`}
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td className="py-3 px-4 border border-border">
+                      {contact ? contact.mobile_phone || contact.landline_phone || "-" : "-"}
+                    </td>
+                    <td className="py-3 px-2 border border-border" onClick={(e) => e.stopPropagation()}>
+                      {user?.role === "admin" && (
+                        <button
+                          onClick={(e) => handleDelete(e, client)}
+                          disabled={deletingId === client.id}
+                          title="거래처 삭제"
+                          className="p-1.5 text-text-muted hover:text-danger disabled:opacity-50"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </MainLayout>

@@ -1,8 +1,8 @@
-import { FileScan, Plus, Trash2 } from "lucide-react";
+import { Eye, FileScan, Paperclip, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
+import { ApiError, apiGet, apiPost, apiPut, apiUpload, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { BusinessRegOcrResult } from "./types";
 import {
@@ -106,11 +106,20 @@ export function ClientFormPage() {
   const [ocrFilledCount, setOcrFilledCount] = useState<number | null>(null);
   const [ocrRawText, setOcrRawText] = useState<string | null>(null);
   const [showOcrRawText, setShowOcrRawText] = useState(false);
+  const [stagedBizRegFile, setStagedBizRegFile] = useState<File | null>(null);
+
+  const bizRegInputRef = useRef<HTMLInputElement>(null);
+  const [hasBizRegImage, setHasBizRegImage] = useState(false);
+  const [isBizRegUploading, setIsBizRegUploading] = useState(false);
+  const [bizRegError, setBizRegError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isEdit) return;
     apiGet<Client>(`/api/clients/${id}`)
-      .then((client) => setValues(toFormValues(client)))
+      .then((client) => {
+        setValues(toFormValues(client));
+        setHasBizRegImage(client.has_biz_reg_image);
+      })
       .catch((err) => {
         logError("ClientForm", "조회 실패", err);
         setError("거래처를 불러오지 못했습니다.");
@@ -142,6 +151,7 @@ export function ClientFormPage() {
     e.target.value = ""; // 같은 파일을 다시 선택해도 onChange가 발생하도록 초기화
     if (!file) return;
 
+    setStagedBizRegFile(file); // 저장 시 이 파일을 사업자등록증 첨부로 함께 업로드한다
     setOcrError(null);
     setOcrFilledCount(null);
     setOcrRawText(null);
@@ -180,6 +190,25 @@ export function ClientFormPage() {
     }
   }
 
+  async function handleBizRegFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !id) return;
+
+    setBizRegError(null);
+    setIsBizRegUploading(true);
+    try {
+      logDebug("ClientForm", `사업자등록증 첨부 업로드 시도: ${file.name}`);
+      await apiUpload(`/api/clients/${id}/biz-reg-image`, file);
+      setHasBizRegImage(true);
+    } catch (err) {
+      logError("ClientForm", "사업자등록증 첨부 업로드 실패", err);
+      setBizRegError(err instanceof ApiError ? err.message : "업로드 중 오류가 발생했습니다.");
+    } finally {
+      setIsBizRegUploading(false);
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -191,6 +220,13 @@ export function ClientFormPage() {
         navigate(`/clients/${id}`, { replace: true });
       } else {
         const created = await apiPost<Client>("/api/clients", payload);
+        if (stagedBizRegFile) {
+          try {
+            await apiUpload(`/api/clients/${created.id}/biz-reg-image`, stagedBizRegFile);
+          } catch (err) {
+            logError("ClientForm", "사업자등록증 첨부 업로드 실패", err);
+          }
+        }
         navigate(`/clients/${created.id}`, { replace: true });
       }
     } catch (err) {
@@ -209,7 +245,7 @@ export function ClientFormPage() {
         <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 max-w-2xl">
           {!isEdit && (
             <div className="mb-5 pb-5 border-b border-border">
-              <label className="block text-xs text-text-muted mb-1.5">참조 (사업자등록증으로 자동 입력)</label>
+              <label className="block text-xs text-text-muted mb-1.5">사업자등록증 (자동 입력 + 첨부)</label>
               <input
                 ref={ocrInputRef}
                 type="file"
@@ -226,6 +262,12 @@ export function ClientFormPage() {
                 <FileScan size={14} />
                 {isOcrLoading ? "인식 중..." : "사업자등록증 이미지 업로드"}
               </button>
+              {stagedBizRegFile && (
+                <p className="text-xs text-text-muted mt-1.5 flex items-center gap-1">
+                  <Paperclip size={12} />
+                  {stagedBizRegFile.name} (저장 시 첨부파일로 함께 등록됩니다)
+                </p>
+              )}
               {ocrFilledCount !== null && ocrFilledCount > 0 && (
                 <p className="text-xs text-success mt-1.5">
                   {ocrFilledCount}개 항목을 자동으로 채웠습니다. 저장 전 내용을 꼭 확인해주세요 (OCR 인식은 오류가 있을 수 있습니다).
@@ -248,6 +290,41 @@ export function ClientFormPage() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {isEdit && (
+            <div className="mb-5 pb-5 border-b border-border">
+              <label className="block text-xs text-text-muted mb-1.5">사업자등록증 첨부</label>
+              <input
+                ref={bizRegInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={handleBizRegFileSelect}
+                className="hidden"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => bizRegInputRef.current?.click()}
+                  disabled={isBizRegUploading}
+                  className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg disabled:opacity-60"
+                >
+                  <Paperclip size={14} />
+                  {isBizRegUploading ? "업로드 중..." : hasBizRegImage ? "다시 첨부" : "파일 첨부"}
+                </button>
+                {hasBizRegImage && (
+                  <button
+                    type="button"
+                    onClick={() => openFile(`/api/clients/${id}/biz-reg-image`)}
+                    className="flex items-center gap-1.5 text-xs text-primary hover:opacity-80"
+                  >
+                    <Eye size={14} />
+                    첨부 보기
+                  </button>
+                )}
+              </div>
+              {bizRegError && <p className="text-xs text-danger mt-1.5">{bizRegError}</p>}
             </div>
           )}
 

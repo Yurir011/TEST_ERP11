@@ -19,6 +19,7 @@ from app.schemas.project_progress import (
     ProgressStageCreate,
     ProgressStageOut,
     ProgressStageProgressUpdate,
+    ProgressStageScheduleUpdate,
     PurchaseStepOut,
     PurchaseStepRename,
 )
@@ -138,6 +139,35 @@ def set_progress_stage_progress(
     db.refresh(stage)
     logger.debug(
         f"[ProjectProgress] 진행 상황 단계 진행율 변경: id={stage_id}, progress_percent={stage.progress_percent}"
+    )
+    return stage
+
+
+@router.put("/{project_id}/progress-stages/{stage_id}/schedule", response_model=ProgressStageOut)
+def set_progress_stage_schedule(
+    project_id: int,
+    stage_id: int,
+    payload: ProgressStageScheduleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    stage = (
+        db.query(ProjectProgressStage)
+        .filter(ProjectProgressStage.id == stage_id, ProjectProgressStage.project_id == project_id)
+        .first()
+    )
+    if stage is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="진행 상황 항목을 찾을 수 없습니다.")
+
+    if payload.start_date and payload.end_date and payload.start_date > payload.end_date:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="종료일은 시작일보다 빠를 수 없습니다.")
+
+    stage.start_date = payload.start_date
+    stage.end_date = payload.end_date
+    db.commit()
+    db.refresh(stage)
+    logger.debug(
+        f"[ProjectProgress] 진행 상황 단계 일정 변경: id={stage_id}, start={stage.start_date}, end={stage.end_date}"
     )
     return stage
 

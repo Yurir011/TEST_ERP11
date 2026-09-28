@@ -41,6 +41,9 @@ class ProjectProgressStage(Base):
     order_index: Mapped[int] = mapped_column(Integer, default=0)
     progress_percent: Mapped[int] = mapped_column(Integer, default=0)
     completed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # 주차 기반 진행 타임라인 표시용. 항목마다 시작/종료일이 다를 수 있고, 다른 항목과 기간이 겹칠 수도 있다.
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="progress_stages")
 

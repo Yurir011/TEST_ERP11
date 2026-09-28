@@ -19,6 +19,7 @@ const GRADE_OPTIONS: { value: JobGrade; label: string }[] = [
 
 const TITLE_OPTIONS: { value: JobTitle | null; label: string }[] = [
   { value: null, label: "없음" },
+  { value: "dept_head", label: "부서장" },
   { value: "team_lead", label: "팀장" },
   { value: "ceo", label: "대표" },
 ];

@@ -13,7 +13,7 @@ from app.logging_config import get_logger
 from app.models.document import DocumentIssue, DocumentStatus
 from app.models.user import User, is_admin_role
 from app.schemas.document import DocumentIssueRequest, DocumentOut, RejectIn
-from app.services.approval_notice import create_decision_notice
+from app.services.approval_notice import create_decision_notification
 from app.services.certificate_pdf import DOC_TITLES, generate_certificate_pdf
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -81,13 +81,13 @@ def request_document(
         record.status = DocumentStatus.approved
         record.reviewed_at = datetime.now(timezone.utc)
         _issue_pdf(record, current_user)
-        create_decision_notice(
+        create_decision_notification(
             db,
-            category="증명서",
             target_name=current_user.name,
+            target_user_id=current_user.id,
             doc_label=DOC_TITLES[record.doc_type],
             approved=True,
-            author_id=current_user.id,
+            link="/documents",
         )
         logger.debug(f"[Documents] 자기결재 처리(즉시 승인): id={record.id}, by={current_user.id}")
 
@@ -146,13 +146,13 @@ def approve_document(doc_id: int, db: Session = Depends(get_db), current_user: U
     record.status = DocumentStatus.approved
     record.reviewed_at = datetime.now(timezone.utc)
     _issue_pdf(record, record.user)
-    create_decision_notice(
+    create_decision_notification(
         db,
-        category="증명서",
         target_name=record.user.name,
+        target_user_id=record.user_id,
         doc_label=DOC_TITLES[record.doc_type],
         approved=True,
-        author_id=current_user.id,
+        link="/documents",
     )
     db.commit()
     db.refresh(record)
@@ -170,14 +170,14 @@ def reject_document(
     record.status = DocumentStatus.rejected
     record.reject_reason = payload.reason
     record.reviewed_at = datetime.now(timezone.utc)
-    create_decision_notice(
+    create_decision_notification(
         db,
-        category="증명서",
         target_name=record.user.name,
+        target_user_id=record.user_id,
         doc_label=DOC_TITLES[record.doc_type],
         approved=False,
-        author_id=current_user.id,
         detail=f"반려 사유: {payload.reason}",
+        link="/documents",
     )
     db.commit()
     db.refresh(record)

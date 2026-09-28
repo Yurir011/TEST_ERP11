@@ -26,12 +26,19 @@ export function StatCard({ label, value, change, trend, icon: Icon, to }: StatCa
     </>
   );
 
+  const linkClassName = "block bg-surface border border-border rounded-2xl p-5 hover:border-tile-blue-fg/40 hover:shadow-sm transition-all";
+
+  if (to?.startsWith("#")) {
+    return (
+      <a href={to} className={linkClassName}>
+        {content}
+      </a>
+    );
+  }
+
   if (to) {
     return (
-      <Link
-        to={to}
-        className="block bg-surface border border-border rounded-2xl p-5 hover:border-tile-blue-fg/40 hover:shadow-sm transition-all"
-      >
+      <Link to={to} className={linkClassName}>
         {content}
       </Link>
     );

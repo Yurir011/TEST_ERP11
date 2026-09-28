@@ -1,6 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
-import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiGet } from "../../lib/api";
 import { formatDuration, formatTime } from "../../lib/format";
@@ -56,7 +55,7 @@ function MonthlyTable({ records, showEmployee }: { records: AttendanceRecord[]; 
   );
 }
 
-export function AttendancePage() {
+export function AttendanceSection() {
   const { user } = useAuth();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -124,7 +123,12 @@ export function AttendancePage() {
   }
 
   return (
-    <MainLayout title="출퇴근기록" description="출근/퇴근을 기록하고 근태 이력을 확인합니다.">
+    <section id="attendance" className="mb-8 scroll-mt-6">
+      <div className="mb-3">
+        <h2 className="text-lg font-semibold">출퇴근 기록</h2>
+        <p className="text-sm text-text-muted mt-0.5">출근/퇴근을 기록하고 근태 이력을 확인합니다.</p>
+      </div>
+
       <div className="bg-surface border border-border rounded-2xl p-5 mb-6">
         <p className="text-sm font-medium">오늘 근태</p>
         <p className="text-sm text-text-muted mt-1">{todayLabel(today)}</p>
@@ -132,7 +136,7 @@ export function AttendancePage() {
       </div>
 
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-text-muted">내 근태 기록 (월별, 최근 {MAX_HISTORY_MONTHS}개월까지)</h2>
+        <h3 className="text-sm font-medium text-text-muted">내 근태 기록 (월별, 최근 {MAX_HISTORY_MONTHS}개월까지)</h3>
         <div className="flex items-center gap-2">
           <button
             onClick={() => shiftMonth(-1)}
@@ -168,12 +172,12 @@ export function AttendancePage() {
 
       {user?.role === "admin" && (
         <>
-          <h2 className="text-sm font-medium text-text-muted mb-3">전체 직원 근태 현황</h2>
+          <h3 className="text-sm font-medium text-text-muted mb-3">전체 직원 근태 현황</h3>
           <div className="bg-surface border border-border rounded-2xl p-5">
             <MonthlyTable records={allRecords} showEmployee />
           </div>
         </>
       )}
-    </MainLayout>
+    </section>
   );
 }

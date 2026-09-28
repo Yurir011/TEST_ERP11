@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.approval import APPROVER_TITLES
@@ -6,7 +6,7 @@ from app.core.deps import get_current_user, require_admin_or_site_admin
 from app.core.security import hash_password
 from app.database import get_db
 from app.logging_config import get_logger
-from app.models.user import User, UserRole, resolve_role
+from app.models.user import JobTitle, User, UserRole, resolve_role
 from app.schemas.user import ApproverOut, PasswordResetRequest, UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -19,13 +19,19 @@ def list_users(db: Session = Depends(get_db), current_user: User = Depends(requi
 
 
 @router.get("/approvers", response_model=list[ApproverOut])
-def list_approvers(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """결재권자(팀장/대표) 후보 목록. 일반 직원도 결재요청을 위해 호출해야 하므로
-    admin 제한 없이 로그인한 누구나 조회 가능하다."""
-    logger.debug(f"[Users] 결재권자 후보 조회: by={current_user.id}")
+def list_approvers(
+    include_dept_head: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """결재권자(부서장/팀장/대표) 후보 목록. 일반 직원도 결재요청을 위해 호출해야 하므로
+    admin 제한 없이 로그인한 누구나 조회 가능하다. 품의서 결재선처럼 부서장이 필요한 경우에만
+    include_dept_head=true로 조회한다 (기존 결재 화면들은 팀장/대표만 사용)."""
+    logger.debug(f"[Users] 결재권자 후보 조회: by={current_user.id}, include_dept_head={include_dept_head}")
+    titles = (*APPROVER_TITLES, JobTitle.dept_head) if include_dept_head else APPROVER_TITLES
     return (
         db.query(User)
-        .filter(User.title.in_(APPROVER_TITLES), User.is_active.is_(True))
+        .filter(User.title.in_(titles), User.is_active.is_(True))
         .order_by(User.title, User.name)
         .all()
     )

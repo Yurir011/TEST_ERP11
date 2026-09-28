@@ -18,6 +18,7 @@ const GRADE_LABELS: Record<JobGrade, string> = {
 const TITLE_LABELS: Record<JobTitle, string> = {
   ceo: "대표",
   team_lead: "팀장",
+  dept_head: "부서장",
 };
 
 export function UsersPage() {

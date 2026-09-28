@@ -1,7 +1,11 @@
+import os
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
 from app.core.deps import get_current_user, require_admin
 from app.database import get_db
 from app.logging_config import get_logger
@@ -14,6 +18,7 @@ router = APIRouter(prefix="/api/clients", tags=["clients"])
 logger = get_logger("Clients")
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_BIZ_REG_FILE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf"}
 
 
 def _is_korean_char(ch: str) -> bool:
@@ -136,11 +141,51 @@ def update_client(
     return client
 
 
+@router.post("/{client_id}/biz-reg-image", response_model=ClientOut)
+def upload_biz_reg_image(
+    client_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    client = db.query(Client).options(joinedload(Client.contacts)).filter(Client.id == client_id).first()
+    if client is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래처를 찾을 수 없습니다.")
+    if file.content_type not in ALLOWED_BIZ_REG_FILE_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지(jpg, png, webp) 또는 PDF 파일만 업로드할 수 있습니다.")
+
+    content = file.file.read()
+    os.makedirs(settings.business_reg_images_dir, exist_ok=True)
+    if client.biz_reg_image_path and os.path.exists(client.biz_reg_image_path):
+        os.remove(client.biz_reg_image_path)
+    ext = ALLOWED_BIZ_REG_FILE_TYPES[file.content_type]
+    file_path = os.path.join(settings.business_reg_images_dir, f"{client.id}.{ext}")
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    client.biz_reg_image_path = file_path
+    db.commit()
+    db.refresh(client)
+    logger.debug(f"[Clients] 사업자등록증 첨부 업로드: client_id={client_id}, by={current_user.id}")
+    return client
+
+
+@router.get("/{client_id}/biz-reg-image")
+def get_biz_reg_image(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if client is None or not client.biz_reg_image_path or not os.path.exists(client.biz_reg_image_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사업자등록증 파일을 찾을 수 없습니다.")
+    logger.debug(f"[Clients] 사업자등록증 첨부 조회: client_id={client_id}, by={current_user.id}")
+    return FileResponse(client.biz_reg_image_path)
+
+
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_client(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     client = db.query(Client).filter(Client.id == client_id).first()
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래처를 찾을 수 없습니다.")
+    if client.biz_reg_image_path and os.path.exists(client.biz_reg_image_path):
+        os.remove(client.biz_reg_image_path)
     db.delete(client)
     db.commit()
     logger.debug(f"[Clients] 삭제: id={client_id}, by={current_user.id}")

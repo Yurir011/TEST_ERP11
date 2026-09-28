@@ -1,9 +1,9 @@
-import { ArrowLeft, Landmark, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, FileText, Landmark, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
-import { apiDelete, apiGet } from "../../lib/api";
+import { apiDelete, apiGet, openFile } from "../../lib/api";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { logError } from "../../lib/logger";
 import type { Client } from "./types";
@@ -97,14 +97,26 @@ export function ClientDetailPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowBankInfo((v) => !v)}
-            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5 mt-3"
-          >
-            <Landmark size={14} />
-            {showBankInfo ? "계좌 정보 숨기기" : "계좌 정보 보기"}
-          </button>
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => setShowBankInfo((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5"
+            >
+              <Landmark size={14} />
+              {showBankInfo ? "계좌 정보 숨기기" : "계좌 정보 보기"}
+            </button>
+            {client.has_biz_reg_image && (
+              <button
+                type="button"
+                onClick={() => openFile(`/api/clients/${client.id}/biz-reg-image`)}
+                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5"
+              >
+                <FileText size={14} />
+                사업자등록증 보기
+              </button>
+            )}
+          </div>
 
           {showBankInfo && (
             <div className="mt-1">

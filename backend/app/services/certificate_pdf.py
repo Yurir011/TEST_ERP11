@@ -95,6 +95,7 @@ GRADE_LABELS = {
 TITLE_LABELS = {
     JobTitle.ceo: "대표",
     JobTitle.team_lead: "팀장",
+    JobTitle.dept_head: "부서장",
 }
 
 GRADE_LABELS_EN = {
@@ -108,6 +109,7 @@ GRADE_LABELS_EN = {
 TITLE_LABELS_EN = {
     JobTitle.ceo: "CEO",
     JobTitle.team_lead: "Team Lead",
+    JobTitle.dept_head: "Department Head",
 }
 
 

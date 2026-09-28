@@ -1,10 +1,26 @@
-import { Check, Download, FileSpreadsheet, FileText, Mail, Plus, Printer, Receipt, Sheet, Trash2, X } from "lucide-react";
+import {
+  Check,
+  Download,
+  FileSignature,
+  FileSpreadsheet,
+  FileText,
+  Mail,
+  Plus,
+  Printer,
+  Receipt,
+  Sheet,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { ProposalsPage } from "../proposals/ProposalsPage";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import { ProjectDocumentDetailModal } from "./ProjectDocumentDetailModal";
 import {
@@ -14,7 +30,16 @@ import {
   PROJECT_DOC_TYPE_LABELS,
   type ProjectDocType,
   type ProjectDocument,
+  type ProjectDocumentStatus,
+  type TaxInvoicePurpose,
 } from "./types";
+
+const TAX_PURPOSE_STYLES: Record<TaxInvoicePurpose, string> = {
+  청구: "bg-tile-blue text-tile-blue-fg",
+  영수: "bg-tile-green text-tile-green-fg",
+};
+
+type DocTab = ProjectDocType | "all" | "proposal";
 
 const NEW_DOC_ACTIONS: { type: ProjectDocType; icon: typeof FileText; colorClass: string }[] = [
   { type: "quotation", icon: FileText, colorClass: "text-tile-blue-fg" },
@@ -22,8 +47,9 @@ const NEW_DOC_ACTIONS: { type: ProjectDocType; icon: typeof FileText; colorClass
   { type: "tax_invoice", icon: Receipt, colorClass: "text-tile-purple-fg" },
 ];
 
-const TABS: { key: ProjectDocType | "all"; label: string }[] = [
+const TABS: { key: DocTab; label: string }[] = [
   { key: "all", label: "전체" },
+  { key: "proposal", label: "품의서" },
   { key: "quotation", label: "견적서" },
   { key: "statement", label: "거래명세서" },
   { key: "tax_invoice", label: "세금계산서" },
@@ -41,6 +67,141 @@ function itemsTotal(doc: ProjectDocument): number {
 
 function formatDocAmount(doc: ProjectDocument, amount: number): string {
   return `${DOC_CURRENCY_SYMBOLS[doc.currency]}${amount.toLocaleString()}`;
+}
+
+// ── "세금계산서 통계" 집계: 전월 대비 증감 + 청구/영수 비교. 금액은 KRW 문서만 합산한다 (외화는 드문 경우라 섞으면 왜곡됨). ──
+function monthKey(dateStr: string): string {
+  return dateStr.slice(0, 7);
+}
+
+function computeTaxInvoiceStats(docs: ProjectDocument[]) {
+  const krwDocs = docs.filter((d) => d.currency === "KRW");
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const thisMonthDocs = krwDocs.filter((d) => monthKey(d.issue_date) === thisMonth);
+  const thisMonthAmount = thisMonthDocs.reduce((sum, d) => sum + itemsTotal(d), 0);
+
+  const issuedCount = docs.filter((d) => d.popbill_issued).length;
+  const notIssuedCount = docs.length - issuedCount;
+
+  const lastMonthDt = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthKey = `${lastMonthDt.getFullYear()}-${String(lastMonthDt.getMonth() + 1).padStart(2, "0")}`;
+  const lastMonthDocs = krwDocs.filter((d) => monthKey(d.issue_date) === lastMonthKey);
+  const lastMonthAmount = lastMonthDocs.reduce((sum, d) => sum + itemsTotal(d), 0);
+  const momChangePct =
+    lastMonthAmount > 0 ? ((thisMonthAmount - lastMonthAmount) / lastMonthAmount) * 100 : thisMonthAmount > 0 ? 100 : 0;
+
+  return {
+    totalCount: docs.length,
+    thisMonthAmount,
+    thisMonthCount: thisMonthDocs.length,
+    issuedCount,
+    notIssuedCount,
+    lastMonthAmount,
+    lastMonthCount: lastMonthDocs.length,
+    momChangePct,
+  };
+}
+
+// "세금계산서 통계" 카드 — 전월 대비 증감 KPI(안 5) + 청구/영수 구분 비교(안 4)를 하나로 합친 최종 구성.
+interface TaxInvoiceStatsCardProps {
+  docs: ProjectDocument[];
+  monthFilter: "all" | "this" | "last";
+  onToggleMonth: (value: "this" | "last") => void;
+  issuedFilter: "all" | "issued" | "not_issued";
+  onToggleIssued: (value: "issued" | "not_issued") => void;
+  purposeFilter: "all" | TaxInvoicePurpose;
+  onTogglePurpose: (value: TaxInvoicePurpose) => void;
+}
+
+function TaxInvoiceStatsCard({
+  docs,
+  monthFilter,
+  onToggleMonth,
+  issuedFilter,
+  onToggleIssued,
+  purposeFilter,
+  onTogglePurpose,
+}: TaxInvoiceStatsCardProps) {
+  const s = computeTaxInvoiceStats(docs);
+  const isUp = s.momChangePct >= 0;
+
+  const purposeTotals: Record<"청구" | "영수", { count: number; amount: number }> = {
+    청구: { count: 0, amount: 0 },
+    영수: { count: 0, amount: 0 },
+  };
+  for (const d of docs) {
+    purposeTotals[d.purpose_type].count += 1;
+    if (d.currency === "KRW") purposeTotals[d.purpose_type].amount += itemsTotal(d);
+  }
+  const totalCount = docs.length || 1;
+
+  const cardBase = "bg-bg rounded-xl p-4 text-left w-full transition-colors hover:bg-border/40 cursor-pointer";
+  const activeRing = "ring-2 ring-primary";
+
+  return (
+    <div className="bg-surface border border-border rounded-2xl p-6 mb-6">
+      <h2 className="text-sm font-semibold mb-1">세금계산서 통계</h2>
+      <p className="text-xs text-text-muted mb-4">카드를 클릭하면 아래 목록이 해당 조건으로 필터링됩니다.</p>
+
+      <div className="grid grid-cols-3 gap-4 mb-5">
+        <button
+          onClick={() => onToggleMonth("this")}
+          className={`${cardBase} ${monthFilter === "this" ? activeRing : ""}`}
+        >
+          <p className="text-xs text-text-muted">이번 달 발행 금액</p>
+          <p className="text-lg font-semibold mt-1">₩{s.thisMonthAmount.toLocaleString()}</p>
+          <p className={`text-xs mt-1.5 flex items-center gap-1 ${isUp ? "text-success" : "text-danger"}`}>
+            {isUp ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+            전월 대비 {isUp ? "+" : ""}
+            {s.momChangePct.toFixed(1)}%
+          </p>
+        </button>
+        <button
+          onClick={() => onToggleMonth("last")}
+          className={`${cardBase} ${monthFilter === "last" ? activeRing : ""}`}
+        >
+          <p className="text-xs text-text-muted">전월 발행 금액</p>
+          <p className="text-lg font-semibold mt-1 text-text-muted">₩{s.lastMonthAmount.toLocaleString()}</p>
+          <p className="text-xs text-text-muted mt-1.5">{s.lastMonthCount}건</p>
+        </button>
+        <button
+          onClick={() => onToggleIssued("not_issued")}
+          className={`${cardBase} ${issuedFilter === "not_issued" ? activeRing : ""}`}
+        >
+          <p className="text-xs text-text-muted">팝빌 미발행</p>
+          <p className="text-lg font-semibold mt-1 text-tile-orange-fg">{s.notIssuedCount}건</p>
+          <p className="text-xs text-text-muted mt-1.5">전체 {s.totalCount}건 중</p>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        {(["청구", "영수"] as const).map((purpose) => {
+          const p = purposeTotals[purpose];
+          const pct = Math.round((p.count / totalCount) * 100);
+          return (
+            <button
+              key={purpose}
+              onClick={() => onTogglePurpose(purpose)}
+              className={`${cardBase} ${purposeFilter === purpose ? activeRing : ""}`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium">{purpose}용</p>
+                <span className="text-xs text-text-muted">
+                  {p.count}건 ({pct}%)
+                </span>
+              </div>
+              <p className="text-lg font-semibold">₩{p.amount.toLocaleString()}</p>
+              <div className="h-2 rounded-full bg-surface overflow-hidden mt-3">
+                <div className="h-full rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function pdfFilename(doc: ProjectDocument): string {
@@ -62,15 +223,21 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     ? NEW_DOC_ACTIONS.filter((action) => action.type === lockedDocType)
     : NEW_DOC_ACTIONS.filter((action) => action.type !== "tax_invoice");
   const visibleTabs = TABS.filter((t) => t.key !== "tax_invoice");
-  const [tab, setTab] = useState<ProjectDocType | "all">(lockedDocType ?? "all");
+  const [tab, setTab] = useState<DocTab>(lockedDocType ?? "all");
   const [docs, setDocs] = useState<ProjectDocument[] | null>(null);
   const [pendingForMe, setPendingForMe] = useState<ProjectDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [resubmitDoc, setResubmitDoc] = useState<ProjectDocument | null>(null);
   const [detailDoc, setDetailDoc] = useState<ProjectDocument | null>(null);
+  const [purposeFilter, setPurposeFilter] = useState<"all" | TaxInvoicePurpose>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | ProjectDocumentStatus>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [monthFilter, setMonthFilter] = useState<"all" | "this" | "last">("all");
+  const [issuedFilter, setIssuedFilter] = useState<"all" | "issued" | "not_issued">("all");
 
   function loadDocs() {
+    if (tab === "proposal") return;
     logDebug("ProjectDocuments", `목록 조회: type=${tab}`);
     const params = new URLSearchParams();
     if (tab !== "all") params.set("doc_type", tab);
@@ -264,10 +431,57 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   }
 
   const isApproved = (doc: ProjectDocument) => doc.status === "approved" && doc.has_pdf;
+  const newDocCardCount = visibleActions.length + (lockedDocType ? 0 : 1);
+  const newDocGridCols = newDocCardCount >= 3 ? "grid-cols-3" : newDocCardCount === 2 ? "grid-cols-2" : "grid-cols-1";
+
+  // 세금계산서 목록은 청구/영수 구분, 상태, 자유 검색으로 다방면 조회가 가능해야 한다.
+  const q = searchQuery.trim().toLowerCase();
+  const now = new Date();
+  const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`;
+
+  const visibleDocs =
+    docs === null
+      ? null
+      : docs.filter((doc) => {
+          if (lockedDocType !== "tax_invoice") return true;
+          if (purposeFilter !== "all" && doc.purpose_type !== purposeFilter) return false;
+          if (statusFilter !== "all" && doc.status !== statusFilter) return false;
+          if (issuedFilter === "issued" && !doc.popbill_issued) return false;
+          if (issuedFilter === "not_issued" && doc.popbill_issued) return false;
+          if (monthFilter === "this" && monthKey(doc.issue_date) !== thisMonthKey) return false;
+          if (monthFilter === "last" && monthKey(doc.issue_date) !== lastMonthKey) return false;
+          if (
+            q &&
+            !`${doc.project_name} ${doc.client_name} ${doc.manager_name ?? ""} ${doc.doc_no ?? ""}`
+              .toLowerCase()
+              .includes(q)
+          ) {
+            return false;
+          }
+          return true;
+        });
 
   const content = (
     <>
-      <div className={`grid gap-4 mb-6 ${visibleActions.length >= 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+      <div className={`grid gap-4 mb-6 ${newDocGridCols}`}>
+        {!lockedDocType && (
+          <Link
+            to="/proposals/new"
+            className="bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors flex items-center gap-3"
+          >
+            <div className="p-2.5 rounded-xl bg-bg text-tile-orange-fg">
+              <FileSignature size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-text">품의서 작성</p>
+              <p className="text-xs text-text-muted mt-0.5 flex items-center gap-1">
+                <Plus size={11} />새 문서 등록
+              </p>
+            </div>
+          </Link>
+        )}
         {visibleActions.map(({ type, icon: Icon, colorClass }) => (
           <Link
             key={type}
@@ -287,7 +501,19 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
         ))}
       </div>
 
-      {pendingForMe.length > 0 && (
+      {lockedDocType === "tax_invoice" && docs !== null && (
+        <TaxInvoiceStatsCard
+          docs={docs}
+          monthFilter={monthFilter}
+          onToggleMonth={(v) => setMonthFilter((prev) => (prev === v ? "all" : v))}
+          issuedFilter={issuedFilter}
+          onToggleIssued={(v) => setIssuedFilter((prev) => (prev === v ? "all" : v))}
+          purposeFilter={purposeFilter}
+          onTogglePurpose={(v) => setPurposeFilter((prev) => (prev === v ? "all" : v))}
+        />
+      )}
+
+      {tab !== "proposal" && pendingForMe.length > 0 && (
         <div className="bg-surface border border-tile-blue-fg/30 rounded-2xl p-5 mb-6">
           <h2 className="text-sm font-semibold mb-3">내 결재함 - 승인 대기 중인 문서 ({pendingForMe.length}건)</h2>
           <div className="space-y-2">
@@ -342,21 +568,66 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
         </div>
       )}
 
+      {tab === "proposal" ? (
+        <ProposalsPage embedded />
+      ) : (
+        <>
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
-      {docs !== null && docs.length === 0 && (
-        <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
-          <FileText className="mx-auto mb-2 text-text-muted" size={24} />
-          <p className="text-sm text-text-muted">등록된 문서가 없습니다.</p>
+      {lockedDocType === "tax_invoice" && docs !== null && docs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
+            {(["all", "청구", "영수"] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPurposeFilter(p)}
+                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
+                  purposeFilter === p ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+                }`}
+              >
+                {p === "all" ? "전체" : p}
+              </button>
+            ))}
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "all" | ProjectDocumentStatus)}
+            className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
+          >
+            <option value="all">상태 전체</option>
+            <option value="draft">{PROJECT_DOC_STATUS_LABELS.draft}</option>
+            <option value="pending">{PROJECT_DOC_STATUS_LABELS.pending}</option>
+            <option value="approved">{PROJECT_DOC_STATUS_LABELS.approved}</option>
+            <option value="rejected">{PROJECT_DOC_STATUS_LABELS.rejected}</option>
+          </select>
+
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="프로젝트·거래처·담당자·번호 검색"
+            className="flex-1 min-w-[180px] text-xs border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:border-primary"
+          />
+
+          <span className="text-xs text-text-muted shrink-0">{visibleDocs?.length ?? 0}건</span>
         </div>
       )}
 
-      {docs !== null && docs.length > 0 && (
+      {visibleDocs !== null && visibleDocs.length === 0 && (
+        <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
+          <FileText className="mx-auto mb-2 text-text-muted" size={24} />
+          <p className="text-sm text-text-muted">
+            {docs && docs.length > 0 ? "조건에 맞는 문서가 없습니다." : "등록된 문서가 없습니다."}
+          </p>
+        </div>
+      )}
+
+      {visibleDocs !== null && visibleDocs.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-text-muted border-b border-border">
-                <th className="py-2.5 px-4 font-medium">구분</th>
+                <th className="py-2.5 px-4 font-medium">{lockedDocType === "tax_invoice" ? "구분(청구/영수)" : "구분"}</th>
                 <th className="py-2.5 px-4 font-medium">상태</th>
                 <th className="py-2.5 px-4 font-medium">날짜</th>
                 <th className="py-2.5 px-4 font-medium">프로젝트</th>
@@ -368,7 +639,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
               </tr>
             </thead>
             <tbody>
-              {docs.map((doc) => {
+              {visibleDocs.map((doc) => {
                 const approved = isApproved(doc);
                 const disabledTitle = "결재 승인 후 이용 가능합니다.";
                 return (
@@ -378,9 +649,15 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                     className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
                   >
                     <td className="py-2.5 px-4">
-                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-blue text-tile-blue-fg">
-                        {PROJECT_DOC_TYPE_LABELS[doc.doc_type]}
-                      </span>
+                      {lockedDocType === "tax_invoice" ? (
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${TAX_PURPOSE_STYLES[doc.purpose_type]}`}>
+                          {doc.purpose_type}용
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-blue text-tile-blue-fg">
+                          {PROJECT_DOC_TYPE_LABELS[doc.doc_type]}
+                        </span>
+                      )}
                     </td>
                     <td className="py-2.5 px-4">
                       <span
@@ -465,6 +742,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
 
       {resubmitDoc && (

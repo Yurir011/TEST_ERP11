@@ -70,6 +70,7 @@ class ClientOut(BaseModel):
     receivable_amount: int
     payable_amount: int
     memo: str | None
+    has_biz_reg_image: bool
     contacts: list[ClientContactOut]
     created_at: datetime
     updated_at: datetime

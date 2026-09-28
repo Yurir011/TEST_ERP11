@@ -83,7 +83,7 @@ export function PurchaseProgressCard({ projectId }: { projectId: number }) {
                   onClick={() => handleToggle(step)}
                   className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-sm font-medium shrink-0 transition-colors ${
                     step.is_done
-                      ? "bg-success border-success text-white"
+                      ? "bg-gray-600 border-gray-600 text-white"
                       : "border-border bg-bg text-text-muted hover:border-primary/50"
                   }`}
                   title={step.is_done ? "완료 취소" : "완료 체크"}
@@ -119,7 +119,7 @@ export function PurchaseProgressCard({ projectId }: { projectId: number }) {
                 {step.completed_on && <span className="text-[10px] text-text-muted">{step.completed_on}</span>}
               </div>
               {i < steps.length - 1 && (
-                <div className={`h-0.5 flex-1 mx-1 mb-6 ${step.is_done ? "bg-success/40" : "bg-border"}`} />
+                <div className={`h-0.5 flex-1 mx-1 mb-6 ${step.is_done ? "bg-gray-600/40" : "bg-border"}`} />
               )}
             </div>
           ))}

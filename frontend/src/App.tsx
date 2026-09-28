@@ -7,7 +7,6 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { NoticesPage } from "./features/notices/NoticesPage";
 import { NoticeDetailPage } from "./features/notices/NoticeDetailPage";
 import { NoticeFormPage } from "./features/notices/NoticeFormPage";
-import { AttendancePage } from "./features/attendance/AttendancePage";
 import { ApprovalHubPage } from "./features/approvalHub/ApprovalHubPage";
 import { LeavesPage } from "./features/leaves/LeavesPage";
 import { DocumentsPage } from "./features/documents/DocumentsPage";
@@ -20,6 +19,7 @@ import { ProjectDetailPage } from "./features/projects/ProjectDetailPage";
 import { SalesDocumentFormPage } from "./features/projects/SalesDocumentFormPage";
 import { ProjectDocumentsPage } from "./features/projectDocuments/ProjectDocumentsPage";
 import { ProjectDocumentFormPage } from "./features/projectDocuments/ProjectDocumentFormPage";
+import { ProposalFormPage } from "./features/proposals/ProposalFormPage";
 import { TransactionsPage } from "./features/transactions/TransactionsPage";
 import { TransactionFormPage } from "./features/transactions/TransactionFormPage";
 import { PaymentsPage } from "./features/payments/PaymentsPage";
@@ -51,14 +51,6 @@ function App() {
         element={
           <ProtectedRoute siteAdminAllowed>
             <CalendarPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/attendance"
-        element={
-          <ProtectedRoute>
-            <AttendancePage />
           </ProtectedRoute>
         }
       />
@@ -131,6 +123,14 @@ function App() {
         element={
           <ProtectedRoute>
             <ProjectDocumentFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/proposals/new"
+        element={
+          <ProtectedRoute>
+            <ProposalFormPage />
           </ProtectedRoute>
         }
       />

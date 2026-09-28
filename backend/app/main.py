@@ -13,10 +13,12 @@ from app.routers import (
     documents,
     leaves,
     notices,
+    notifications,
     payments,
     project_documents,
     project_progress,
     projects,
+    proposals,
     sales_documents,
     schedule,
     todos,
@@ -39,12 +41,14 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(notices.router)
+app.include_router(notifications.router)
 app.include_router(attendance.router)
 app.include_router(leaves.router)
 app.include_router(documents.router)
 app.include_router(clients.router)
 app.include_router(projects.router)
 app.include_router(project_documents.router)
+app.include_router(proposals.router)
 app.include_router(project_progress.router)
 app.include_router(sales_documents.router)
 app.include_router(transactions.router)

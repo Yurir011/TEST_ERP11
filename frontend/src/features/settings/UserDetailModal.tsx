@@ -11,6 +11,7 @@ import {
 const TITLE_LABELS: Record<JobTitle, string> = {
   ceo: "대표",
   team_lead: "팀장",
+  dept_head: "부서장",
 };
 
 function Row({ label, value }: { label: string; value: string }) {

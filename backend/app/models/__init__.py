@@ -4,9 +4,11 @@ from app.models.document import DocumentIssue
 from app.models.document_set import DocumentSet
 from app.models.leave import LeaveRequest
 from app.models.notice import Notice
+from app.models.notification import Notification
 from app.models.payment import Payment
 from app.models.project import Project
 from app.models.project_document import ProjectDocument, ProjectDocumentItem
+from app.models.proposal import Proposal, ProposalApprovalStep, ProposalAttachment
 from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
 from app.models.sales_document import SalesDocument, SalesDocumentItem
 from app.models.schedule import ScheduleEvent
@@ -17,6 +19,7 @@ from app.models.user import User
 __all__ = [
     "User",
     "Notice",
+    "Notification",
     "Attendance",
     "LeaveRequest",
     "DocumentIssue",
@@ -24,6 +27,9 @@ __all__ = [
     "Project",
     "ProjectDocument",
     "ProjectDocumentItem",
+    "Proposal",
+    "ProposalApprovalStep",
+    "ProposalAttachment",
     "ProjectProgressStage",
     "ProjectPurchaseStep",
     "DocumentSet",

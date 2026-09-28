@@ -11,7 +11,7 @@ from app.logging_config import get_logger
 from app.models.leave import LeaveRequest, LeaveStatus
 from app.models.user import User, is_admin_role
 from app.schemas.leave import LeaveBalanceOut, LeaveCreate, LeaveOut, RejectIn
-from app.services.approval_notice import create_decision_notice
+from app.services.approval_notice import create_decision_notification
 
 router = APIRouter(prefix="/api/leaves", tags=["leaves"])
 logger = get_logger("Leaves")
@@ -106,13 +106,13 @@ def create_leave(
         record.status = LeaveStatus.approved
         record.reviewed_by = current_user.id
         record.reviewed_at = datetime.now(timezone.utc)
-        create_decision_notice(
+        create_decision_notification(
             db,
-            category="연차",
             target_name=current_user.name,
+            target_user_id=current_user.id,
             doc_label=f"연차 ({payload.start_date} ~ {payload.end_date}, {days}일)",
             approved=True,
-            author_id=current_user.id,
+            link="/leaves",
         )
         logger.debug(f"[Leaves] 자기결재 처리(즉시 승인): user_id={current_user.id}")
 
@@ -230,13 +230,13 @@ def approve_leave(leave_id: int, db: Session = Depends(get_db), current_user: Us
     record.status = LeaveStatus.approved
     record.reviewed_by = current_user.id
     record.reviewed_at = datetime.now(timezone.utc)
-    create_decision_notice(
+    create_decision_notification(
         db,
-        category="연차",
         target_name=record.user.name,
+        target_user_id=record.user_id,
         doc_label=f"연차 ({record.start_date} ~ {record.end_date}, {record.days}일)",
         approved=True,
-        author_id=current_user.id,
+        link="/leaves",
     )
 
     db.commit()
@@ -257,14 +257,14 @@ def reject_leave(
     record.reject_reason = payload.reason
     record.reviewed_by = current_user.id
     record.reviewed_at = datetime.now(timezone.utc)
-    create_decision_notice(
+    create_decision_notification(
         db,
-        category="연차",
         target_name=record.user.name,
+        target_user_id=record.user_id,
         doc_label=f"연차 ({record.start_date} ~ {record.end_date}, {record.days}일)",
         approved=False,
-        author_id=current_user.id,
         detail=f"반려 사유: {payload.reason}",
+        link="/leaves",
     )
     db.commit()
     db.refresh(record)
