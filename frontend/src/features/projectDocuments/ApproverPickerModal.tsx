@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ApproverSelect } from "../../components/approval/ApproverSelect";
+import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
+import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCheckbox";
 
 export function ApproverPickerModal({
   isSubmitting,
@@ -7,29 +8,39 @@ export function ApproverPickerModal({
   onCancel,
 }: {
   isSubmitting: boolean;
-  onConfirm: (approverId: number) => void;
+  onConfirm: (endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) => void;
   onCancel: () => void;
 }) {
-  const [approverId, setApproverId] = useState("");
+  const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
+  const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [isFinalDecision, setIsFinalDecision] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function handleConfirm() {
     setError(null);
-    if (!approverId) {
-      setError("결재권자를 선택해주세요.");
+    if (!isFinalDecision && (!endTitle || approverIds.some((id) => !id))) {
+      setError("결재선을 선택하거나 전결을 선택해주세요.");
       return;
     }
-    onConfirm(Number(approverId));
+    onConfirm(isFinalDecision ? null : endTitle, isFinalDecision ? [] : approverIds.map(Number), isFinalDecision);
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="bg-surface rounded-2xl p-6 w-full max-w-sm">
+      <div className="bg-surface rounded-2xl p-6 w-full max-w-lg">
         <h3 className="text-sm font-semibold mb-1">결재권자 선택</h3>
         <p className="text-xs text-text-muted mb-4">결재 승인 후에만 저장/발송/출력이 가능합니다.</p>
 
-        <div className="mb-4">
-          <ApproverSelect value={approverId} onChange={setApproverId} />
+        <div className="mb-4 space-y-3">
+          <FinalDecisionCheckbox checked={isFinalDecision} onChange={setIsFinalDecision} />
+          {!isFinalDecision && (
+            <ApprovalChainPicker
+              endTitle={endTitle}
+              onEndTitleChange={setEndTitle}
+              approverIds={approverIds}
+              onApproverIdsChange={setApproverIds}
+            />
+          )}
         </div>
 
         {error && <p className="text-xs text-danger mb-3">{error}</p>}

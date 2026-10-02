@@ -53,8 +53,11 @@ class ApproverOut(BaseModel):
     title: JobTitle
 
 
-class UserCreate(BaseModel):
+class NextEmployeeNoOut(BaseModel):
     employee_no: str
+
+
+class UserCreate(BaseModel):
     email: str = Field(pattern=EMAIL_PATTERN)
     name: str
     password: str = Field(min_length=4)

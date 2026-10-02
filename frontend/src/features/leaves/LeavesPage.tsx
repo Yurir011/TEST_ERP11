@@ -1,10 +1,13 @@
 import { CalendarRange, ChevronLeft, ChevronRight, Check, Plus, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { ApproverSelect } from "../../components/approval/ApproverSelect";
+import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
+import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCheckbox";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { openTargetDomId, useOpenTarget, useScrollToOpenTarget } from "../../lib/useOpenTarget";
+import { LeaveDetailModal } from "./LeaveDetailModal";
 import type { LeaveBalance, LeaveRecord } from "./types";
 
 function toMonthValue(year: number, month: number) {
@@ -29,10 +32,24 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
-  const [approverId, setApproverId] = useState("");
+  const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
+  const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [isFinalDecision, setIsFinalDecision] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const openTargetId = useOpenTarget();
+  useScrollToOpenTarget(openTargetId, myLeaves.length > 0 || pendingLeaves.length > 0);
+  const [detail, setDetail] = useState<LeaveRecord | null>(null);
+
+  // 업무 알림(?open=연차ID)으로 들어오면 해당 신청 건의 상세 화면을 바로 열고, 결재권자는 그 자리에서 승인/반려할 수 있다.
+  useEffect(() => {
+    if (openTargetId === null) return;
+    logDebug("Leaves", `알림에서 연차 상세 열기: id=${openTargetId}`);
+    apiGet<LeaveRecord>(`/api/leaves/${openTargetId}`)
+      .then(setDetail)
+      .catch((err) => logError("Leaves", "연차 상세 조회 실패", err));
+  }, [openTargetId]);
 
   function loadBalance() {
     apiGet<LeaveBalance>("/api/leaves/balance")
@@ -87,8 +104,8 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!approverId) {
-      setFormError("결재권자를 선택해주세요.");
+    if (!isFinalDecision && (!endTitle || approverIds.some((id) => !id))) {
+      setFormError("결재선의 종료 단계와 각 단계의 결재자를 모두 선택해주세요.");
       return;
     }
     setIsSubmitting(true);
@@ -97,17 +114,22 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
         start_date: startDate,
         end_date: endDate,
         reason,
-        approver_id: Number(approverId),
+        is_final_decision: isFinalDecision,
+        end_title: isFinalDecision ? null : endTitle,
+        approver_ids: isFinalDecision ? [] : approverIds.map(Number),
       });
       setShowForm(false);
       setStartDate("");
       setEndDate("");
       setReason("");
-      setApproverId("");
+      setEndTitle(null);
+      setApproverIds([]);
+      setIsFinalDecision(false);
       loadBalance();
       loadMyLeaves();
       loadPending();
       logDebug("Leaves", "신청 완료, 목록 새로고침");
+      window.alert("연차 신청이 완료되었습니다.");
     } catch (err) {
       logError("Leaves", "신청 실패", err);
       setFormError(err instanceof ApiError ? err.message : "신청 중 오류가 발생했습니다.");
@@ -131,10 +153,12 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
     setBusyId(id);
     try {
       await apiPut(`/api/leaves/${id}/approve`);
+      setDetail(null);
       loadPending();
       loadMyLeaves();
       loadBalance();
       loadTeamCalendar();
+      window.alert("결재 승인되었습니다.");
     } catch (err) {
       logError("Leaves", "승인 처리 실패", err);
     } finally {
@@ -148,6 +172,7 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
     setBusyId(id);
     try {
       await apiPut(`/api/leaves/${id}/reject`, { reason: reason.trim() });
+      setDetail(null);
       loadPending();
       loadMyLeaves();
       loadBalance();
@@ -232,7 +257,15 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
               placeholder="연차 사유를 입력하세요"
             />
           </div>
-          <ApproverSelect value={approverId} onChange={setApproverId} />
+          <FinalDecisionCheckbox checked={isFinalDecision} onChange={setIsFinalDecision} />
+          {!isFinalDecision && (
+            <ApprovalChainPicker
+              endTitle={endTitle}
+              onEndTitleChange={setEndTitle}
+              approverIds={approverIds}
+              onApproverIdsChange={setApproverIds}
+            />
+          )}
           {formError && <p className="text-xs text-danger">{formError}</p>}
           <button
             type="submit"
@@ -249,7 +282,11 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
           <h2 className="text-sm font-medium text-text-muted mb-3">내 결재함 - 승인 대기 중인 신청</h2>
           <div className="bg-surface border border-border rounded-2xl divide-y divide-border">
             {pendingLeaves.map((l) => (
-              <div key={l.id} className="flex items-center justify-between px-5 py-4">
+              <div
+                key={l.id}
+                id={openTargetDomId(l.id)}
+                className={`flex items-center justify-between px-5 py-4 ${l.id === openTargetId ? "bg-tile-blue" : ""}`}
+              >
                 <div>
                   <p className="text-sm font-medium">
                     {l.user_name} · {l.start_date} ~ {l.end_date} ({l.days}일)
@@ -289,7 +326,11 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
         ) : (
           <div className="bg-surface border border-border rounded-2xl divide-y divide-border">
             {myLeaves.map((l) => (
-              <div key={l.id} className="flex items-center justify-between px-5 py-4">
+              <div
+                key={l.id}
+                id={openTargetDomId(l.id)}
+                className={`flex items-center justify-between px-5 py-4 ${l.id === openTargetId ? "bg-tile-blue" : ""}`}
+              >
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium">
@@ -299,7 +340,13 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
                   </div>
                   <p className="text-xs text-text-muted mt-1">{l.reason}</p>
                   {l.approver_name && (
-                    <p className="text-xs text-text-muted mt-0.5">결재권자: {l.approver_name}</p>
+                    <p className="text-xs text-text-muted mt-0.5">
+                      결재권자: {l.approver_name}
+                      {l.is_final_decision && <span className="text-primary font-medium"> (전결)</span>}
+                      {!l.is_final_decision && l.steps.length > 1 && (
+                        <span> · {l.current_step}/{l.steps.length}단계</span>
+                      )}
+                    </p>
                   )}
                   {l.status === "rejected" && l.reject_reason && (
                     <p className="text-xs text-danger mt-0.5">반려 사유: {l.reject_reason}</p>
@@ -362,6 +409,15 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
           )}
         </div>
       </section>
+      {detail && (
+        <LeaveDetailModal
+          leave={detail}
+          isBusy={busyId === detail.id}
+          onClose={() => setDetail(null)}
+          onApprove={handleApprove}
+          onReject={handleReject}
+        />
+      )}
     </>
   );
 

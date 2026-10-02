@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { isSameDay, isSameMonth, toISODate, WEEKDAY_LABELS } from "./dateUtils";
 import { getHolidayMap, getLunarLabel } from "./holidays";
-import { EVENT_COLOR_HEX, type ScheduleEvent } from "./types";
+import { EVENT_COLOR_STYLES, type ScheduleEvent } from "./types";
 
 interface MonthViewProps {
   days: Date[];
@@ -83,8 +83,8 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
                       e.stopPropagation();
                       onEventClick(ev);
                     }}
-                    className={`text-[11px] px-1.5 py-0.5 rounded truncate text-white ${ev.is_completed ? "opacity-50 line-through" : ""}`}
-                    style={{ backgroundColor: EVENT_COLOR_HEX[ev.color] }}
+                    className={`text-[11px] px-1.5 py-0.5 rounded truncate font-medium ${ev.is_completed ? "opacity-50 line-through" : ""}`}
+                    style={{ backgroundColor: EVENT_COLOR_STYLES[ev.color].bg, color: EVENT_COLOR_STYLES[ev.color].fg }}
                     title={ev.title}
                   >
                     {ev.is_lunar && "[음] "}

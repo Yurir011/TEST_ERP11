@@ -1,7 +1,7 @@
 import { CalendarDays, Check, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { toISODate } from "./dateUtils";
 import { getHolidaysForYear } from "./holidays";
-import { EVENT_COLOR_HEX, type ScheduleEvent } from "./types";
+import { EVENT_COLOR_STYLES, type ScheduleEvent } from "./types";
 
 interface DayViewProps {
   day: Date;
@@ -67,7 +67,7 @@ export function DayView({ day, eventsByDate, onAddClick, onEventClick, onToggleC
               >
                 {ev.is_completed && <Check size={12} />}
               </button>
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: EVENT_COLOR_HEX[ev.color] }} />
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: EVENT_COLOR_STYLES[ev.color].fg }} />
               <button
                 onClick={() => onEventClick(ev)}
                 className={`flex-1 text-left text-sm ${ev.is_completed ? "line-through text-text-muted" : ""}`}

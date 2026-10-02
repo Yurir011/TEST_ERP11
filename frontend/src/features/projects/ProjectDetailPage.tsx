@@ -9,6 +9,12 @@ import { PercentPickerPopover } from "./PercentPickerPopover";
 import { PROGRESS_ROW_STYLES } from "./progressRowStyles";
 import { PurchaseProgressCard } from "./PurchaseProgressCard";
 import {
+  PROJECT_DOC_STATUS_LABELS,
+  PROJECT_DOC_STATUS_STYLES,
+  PROJECT_DOC_TYPE_LABELS,
+  type ProjectDocument,
+} from "../projectDocuments/types";
+import {
   MAX_PROGRESS_STAGES,
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_STYLES,
@@ -368,6 +374,17 @@ function ProgressSectionCard({
   );
 }
 
+// 종합 진행률 옆에 붙일 주차 요약: "3주차 / 총 8주". 일정이 없으면 null, 기간 밖이면 시작 전/종료로 표시한다.
+function weekSummary(project: Project): string | null {
+  if (!project.start_date || !project.end_date) return null;
+  const totalWeeks = Math.max(1, Math.ceil((diffDays(parseDate(project.start_date), parseDate(project.end_date)) + 1) / 7));
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  if (todayStr < project.start_date) return `시작 전 / 총 ${totalWeeks}주`;
+  if (todayStr > project.end_date) return `종료 / 총 ${totalWeeks}주`;
+  return `${dateToWeek(todayStr, project.start_date)}주차 / 총 ${totalWeeks}주`;
+}
+
 // 진행상황 항목들의 진행율 평균을 종합 진행률로 계산한다.
 function calcStageProgress(stages: ProgressStage[]): number | null {
   if (stages.length === 0) return null;
@@ -472,7 +489,10 @@ function ScheduleProgressCard({
       <div className="mt-5">
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-xs text-text-muted">종합 진행률</label>
-          <span className="text-xs font-bold text-gray-600 tabular-nums">{project.progress_percent}%</span>
+          <span className="text-xs tabular-nums">
+            {weekSummary(project) && <span className="text-text-muted mr-2">{weekSummary(project)}</span>}
+            <span className="font-bold text-progress-4-fg">{project.progress_percent}%</span>
+          </span>
         </div>
         <div className="relative">
           <div
@@ -481,7 +501,7 @@ function ScheduleProgressCard({
             className="h-6 rounded-lg bg-bg overflow-hidden cursor-pointer"
           >
             <div
-              className="h-full rounded-lg transition-all duration-300 bg-gray-600"
+              className="h-full rounded-lg transition-all duration-300 bg-progress-4-fg"
               style={{ width: `${project.progress_percent}%` }}
             />
           </div>
@@ -558,6 +578,7 @@ export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [documents, setDocuments] = useState<SalesDocument[] | null>(null);
+  const [projectDocs, setProjectDocs] = useState<ProjectDocument[] | null>(null);
   const [stages, setStages] = useState<ProgressStage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -571,6 +592,13 @@ export function ProjectDetailPage() {
       });
   }
 
+  // 견적서·거래명세서는 전자결재(문서관리)와 같은 문서로 작성/결재/PDF 발급되므로 그쪽 목록을 그대로 가져온다.
+  function loadProjectDocs() {
+    apiGet<ProjectDocument[]>(`/api/project-documents?project_id=${id}`)
+      .then((list) => setProjectDocs(list.filter((d) => d.doc_type !== "tax_invoice")))
+      .catch((err) => logError("ProjectDetail", "견적서·거래명세서 목록 조회 실패", err));
+  }
+
   function loadDocuments() {
     apiGet<SalesDocument[]>(`/api/sales-documents?project_id=${id}`)
       .then(setDocuments)
@@ -580,6 +608,7 @@ export function ProjectDetailPage() {
   useEffect(() => {
     loadProject();
     loadDocuments();
+    loadProjectDocs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -648,22 +677,66 @@ export function ProjectDetailPage() {
 
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-text-muted">견적서 · 거래명세서</h2>
-            <Link
-              to={`/projects/${project.id}/documents/new`}
-              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-1.5 hover:bg-surface"
-            >
-              <Plus size={14} />
-              견적서 · 거래명세서 작성
-            </Link>
+            <div className="flex items-center gap-2">
+              {(["quotation", "statement", "set"] as const).map((type) => (
+                <Link
+                  key={type}
+                  to={`/projects/${project.id}/documents/new?type=${type}`}
+                  className="flex items-center gap-1.5 text-xs font-medium bg-primary hover:bg-primary-hover text-white rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  <Plus size={14} />
+                  {type === "set" ? "견적서 + 거래명세서 동시 작성" : `${PROJECT_DOC_TYPE_LABELS[type]} 작성`}
+                </Link>
+              ))}
+            </div>
           </div>
 
-          {setGroups !== null && setGroups.length === 0 && (
-            <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
+          {projectDocs !== null && projectDocs.length === 0 && (
+            <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center mb-6">
               <FileText className="mx-auto mb-2 text-text-muted" size={24} />
               <p className="text-sm text-text-muted">작성된 문서가 없습니다.</p>
             </div>
           )}
 
+          {projectDocs !== null && projectDocs.length > 0 && (
+            <div className="bg-surface border border-border rounded-2xl divide-y divide-border mb-6">
+              {projectDocs.map((doc) => (
+                <div key={doc.id} className="flex items-center justify-between gap-3 px-5 py-4">
+                  <Link to={`/project-documents?open=${doc.id}`} className="min-w-0 flex-1 hover:text-primary transition-colors">
+                    <p className="text-sm font-medium truncate">
+                      {PROJECT_DOC_TYPE_LABELS[doc.doc_type]}
+                      {doc.doc_no ? ` · ${doc.doc_no}` : ""}
+                    </p>
+                    <p className="text-xs text-text-muted mt-1">
+                      {doc.client_name} · {doc.issue_date}
+                    </p>
+                  </Link>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}>
+                    {PROJECT_DOC_STATUS_LABELS[doc.status]}
+                  </span>
+                  {doc.status === "approved" && doc.has_pdf && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await downloadFile(`/api/project-documents/${doc.id}/pdf`, `${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}_${doc.issue_date}.pdf`);
+                        } catch (err) {
+                          logError("ProjectDetail", "문서 PDF 다운로드 실패", err);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5 shrink-0"
+                    >
+                      <Download size={14} />
+                      PDF
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {setGroups !== null && setGroups.length > 0 && (
+            <h3 className="text-xs font-medium text-text-muted mb-2">이전 방식으로 작성한 문서</h3>
+          )}
           {setGroups !== null && setGroups.length > 0 && (
             <div className="space-y-3">
               {setGroups.map((group) => (

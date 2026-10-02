@@ -59,10 +59,11 @@ class _StampedSignatureLine(Flowable):
         canvas.drawString(start_x, baseline_y, self.text)
 
         stamp_image = _get_stamp_image()
-        marker_index = self.text.rfind(SEAL_MARKER)
-        if stamp_image is not None and marker_index != -1:
+        marker = next((m for m in (SEAL_MARKER, SEAL_MARKER_EN) if m in self.text), None)
+        if stamp_image is not None and marker is not None:
+            marker_index = self.text.rfind(marker)
             prefix_width = canvas.stringWidth(self.text[:marker_index], self.font_name, self.font_size)
-            marker_width = canvas.stringWidth(SEAL_MARKER, self.font_name, self.font_size)
+            marker_width = canvas.stringWidth(marker, self.font_name, self.font_size)
             center_x = start_x + prefix_width + marker_width / 2
             center_y = self.height / 2
             canvas.drawImage(
@@ -81,8 +82,8 @@ DOC_TITLES = {
     DocumentType.employment_en: "Certificate of Employment",
 }
 
-# 경력증명서만 회사 직인을 찍는다 (재직증명서/영문 재직증명서는 직인 없이 발급).
-STAMPED_DOC_TYPES = {DocumentType.career}
+# 승인 시 회사 직인을 찍는 서류 (재직증명서 한/영문, 경력증명서 모두).
+STAMPED_DOC_TYPES = {DocumentType.employment, DocumentType.career, DocumentType.employment_en}
 
 GRADE_LABELS = {
     JobGrade.staff: "사원",
@@ -200,7 +201,9 @@ def generate_certificate_pdf(
             ["Purpose", purpose or "For submission"],
         ]
         certify_sentence = "This is to certify that the above-named person is currently employed at our company."
-        signature_text = f"CEO: {settings.company_ceo_name or '-'}{OFFLINE_SEAL_GAP}{SEAL_MARKER_EN}"
+        signature_text = f"CEO: {settings.company_ceo_name or '-'}" + (
+            f" {SEAL_MARKER_EN}" if use_stamp else f"{OFFLINE_SEAL_GAP}{SEAL_MARKER_EN}"
+        )
         footer_lines = [
             f"Date Issued: {issued_date.isoformat()}",
             f"{settings.company_name}",

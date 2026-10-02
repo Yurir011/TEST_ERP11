@@ -1,6 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import extract, func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
@@ -11,10 +12,33 @@ from app.models.client import Client
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import User
 from app.schemas.transaction import TransactionCreate, TransactionOut, VatReportOut
+from app.services.transaction_list_excel import generate_transaction_list_excel
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 logger = get_logger("Transactions")
 require_transactions_access = require_menu_access("transactions")
+
+
+def _build_transaction_query(
+    db: Session,
+    type_filter: TransactionType | None,
+    year: int | None,
+    month: int | None,
+    start_date: date | None,
+    end_date: date | None,
+):
+    query = db.query(Transaction).options(joinedload(Transaction.client))
+    if type_filter is not None:
+        query = query.filter(Transaction.type == type_filter)
+    if year is not None:
+        query = query.filter(extract("year", Transaction.transaction_date) == year)
+    if month is not None:
+        query = query.filter(extract("month", Transaction.transaction_date) == month)
+    if start_date is not None:
+        query = query.filter(Transaction.transaction_date >= start_date)
+    if end_date is not None:
+        query = query.filter(Transaction.transaction_date <= end_date)
+    return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
 
 
 def _to_out(tx: Transaction) -> TransactionOut:
@@ -49,19 +73,30 @@ def list_transactions(
         f"[Transactions] 목록 조회: type={type_filter}, year={year}, month={month}, "
         f"start_date={start_date}, end_date={end_date}, by={current_user.id}"
     )
-    query = db.query(Transaction).options(joinedload(Transaction.client))
-    if type_filter is not None:
-        query = query.filter(Transaction.type == type_filter)
-    if year is not None:
-        query = query.filter(extract("year", Transaction.transaction_date) == year)
-    if month is not None:
-        query = query.filter(extract("month", Transaction.transaction_date) == month)
-    if start_date is not None:
-        query = query.filter(Transaction.transaction_date >= start_date)
-    if end_date is not None:
-        query = query.filter(Transaction.transaction_date <= end_date)
-    transactions = query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
+    transactions = _build_transaction_query(db, type_filter, year, month, start_date, end_date).all()
     return [_to_out(t) for t in transactions]
+
+
+@router.get("/export/excel")
+def export_transactions_excel(
+    type_filter: TransactionType | None = Query(default=None, alias="type"),
+    year: int | None = Query(default=None),
+    month: int | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_transactions_access),
+):
+    transactions = _build_transaction_query(db, type_filter, year, month, start_date, end_date).all()
+    logger.debug(
+        f"[Transactions] 목록 엑셀 내보내기: count={len(transactions)}, start_date={start_date}, "
+        f"end_date={end_date}, by={current_user.id}"
+    )
+    excel_bytes = generate_transaction_list_excel(transactions)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @router.get("/report/vat", response_model=VatReportOut)

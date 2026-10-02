@@ -1,15 +1,17 @@
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.core.approval import is_self_approval, resolve_approver
+from app.core.approval import advance_chain_self_approvals, build_chain_steps, get_steps, get_steps_map, validate_chain_approvers
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
+from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.client import Client
 from app.models.project import Project
 from app.models.project_document import (
@@ -18,27 +20,34 @@ from app.models.project_document import (
     ProjectDocumentItem,
     ProjectDocumentStatus,
 )
-from app.models.user import User, has_menu_permission
+from app.models.payment import Payment, PaymentMethod, PaymentType
+from app.models.transaction import Transaction, TransactionType
+from app.models.user import JobTitle, User, has_menu_permission
+from app.schemas.approval import to_approval_step_out
 from app.schemas.project_document import (
     ApprovalRequestIn,
     PopbillIssueOut,
     ProjectDocumentCreate,
     ProjectDocumentOut,
+    ProjectDocumentSetCreate,
     ProjectDocumentUpdate,
     RejectIn,
+    TaxInvoicePaymentConfirm,
 )
-from app.services.approval_notice import create_decision_notification
+from app.services.approval_notice import create_decision_notification, create_request_notification
 from app.services.excel_to_pdf import convert_xlsx_to_pdf
 from app.services import popbill_service
 from app.services.project_document_excel import generate_project_document_excel
 from app.services.project_document_pdf import generate_project_document_pdf
 from app.services.project_document_template import fill_project_document_template, next_doc_no
+from app.services.tax_invoice_list_excel import generate_tax_invoice_list_excel
 from popbill import PopbillException
 
 TEMPLATED_DOC_TYPES = (ProjectDocType.quotation, ProjectDocType.statement)
 
 router = APIRouter(prefix="/api/project-documents", tags=["project-documents"])
 logger = get_logger("ProjectDocuments")
+_TARGET = ApprovalTargetType.project_document
 
 DOC_TYPE_LABELS_KO = {
     ProjectDocType.quotation: "견적서",
@@ -46,8 +55,9 @@ DOC_TYPE_LABELS_KO = {
     ProjectDocType.tax_invoice: "세금계산서",
 }
 
-def _doc_link(doc_type: ProjectDocType) -> str:
-    return "/tax-invoices" if doc_type == ProjectDocType.tax_invoice else "/project-documents"
+def _doc_link(doc_type: ProjectDocType, doc_id: int) -> str:
+    base = "/tax-invoices" if doc_type == ProjectDocType.tax_invoice else "/project-documents"
+    return f"{base}?open={doc_id}"
 
 
 _DOC_QUERY_OPTIONS = (
@@ -68,7 +78,7 @@ def _first_contact_email(project: Project) -> str | None:
     return None
 
 
-def _to_out(doc: ProjectDocument) -> ProjectDocumentOut:
+def _to_out(doc: ProjectDocument, steps: list[ApprovalStep]) -> ProjectDocumentOut:
     return ProjectDocumentOut(
         id=doc.id,
         project_id=doc.project_id,
@@ -82,10 +92,14 @@ def _to_out(doc: ProjectDocument) -> ProjectDocumentOut:
         manager_name=doc.manager_name,
         items=doc.items,
         has_pdf=bool(doc.file_path),
+        set_id=doc.set_id,
         has_excel=bool(doc.excel_path),
         status=doc.status,
+        current_step=doc.current_step,
+        steps=[to_approval_step_out(s) for s in steps],
         approver_id=doc.approver_id,
         approver_name=doc.approver.name if doc.approver else None,
+        is_final_decision=doc.is_final_decision,
         reviewed_at=doc.reviewed_at,
         reject_reason=doc.reject_reason,
         client_contact_email=_first_contact_email(doc.project),
@@ -94,7 +108,17 @@ def _to_out(doc: ProjectDocument) -> ProjectDocumentOut:
         popbill_issued=bool(doc.popbill_issued_at),
         popbill_nts_confirm_num=doc.popbill_nts_confirm_num,
         popbill_issued_at=doc.popbill_issued_at,
+        payment_recorded=doc.payment_recorded,
     )
+
+
+def _to_out_db(db: Session, doc: ProjectDocument) -> ProjectDocumentOut:
+    return _to_out(doc, get_steps(db, _TARGET, doc.id))
+
+
+def _to_out_list(db: Session, docs: list[ProjectDocument]) -> list[ProjectDocumentOut]:
+    steps_map = get_steps_map(db, _TARGET, [d.id for d in docs])
+    return [_to_out(d, steps_map.get(d.id, [])) for d in docs]
 
 
 def _get_doc_or_404(db: Session, doc_id: int) -> ProjectDocument:
@@ -104,26 +128,181 @@ def _get_doc_or_404(db: Session, doc_id: int) -> ProjectDocument:
     return doc
 
 
-def _apply_approval_request(db: Session, doc: ProjectDocument, approver_id: int, current_user: User) -> None:
-    approver = resolve_approver(db, approver_id)
-    doc.approver_id = approver.id
-    doc.reject_reason = None
-    if is_self_approval(approver, current_user):
-        doc.status = ProjectDocumentStatus.approved
-        doc.reviewed_at = datetime.now(timezone.utc)
-        create_decision_notification(
-            db,
-            target_name=doc.creator.name,
-            target_user_id=doc.created_by,
-            doc_label=f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})",
-            approved=True,
-            link=_doc_link(doc.doc_type),
+def _record_tax_invoice_transaction(db: Session, doc: ProjectDocument, current_user: User) -> None:
+    """세금계산서가 결재 승인되면 팝빌 발행 여부와 무관하게 즉시 매입매출관리에 자동 기록한다.
+    청구 목적은 매출, 영수 목적은 매입으로 집계한다. doc.project는 호출 전에 반드시 로드되어 있어야 한다."""
+    if doc.doc_type != ProjectDocType.tax_invoice or doc.ledger_transaction_id is not None:
+        return
+
+    subtotal = sum(item.quantity * item.unit_price for item in doc.items)
+    vat = round(subtotal * 0.1)
+    tx_type = TransactionType.sales if doc.purpose_type == "청구" else TransactionType.purchase
+    tx = Transaction(
+        type=tx_type,
+        transaction_date=doc.issue_date,
+        client_id=doc.project.client_id,
+        counterparty=doc.client_name,
+        item_name=f"세금계산서 ({doc.doc_no or doc.id})",
+        supply_amount=subtotal,
+        vat_amount=vat,
+        total_amount=subtotal + vat,
+        tax_invoice_no=doc.doc_no,
+        memo=f"[자동연동] 세금계산서 승인(project_document_id={doc.id})에서 자동 생성됨",
+        created_by=current_user.id,
+    )
+    db.add(tx)
+    db.flush()
+    doc.ledger_transaction_id = tx.id
+    logger.debug(
+        f"[ProjectDocuments] 세금계산서 매입매출 자동 기록: doc_id={doc.id}, tx_id={tx.id}, "
+        f"type={tx_type.value}, amount={tx.total_amount}"
+    )
+
+
+def _finalize_tax_invoice_payment(db: Session, doc: ProjectDocument, received: bool, current_user: User) -> None:
+    """세금계산서 승인 시점에 확정된 입금(청구)/지급(영수) 여부를 입출금관리에 기록한다.
+    미수(청구)/미지급(영수)인 경우 외상매출금/외상매입금으로 남기고 거래처 잔액을 늘려,
+    나중에 기존 미수금/미지급금 수금·지급 처리(정산) 화면에서 정상화할 수 있게 한다."""
+    if doc.payment_recorded:
+        return
+
+    subtotal = sum(item.quantity * item.unit_price for item in doc.items)
+    total = subtotal + round(subtotal * 0.1)
+    is_billing = doc.purpose_type == "청구"
+    payment_type = PaymentType.deposit if is_billing else PaymentType.withdrawal
+    category = ("외상매출금" if is_billing else "외상매입금") if not received else "기타"
+    action_label = "입금" if is_billing else "지급"
+    description = f"세금계산서 {doc.doc_no or doc.id} {action_label}" + ("" if received else " (미확정)")
+
+    client = doc.project.client if doc.project else None
+    payment = Payment(
+        type=payment_type,
+        payment_date=doc.issue_date,
+        category=category,
+        description=description,
+        amount=total,
+        method=PaymentMethod.other,
+        client_id=client.id if client else None,
+        memo=f"[자동연동] 세금계산서 project_document_id={doc.id}",
+        created_by=current_user.id,
+    )
+    db.add(payment)
+
+    if not received and client is not None:
+        field = "receivable_amount" if is_billing else "payable_amount"
+        current = getattr(client, field)
+        setattr(client, field, current + total)
+        logger.debug(
+            f"[ProjectDocuments] 세금계산서 미확정 처리로 거래처 {field} 자동 증가: "
+            f"client_id={client.id}, {current} -> {current + total}"
         )
+
+    doc.payment_recorded = True
+    logger.debug(
+        f"[ProjectDocuments] 세금계산서 입출금 확인 기록: doc_id={doc.id}, received={received}, "
+        f"amount={total}, category={category}, by={current_user.id}"
+    )
+
+
+def _apply_approval_request(
+    db: Session,
+    doc: ProjectDocument,
+    end_title: JobTitle | None,
+    approver_ids: list[int],
+    is_final_decision: bool,
+    current_user: User,
+    notify: bool = True,
+) -> list[ApprovalStep]:
+    """doc.id가 이미 확보된 상태(flush 이후)에서 호출해야 한다. 재요청(반려 후 재작성)인 경우 이전
+    결재선은 지우고 새로 만든다."""
+    doc.is_final_decision = is_final_decision
+    doc.reject_reason = None
+    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == doc.id).delete()
+    doc_label = f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})"
+
+    if is_final_decision:
+        doc.status = ProjectDocumentStatus.approved
+        doc.current_step = 1
+        doc.approver_id = current_user.id
+        doc.reviewed_at = datetime.now(timezone.utc)
+        _record_tax_invoice_transaction(db, doc, current_user)
+        if doc.doc_type == ProjectDocType.tax_invoice and doc.payment_received_hint is not None:
+            _finalize_tax_invoice_payment(db, doc, doc.payment_received_hint, current_user)
+        if notify:
+            create_decision_notification(
+                db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
+            )
+        logger.debug(f"[ProjectDocuments] 전결 처리(즉시 승인): doc_id={doc.id}, by={current_user.id}")
+        return []
+
+    chain, approvers = validate_chain_approvers(db, end_title, approver_ids)
+    steps = build_chain_steps(db, _TARGET, doc.id, chain, approvers)
+    fully_approved = advance_chain_self_approvals(steps, current_user)
+    if fully_approved:
+        doc.status = ProjectDocumentStatus.approved
+        doc.current_step = len(steps)
+        doc.approver_id = steps[-1].approver_id
+        doc.reviewed_at = datetime.now(timezone.utc)
+        _record_tax_invoice_transaction(db, doc, current_user)
+        if doc.doc_type == ProjectDocType.tax_invoice and doc.payment_received_hint is not None:
+            _finalize_tax_invoice_payment(db, doc, doc.payment_received_hint, current_user)
+        if notify:
+            create_decision_notification(
+                db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
+            )
         logger.debug(f"[ProjectDocuments] 자기결재 처리(즉시 승인): doc_id={doc.id}, by={current_user.id}")
     else:
+        pending_step = next(s for s in steps if s.status == ApprovalStepStatus.pending)
         doc.status = ProjectDocumentStatus.pending
+        doc.current_step = pending_step.step_order
+        doc.approver_id = pending_step.approver_id
         doc.reviewed_at = None
-        logger.debug(f"[ProjectDocuments] 결재 요청: doc_id={doc.id}, approver_id={approver.id}")
+        if notify:
+            create_request_notification(
+                db, target_user_id=pending_step.approver_id, requester_name=current_user.name, doc_label=doc_label, link=_doc_link(doc.doc_type, doc.id)
+            )
+        logger.debug(f"[ProjectDocuments] 결재 요청: doc_id={doc.id}, approver_id={pending_step.approver_id}")
+    return steps
+
+
+def _new_document(
+    db: Session, payload: ProjectDocumentCreate, doc_type: ProjectDocType, project: Project, current_user: User
+) -> ProjectDocument:
+    """문서 1건을 만들고 flush해서 id를 확보한 채로 돌려준다 (결재선 생성 전 단계)."""
+    doc = ProjectDocument(
+        project_id=payload.project_id,
+        doc_type=doc_type,
+        issue_date=payload.issue_date,
+        currency=payload.currency.value,
+        purpose_type=payload.purpose_type.value,
+        client_name=payload.client_name,
+        manager_name=payload.manager_name,
+        created_by=current_user.id,
+        payment_received_hint=payload.received,
+    )
+    if doc_type == ProjectDocType.quotation:
+        doc.doc_no = next_doc_no(db, doc_type, payload.issue_date)
+    doc.items = [
+        ProjectDocumentItem(content=i.content, quantity=i.quantity, unit_price=i.unit_price, note=i.note, sort_order=idx)
+        for idx, i in enumerate(payload.items)
+    ]
+    doc.creator = current_user
+    doc.project = project
+    db.add(doc)
+    db.flush()  # id 확보 (ApprovalStep.target_id에 필요)
+    return doc
+
+
+def _set_siblings(db: Session, doc: ProjectDocument) -> list[ProjectDocument]:
+    """같은 묶음(견적서+거래명세서)에 속한 다른 문서들. 단독 문서면 빈 리스트."""
+    if doc.set_id is None:
+        return []
+    return (
+        db.query(ProjectDocument)
+        .options(*_DOC_QUERY_OPTIONS)
+        .filter(ProjectDocument.set_id == doc.set_id, ProjectDocument.id != doc.id)
+        .all()
+    )
 
 
 def _regenerate_pdf(db: Session, doc: ProjectDocument) -> None:
@@ -187,17 +366,74 @@ def list_project_documents(
         query = query.filter(ProjectDocument.status == status_filter)
     if approver_mine:
         query = query.filter(ProjectDocument.approver_id == current_user.id)
+        # 묶음의 거래명세서는 견적서와 한 번에 결재되므로, 내 결재함/대기 건수에는 견적서 쪽만 한 건으로 보여준다.
+        query = query.filter(
+            ~(ProjectDocument.set_id.isnot(None) & (ProjectDocument.doc_type == ProjectDocType.statement))
+        )
     docs = query.order_by(ProjectDocument.issue_date.desc(), ProjectDocument.id.desc()).all()
-    return [_to_out(d) for d in docs]
+    return _to_out_list(db, docs)
+
+
+@router.get("/export/tax-invoices-excel")
+def export_tax_invoices_excel(
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    status_filter: ProjectDocumentStatus | None = Query(default=None, alias="status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not has_menu_permission(current_user, "tax_invoice"):
+        logger.debug(f"[ProjectDocuments] 세금계산서 엑셀 권한 없음, 접근 거부: user_id={current_user.id}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 조회 권한이 없습니다.")
+
+    query = db.query(ProjectDocument).options(*_DOC_QUERY_OPTIONS).filter(ProjectDocument.doc_type == ProjectDocType.tax_invoice)
+    if date_from is not None:
+        query = query.filter(ProjectDocument.issue_date >= date_from)
+    if date_to is not None:
+        query = query.filter(ProjectDocument.issue_date <= date_to)
+    if status_filter is not None:
+        query = query.filter(ProjectDocument.status == status_filter)
+    docs = query.order_by(ProjectDocument.issue_date.desc(), ProjectDocument.id.desc()).all()
+
+    billing_docs = [d for d in docs if d.purpose_type == "청구"]
+    receipt_docs = [d for d in docs if d.purpose_type == "영수"]
+
+    # 개요 탭의 매입 합계: 매입매출관리(Transactions)에 기록된 매입 거래 중 세금계산서번호가 입력된 건만 집계한다.
+    purchase_query = db.query(
+        sa_func.coalesce(sa_func.sum(Transaction.total_amount), 0), sa_func.count(Transaction.id)
+    ).filter(
+        Transaction.type == TransactionType.purchase,
+        Transaction.tax_invoice_no.isnot(None),
+        Transaction.tax_invoice_no != "",
+    )
+    if date_from is not None:
+        purchase_query = purchase_query.filter(Transaction.transaction_date >= date_from)
+    if date_to is not None:
+        purchase_query = purchase_query.filter(Transaction.transaction_date <= date_to)
+    purchase_total, purchase_count = purchase_query.first()
+
+    period_label = f"{date_from.isoformat() if date_from else '처음'} ~ {date_to.isoformat() if date_to else '지금'}"
+    logger.debug(
+        f"[ProjectDocuments] 세금계산서 엑셀 내보내기: count={len(docs)}, date_from={date_from}, date_to={date_to}, "
+        f"status={status_filter}, by={current_user.id}"
+    )
+    excel_bytes = generate_tax_invoice_list_excel(billing_docs, receipt_docs, int(purchase_total), int(purchase_count), period_label)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @router.post("", response_model=ProjectDocumentOut, status_code=status.HTTP_201_CREATED)
 def create_project_document(
     payload: ProjectDocumentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    if payload.doc_type == ProjectDocType.tax_invoice and not has_menu_permission(current_user, "tax_invoice"):
-        logger.debug(f"[ProjectDocuments] 세금계산서 권한 없음, 접근 거부: user_id={current_user.id}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 작성 권한이 없습니다.")
+    if payload.doc_type == ProjectDocType.tax_invoice:
+        if not has_menu_permission(current_user, "tax_invoice"):
+            logger.debug(f"[ProjectDocuments] 세금계산서 권한 없음, 접근 거부: user_id={current_user.id}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 작성 권한이 없습니다.")
+        if payload.received is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입금/지급 확인 여부를 선택해주세요.")
 
     project = db.query(Project).filter(Project.id == payload.project_id).first()
     if project is None:
@@ -205,34 +441,53 @@ def create_project_document(
 
     logger.debug(
         f"[ProjectDocuments] 등록: doc_type={payload.doc_type}, project_id={payload.project_id}, "
-        f"items={len(payload.items)}, approver_id={payload.approver_id}, by={current_user.id}"
+        f"items={len(payload.items)}, end_title={payload.end_title}, by={current_user.id}"
     )
-    doc = ProjectDocument(
-        project_id=payload.project_id,
-        doc_type=payload.doc_type,
-        issue_date=payload.issue_date,
-        currency=payload.currency.value,
-        purpose_type=payload.purpose_type.value,
-        client_name=payload.client_name,
-        manager_name=payload.manager_name,
-        created_by=current_user.id,
-    )
-    if payload.doc_type == ProjectDocType.quotation:
-        doc.doc_no = next_doc_no(db, payload.doc_type, payload.issue_date)
-    doc.items = [
-        ProjectDocumentItem(content=i.content, quantity=i.quantity, unit_price=i.unit_price, note=i.note, sort_order=idx)
-        for idx, i in enumerate(payload.items)
-    ]
-    doc.creator = current_user
-    _apply_approval_request(db, doc, payload.approver_id, current_user)
-    db.add(doc)
+    doc = _new_document(db, payload, payload.doc_type, project, current_user)
+    steps = _apply_approval_request(db, doc, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user)
     db.commit()
 
     doc = _get_doc_or_404(db, doc.id)
     _regenerate_documents(db, doc)
     db.commit()
     db.refresh(doc)
-    return _to_out(doc)
+    return _to_out(doc, steps)
+
+
+@router.post("/set", response_model=list[ProjectDocumentOut], status_code=status.HTTP_201_CREATED)
+def create_project_document_set(
+    payload: ProjectDocumentSetCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """견적서+거래명세서를 같은 내용으로 한 번에 작성한다. 두 문서는 set_id로 묶여 한 번의 결재(승인/반려)로
+    함께 처리된다. 결재 요청/결과 알림은 견적서 기준으로 한 번만 보낸다. 반환: [견적서, 거래명세서]."""
+    project = db.query(Project).filter(Project.id == payload.project_id).first()
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 프로젝트입니다.")
+
+    logger.debug(
+        f"[ProjectDocuments] 견적서+거래명세서 동시 등록: project_id={payload.project_id}, "
+        f"items={len(payload.items)}, end_title={payload.end_title}, by={current_user.id}"
+    )
+    quotation = _new_document(db, payload, ProjectDocType.quotation, project, current_user)
+    statement = _new_document(db, payload, ProjectDocType.statement, project, current_user)
+    quotation.set_id = quotation.id
+    statement.set_id = quotation.id
+
+    steps_q = _apply_approval_request(db, quotation, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user)
+    steps_s = _apply_approval_request(
+        db, statement, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user, notify=False
+    )
+    db.commit()
+
+    outs = []
+    for doc, steps in ((quotation, steps_q), (statement, steps_s)):
+        doc = _get_doc_or_404(db, doc.id)
+        _regenerate_documents(db, doc)
+        db.commit()
+        db.refresh(doc)
+        outs.append(_to_out(doc, steps))
+    logger.debug(f"[ProjectDocuments] 동시 등록 완료: set_id={quotation.id}")
+    return outs
 
 
 @router.put("/{doc_id}", response_model=ProjectDocumentOut)
@@ -244,6 +499,11 @@ def update_project_document(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 수정할 수 있습니다.")
     if doc.status not in (ProjectDocumentStatus.draft, ProjectDocumentStatus.rejected):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="작성 중이거나 반려된 문서만 수정할 수 있습니다.")
+    if doc.set_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="견적서와 거래명세서를 함께 작성한 문서는 수정할 수 없습니다. 삭제 후 다시 작성해주세요.",
+        )
 
     doc.issue_date = payload.issue_date
     doc.currency = payload.currency.value
@@ -256,6 +516,7 @@ def update_project_document(
     ]
     doc.status = ProjectDocumentStatus.draft
     doc.approver_id = None
+    doc.current_step = 1
     doc.reject_reason = None
     doc.reviewed_at = None
     db.commit()
@@ -265,7 +526,7 @@ def update_project_document(
     db.commit()
     db.refresh(doc)
     logger.debug(f"[ProjectDocuments] 수정: doc_id={doc_id}, by={current_user.id}")
-    return _to_out(doc)
+    return _to_out_db(db, doc)
 
 
 @router.post("/{doc_id}/request-approval", response_model=ProjectDocumentOut)
@@ -277,15 +538,56 @@ def request_approval(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 결재를 요청할 수 있습니다.")
     if doc.status not in (ProjectDocumentStatus.draft, ProjectDocumentStatus.rejected):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="작성 중이거나 반려된 문서만 결재 요청할 수 있습니다.")
+    if doc.doc_type == ProjectDocType.tax_invoice and payload.received is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입금/지급 확인 여부를 선택해주세요.")
 
-    _apply_approval_request(db, doc, payload.approver_id, current_user)
+    if doc.doc_type == ProjectDocType.tax_invoice:
+        doc.payment_received_hint = payload.received
+    steps = _apply_approval_request(db, doc, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user)
+    # 묶음이면 나머지 문서도 같은 결재선으로 다시 요청한다 (알림은 한 번만).
+    siblings = [s for s in _set_siblings(db, doc) if s.status in (ProjectDocumentStatus.draft, ProjectDocumentStatus.rejected)]
+    for sibling in siblings:
+        _apply_approval_request(db, sibling, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user, notify=False)
     db.commit()
 
+    for target in siblings:
+        refreshed = _get_doc_or_404(db, target.id)
+        _regenerate_documents(db, refreshed)
+        db.commit()
     doc = _get_doc_or_404(db, doc.id)
     _regenerate_documents(db, doc)
     db.commit()
     db.refresh(doc)
-    return _to_out(doc)
+    return _to_out(doc, steps)
+
+
+def _approve_one(db: Session, doc: ProjectDocument, current_user: User, notify: bool) -> None:
+    """문서 1건의 현재 결재 단계를 승인하고, 마지막 단계면 승인 완료, 아니면 다음 결재권자로 넘긴다 (commit은 호출자가)."""
+    steps = get_steps(db, _TARGET, doc.id)
+    current = next(s for s in steps if s.step_order == doc.current_step)
+    current.status = ApprovalStepStatus.approved
+    current.decided_at = datetime.now(timezone.utc)
+    doc_label = f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})"
+
+    if current.step_order == len(steps):
+        doc.status = ProjectDocumentStatus.approved
+        doc.reviewed_at = datetime.now(timezone.utc)
+        _record_tax_invoice_transaction(db, doc, current_user)
+        if doc.doc_type == ProjectDocType.tax_invoice and doc.payment_received_hint is not None:
+            _finalize_tax_invoice_payment(db, doc, doc.payment_received_hint, current_user)
+        if notify:
+            create_decision_notification(
+                db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
+            )
+    else:
+        next_step = next(s for s in steps if s.step_order == current.step_order + 1)
+        doc.current_step = next_step.step_order
+        doc.approver_id = next_step.approver_id
+        if notify:
+            create_request_notification(
+                db, target_user_id=next_step.approver_id, requester_name=doc.creator.name, doc_label=doc_label, link=_doc_link(doc.doc_type, doc.id)
+            )
+            logger.debug(f"[ProjectDocuments] 다음 결재 요청 알림 발송: doc_id={doc.id}, approver_id={next_step.approver_id}")
 
 
 @router.put("/{doc_id}/approve", response_model=ProjectDocumentOut)
@@ -297,24 +599,65 @@ def approve_project_document(doc_id: int, db: Session = Depends(get_db), current
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 대기 중인 문서만 승인할 수 있습니다.")
 
     logger.debug(f"[ProjectDocuments] 결재 승인 시도: id={doc_id}, by={current_user.id}")
-    doc.status = ProjectDocumentStatus.approved
-    doc.reviewed_at = datetime.now(timezone.utc)
-    create_decision_notification(
-        db,
-        target_name=doc.creator.name,
-        target_user_id=doc.created_by,
-        doc_label=f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})",
-        approved=True,
-        link=_doc_link(doc.doc_type),
-    )
+    _approve_one(db, doc, current_user, notify=True)
+    # 견적서+거래명세서 묶음이면 한 번의 승인으로 나머지 문서도 같은 단계까지 함께 승인한다 (알림은 중복 발송하지 않는다).
+    siblings = [s for s in _set_siblings(db, doc) if s.status == ProjectDocumentStatus.pending and s.approver_id == current_user.id]
+    for sibling in siblings:
+        _approve_one(db, sibling, current_user, notify=False)
+        logger.debug(f"[ProjectDocuments] 묶음 문서 함께 승인: doc_id={sibling.id}, set_id={doc.set_id}")
     db.commit()
 
+    for target in [doc, *siblings]:
+        refreshed = _get_doc_or_404(db, target.id)
+        _regenerate_documents(db, refreshed)
+        db.commit()
     doc = _get_doc_or_404(db, doc.id)
-    _regenerate_documents(db, doc)
+    logger.debug(f"[ProjectDocuments] 결재 승인 완료: id={doc_id}, by={current_user.id}")
+    return _to_out(doc, get_steps(db, _TARGET, doc.id))
+
+
+@router.post("/{doc_id}/confirm-payment", response_model=ProjectDocumentOut)
+def confirm_tax_invoice_payment(
+    doc_id: int,
+    payload: TaxInvoicePaymentConfirm,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """작성/재요청 시점에 입금·지급 확인 여부를 받지 못한 세금계산서를 위한 수동 확인용 보조 엔드포인트.
+    정상적인 흐름에서는 작성 시점에 받은 응답이 승인과 동시에 자동 반영되므로 호출될 일이 거의 없다."""
+    doc = _get_doc_or_404(db, doc_id)
+    if doc.doc_type != ProjectDocType.tax_invoice:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서만 입금/지급 확인이 가능합니다.")
+    if doc.status != ProjectDocumentStatus.approved:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 승인된 세금계산서만 확인할 수 있습니다.")
+    if doc.payment_recorded:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 입출금 내역이 기록된 문서입니다.")
+
+    _finalize_tax_invoice_payment(db, doc, payload.received, current_user)
     db.commit()
     db.refresh(doc)
-    logger.debug(f"[ProjectDocuments] 결재 승인 완료: id={doc_id}, by={current_user.id}")
-    return _to_out(doc)
+    return _to_out_db(db, doc)
+
+
+def _reject_one(db: Session, doc: ProjectDocument, reason: str, notify: bool) -> None:
+    steps = get_steps(db, _TARGET, doc.id)
+    current = next(s for s in steps if s.step_order == doc.current_step)
+    current.status = ApprovalStepStatus.rejected
+    current.decided_at = datetime.now(timezone.utc)
+
+    doc.status = ProjectDocumentStatus.rejected
+    doc.reject_reason = reason
+    doc.reviewed_at = datetime.now(timezone.utc)
+    if notify:
+        create_decision_notification(
+            db,
+            target_name=doc.creator.name,
+            target_user_id=doc.created_by,
+            doc_label=f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})",
+            approved=False,
+            detail=f"반려 사유: {reason}",
+            link=_doc_link(doc.doc_type, doc.id),
+        )
 
 
 @router.put("/{doc_id}/reject", response_model=ProjectDocumentOut)
@@ -327,26 +670,21 @@ def reject_project_document(
     if doc.status != ProjectDocumentStatus.pending:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 대기 중인 문서만 반려할 수 있습니다.")
 
-    doc.status = ProjectDocumentStatus.rejected
-    doc.reject_reason = payload.reason
-    doc.reviewed_at = datetime.now(timezone.utc)
-    create_decision_notification(
-        db,
-        target_name=doc.creator.name,
-        target_user_id=doc.created_by,
-        doc_label=f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})",
-        approved=False,
-        detail=f"반려 사유: {payload.reason}",
-        link=_doc_link(doc.doc_type),
-    )
+    _reject_one(db, doc, payload.reason, notify=True)
+    # 묶음이면 나머지 문서도 함께 반려한다 (알림은 한 번만).
+    siblings = [s for s in _set_siblings(db, doc) if s.status == ProjectDocumentStatus.pending and s.approver_id == current_user.id]
+    for sibling in siblings:
+        _reject_one(db, sibling, payload.reason, notify=False)
+        logger.debug(f"[ProjectDocuments] 묶음 문서 함께 반려: doc_id={sibling.id}, set_id={doc.set_id}")
     db.commit()
 
+    for target in [doc, *siblings]:
+        refreshed = _get_doc_or_404(db, target.id)
+        _regenerate_documents(db, refreshed)
+        db.commit()
     doc = _get_doc_or_404(db, doc.id)
-    _regenerate_documents(db, doc)
-    db.commit()
-    db.refresh(doc)
     logger.debug(f"[ProjectDocuments] 결재 반려: id={doc_id}, by={current_user.id}, reason={payload.reason}")
-    return _to_out(doc)
+    return _to_out(doc, get_steps(db, _TARGET, doc.id))
 
 
 @router.get("/{doc_id}/pdf")
@@ -440,7 +778,15 @@ def delete_project_document(doc_id: int, db: Session = Depends(get_db), current_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="문서를 찾을 수 없습니다.")
     if doc.status == ProjectDocumentStatus.approved:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제할 수 없습니다.")
-    db.delete(doc)
+    # 묶음(견적서+거래명세서)이면 함께 삭제한다.
+    targets = [doc]
+    if doc.set_id is not None:
+        targets = db.query(ProjectDocument).filter(ProjectDocument.set_id == doc.set_id).all()
+        if any(t.status == ProjectDocumentStatus.approved for t in targets):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제할 수 없습니다.")
+    for target in targets:
+        db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == target.id).delete()
+        db.delete(target)
     db.commit()
     logger.debug(f"[ProjectDocuments] 삭제: id={doc_id}, by={current_user.id}")
     return None

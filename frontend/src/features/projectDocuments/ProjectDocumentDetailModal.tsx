@@ -1,4 +1,6 @@
-import { Download, Eye, Mail, Printer, Send, Sheet, X } from "lucide-react";
+import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
+import { Check, Download, Eye, Mail, Printer, Send, Sheet, X } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 import {
   DOC_CURRENCY_SYMBOLS,
   PROJECT_DOC_STATUS_LABELS,
@@ -19,6 +21,8 @@ export function ProjectDocumentDetailModal({
   doc,
   isBusy,
   onClose,
+  onApprove,
+  onReject,
   onDownload,
   onDownloadExcel,
   onPrint,
@@ -30,6 +34,8 @@ export function ProjectDocumentDetailModal({
   doc: ProjectDocument;
   isBusy: boolean;
   onClose: () => void;
+  onApprove: (doc: ProjectDocument) => void;
+  onReject: (doc: ProjectDocument) => void;
   onDownload: (doc: ProjectDocument) => void;
   onDownloadExcel: (doc: ProjectDocument) => void;
   onPrint: (doc: ProjectDocument) => void;
@@ -38,6 +44,9 @@ export function ProjectDocumentDetailModal({
   onPopbillView: (doc: ProjectDocument) => void;
   onPopbillPdf: (doc: ProjectDocument) => void;
 }) {
+  const { user } = useAuth();
+  const currentStep = doc.steps.find((st) => st.step_order === doc.current_step);
+  const canDecide = doc.status === "pending" && currentStep?.approver_id === user?.id;
   const approved = doc.status === "approved" && doc.has_pdf;
   const disabledTitle = "결재 승인 후 이용 가능합니다.";
 
@@ -65,7 +74,13 @@ export function ProjectDocumentDetailModal({
             {PROJECT_DOC_STATUS_LABELS[doc.status]}
           </span>
           {doc.approver_name && (
-            <span className="text-xs text-text-muted">결재권자: {doc.approver_name}</span>
+            <span className="text-xs text-text-muted">
+              결재권자: {doc.approver_name}
+              {doc.is_final_decision && <span className="text-primary font-medium"> (전결)</span>}
+              {!doc.is_final_decision && doc.steps.length > 1 && (
+                <span> · {doc.current_step}/{doc.steps.length}단계</span>
+              )}
+            </span>
           )}
           {doc.reviewed_at && (
             <span className="text-xs text-text-muted">· {doc.reviewed_at.slice(0, 10)}</span>
@@ -78,6 +93,8 @@ export function ProjectDocumentDetailModal({
         {doc.status === "rejected" && doc.reject_reason && (
           <p className="text-xs text-danger bg-red-50 rounded-lg px-3 py-2 mb-4">반려 사유: {doc.reject_reason}</p>
         )}
+
+        <ApprovalStampTable steps={doc.steps} currentStep={doc.current_step} docStatus={doc.status} />
 
         {doc.manager_name && <p className="text-xs text-text-muted mb-2">담당자: {doc.manager_name}</p>}
 
@@ -149,6 +166,33 @@ export function ProjectDocumentDetailModal({
             ) : (
               <p className="text-xs text-text-muted">결재 승인 후 팝빌로 발행할 수 있습니다.</p>
             )}
+          </div>
+        )}
+
+        {doc.set_id !== null && (
+          <p className="text-xs text-tile-blue-fg bg-tile-blue rounded-lg px-3 py-2 mb-4">
+            {doc.doc_type === "quotation" ? "거래명세서" : "견적서"}와 함께 작성된 문서입니다. 한 번의 결재로 두 문서가 같이 승인/반려됩니다.
+          </p>
+        )}
+
+        {canDecide && (
+          <div className="flex items-center justify-end gap-2 mb-4 pb-4 border-b border-border">
+            <button
+              onClick={() => onReject(doc)}
+              disabled={isBusy}
+              className="flex items-center gap-1 text-xs text-danger border border-danger/30 rounded-lg px-3 py-2 hover:bg-red-50 disabled:opacity-50"
+            >
+              <X size={14} />
+              반려
+            </button>
+            <button
+              onClick={() => onApprove(doc)}
+              disabled={isBusy}
+              className="flex items-center gap-1 text-xs text-success border border-success/30 rounded-lg px-3 py-2 hover:bg-tile-green disabled:opacity-50"
+            >
+              <Check size={14} />
+              승인
+            </button>
           </div>
         )}
 

@@ -12,6 +12,7 @@ class NotificationOut(BaseModel):
     link: str | None
     is_read: bool
     created_at: datetime
+    my_approval_done: bool | None = None  # 결재 요청 알림에서 수신자 본인의 결재 완료 여부 (그 외 알림은 None)
 
 
 class UnreadCountOut(BaseModel):

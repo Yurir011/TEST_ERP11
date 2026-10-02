@@ -1,9 +1,9 @@
-import { Building2, Plus, Search, Trash2 } from "lucide-react";
+import { Building2, Download, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
-import { apiDelete, apiGet } from "../../lib/api";
+import { apiDelete, apiGet, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { Client } from "./types";
 
@@ -18,6 +18,7 @@ export function ClientsPage() {
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   function loadClients(q: string) {
     logDebug("Clients", `목록 조회: q=${q}`);
@@ -35,6 +36,19 @@ export function ClientsPage() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  async function handleExportExcel() {
+    setIsExporting(true);
+    try {
+      const path = query ? `/api/clients/export/excel?q=${encodeURIComponent(query)}` : "/api/clients/export/excel";
+      await downloadFile(path, `거래처목록_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (err) {
+      logError("Clients", "목록 엑셀 다운로드 실패", err);
+      setError("목록을 다운로드하지 못했습니다.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   async function handleDelete(e: MouseEvent, client: Client) {
     e.preventDefault();
@@ -58,13 +72,23 @@ export function ClientsPage() {
       title="거래처관리"
       description="거래처 정보를 등록하고 관리합니다."
       actions={
-        <Link
-          to="/clients/new"
-          className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={16} />
-          새 거래처 등록
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
+          >
+            <Download size={14} />
+            {isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"}
+          </button>
+          <Link
+            to="/clients/new"
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={16} />
+            새 거래처 등록
+          </Link>
+        </div>
       }
     >
       <div className="relative mb-5 max-w-md">

@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -50,6 +50,7 @@ class Proposal(Base):
         Enum(ProposalStatus, name="proposalstatus"), default=ProposalStatus.pending
     )
     current_step: Mapped[int] = mapped_column(Integer, default=1)  # 현재 결재 대기 중인 단계 (1부터 시작)
+    is_final_decision: Mapped[bool] = mapped_column(Boolean, default=False)  # 전결 여부 (결재선 없이 기안자 본인 결재로 즉시 완료, steps는 비어있음)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))

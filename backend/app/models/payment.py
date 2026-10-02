@@ -49,7 +49,7 @@ class BankType(str, enum.Enum):
     woori = "woori"  # 우리은행
 
 
-# 입출금 분류(12개). 콤보박스 선택지로 사용 — category 컬럼은 자유 입력 String이지만 이 목록으로 값을 제한한다.
+# 입출금 분류(13개). 콤보박스 선택지로 사용 — category 컬럼은 자유 입력 String이지만 이 목록으로 값을 제한한다.
 PAYMENT_CATEGORIES = (
     "소모품비",
     "공과금",
@@ -59,6 +59,7 @@ PAYMENT_CATEGORIES = (
     "차량",
     "제조",
     "외상매출금",
+    "미수",
     "외상매입금",
     "선수금",
     "미지급금",

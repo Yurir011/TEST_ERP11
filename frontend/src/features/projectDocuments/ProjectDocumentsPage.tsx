@@ -14,15 +14,18 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { ProposalsPage } from "../proposals/ProposalsPage";
 import { ApproverPickerModal } from "./ApproverPickerModal";
+import { useOpenTarget } from "../../lib/useOpenTarget";
 import { ProjectDocumentDetailModal } from "./ProjectDocumentDetailModal";
+import { askTaxInvoicePaymentReceived } from "./taxInvoicePaymentConfirm";
 import {
   DOC_CURRENCY_SYMBOLS,
   PROJECT_DOC_STATUS_LABELS,
@@ -54,6 +57,10 @@ const TABS: { key: DocTab; label: string }[] = [
   { key: "statement", label: "거래명세서" },
   { key: "tax_invoice", label: "세금계산서" },
 ];
+
+function isDocTab(value: string | null): value is DocTab {
+  return value !== null && TABS.some((t) => t.key === value);
+}
 
 function itemsSummary(doc: ProjectDocument): string {
   if (doc.items.length === 0) return "-";
@@ -219,22 +226,42 @@ interface ProjectDocumentsPageProps {
 
 export function ProjectDocumentsPage({ embedded = false, lockedDocType }: ProjectDocumentsPageProps) {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const visibleActions = lockedDocType
     ? NEW_DOC_ACTIONS.filter((action) => action.type === lockedDocType)
     : NEW_DOC_ACTIONS.filter((action) => action.type !== "tax_invoice");
   const visibleTabs = TABS.filter((t) => t.key !== "tax_invoice");
-  const [tab, setTab] = useState<DocTab>(lockedDocType ?? "all");
+  // 업무 알림("결재 요청") 클릭 시 ?tab=proposal 등으로 해당 탭(내 결재함)에 바로 진입할 수 있게 한다.
+  const tabParam = searchParams.get("tab");
+  const initialTab = lockedDocType ?? (isDocTab(tabParam) ? tabParam : "all");
+  const [tab, setTab] = useState<DocTab>(initialTab);
   const [docs, setDocs] = useState<ProjectDocument[] | null>(null);
   const [pendingForMe, setPendingForMe] = useState<ProjectDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [resubmitDoc, setResubmitDoc] = useState<ProjectDocument | null>(null);
   const [detailDoc, setDetailDoc] = useState<ProjectDocument | null>(null);
+  const openTargetId = useOpenTarget();
+  const openedTargetRef = useRef(false);
+
+  // 업무 알림(?open=문서ID)으로 들어오면 해당 문서 상세를 바로 연다. 승인/반려 이후에도 동일하게 열린다.
+  useEffect(() => {
+    if (openTargetId === null || openedTargetRef.current || docs === null) return;
+    const target = docs.find((d) => d.id === openTargetId) ?? pendingForMe.find((d) => d.id === openTargetId);
+    if (target) {
+      openedTargetRef.current = true;
+      logDebug("ProjectDocuments", `알림에서 문서 상세 열기: id=${openTargetId}`);
+      setDetailDoc(target);
+    }
+  }, [openTargetId, docs, pendingForMe]);
   const [purposeFilter, setPurposeFilter] = useState<"all" | TaxInvoicePurpose>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectDocumentStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [monthFilter, setMonthFilter] = useState<"all" | "this" | "last">("all");
   const [issuedFilter, setIssuedFilter] = useState<"all" | "issued" | "not_issued">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   function loadDocs() {
     if (tab === "proposal") return;
@@ -291,7 +318,9 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     setBusyId(doc.id);
     try {
       await apiPut(`/api/project-documents/${doc.id}/approve`);
+      setDetailDoc(null);
       reloadAll();
+      window.alert("결재 승인되었습니다.");
     } catch (err) {
       logError("ProjectDocuments", "결재 승인 실패", err);
       setError(err instanceof ApiError ? err.message : "결재 승인 중 오류가 발생했습니다.");
@@ -307,6 +336,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     setBusyId(doc.id);
     try {
       await apiPut(`/api/project-documents/${doc.id}/reject`, { reason: reason.trim() });
+      setDetailDoc(null);
       reloadAll();
     } catch (err) {
       logError("ProjectDocuments", "결재 반려 실패", err);
@@ -316,12 +346,19 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     }
   }
 
-  async function handleResubmit(approverId: number) {
+  async function handleResubmit(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
     if (!resubmitDoc) return;
+    const received =
+      resubmitDoc.doc_type === "tax_invoice"
+        ? askTaxInvoicePaymentReceived(resubmitDoc.purpose_type, resubmitDoc.client_name)
+        : null;
     setBusyId(resubmitDoc.id);
     try {
       await apiPost(`/api/project-documents/${resubmitDoc.id}/request-approval`, {
-        approver_id: approverId,
+        end_title: endTitle,
+        approver_ids: approverIds,
+        is_final_decision: isFinalDecision,
+        received,
       });
       setResubmitDoc(null);
       reloadAll();
@@ -352,6 +389,27 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       logError("ProjectDocuments", "엑셀 다운로드 실패", err);
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function handleExportTaxInvoicesExcel() {
+    setIsExportingExcel(true);
+    try {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set("date_from", dateFrom);
+      if (dateTo) params.set("date_to", dateTo);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      const qs = params.toString();
+      const rangeLabel = dateFrom || dateTo ? `${dateFrom || "처음"}~${dateTo || "지금"}` : "전체";
+      await downloadFile(
+        `/api/project-documents/export/tax-invoices-excel${qs ? `?${qs}` : ""}`,
+        `세금계산서_${rangeLabel}.xlsx`
+      );
+    } catch (err) {
+      logError("ProjectDocuments", "세금계산서 목록 엑셀 다운로드 실패", err);
+      setError("세금계산서 목록을 다운로드하지 못했습니다.");
+    } finally {
+      setIsExportingExcel(false);
     }
   }
 
@@ -452,6 +510,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           if (issuedFilter === "not_issued" && doc.popbill_issued) return false;
           if (monthFilter === "this" && monthKey(doc.issue_date) !== thisMonthKey) return false;
           if (monthFilter === "last" && monthKey(doc.issue_date) !== lastMonthKey) return false;
+          if (dateFrom && doc.issue_date < dateFrom) return false;
+          if (dateTo && doc.issue_date > dateTo) return false;
           if (
             q &&
             !`${doc.project_name} ${doc.client_name} ${doc.manager_name ?? ""} ${doc.doc_no ?? ""}`
@@ -505,7 +565,11 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
         <TaxInvoiceStatsCard
           docs={docs}
           monthFilter={monthFilter}
-          onToggleMonth={(v) => setMonthFilter((prev) => (prev === v ? "all" : v))}
+          onToggleMonth={(v) => {
+            setMonthFilter((prev) => (prev === v ? "all" : v));
+            setDateFrom("");
+            setDateTo("");
+          }}
           issuedFilter={issuedFilter}
           onToggleIssued={(v) => setIssuedFilter((prev) => (prev === v ? "all" : v))}
           purposeFilter={purposeFilter}
@@ -601,6 +665,43 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
             <option value="approved">{PROJECT_DOC_STATUS_LABELS.approved}</option>
             <option value="rejected">{PROJECT_DOC_STATUS_LABELS.rejected}</option>
           </select>
+
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                setMonthFilter("all");
+              }}
+              className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
+            />
+            <span className="text-text-muted text-xs">~</span>
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setMonthFilter("all");
+              }}
+              className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDateFrom("");
+                  setDateTo("");
+                }}
+                className="text-xs text-text-muted hover:text-text px-1"
+                title="기간 초기화"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
 
           <input
             value={searchQuery}
@@ -759,6 +860,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           doc={detailDoc}
           isBusy={busyId === detailDoc.id}
           onClose={() => setDetailDoc(null)}
+          onApprove={handleApprove}
+          onReject={handleReject}
           onDownload={handleDownload}
           onDownloadExcel={handleDownloadExcel}
           onPrint={handlePrint}
@@ -780,7 +883,22 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       : "프로젝트별 견적서·거래명세서를 작성하고 관리합니다.";
 
   return (
-    <MainLayout title={layoutTitle} description={layoutDescription}>
+    <MainLayout
+      title={layoutTitle}
+      description={layoutDescription}
+      actions={
+        lockedDocType === "tax_invoice" ? (
+          <button
+            onClick={handleExportTaxInvoicesExcel}
+            disabled={isExportingExcel}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
+          >
+            <Download size={14} />
+            {isExportingExcel ? "다운로드 중..." : "엑셀 다운로드 (청구/영수/개요)"}
+          </button>
+        ) : undefined
+      }
+    >
       {content}
     </MainLayout>
   );

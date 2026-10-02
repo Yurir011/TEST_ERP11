@@ -7,10 +7,24 @@ from app.core.security import hash_password
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.user import JobTitle, User, UserRole, resolve_role
-from app.schemas.user import ApproverOut, PasswordResetRequest, UserCreate, UserOut, UserUpdate
+from app.schemas.user import ApproverOut, NextEmployeeNoOut, PasswordResetRequest, UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 logger = get_logger("Users")
+
+# 9000번대는 사이트 관리자 전용으로 예약되어 있어 일반 직원 채번 대상에서 제외한다.
+SITE_ADMIN_NO_RANGE_START = 9000
+DEFAULT_START_EMPLOYEE_NO = 1000
+
+
+def _generate_next_employee_no(db: Session) -> str:
+    numeric_nos = [
+        int(no)
+        for (no,) in db.query(User.employee_no).all()
+        if no.isdigit() and int(no) < SITE_ADMIN_NO_RANGE_START
+    ]
+    next_no = max(numeric_nos) + 1 if numeric_nos else DEFAULT_START_EMPLOYEE_NO
+    return str(next_no)
 
 
 @router.get("", response_model=list[UserOut])
@@ -37,16 +51,22 @@ def list_approvers(
     )
 
 
+@router.get("/next-employee-no", response_model=NextEmployeeNoOut)
+def get_next_employee_no(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
+    employee_no = _generate_next_employee_no(db)
+    logger.debug(f"[Users] 다음 사번 미리보기: employee_no={employee_no}, by={current_user.id}")
+    return NextEmployeeNoOut(employee_no=employee_no)
+
+
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(payload: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용 중인 이메일입니다.")
-    if db.query(User).filter(User.employee_no == payload.employee_no).first():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 사용 중인 사번입니다.")
 
-    logger.debug(f"[Users] 계정 생성: email={payload.email}, menu_permissions={payload.menu_permissions}, by={current_user.id}")
+    employee_no = _generate_next_employee_no(db)
+    logger.debug(f"[Users] 계정 생성: email={payload.email}, employee_no={employee_no}, menu_permissions={payload.menu_permissions}, by={current_user.id}")
     user = User(
-        employee_no=payload.employee_no,
+        employee_no=employee_no,
         email=payload.email,
         name=payload.name,
         hashed_password=hash_password(payload.password),

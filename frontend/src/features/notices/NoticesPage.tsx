@@ -1,4 +1,4 @@
-import { Bell, CheckCheck, ChevronDown, Megaphone, Plus } from "lucide-react";
+import { Bell, CheckCheck, ChevronDown, Megaphone, Plus, Stamp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -16,6 +16,30 @@ interface AppNotification {
   link: string | null;
   is_read: boolean;
   created_at: string;
+  my_approval_done: boolean | null;
+}
+
+function monthLabel(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+}
+
+// 알림 목록용 짧은 날짜/시간: "10-02 14:08"
+function formatShortDateTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function groupByMonth(items: AppNotification[]): [string, AppNotification[]][] {
+  const groups: [string, AppNotification[]][] = [];
+  for (const item of items) {
+    const key = monthLabel(item.created_at);
+    const existing = groups.find(([month]) => month === key);
+    if (existing) existing[1].push(item);
+    else groups.push([key, [item]]);
+  }
+  return groups;
 }
 
 export function NoticesPage() {
@@ -23,7 +47,6 @@ export function NoticesPage() {
   const [notices, setNotices] = useState<Notice[] | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expandedNotificationId, setExpandedNotificationId] = useState<number | null>(null);
   const [expandedNoticeId, setExpandedNoticeId] = useState<number | null>(null);
 
   function loadNotifications() {
@@ -43,17 +66,16 @@ export function NoticesPage() {
     loadNotifications();
   }, []);
 
-  async function handleToggleNotification(n: AppNotification) {
-    logDebug("Notices", `알림 펼치기 토글: id=${n.id}`);
-    if (!n.is_read) {
-      try {
-        await apiPut(`/api/notifications/${n.id}/read`);
-        setNotifications((prev) => prev?.map((item) => (item.id === n.id ? { ...item, is_read: true } : item)) ?? prev);
-      } catch (err) {
-        logError("Notices", "알림 읽음 처리 실패", err);
-      }
+  // 알림을 누르면 읽음 처리하고, 연결된 문서가 있으면 그 문서로 바로 이동한다 (이동은 Link가 처리).
+  async function handleOpenNotification(n: AppNotification) {
+    logDebug("Notices", `알림 열기: id=${n.id}`);
+    if (n.is_read) return;
+    try {
+      await apiPut(`/api/notifications/${n.id}/read`);
+      setNotifications((prev) => prev?.map((item) => (item.id === n.id ? { ...item, is_read: true } : item)) ?? prev);
+    } catch (err) {
+      logError("Notices", "알림 읽음 처리 실패", err);
     }
-    setExpandedNotificationId((prev) => (prev === n.id ? null : n.id));
   }
 
   async function handleMarkAllRead() {
@@ -104,48 +126,42 @@ export function NoticesPage() {
           <p className="text-sm text-text-muted">받은 업무 알림이 없습니다.</p>
         )}
         {notifications !== null && notifications.length > 0 && (
-          <div className="space-y-2">
-            {notifications.map((n) => {
-              const open = expandedNotificationId === n.id;
-              return (
-                <div
-                  key={n.id}
-                  className={`rounded-xl border transition-colors ${
-                    n.is_read ? "bg-surface border-border" : "bg-tile-blue border-tile-blue-fg/30"
-                  }`}
-                >
-                  <button
-                    onClick={() => handleToggleNotification(n)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <ChevronDown
-                        size={14}
-                        className={`shrink-0 text-text-muted transition-transform ${open ? "rotate-180" : ""}`}
-                      />
-                      <span className={`text-sm truncate ${n.is_read ? "text-text-muted" : "font-medium text-text"}`}>
-                        {n.title}
-                      </span>
-                    </span>
-                    <span className="text-xs text-text-muted shrink-0">{formatDate(n.created_at)}</span>
-                  </button>
-                  {open && (
-                    <div className="px-4 pb-3 pl-9">
-                      <p className="text-xs text-text-muted">{n.message}</p>
-                      {n.link && (
-                        <Link
-                          to={n.link}
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-block mt-2 text-xs text-primary hover:underline"
-                        >
-                          바로가기 →
-                        </Link>
+          <div className="bg-surface border border-border rounded-2xl p-4">
+            {groupByMonth(notifications).map(([month, items]) => (
+              <div key={month} className="mb-3 last:mb-0">
+                <p className="text-[11px] text-text-muted font-medium mb-1">{month}</p>
+                {items.map((n) => {
+                  const rowClass = `grid grid-cols-[8px_auto_minmax(0,1fr)] sm:grid-cols-[8px_96px_minmax(0,210px)_minmax(0,1fr)_auto] items-center gap-x-2.5 px-1.5 py-2.5 rounded-md border-t border-border first:border-t-0 hover:bg-bg transition-colors ${
+                    n.is_read ? "opacity-70" : ""
+                  }`;
+                  const content = (
+                    <>
+                      {n.is_read ? <span /> : <span className="w-1.5 h-1.5 rounded-full bg-notify" />}
+                      <span className="text-[11px] text-text-muted tabular-nums">{formatShortDateTime(n.created_at)}</span>
+                      <span className="text-[13px] font-medium truncate">{n.title}</span>
+                      <span className="hidden sm:block text-xs text-text-muted truncate">{n.message.split("\n")[0]}</span>
+                      {n.my_approval_done ? (
+                        <span className="hidden sm:inline-flex items-center gap-0.5 text-[11px] font-semibold text-danger border border-danger/60 rounded-full px-1.5 py-px -rotate-3">
+                          <Stamp size={10} />
+                          결재완료
+                        </span>
+                      ) : (
+                        <span className="hidden sm:block" />
                       )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    </>
+                  );
+                  return n.link ? (
+                    <Link key={n.id} to={n.link} onClick={() => handleOpenNotification(n)} className={rowClass}>
+                      {content}
+                    </Link>
+                  ) : (
+                    <button key={n.id} type="button" onClick={() => handleOpenNotification(n)} className={`${rowClass} w-full text-left`}>
+                      {content}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )}
       </section>

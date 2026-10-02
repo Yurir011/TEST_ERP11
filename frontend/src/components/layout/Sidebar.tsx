@@ -39,7 +39,7 @@ const menuItems: {
   { to: "/tax-invoices", label: "세금계산서", icon: ScrollText, adminOnly: false, menuKey: "tax_invoice", colorClass: "" },
   { to: "/transactions", label: "매입매출관리", icon: Receipt, adminOnly: false, menuKey: "transactions", colorClass: "text-primary" },
   { to: "/payments", label: "입출금관리", icon: Banknote, adminOnly: false, menuKey: "payments", colorClass: "text-primary" },
-  { to: "/notices", label: "업무 알림", icon: Bell, adminOnly: false, menuKey: "notices", colorClass: "text-danger" },
+  { to: "/notices", label: "업무 알림", icon: Bell, adminOnly: false, menuKey: "notices", colorClass: "text-notify" },
   { to: "/settings", label: "직원등록", icon: Settings, adminOnly: true, colorClass: "text-primary" },
 ];
 
@@ -90,7 +90,7 @@ export function Sidebar() {
             <Icon size={17} />
             {label}
             {to === "/notices" && unreadCount > 0 && (
-              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] font-semibold flex items-center justify-center">
+              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center">
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}

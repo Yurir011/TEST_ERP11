@@ -16,7 +16,6 @@ import { ClientFormPage } from "./features/clients/ClientFormPage";
 import { ProjectsPage } from "./features/projects/ProjectsPage";
 import { ProjectFormPage } from "./features/projects/ProjectFormPage";
 import { ProjectDetailPage } from "./features/projects/ProjectDetailPage";
-import { SalesDocumentFormPage } from "./features/projects/SalesDocumentFormPage";
 import { ProjectDocumentsPage } from "./features/projectDocuments/ProjectDocumentsPage";
 import { ProjectDocumentFormPage } from "./features/projectDocuments/ProjectDocumentFormPage";
 import { ProposalFormPage } from "./features/proposals/ProposalFormPage";
@@ -106,7 +105,7 @@ function App() {
         path="/projects/:id/documents/new"
         element={
           <ProtectedRoute menuKey="projects">
-            <SalesDocumentFormPage />
+            <ProjectDocumentFormPage />
           </ProtectedRoute>
         }
       />

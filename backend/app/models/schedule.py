@@ -10,7 +10,20 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.user import User
 
-EVENT_COLORS = ("blue", "green", "red", "orange", "purple", "pink", "teal", "gray")
+EVENT_COLORS = (
+    "peach",
+    "skyblue",
+    "sagemint",
+    "lilac",
+    "buttercream",
+    "rose",
+    "grayblue",
+    "graygreen",
+    "graylilac",
+    "grayyellow",
+    "graypink",
+    "grayteal",
+)
 
 
 class ScheduleEvent(Base):
@@ -21,7 +34,7 @@ class ScheduleEvent(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     start_date: Mapped[date] = mapped_column(Date, index=True)
     end_date: Mapped[date] = mapped_column(Date, index=True)
-    color: Mapped[str] = mapped_column(String(20), default="blue")
+    color: Mapped[str] = mapped_column(String(20), default="grayblue")
     is_lunar: Mapped[bool] = mapped_column(Boolean, default=False)  # 음력 날짜로 입력된 일정인지 (저장은 항상 환산된 양력 날짜)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)

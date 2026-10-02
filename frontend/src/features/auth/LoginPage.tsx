@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError } from "../../lib/api";
@@ -8,13 +8,10 @@ import { logError } from "../../lib/logger";
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const from = (location.state as { from?: string } | null)?.from ?? "/";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -22,7 +19,7 @@ export function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      navigate(from, { replace: true });
+      navigate("/", { replace: true });
     } catch (err) {
       logError("LoginPage", "로그인 실패", err);
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {

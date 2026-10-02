@@ -3,6 +3,8 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.project_document import MAX_ITEMS, DocCurrency, ProjectDocType, ProjectDocumentStatus, TaxInvoicePurpose
+from app.models.user import JobTitle
+from app.schemas.approval import ApprovalStepOut
 
 
 class ProjectDocumentItemIn(BaseModel):
@@ -31,7 +33,10 @@ class ProjectDocumentCreate(BaseModel):
     client_name: str
     manager_name: str | None = None
     items: list[ProjectDocumentItemIn] = Field(default_factory=list)
-    approver_id: int
+    is_final_decision: bool = False
+    end_title: JobTitle | None = None
+    approver_ids: list[int] = Field(default_factory=list)
+    received: bool | None = None  # 세금계산서 작성 시점에 물어보는 입금(청구)/지급(영수) 확인 여부
 
     @field_validator("items")
     @classmethod
@@ -41,6 +46,12 @@ class ProjectDocumentCreate(BaseModel):
         if len(v) > MAX_ITEMS:
             raise ValueError(f"항목은 최대 {MAX_ITEMS}개까지 입력할 수 있습니다.")
         return v
+
+
+class ProjectDocumentSetCreate(ProjectDocumentCreate):
+    """견적서+거래명세서 동시 작성. doc_type은 무시되고 항상 견적서/거래명세서 한 쌍이 만들어진다."""
+
+    doc_type: ProjectDocType = ProjectDocType.quotation
 
 
 class ProjectDocumentUpdate(BaseModel):
@@ -66,11 +77,20 @@ class ProjectDocumentUpdate(BaseModel):
 class ApprovalRequestIn(BaseModel):
     """반려된 문서를 다시 결재 요청할 때 사용."""
 
-    approver_id: int
+    is_final_decision: bool = False
+    end_title: JobTitle | None = None
+    approver_ids: list[int] = Field(default_factory=list)
+    received: bool | None = None  # 세금계산서 재요청 시점에 물어보는 입금(청구)/지급(영수) 확인 여부
 
 
 class RejectIn(BaseModel):
     reason: str
+
+
+class TaxInvoicePaymentConfirm(BaseModel):
+    """세금계산서 승인 직후 입금(청구)/지급(영수) 여부를 확인할 때 사용."""
+
+    received: bool
 
 
 class ProjectDocumentOut(BaseModel):
@@ -89,9 +109,13 @@ class ProjectDocumentOut(BaseModel):
     items: list[ProjectDocumentItemOut]
     has_pdf: bool
     has_excel: bool
+    set_id: int | None = None
     status: ProjectDocumentStatus
+    current_step: int
+    steps: list[ApprovalStepOut]
     approver_id: int | None
     approver_name: str | None
+    is_final_decision: bool
     reviewed_at: datetime | None
     reject_reason: str | None
     client_contact_email: str | None
@@ -100,6 +124,7 @@ class ProjectDocumentOut(BaseModel):
     popbill_issued: bool
     popbill_nts_confirm_num: str | None
     popbill_issued_at: datetime | None
+    payment_recorded: bool
 
 
 class PopbillIssueOut(BaseModel):

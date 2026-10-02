@@ -1,5 +1,6 @@
 import { Check, Download, ExternalLink, Paperclip, Printer, Link as LinkIcon, Trash2, X } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
+import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { logError } from "../../lib/logger";
@@ -127,32 +128,13 @@ export function ProposalDetailModal({
           )}
         </div>
 
-        <div className="flex gap-2 mb-4">
-          {proposal.steps.map((step) => (
-            <div
-              key={step.step_order}
-              className={`flex-1 rounded-xl border p-3 text-center ${
-                step.status === "approved"
-                  ? "border-success/40 bg-tile-green"
-                  : step.step_order === proposal.current_step && proposal.status === "pending"
-                    ? "border-primary/40 bg-tile-blue"
-                    : "border-dashed border-border bg-bg"
-              }`}
-            >
-              <p className="text-[11px] font-semibold text-text-muted">{PROPOSAL_TITLE_LABELS[step.title]}</p>
-              {step.status === "approved" ? (
-                <>
-                  <p className="text-sm font-medium mt-1">{step.approver_name}</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">결재완료</p>
-                </>
-              ) : (
-                <p className="text-xs text-text-muted mt-2">
-                  {step.status === "rejected" ? "반려" : "결재대기"}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
+        {proposal.is_final_decision && (
+          <div className="mb-4 rounded-xl border border-primary/30 bg-tile-blue px-4 py-3 text-sm text-tile-blue-fg">
+            전결로 즉시 승인된 문서입니다. (결재자: {proposal.creator_name})
+          </div>
+        )}
+
+        <ApprovalStampTable steps={proposal.steps} currentStep={proposal.current_step} docStatus={proposal.status} />
 
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
           <div>

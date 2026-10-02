@@ -146,6 +146,8 @@ def generate_project_document_pdf(doc: ProjectDocument, project: Project, client
 
     if doc.status == ProjectDocumentStatus.approved:
         approver_name = doc.approver.name if doc.approver else "-"
+        if doc.is_final_decision:
+            approver_name += " (전결)"
         signature_text = f"결재자 : {approver_name} {SEAL_MARKER}"
         elements.append(
             _StampedSignatureLine(signature_text, font_name=FONT_REGULAR, font_size=11, width=pdf.width)

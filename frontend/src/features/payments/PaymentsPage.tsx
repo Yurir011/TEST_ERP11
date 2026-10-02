@@ -342,11 +342,11 @@ export function PaymentsPage() {
           </div>
           <div className="bg-surface border border-border rounded-2xl p-5">
             <p className="text-sm text-text-muted">총 출금</p>
-            <p className="text-lg font-semibold mt-1 text-danger">{formatCurrency(report.total_withdrawal)}</p>
+            <p className="text-lg font-semibold mt-1 text-notify">{formatCurrency(report.total_withdrawal)}</p>
           </div>
           <div className="bg-surface border border-border rounded-2xl p-5">
             <p className="text-sm text-text-muted">순증감</p>
-            <p className={`text-lg font-semibold mt-1 ${report.net >= 0 ? "text-success" : "text-danger"}`}>
+            <p className={`text-lg font-semibold mt-1 ${report.net >= 0 ? "text-success" : "text-notify"}`}>
               {formatCurrency(report.net)}
             </p>
           </div>

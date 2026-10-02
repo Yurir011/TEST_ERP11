@@ -22,13 +22,6 @@ export const PROPOSAL_TITLE_LABELS: Record<ProposalApproverTitle, string> = {
   ceo: "대표",
 };
 
-// 결재 시작 단계를 고르면 나머지 결재선이 자동으로 정해진다 (마지막 단계는 항상 대표). 백엔드 STEP_CHAINS와 동일하게 유지할 것.
-export const PROPOSAL_STEP_CHAINS: Record<ProposalApproverTitle, ProposalApproverTitle[]> = {
-  dept_head: ["dept_head", "team_lead", "ceo"],
-  team_lead: ["team_lead", "ceo"],
-  ceo: ["ceo"],
-};
-
 export type ProposalAttachmentKind = "file" | "link";
 
 export interface ProposalAttachment {
@@ -60,6 +53,7 @@ export interface Proposal {
   issue_date: string;
   status: ProposalStatus;
   current_step: number;
+  is_final_decision: boolean;
   created_by: number;
   creator_name: string;
   steps: ProposalStep[];

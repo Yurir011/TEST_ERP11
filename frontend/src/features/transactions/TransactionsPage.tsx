@@ -1,8 +1,8 @@
-import { ChevronLeft, ChevronRight, Plus, Receipt, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Plus, Receipt, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { apiDelete, apiGet } from "../../lib/api";
+import { apiDelete, apiGet, downloadFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
@@ -47,6 +47,7 @@ export function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [report, setReport] = useState<VatReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   function loadTransactions() {
     logDebug("Transactions", `목록 조회: ${startDate} ~ ${endDate}, type=${tab}`);
@@ -96,6 +97,20 @@ export function TransactionsPage() {
     setEndDate(todayISO());
   }
 
+  async function handleExportExcel() {
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+      if (tab !== "all") params.set("type", tab);
+      await downloadFile(`/api/transactions/export/excel?${params.toString()}`, `매입매출내역_${startDate}~${endDate}.xlsx`);
+    } catch (err) {
+      logError("Transactions", "목록 엑셀 다운로드 실패", err);
+      setError("목록을 다운로드하지 못했습니다.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   async function handleDelete(id: number) {
     if (!window.confirm("이 거래 내역을 삭제할까요?")) return;
     try {
@@ -112,13 +127,23 @@ export function TransactionsPage() {
       title="매입매출관리"
       description="매입·매출을 기록하고 부가세를 자동으로 집계합니다."
       actions={
-        <Link
-          to="/transactions/new"
-          className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={16} />
-          새 거래 등록
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
+          >
+            <Download size={14} />
+            {isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"}
+          </button>
+          <Link
+            to="/transactions/new"
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={16} />
+            새 거래 등록
+          </Link>
+        </div>
       }
     >
       <div className="flex items-center justify-between mb-5">
@@ -173,7 +198,7 @@ export function TransactionsPage() {
           </div>
           <div className="bg-surface border border-border rounded-2xl p-5">
             <p className="text-sm text-text-muted">{report.payable_vat >= 0 ? "납부세액" : "환급세액"}</p>
-            <p className={`text-lg font-semibold mt-1 ${report.payable_vat >= 0 ? "text-danger" : "text-success"}`}>
+            <p className={`text-lg font-semibold mt-1 ${report.payable_vat >= 0 ? "text-notify" : "text-success"}`}>
               {formatCurrency(Math.abs(report.payable_vat))}
             </p>
             <p className="text-xs text-text-muted mt-0.5">매출부가세 - 매입부가세</p>

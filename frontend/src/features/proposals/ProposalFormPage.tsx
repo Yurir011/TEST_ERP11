@@ -2,11 +2,12 @@ import { Link as LinkIcon, Paperclip, X } from "lucide-react";
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { ApproverSelect } from "../../components/approval/ApproverSelect";
+import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
+import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCheckbox";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiPost, apiUpload } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
-import { PROPOSAL_STEP_CHAINS, PROPOSAL_TITLE_LABELS, type Proposal, type ProposalApproverTitle } from "./types";
+import type { Proposal } from "./types";
 
 const DEPARTMENT_NAME = "연구개발팀";
 
@@ -25,16 +26,15 @@ export function ProposalFormPage() {
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
   const [content, setContent] = useState("");
-  const [startTitle, setStartTitle] = useState<ProposalApproverTitle | null>(null);
-  const [approverIds, setApproverIds] = useState<string[]>(["", "", ""]);
+  const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
+  const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [isFinalDecision, setIsFinalDecision] = useState(false);
   const [attachments, setAttachments] = useState<StagedAttachment[]>([]);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const chain = startTitle ? PROPOSAL_STEP_CHAINS[startTitle] : null;
 
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -53,31 +53,16 @@ export function ProposalFormPage() {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handleFirstApproverChange(approver: { title: ProposalApproverTitle } | undefined) {
-    setStartTitle(approver ? approver.title : null);
-    // 1단계 값은 onChange가 별도로 채우므로, 여기서는 이후 단계(2·3단계) 선택만 초기화한다.
-    setApproverIds((prev) => [prev[0], "", ""]);
-  }
-
-  function setApproverIdAt(index: number, value: string) {
-    setApproverIds((prev) => prev.map((v, i) => (i === index ? value : v)));
-  }
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!startTitle || !chain) {
-      setError("1단계 결재자를 먼저 선택해주세요.");
-      return;
-    }
-    const selectedIds = chain.map((_, idx) => approverIds[idx]);
-    if (selectedIds.some((id) => !id)) {
-      setError("결재선의 모든 단계에서 결재자를 선택해주세요.");
+    if (!isFinalDecision && (!endTitle || approverIds.some((id) => !id))) {
+      setError("결재선을 선택하거나 전결을 선택해주세요.");
       return;
     }
 
-    logDebug("Proposals", `품의서 등록 시도: title=${title}, start_title=${startTitle}`);
+    logDebug("Proposals", `품의서 등록 시도: title=${title}, end_title=${endTitle}, is_final_decision=${isFinalDecision}`);
     setIsSubmitting(true);
     try {
       const created = await apiPost<Proposal>("/api/proposals", {
@@ -85,8 +70,9 @@ export function ProposalFormPage() {
         title,
         topic,
         content,
-        start_title: startTitle,
-        approver_ids: selectedIds.map(Number),
+        is_final_decision: isFinalDecision,
+        end_title: isFinalDecision ? null : endTitle,
+        approver_ids: isFinalDecision ? [] : approverIds.map(Number),
       });
 
       for (const attachment of attachments) {
@@ -104,6 +90,7 @@ export function ProposalFormPage() {
         }
       }
 
+      window.alert("결재 요청이 완료되었습니다.");
       navigate("/project-documents", { replace: true });
     } catch (err) {
       logError("Proposals", "품의서 등록 실패", err);
@@ -251,34 +238,18 @@ export function ProposalFormPage() {
         <div className="bg-surface border border-border rounded-2xl p-6 space-y-4">
           <div>
             <h3 className="text-sm font-semibold mb-1">결재 요청</h3>
-            <p className="text-xs text-text-muted">
-              1단계 결재자를 선택하면 그 직책에 따라 다음 결재 단계(최종 대표까지)가 자동으로 정해집니다.
-            </p>
+            <p className="text-xs text-text-muted">결재선을 어느 단계에서 마무리할지 먼저 선택해주세요.</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <ApproverSelect
-              label="1. 결재자"
-              includeDeptHead
-              value={approverIds[0]}
-              onChange={(value) => setApproverIdAt(0, value)}
-              onApproverChange={handleFirstApproverChange}
+          <FinalDecisionCheckbox checked={isFinalDecision} onChange={setIsFinalDecision} />
+
+          {!isFinalDecision && (
+            <ApprovalChainPicker
+              endTitle={endTitle}
+              onEndTitleChange={setEndTitle}
+              approverIds={approverIds}
+              onApproverIdsChange={setApproverIds}
             />
-            {chain?.slice(1).map((stepTitle, idx) => (
-              <ApproverSelect
-                key={`${startTitle}-${idx + 1}`}
-                label={`${idx + 2}. ${PROPOSAL_TITLE_LABELS[stepTitle]}`}
-                onlyTitle={stepTitle}
-                value={approverIds[idx + 1]}
-                onChange={(value) => setApproverIdAt(idx + 1, value)}
-              />
-            ))}
-          </div>
-
-          {chain && startTitle && (
-            <p className="text-xs text-text-muted">
-              1단계 결재자 직책({PROPOSAL_TITLE_LABELS[startTitle]})에 따라 총 {chain.length}단계 결재로 진행됩니다.
-            </p>
           )}
         </div>
 

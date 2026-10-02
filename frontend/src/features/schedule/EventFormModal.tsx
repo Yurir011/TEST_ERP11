@@ -9,7 +9,7 @@ import {
   solarToLunar,
 } from "./lunarUtils";
 import {
-  EVENT_COLOR_HEX,
+  EVENT_COLOR_STYLES,
   EVENT_COLORS,
   type EventColor,
   type RecurrenceFreq,
@@ -42,7 +42,7 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
   const [description, setDescription] = useState(event?.description ?? "");
   const [startDate, setStartDate] = useState(event?.start_date ?? initialDate);
   const [endDate, setEndDate] = useState(event?.end_date ?? initialDate);
-  const [color, setColor] = useState<EventColor>(event?.color ?? "blue");
+  const [color, setColor] = useState<EventColor>(event?.color ?? "grayblue");
   const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFreq>("none");
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
   const [recurrenceUntil, setRecurrenceUntil] = useState(initialDate);
@@ -348,10 +348,10 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
                   type="button"
                   disabled={!canEdit}
                   onClick={() => setColor(c)}
-                  className={`w-7 h-7 rounded-full transition-transform disabled:opacity-60 ${
+                  className={`w-7 h-7 rounded-full border border-border transition-transform disabled:opacity-60 ${
                     color === c ? "ring-2 ring-offset-2 ring-text scale-105" : ""
                   }`}
-                  style={{ backgroundColor: EVENT_COLOR_HEX[c] }}
+                  style={{ backgroundColor: EVENT_COLOR_STYLES[c].bg }}
                   aria-label={c}
                 />
               ))}
@@ -373,7 +373,7 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
             <p className="text-xs text-text-muted">
               등록자: {event.created_by_name}
               {event.is_completed && " · 완료됨"}
-              {event.recurrence_group_id && " · 반복 일정"}
+              {event.recurrence_group_id && !event.recurrence_group_id.startsWith("leave-") && " · 반복 일정"}
             </p>
           )}
 

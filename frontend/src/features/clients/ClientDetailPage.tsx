@@ -89,7 +89,7 @@ export function ClientDetailPage() {
           <div className="grid grid-cols-2 gap-4 mt-5">
             <div className="bg-bg rounded-xl p-4">
               <p className="text-xs text-text-muted">미수금</p>
-              <p className="text-lg font-semibold mt-1 text-danger">{formatCurrency(client.receivable_amount)}</p>
+              <p className="text-lg font-semibold mt-1 text-notify">{formatCurrency(client.receivable_amount)}</p>
             </div>
             <div className="bg-bg rounded-xl p-4">
               <p className="text-xs text-text-muted">미지급금</p>

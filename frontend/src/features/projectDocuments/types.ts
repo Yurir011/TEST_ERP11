@@ -1,3 +1,5 @@
+import type { ApprovalStep } from "../../components/approval/types";
+
 export type ProjectDocType = "quotation" | "statement" | "tax_invoice";
 
 export const PROJECT_DOC_TYPE_LABELS: Record<ProjectDocType, string> = {
@@ -70,10 +72,14 @@ export interface ProjectDocument {
   manager_name: string | null;
   items: ProjectDocumentItem[];
   has_pdf: boolean;
+  set_id: number | null;
   has_excel: boolean;
   status: ProjectDocumentStatus;
+  current_step: number;
+  steps: ApprovalStep[];
   approver_id: number | null;
   approver_name: string | null;
+  is_final_decision: boolean;
   reviewed_at: string | null;
   reject_reason: string | null;
   client_contact_email: string | null;
@@ -82,6 +88,7 @@ export interface ProjectDocument {
   popbill_issued: boolean;
   popbill_nts_confirm_num: string | null;
   popbill_issued_at: string | null;
+  payment_recorded: boolean;
 }
 
 export interface ProjectDocumentItemFormValues {

@@ -1,7 +1,7 @@
 import os
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -13,6 +13,7 @@ from app.models.client import Client, ClientContact
 from app.models.user import User
 from app.schemas.client import BusinessRegOcrOut, ClientCreate, ClientOut
 from app.services.business_reg_ocr import recognize_business_registration
+from app.services.client_list_excel import generate_client_list_excel
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 logger = get_logger("Clients")
@@ -47,13 +48,7 @@ def _apply_contacts(client: Client, contacts: list) -> None:
     ]
 
 
-@router.get("", response_model=list[ClientOut])
-def list_clients(
-    q: str | None = Query(default=None, description="상호/담당자/사업자번호 검색어"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    logger.debug(f"[Clients] 목록 조회: user_id={current_user.id}, q={q}")
+def _build_client_query(db: Session, q: str | None):
     query = db.query(Client).options(joinedload(Client.contacts))
     if q:
         like = f"%{q}%"
@@ -64,9 +59,35 @@ def list_clients(
                 Client.contacts.any(ClientContact.name.ilike(like)),
             )
         )
-    clients = query.all()
+    return query
+
+
+@router.get("", response_model=list[ClientOut])
+def list_clients(
+    q: str | None = Query(default=None, description="상호/담당자/사업자번호 검색어"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    logger.debug(f"[Clients] 목록 조회: user_id={current_user.id}, q={q}")
+    clients = _build_client_query(db, q).all()
     clients.sort(key=_client_sort_key)
     return clients
+
+
+@router.get("/export/excel")
+def export_clients_excel(
+    q: str | None = Query(default=None, description="상호/담당자/사업자번호 검색어"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    clients = _build_client_query(db, q).all()
+    clients.sort(key=_client_sort_key)
+    logger.debug(f"[Clients] 목록 엑셀 내보내기: count={len(clients)}, q={q}, by={current_user.id}")
+    excel_bytes = generate_client_list_excel(clients)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @router.post("/ocr/business-registration", response_model=BusinessRegOcrOut)

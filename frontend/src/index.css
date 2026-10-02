@@ -11,6 +11,12 @@
   --color-primary-hover: #1d4ed8;
   --color-success: #16a34a;
   --color-danger: #dc2626;
+  /* 대시보드 업무알림/내 업무알림 전용 강조색 (반려 등 danger와는 별도로 구분). */
+  --color-notify: #ff0004;
+  /* 알림/공지 건수 배지 전용 (연핑크 바탕 + 연한 테두리 + 진한 글씨). */
+  --color-badge-bg: #fce7f3;
+  --color-badge-fg: #831843;
+  --color-badge-border: #f9a8d4;
 
   --color-tile-blue: #eff6ff;
   --color-tile-blue-fg: #2563eb;

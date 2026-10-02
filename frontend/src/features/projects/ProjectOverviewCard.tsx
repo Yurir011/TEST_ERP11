@@ -60,7 +60,7 @@ export function ProjectOverviewCard({ projects }: { projects: Project[] }) {
   return (
     <div className="bg-surface border border-border rounded-2xl p-5">
       <div className="grid grid-cols-[116px_1fr] gap-5 items-center">
-        <div className="flex flex-col items-center gap-1">
+        <Link to="/projects" className="flex flex-col items-center gap-1 hover:opacity-80 transition-opacity">
           <svg width="100" height="100" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r={RING_R} fill="none" stroke="var(--color-border)" strokeWidth="10" />
             <circle
@@ -80,7 +80,7 @@ export function ProjectOverviewCard({ projects }: { projects: Project[] }) {
             </text>
           </svg>
           <span className="text-[10.5px] text-text-faint">평균 진행률</span>
-        </div>
+        </Link>
 
         <div className="flex flex-col gap-2 min-w-0">
           {highlights.length === 0 && <p className="text-xs text-text-muted">주목할 프로젝트가 없습니다.</p>}

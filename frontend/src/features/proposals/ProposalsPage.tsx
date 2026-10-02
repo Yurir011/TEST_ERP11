@@ -1,9 +1,10 @@
 import { Check, FileSignature, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { ApiError, apiGet, apiPut, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { useOpenTarget } from "../../lib/useOpenTarget";
 import { ProposalDetailModal } from "./ProposalDetailModal";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal } from "./types";
 
@@ -21,6 +22,19 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [detail, setDetail] = useState<Proposal | null>(null);
+  const openTargetId = useOpenTarget();
+  const openedTargetRef = useRef(false);
+
+  // 업무 알림(?open=품의서ID)으로 들어오면 해당 품의서 상세를 바로 연다. 승인/반려 이후에도 동일하게 열린다.
+  useEffect(() => {
+    if (openTargetId === null || openedTargetRef.current || proposals === null) return;
+    const target = proposals.find((p) => p.id === openTargetId) ?? pendingForMe.find((p) => p.id === openTargetId);
+    if (target) {
+      openedTargetRef.current = true;
+      logDebug("Proposals", `알림에서 품의서 상세 열기: id=${openTargetId}`);
+      setDetail(target);
+    }
+  }, [openTargetId, proposals, pendingForMe]);
 
   function loadProposals() {
     logDebug("Proposals", "목록 조회 시작");
@@ -56,6 +70,7 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
     try {
       await apiPut(`/api/proposals/${p.id}/approve`);
       reloadAll();
+      window.alert("결재 승인되었습니다.");
     } catch (err) {
       logError("Proposals", "결재 승인 실패", err);
       setError(err instanceof ApiError ? err.message : "결재 승인 중 오류가 발생했습니다.");
@@ -197,9 +212,11 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
                       </span>
                     </td>
                     <td className="py-2.5 px-4">
-                      {p.status === "pending" && currentStep
-                        ? `${PROPOSAL_TITLE_LABELS[currentStep.title]} ${currentStep.approver_name}`
-                        : "-"}
+                      {p.is_final_decision
+                        ? "전결"
+                        : p.status === "pending" && currentStep
+                          ? `${PROPOSAL_TITLE_LABELS[currentStep.title]} ${currentStep.approver_name}`
+                          : "-"}
                     </td>
                   </tr>
                 );

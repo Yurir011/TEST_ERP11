@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
+from app.core.approval import validate_chain_approvers
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
@@ -22,7 +23,6 @@ from app.models.proposal import (
 )
 from app.models.user import User
 from app.schemas.proposal import (
-    STEP_CHAINS,
     ProposalAttachmentOut,
     ProposalCreate,
     ProposalLinkAttachmentIn,
@@ -30,7 +30,7 @@ from app.schemas.proposal import (
     ProposalStepOut,
     RejectIn,
 )
-from app.services.approval_notice import create_decision_notification
+from app.services.approval_notice import create_decision_notification, create_request_notification
 from app.services.proposal_pdf import generate_proposal_pdf
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
@@ -83,6 +83,7 @@ def _to_out(p: Proposal) -> ProposalOut:
         current_step=p.current_step,
         created_by=p.created_by,
         creator_name=p.creator.name,
+        is_final_decision=p.is_final_decision,
         steps=[
             ProposalStepOut(
                 step_order=s.step_order,
@@ -123,10 +124,21 @@ def _regenerate_pdf(p: Proposal) -> None:
 
 
 def _advance_self_approvals(db: Session, p: Proposal, current_user: User) -> None:
-    """기안자 본인이 연속된 단계의 결재권자로도 지정된 경우, 그 단계들은 즉시 승인 처리한다."""
+    """기안자 본인이 연속된 단계의 결재권자로도 지정된 경우, 그 단계들은 즉시 승인 처리한다.
+    더 이상 자기결재로 진행할 수 없으면 그 단계의 결재권자에게 결재 요청 알림을 보낸다."""
     while p.status == ProposalStatus.pending:
         step = _current_step(p)
         if step.approver_id != current_user.id:
+            create_request_notification(
+                db,
+                target_user_id=step.approver_id,
+                requester_name=p.creator.name,
+                doc_label=f"품의서({p.title})",
+                link=f"/project-documents?tab=proposal&open={p.id}",
+            )
+            logger.debug(
+                f"[Proposals] 결재 요청 알림 발송: proposal_id={p.id}, step={step.step_order}, approver_id={step.approver_id}"
+            )
             break
         step.status = ProposalStepStatus.approved
         step.decided_at = datetime.now(timezone.utc)
@@ -139,7 +151,7 @@ def _advance_self_approvals(db: Session, p: Proposal, current_user: User) -> Non
                 target_user_id=p.created_by,
                 doc_label=f"품의서({p.title})",
                 approved=True,
-                link="/project-documents",
+                link=f"/project-documents?tab=proposal&open={p.id}",
             )
         else:
             p.current_step = step.step_order + 1
@@ -167,25 +179,6 @@ def list_proposals(
 
 @router.post("", response_model=ProposalOut, status_code=status.HTTP_201_CREATED)
 def create_proposal(payload: ProposalCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    chain = STEP_CHAINS[payload.start_title]
-    if len(payload.approver_ids) != len(chain):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{payload.start_title.value} 시작 시 결재자는 {len(chain)}명이어야 합니다.",
-        )
-
-    approvers: list[User] = []
-    for step_title, approver_id in zip(chain, payload.approver_ids):
-        approver = (
-            db.query(User)
-            .filter(User.id == approver_id, User.title == step_title, User.is_active.is_(True))
-            .first()
-        )
-        if approver is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{step_title.value} 결재자 정보가 올바르지 않습니다.")
-        approvers.append(approver)
-
-    logger.debug(f"[Proposals] 등록: title={payload.title}, start_title={payload.start_title}, by={current_user.id}")
     issue_date = date.today()
     p = Proposal(
         kind=payload.kind or None,
@@ -196,16 +189,37 @@ def create_proposal(payload: ProposalCreate, db: Session = Depends(get_db), curr
         department_code=DEPARTMENT_CODE,
         department_name=DEPARTMENT_NAME,
         created_by=current_user.id,
+        is_final_decision=payload.is_final_decision,
     )
     p.doc_no = next_proposal_no(db, issue_date)
     p.creator = current_user
-    p.steps = [
-        ProposalApprovalStep(step_order=idx + 1, title=step_title, approver_id=approver.id)
-        for idx, (step_title, approver) in enumerate(zip(chain, approvers))
-    ]
-    db.add(p)
-    db.flush()
-    _advance_self_approvals(db, p, current_user)
+
+    if payload.is_final_decision:
+        logger.debug(f"[Proposals] 전결 등록(즉시 승인): title={payload.title}, by={current_user.id}")
+        p.status = ProposalStatus.approved
+        p.steps = []
+        db.add(p)
+        db.flush()
+        create_decision_notification(
+            db,
+            target_name=current_user.name,
+            target_user_id=current_user.id,
+            doc_label=f"품의서({p.title})",
+            approved=True,
+            link=f"/project-documents?tab=proposal&open={p.id}",
+        )
+    else:
+        chain, approvers = validate_chain_approvers(db, payload.end_title, payload.approver_ids)
+
+        logger.debug(f"[Proposals] 등록: title={payload.title}, end_title={payload.end_title}, by={current_user.id}")
+        p.steps = [
+            ProposalApprovalStep(step_order=idx + 1, title=step_title, approver_id=approver.id)
+            for idx, (step_title, approver) in enumerate(zip(chain, approvers))
+        ]
+        db.add(p)
+        db.flush()
+        _advance_self_approvals(db, p, current_user)
+
     db.commit()
 
     p = _get_or_404(db, p.id)
@@ -236,10 +250,21 @@ def approve_proposal(proposal_id: int, db: Session = Depends(get_db), current_us
             target_user_id=p.created_by,
             doc_label=f"품의서({p.title})",
             approved=True,
-            link="/project-documents",
+            link=f"/project-documents?tab=proposal&open={p.id}",
         )
     else:
         p.current_step = step.step_order + 1
+        next_step = _current_step(p)
+        create_request_notification(
+            db,
+            target_user_id=next_step.approver_id,
+            requester_name=p.creator.name,
+            doc_label=f"품의서({p.title})",
+            link=f"/project-documents?tab=proposal&open={p.id}",
+        )
+        logger.debug(
+            f"[Proposals] 다음 결재 요청 알림 발송: proposal_id={p.id}, step={next_step.step_order}, approver_id={next_step.approver_id}"
+        )
     db.commit()
 
     p = _get_or_404(db, p.id)
@@ -272,7 +297,7 @@ def reject_proposal(
         doc_label=f"품의서({p.title})",
         approved=False,
         detail=f"반려 사유: {payload.reason}",
-        link="/project-documents",
+        link=f"/project-documents?tab=proposal&open={p.id}",
     )
     db.commit()
 

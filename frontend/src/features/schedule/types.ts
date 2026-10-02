@@ -1,16 +1,39 @@
-export const EVENT_COLORS = ["blue", "green", "red", "orange", "purple", "pink", "teal", "gray"] as const;
+export const EVENT_COLORS = [
+  "peach",
+  "skyblue",
+  "sagemint",
+  "lilac",
+  "buttercream",
+  "rose",
+  "grayblue",
+  "graygreen",
+  "graylilac",
+  "grayyellow",
+  "graypink",
+  "grayteal",
+] as const;
 export type EventColor = (typeof EVENT_COLORS)[number];
 
-// 절반은 선명한 톤, 절반은 채도를 낮춘 뮤트 톤으로 구성한 팔레트
-export const EVENT_COLOR_HEX: Record<EventColor, string> = {
-  blue: "#5B7DB1", // 뮤트 블루
-  green: "#6B9971", // 뮤트 그린
-  red: "#DC2626", // 선명 레드
-  orange: "#EA580C", // 선명 오렌지
-  purple: "#8B7BA8", // 뮤트 퍼플
-  pink: "#DB2777", // 선명 핑크
-  teal: "#0D9488", // 선명 틸
-  gray: "#8B8578", // 뮤트 그레이(웜톤)
+export interface EventColorStyle {
+  bg: string;
+  fg: string;
+}
+
+// 연한 파스텔 6색(소프트 파스텔) + 채도를 낮춘 무채색 계열 6색(그레이 틴트)으로 구성한 팔레트.
+// 글씨색(fg)은 가독성을 위해 배경보다 훨씬 짙게 잡았다.
+export const EVENT_COLOR_STYLES: Record<EventColor, EventColorStyle> = {
+  peach: { bg: "#FFD9C7", fg: "#7A2E0C" },
+  skyblue: { bg: "#C9E4FF", fg: "#0F3D66" },
+  sagemint: { bg: "#C9F2DA", fg: "#0E4A2E" },
+  lilac: { bg: "#E3D3FF", fg: "#3D1F70" },
+  buttercream: { bg: "#FFF2BE", fg: "#5C4600" },
+  rose: { bg: "#FFD2E0", fg: "#7A1F40" },
+  grayblue: { bg: "#D6DDE3", fg: "#263340" },
+  graygreen: { bg: "#D8DED4", fg: "#2B3626" },
+  graylilac: { bg: "#DED6E6", fg: "#342A3D" },
+  grayyellow: { bg: "#E6E0CF", fg: "#3D3826" },
+  graypink: { bg: "#E6D4DC", fg: "#3D2630" },
+  grayteal: { bg: "#D4E0DE", fg: "#1F3D37" },
 };
 
 export interface ScheduleEvent {

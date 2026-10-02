@@ -96,6 +96,8 @@ def generate_project_document_excel(doc: ProjectDocument, project: Project, clie
 
     row_idx += 1
     approver_name = doc.approver.name if doc.approver else "-"
+    if doc.is_final_decision:
+        approver_name += " (전결)"
     reviewed_date = doc.reviewed_at.date().isoformat() if doc.reviewed_at else "-"
     ws.cell(row=row_idx, column=1, value=f"결재자 : {approver_name}").font = Font(bold=True)
     ws.cell(row=row_idx, column=3, value=f"승인일 : {reviewed_date}")

@@ -1,3 +1,4 @@
+import os
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,7 +18,8 @@ from app.schemas.sales_document import (
     SalesDocumentSetCreate,
     SalesDocumentSetOut,
 )
-from app.services.sales_document_pdf import DOC_TITLES, generate_sales_document_pdf
+from app.services.sales_document_pdf import DOC_TITLES
+from app.services.sales_document_template import generate_sales_document_pdf_file, sales_pdf_path
 
 router = APIRouter(prefix="/api/sales-documents", tags=["sales-documents"])
 logger = get_logger("SalesDocuments")
@@ -164,6 +166,9 @@ def create_sales_document_set(
     db.refresh(statement)
     estimate.project = project
     statement.project = project
+    # 전자결재 문서 작성과 똑같이: 양식 엑셀을 채워 만들고, 그 엑셀을 PDF로 변환해 둔다 (다운로드는 이 PDF).
+    for created_doc in (estimate, statement):
+        generate_sales_document_pdf_file(created_doc)
     logger.debug(f"[SalesDocuments] 세트 생성 완료: set_id={doc_set.id}, {estimate.doc_no} / {statement.doc_no}")
 
     return SalesDocumentSetOut(set_id=doc_set.id, estimate=_to_out(estimate), statement=_to_out(statement))
@@ -182,7 +187,12 @@ def download_sales_document(
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="문서를 찾을 수 없습니다.")
 
-    pdf_bytes = generate_sales_document_pdf(doc, doc.project, doc.project.client)
+    pdf_path = sales_pdf_path(doc)
+    if not os.path.exists(pdf_path):
+        logger.debug(f"[SalesDocuments] 저장된 PDF 없음, 양식 엑셀에서 다시 생성: id={doc_id}")
+        generate_sales_document_pdf_file(doc)
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
     logger.debug(f"[SalesDocuments] 다운로드: id={doc_id}, by={current_user.id}")
     filename = f"{DOC_TITLES[doc.doc_type].replace(' ', '')}_{doc.doc_no}.pdf"
     encoded_filename = quote(filename)

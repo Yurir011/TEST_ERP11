@@ -13,7 +13,7 @@ class ScheduleEventCreate(BaseModel):
     description: str | None = None
     start_date: date
     end_date: date
-    color: str = "blue"
+    color: str = "grayblue"
     is_lunar: bool = False
     recurrence_freq: str = "none"
     recurrence_weekdays: list[int] | None = None  # 0=일 ... 6=토 (JS Date.getDay() 기준)

@@ -5,27 +5,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.proposal import ProposalAttachmentKind, ProposalStatus, ProposalStepStatus
 from app.models.user import JobTitle
 
-# 결재 시작 단계를 고르면 나머지 결재선이 자동으로 정해진다. 마지막 단계는 항상 대표(ceo).
-STEP_CHAINS: dict[JobTitle, list[JobTitle]] = {
-    JobTitle.dept_head: [JobTitle.dept_head, JobTitle.team_lead, JobTitle.ceo],
-    JobTitle.team_lead: [JobTitle.team_lead, JobTitle.ceo],
-    JobTitle.ceo: [JobTitle.ceo],
-}
-
 
 class ProposalCreate(BaseModel):
     kind: str | None = None
     title: str
     topic: str
     content: str
-    start_title: JobTitle  # 결재 시작 단계 (부서장/팀장/대표)
-    approver_ids: list[int]  # start_title로 정해진 단계 수(1~3)만큼, 순서대로
+    is_final_decision: bool = False
+    end_title: JobTitle | None = None  # 결재선 종료 단계 (부서장/팀장/대표). 전결이면 불필요
+    approver_ids: list[int] = Field(default_factory=list)  # 부서장부터 end_title까지의 단계 수만큼, 순서대로. 전결이면 불필요
 
     @field_validator("approver_ids")
     @classmethod
     def validate_length(cls, v: list[int]) -> list[int]:
-        if not v or len(v) > 3:
-            raise ValueError("결재자는 1명 이상 3명 이하로 지정해야 합니다.")
+        if len(v) > 3:
+            raise ValueError("결재자는 3명 이하로 지정해야 합니다.")
         return v
 
 
@@ -73,6 +67,7 @@ class ProposalOut(BaseModel):
     issue_date: date
     status: ProposalStatus
     current_step: int
+    is_final_decision: bool
     created_by: int
     creator_name: str
     steps: list[ProposalStepOut]

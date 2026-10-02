@@ -19,13 +19,7 @@ TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "assets" / "templates"
 
 DOC_NO_PLACEHOLDER = "XXXX-XX"
 
-# 원(KRW)은 단가/합계 칸에 이미 박혀있는 서식(음수 빨간 괄호 표시 등)을 그대로 쓰고, 달러/엔만 기호를 바꿔 덮어쓴다.
-ITEM_MONEY_FORMATS: dict[str, str] = {
-    DocCurrency.USD.value: '"$"#,##0',
-    DocCurrency.JPY.value: '"¥"#,##0',
-}
-
-# 소계/부가세/합계 줄은 통화와 상관없이 금액 단위를 항상 명시적으로 표시한다.
+# 단가/합계/소계/부가세/합계 칸은 통화 기호를 숫자 바로 앞에 붙여 표시한다.
 TOTAL_MONEY_FORMATS: dict[str, str] = {c.value: f'"{DOC_CURRENCY_SYMBOLS[c]}"#,##0' for c in DocCurrency}
 
 # 상단 "일금 ___ 원정" 줄의 "원정"은 통화 기호가 아니라 고정 텍스트라 서식만으론 안 바뀐다. 통화별 단어로 직접 바꿔준다.
@@ -40,11 +34,11 @@ CURRENCY_SUFFIX_WORD: dict[str, str] = {
 MONEY_FONT_NAME = "맑은 고딕"
 
 
-def _apply_money_format(cell, number_format: str) -> None:
+def _apply_money_format(cell, number_format: str, size: float | None = None) -> None:
     cell.number_format = number_format
     f = cell.font
     cell.font = Font(
-        name=MONEY_FONT_NAME, size=f.sz, bold=f.bold, italic=f.italic, color=f.color, underline=f.underline
+        name=MONEY_FONT_NAME, size=size if size is not None else f.sz, bold=f.bold, italic=f.italic, color=f.color, underline=f.underline
     )
 
 
@@ -135,7 +129,6 @@ def fill_project_document_template(doc: ProjectDocument) -> str:
         # 거래명세서는 견적번호가 필요 없어, 양식에 남아있는 안내 문구(플레이스홀더)를 비워둔다.
         ws[layout.doc_no_cell] = None
 
-    item_money_format = ITEM_MONEY_FORMATS.get(doc.currency)
     total_money_format = TOTAL_MONEY_FORMATS[doc.currency]
 
     subtotal = 0
@@ -158,11 +151,13 @@ def fill_project_document_template(doc: ProjectDocument) -> str:
         else:
             # 사용하지 않는 행은 남아있는 수식(예: =E*F)을 지워 0원으로 표시되지 않게 한다.
             ws[f"G{row}"] = None
-        if item_money_format:
-            _apply_money_format(ws[f"F{row}"], item_money_format)
-            _apply_money_format(ws[f"G{row}"], item_money_format)
-        # 내용은 가운데 맞춤, 합계(금액)는 오른쪽 맞춤 - 양식 원본은 행마다 정렬이 들쭉날쭉해 통일한다.
+        # 양식 원본의 회계 서식은 기호가 칸 왼쪽 끝에 떨어져 보여서, 원화 포함 모두 기호를 숫자 바로 앞에 붙이는 서식으로 덮어쓴다.
+        _apply_money_format(ws[f"F{row}"], total_money_format)
+        _apply_money_format(ws[f"G{row}"], total_money_format)
+        # 내용/비고는 가운데 맞춤, 단가/합계(금액)는 오른쪽 맞춤 - 양식 원본은 행마다 정렬이 들쭉날쭉해 통일한다.
         _set_horizontal(ws[f"B{row}"], "center")
+        _set_horizontal(ws[f"I{row}"], "center")
+        _set_horizontal(ws[f"F{row}"], "right")
         _set_horizontal(ws[f"G{row}"], "right")
 
     vat = round(subtotal * 0.1)
@@ -172,7 +167,10 @@ def fill_project_document_template(doc: ProjectDocument) -> str:
     ws[f"G{layout.total_row}"] = total
     for cell_ref in (f"G{layout.subtotal_row}", f"G{layout.vat_row}", f"G{layout.total_row}", layout.top_total_cell):
         cell = ws[cell_ref]
-        _apply_money_format(cell, total_money_format)
+        # 양식 원본의 최종 합계(세금 포함) 칸만 9pt라 공급가액/부가세(10pt)보다 작아 보여, 같은 크기로 맞춘다.
+        _apply_money_format(
+            cell, total_money_format, size=ws[f"G{layout.subtotal_row}"].font.sz if cell_ref == f"G{layout.total_row}" else None
+        )
         _set_horizontal(cell, "right")
     ws[layout.total_words_cell] = CURRENCY_SUFFIX_WORD[doc.currency]
 

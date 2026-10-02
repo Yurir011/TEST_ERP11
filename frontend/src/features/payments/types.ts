@@ -46,7 +46,7 @@ export const BANK_TYPE_LABELS: Record<BankType, string> = {
   woori: "우리",
 };
 
-// 입출금 분류 12개. 인건비/차량/제조만 세부 항목 콤보박스를 갖는다 (PAYMENT_CATEGORY_ITEMS 참고).
+// 입출금 분류 13개. 인건비/차량/제조만 세부 항목 콤보박스를 갖는다 (PAYMENT_CATEGORY_ITEMS 참고).
 export const PAYMENT_CATEGORIES = [
   "소모품비",
   "공과금",
@@ -56,6 +56,7 @@ export const PAYMENT_CATEGORIES = [
   "차량",
   "제조",
   "외상매출금",
+  "미수",
   "외상매입금",
   "선수금",
   "미지급금",

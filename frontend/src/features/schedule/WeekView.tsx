@@ -2,7 +2,7 @@ import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { isSameDay, toISODate, WEEKDAY_LABELS } from "./dateUtils";
 import { getHolidayMap } from "./holidays";
-import { EVENT_COLOR_HEX, type ScheduleEvent } from "./types";
+import { EVENT_COLOR_STYLES, type ScheduleEvent } from "./types";
 
 interface WeekViewProps {
   days: Date[];
@@ -45,8 +45,8 @@ export function WeekView({ days, eventsByDate, onDayClick, onDayNumberClick, onE
                 <div
                   key={ev.id}
                   onClick={() => onEventClick(ev)}
-                  className={`text-[11px] px-1.5 py-1 rounded text-white cursor-pointer truncate ${ev.is_completed ? "opacity-50 line-through" : ""}`}
-                  style={{ backgroundColor: EVENT_COLOR_HEX[ev.color] }}
+                  className={`text-[11px] px-1.5 py-1 rounded font-medium cursor-pointer truncate ${ev.is_completed ? "opacity-50 line-through" : ""}`}
+                  style={{ backgroundColor: EVENT_COLOR_STYLES[ev.color].bg, color: EVENT_COLOR_STYLES[ev.color].fg }}
                   title={ev.title}
                 >
                   {ev.is_lunar && "[음] "}

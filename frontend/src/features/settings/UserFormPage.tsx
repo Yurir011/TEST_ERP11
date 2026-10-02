@@ -45,6 +45,13 @@ export function UserFormPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isEdit) return;
+    apiGet<{ employee_no: string }>("/api/users/next-employee-no")
+      .then((res) => setEmployeeNo(res.employee_no))
+      .catch((err) => logError("UserForm", "다음 사번 조회 실패", err));
+  }, [isEdit]);
+
+  useEffect(() => {
     if (!isEdit) return;
     apiGet<CurrentUser[]>("/api/users")
       .then((list) => {
@@ -91,7 +98,6 @@ export function UserFormPage() {
         });
       } else {
         await apiPost("/api/users", {
-          employee_no: employeeNo,
           email,
           name,
           password,
@@ -122,11 +128,10 @@ export function UserFormPage() {
             <div>
               <label className="block text-xs text-text-muted mb-1.5">사번</label>
               <input
-                required
-                disabled={isEdit}
-                value={employeeNo}
-                onChange={(e) => setEmployeeNo(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg disabled:opacity-60"
+                disabled
+                value={employeeNo || "자동생성 중..."}
+                readOnly
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none bg-bg disabled:opacity-60"
               />
             </div>
             <div>

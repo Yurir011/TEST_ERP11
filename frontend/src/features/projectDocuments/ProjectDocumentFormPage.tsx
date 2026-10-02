@@ -1,7 +1,8 @@
-import { Info, Plus, Trash2 } from "lucide-react";
+import { FileDown, Info, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { useAuth } from "../../context/AuthContext";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
@@ -9,6 +10,7 @@ import { ApiError, apiGet, apiPost, downloadFile } from "../../lib/api";
 import { hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
+import { askTaxInvoicePaymentReceived } from "./taxInvoicePaymentConfirm";
 import {
   DOC_CURRENCY_LABELS,
   DOC_CURRENCY_SYMBOLS,
@@ -36,13 +38,20 @@ function isProjectDocType(value: string | null): value is ProjectDocType {
 
 export function ProjectDocumentFormPage() {
   const [searchParams] = useSearchParams();
-  const docType: ProjectDocType = isProjectDocType(searchParams.get("type")) ? searchParams.get("type")! : "quotation";
+  const typeParam = searchParams.get("type");
+  // ?type=set 이면 견적서+거래명세서를 같은 내용으로 한 번에 작성하고, 한 번의 결재로 함께 승인/반려된다.
+  const isSet = typeParam === "set";
+  const docType: ProjectDocType = isProjectDocType(typeParam) ? typeParam : "quotation";
   const navigate = useNavigate();
   const { user } = useAuth();
+  // 프로젝트 관리 화면에서 들어오면(/projects/:id/documents/new) 그 프로젝트가 미리 선택되고, 작성 후 그 화면으로 돌아간다.
+  const { id: routeProjectId } = useParams<{ id: string }>();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [projectId, setProjectId] = useState("");
+  const [approvedQuotations, setApprovedQuotations] = useState<ProjectDocument[]>([]);
+  const [loadedQuotationId, setLoadedQuotationId] = useState("");
+  const [projectId, setProjectId] = useState(routeProjectId ?? "");
   const [issueDate, setIssueDate] = useState(todayISO());
   const [clientName, setClientName] = useState("");
   const [managerName, setManagerName] = useState("");
@@ -56,7 +65,7 @@ export function ProjectDocumentFormPage() {
 
   useEffect(() => {
     apiGet<Project[]>("/api/projects")
-      .then((list) => setProjects(list.filter((p) => p.status !== "completed")))
+      .then((list) => setProjects(list.filter((p) => p.status !== "completed" || String(p.id) === routeProjectId)))
       .catch((err) => logError("ProjectDocumentForm", "프로젝트 목록 조회 실패", err));
 
     logDebug("ProjectDocumentForm", "거래처 목록 조회 시작 (거래처명 자동완성)");
@@ -64,6 +73,34 @@ export function ProjectDocumentFormPage() {
       .then(setClients)
       .catch((err) => logError("ProjectDocumentForm", "거래처 목록 조회 실패", err));
   }, []);
+
+  useEffect(() => {
+    if (docType !== "statement") return;
+    logDebug("ProjectDocumentForm", "불러오기용 승인된 견적서 목록 조회 시작");
+    apiGet<ProjectDocument[]>("/api/project-documents?doc_type=quotation&status=approved")
+      .then(setApprovedQuotations)
+      .catch((err) => logError("ProjectDocumentForm", "승인된 견적서 목록 조회 실패", err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docType]);
+
+  function handleLoadQuotation(id: string) {
+    setLoadedQuotationId(id);
+    const quotation = approvedQuotations.find((q) => String(q.id) === id);
+    if (!quotation) return;
+    logDebug("ProjectDocumentForm", `견적서 불러오기: quotation_id=${quotation.id}`);
+    setProjectId(String(quotation.project_id));
+    setClientName(quotation.client_name);
+    setManagerName(quotation.manager_name ?? "");
+    setCurrency(quotation.currency);
+    setItems(
+      quotation.items.map((it) => ({
+        content: it.content,
+        quantity: String(it.quantity),
+        unit_price: String(it.unit_price),
+        note: it.note ?? "",
+      }))
+    );
+  }
 
   function handleProjectChange(id: string) {
     setProjectId(id);
@@ -95,11 +132,13 @@ export function ProjectDocumentFormPage() {
     setShowApproverPicker(true);
   }
 
-  async function handleRequestApproval(approverId: number) {
+  async function handleRequestApproval(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
+    const received = docType === "tax_invoice" ? askTaxInvoicePaymentReceived(purposeType, clientName) : null;
     setIsSubmitting(true);
     try {
-      logDebug("ProjectDocumentForm", `결재요청 시도: approver_id=${approverId}`);
-      const created = await apiPost<ProjectDocument>("/api/project-documents", {
+      logDebug("ProjectDocumentForm", `결재요청 시도: end_title=${endTitle}, is_final_decision=${isFinalDecision}`);
+      const endpoint = isSet ? "/api/project-documents/set" : "/api/project-documents";
+      const createdResult = await apiPost<ProjectDocument | ProjectDocument[]>(endpoint, {
         project_id: Number(projectId),
         doc_type: docType,
         issue_date: issueDate,
@@ -113,14 +152,24 @@ export function ProjectDocumentFormPage() {
           unit_price: Number(it.unit_price) || 0,
           note: it.note || null,
         })),
-        approver_id: approverId,
+        end_title: endTitle,
+        approver_ids: approverIds,
+        is_final_decision: isFinalDecision,
+        received,
       });
 
-      if (created.status === "approved" && created.has_pdf) {
-        await downloadFile(`/api/project-documents/${created.id}/pdf`, `${PROJECT_DOC_TYPE_LABELS[docType]}_${issueDate}.pdf`);
+      const createdDocs = Array.isArray(createdResult) ? createdResult : [createdResult];
+      for (const created of createdDocs) {
+        if (created.status === "approved" && created.has_pdf) {
+          await downloadFile(
+            `/api/project-documents/${created.id}/pdf`,
+            `${PROJECT_DOC_TYPE_LABELS[created.doc_type]}_${issueDate}.pdf`
+          );
+        }
       }
 
-      navigate(docType === "tax_invoice" ? "/tax-invoices" : "/project-documents", { replace: true });
+      window.alert("결재 요청이 완료되었습니다.");
+      navigate(routeProjectId ? `/projects/${routeProjectId}` : docType === "tax_invoice" ? "/tax-invoices" : "/project-documents", { replace: true });
     } catch (err) {
       logError("ProjectDocumentForm", "결재요청 실패", err);
       setError(err instanceof ApiError ? err.message : "결재요청 중 오류가 발생했습니다.");
@@ -135,7 +184,7 @@ export function ProjectDocumentFormPage() {
   }
 
   return (
-    <MainLayout title={`새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`}>
+    <MainLayout title={isSet ? "새 견적서 · 거래명세서 작성" : `새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`}>
       <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-2xl">
         {docType === "tax_invoice" && (
           <div className="flex items-start gap-2 bg-tile-purple text-tile-purple-fg rounded-xl px-4 py-3 text-xs">
@@ -143,6 +192,40 @@ export function ProjectDocumentFormPage() {
             <p>
               세금계산서 발행은 홈택스·팝빌 연동 예정입니다. 지금은 관련 정보를 미리 기록해두는 용도로만
               사용해주세요.
+            </p>
+          </div>
+        )}
+
+        {isSet && (
+          <div className="flex items-start gap-2 bg-tile-blue text-tile-blue-fg rounded-xl px-4 py-3 text-xs">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <p>
+              입력한 내용으로 견적서와 거래명세서가 함께 만들어지고, 한 번의 결재로 두 문서가 같이 승인(또는 반려)됩니다.
+            </p>
+          </div>
+        )}
+
+        {docType === "statement" && !isSet && (
+          <div className="bg-tile-blue text-tile-blue-fg rounded-xl px-4 py-3">
+            <label className="flex items-center gap-1.5 text-xs font-medium mb-1.5">
+              <FileDown size={14} />
+              승인된 견적서 불러오기 (선택)
+            </label>
+            <select
+              value={loadedQuotationId}
+              onChange={(e) => handleLoadQuotation(e.target.value)}
+              className="w-full rounded-lg border border-primary/30 px-3 py-2 text-sm outline-none focus:border-primary bg-surface text-text"
+            >
+              <option value="">불러올 견적서 선택</option>
+              {approvedQuotations.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.doc_no ?? `#${q.id}`} · {q.project_name} ({q.client_name}) · {q.issue_date}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] mt-1.5 opacity-80">
+              날짜를 제외한 프로젝트·거래처·담당자·품목이 그대로 자동입력됩니다.
+              {approvedQuotations.length === 0 && " (승인된 견적서가 아직 없습니다)"}
             </p>
           </div>
         )}
@@ -163,6 +246,15 @@ export function ProjectDocumentFormPage() {
                 {p.name} ({p.client_name})
               </option>
             ))}
+            {(() => {
+              const loaded = approvedQuotations.find((q) => String(q.id) === loadedQuotationId);
+              if (!loaded || projects.some((p) => p.id === loaded.project_id)) return null;
+              return (
+                <option value={loaded.project_id}>
+                  {loaded.project_name} ({loaded.client_name}) · 완료된 프로젝트
+                </option>
+              );
+            })()}
           </select>
           {projects.length === 0 && (
             <p className="text-xs text-text-muted mt-1.5">진행 중인 프로젝트가 없습니다. 먼저 프로젝트를 등록해주세요.</p>
