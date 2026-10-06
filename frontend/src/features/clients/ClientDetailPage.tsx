@@ -106,6 +106,16 @@ export function ClientDetailPage() {
               <Landmark size={14} />
               {showBankInfo ? "계좌 정보 숨기기" : "계좌 정보 보기"}
             </button>
+            {client.has_bankbook_image && (
+              <button
+                type="button"
+                onClick={() => openFile(`/api/clients/${client.id}/bankbook-image`)}
+                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5"
+              >
+                <FileText size={14} />
+                통장사본 보기
+              </button>
+            )}
             {client.has_biz_reg_image && (
               <button
                 type="button"

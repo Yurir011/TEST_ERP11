@@ -69,7 +69,7 @@ function itemsSummary(doc: ProjectDocument): string {
 }
 
 function itemsTotal(doc: ProjectDocument): number {
-  return doc.items.reduce((sum, it) => sum + it.quantity * it.unit_price, 0);
+  return doc.items.reduce((sum, it) => sum + Math.round(it.quantity * it.unit_price), 0);
 }
 
 function formatDocAmount(doc: ProjectDocument, amount: number): string {
@@ -552,7 +552,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
               <Icon size={18} />
             </div>
             <div>
-              <p className="text-sm font-medium text-text">{PROJECT_DOC_TYPE_LABELS[type]} 작성</p>
+              <p className="text-sm font-medium text-text">{type === "tax_invoice" ? "세금계산서 작성 및 등록" : `${PROJECT_DOC_TYPE_LABELS[type]} 작성`}</p>
               <p className="text-xs text-text-muted mt-0.5 flex items-center gap-1">
                 <Plus size={11} />새 문서 등록
               </p>
@@ -879,7 +879,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   const layoutTitle = lockedDocType ? PROJECT_DOC_TYPE_LABELS[lockedDocType] : "문서관리";
   const layoutDescription =
     lockedDocType === "tax_invoice"
-      ? "세금계산서를 작성하고 결재합니다. 홈택스·팝빌 연동 예정입니다."
+      ? "세금계산서를 작성·등록하고 결재합니다. 받은 세금계산서는 사진을 올리면 내용이 자동 입력됩니다."
       : "프로젝트별 견적서·거래명세서를 작성하고 관리합니다.";
 
   return (

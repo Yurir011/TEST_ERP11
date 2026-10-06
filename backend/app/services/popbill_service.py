@@ -7,7 +7,7 @@ from popbill import PopbillException, Taxinvoice, TaxinvoiceDetail, TaxinvoiceSe
 from app.config import settings
 from app.logging_config import get_logger
 from app.models.client import Client
-from app.models.project_document import ProjectDocument
+from app.models.project_document import ProjectDocument, calc_amount, format_price
 
 logger = get_logger("PopbillService")
 
@@ -61,7 +61,7 @@ def build_taxinvoice(doc: ProjectDocument, client: Client) -> Taxinvoice:
     supply_total = 0
     detail_list: list[TaxinvoiceDetail] = []
     for idx, item in enumerate(doc.items, start=1):
-        supply = item.quantity * item.unit_price
+        supply = calc_amount(item.quantity, item.unit_price)
         tax = _round_tax(supply)
         supply_total += supply
         detail_list.append(
@@ -70,7 +70,7 @@ def build_taxinvoice(doc: ProjectDocument, client: Client) -> Taxinvoice:
                 purchaseDT=written,
                 itemName=item.content,
                 qty=str(item.quantity),
-                unitCost=str(item.unit_price),
+                unitCost=format_price(item.unit_price).replace(",", ""),
                 supplyCost=str(supply),
                 tax=str(tax),
             )

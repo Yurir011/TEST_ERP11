@@ -1,4 +1,4 @@
-import { Bell, CheckCheck, ChevronDown, Megaphone, Plus, Stamp } from "lucide-react";
+import { Bell, CheckCheck, ChevronDown, Megaphone, Plus, Stamp, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -17,6 +17,17 @@ interface AppNotification {
   is_read: boolean;
   created_at: string;
   my_approval_done: boolean | null;
+}
+
+interface AllNotification {
+  id: number;
+  user_id: number;
+  recipient_name: string;
+  title: string;
+  message: string;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
 }
 
 function monthLabel(iso: string): string {
@@ -46,6 +57,7 @@ export function NoticesPage() {
   const { user } = useAuth();
   const [notices, setNotices] = useState<Notice[] | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[] | null>(null);
+  const [allNotifications, setAllNotifications] = useState<AllNotification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedNoticeId, setExpandedNoticeId] = useState<number | null>(null);
 
@@ -64,7 +76,14 @@ export function NoticesPage() {
         setError("공지사항을 불러오지 못했습니다.");
       });
     loadNotifications();
-  }, []);
+    // 대표(admin)는 전 직원의 업무 알림도 열람한다.
+    if (user?.role === "admin") {
+      logDebug("Notices", "전 직원 업무 알림 조회 시작");
+      apiGet<AllNotification[]>("/api/notifications/all")
+        .then(setAllNotifications)
+        .catch((err) => logError("Notices", "전 직원 업무 알림 조회 실패", err));
+    }
+  }, [user?.role]);
 
   // 알림을 누르면 읽음 처리하고, 연결된 문서가 있으면 그 문서로 바로 이동한다 (이동은 Link가 처리).
   async function handleOpenNotification(n: AppNotification) {
@@ -165,6 +184,33 @@ export function NoticesPage() {
           </div>
         )}
       </section>
+
+      {user?.role === "admin" && (
+        <section className="mb-8">
+          <h2 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+            <Users size={15} />전 직원 알림
+          </h2>
+          {allNotifications === null && <p className="text-sm text-text-muted">불러오는 중...</p>}
+          {allNotifications !== null && allNotifications.length === 0 && (
+            <p className="text-sm text-text-muted">직원들에게 발송된 업무 알림이 없습니다.</p>
+          )}
+          {allNotifications !== null && allNotifications.length > 0 && (
+            <div className="bg-surface border border-border rounded-2xl p-4">
+              {allNotifications.map((n) => (
+                <div
+                  key={n.id}
+                  className="grid grid-cols-[96px_64px_minmax(0,210px)_minmax(0,1fr)] items-center gap-x-2.5 px-1.5 py-2.5 border-t border-border first:border-t-0"
+                >
+                  <span className="text-[11px] text-text-muted tabular-nums">{formatShortDateTime(n.created_at)}</span>
+                  <span className="text-[12px] font-medium truncate">{n.recipient_name}</span>
+                  <span className="text-[13px] font-medium truncate">{n.title}</span>
+                  <span className="text-xs text-text-muted truncate">{n.message.split("\n")[0]}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section>
         <h2 className="text-sm font-semibold mb-3">공지사항</h2>

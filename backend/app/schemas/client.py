@@ -53,6 +53,15 @@ class BusinessRegOcrOut(BaseModel):
     raw_text: str = ""
 
 
+class BankbookOcrOut(BaseModel):
+    """통장사본 이미지 인식(OCR) 결과. 사용자가 반드시 값을 확인해야 한다. holder(예금주)는 거래처명과 비교하는 참고용이다."""
+
+    bank_name: str | None = None
+    bank_account: str | None = None
+    holder: str | None = None
+    raw_text: str = ""
+
+
 class ClientOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,6 +80,7 @@ class ClientOut(BaseModel):
     payable_amount: int
     memo: str | None
     has_biz_reg_image: bool
+    has_bankbook_image: bool
     contacts: list[ClientContactOut]
     created_at: datetime
     updated_at: datetime

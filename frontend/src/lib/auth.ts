@@ -21,6 +21,12 @@ export function isAdminRole(role: UserRole | undefined): boolean {
 export type JobGrade = "staff" | "assistant_manager" | "manager" | "director" | "chief";
 export type JobTitle = "ceo" | "team_lead" | "dept_head";
 
+export const TITLE_LABELS: Record<JobTitle, string> = {
+  ceo: "대표",
+  team_lead: "팀장",
+  dept_head: "부서장",
+};
+
 export const GRADE_LABELS: Record<JobGrade, string> = {
   staff: "사원",
   assistant_manager: "대리",
@@ -32,11 +38,12 @@ export const GRADE_LABELS: Record<JobGrade, string> = {
 // 관리자가 직원별로 개별 열람 권한을 부여할 수 있는 메뉴 키. 대표(admin)/사이트 관리자는 이 값과 무관하게 항상 전체 접근 가능.
 export type MenuPermissionKey = "projects" | "clients" | "transactions" | "payments" | "notices" | "tax_invoice";
 
-export const MENU_PERMISSION_OPTIONS: { value: MenuPermissionKey; label: string }[] = [
+// sensitive: 금액/회계 정보를 다루는 메뉴라 직원 등록 화면에서 빨간색으로 강조해 권한 부여를 신중히 하도록 한다.
+export const MENU_PERMISSION_OPTIONS: { value: MenuPermissionKey; label: string; sensitive?: boolean }[] = [
   { value: "projects", label: "프로젝트관리" },
   { value: "clients", label: "거래처관리" },
-  { value: "transactions", label: "매입매출관리" },
-  { value: "payments", label: "입출금관리" },
+  { value: "transactions", label: "매입매출관리", sensitive: true },
+  { value: "payments", label: "입출금관리", sensitive: true },
   { value: "notices", label: "공지사항" },
   { value: "tax_invoice", label: "세금계산서" },
 ];

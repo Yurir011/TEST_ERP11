@@ -15,5 +15,20 @@ class NotificationOut(BaseModel):
     my_approval_done: bool | None = None  # 결재 요청 알림에서 수신자 본인의 결재 완료 여부 (그 외 알림은 None)
 
 
+class AllNotificationOut(BaseModel):
+    """대표가 전 직원의 알림을 열람할 때 사용 - 수신자 이름을 포함한다."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    recipient_name: str
+    title: str
+    message: str
+    link: str | None
+    is_read: bool
+    created_at: datetime
+
+
 class UnreadCountOut(BaseModel):
     count: int

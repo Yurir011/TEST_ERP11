@@ -1,6 +1,7 @@
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
 import { Check, Download, Eye, Mail, Printer, Send, Sheet, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { TaxInvoiceImages } from "./TaxInvoiceImages";
 import {
   DOC_CURRENCY_SYMBOLS,
   PROJECT_DOC_STATUS_LABELS,
@@ -10,7 +11,7 @@ import {
 } from "./types";
 
 function itemsTotal(doc: ProjectDocument): number {
-  return doc.items.reduce((sum, it) => sum + it.quantity * it.unit_price, 0);
+  return doc.items.reduce((sum, it) => sum + Math.round(it.quantity * it.unit_price), 0);
 }
 
 function formatDocAmount(doc: ProjectDocument, amount: number): string {
@@ -115,7 +116,7 @@ export function ProjectDocumentDetailModal({
                   <td className="py-2 px-3">{item.content}</td>
                   <td className="py-2 px-3 text-right">{item.quantity.toLocaleString()}</td>
                   <td className="py-2 px-3 text-right">{formatDocAmount(doc, item.unit_price)}</td>
-                  <td className="py-2 px-3 text-right">{formatDocAmount(doc, item.quantity * item.unit_price)}</td>
+                  <td className="py-2 px-3 text-right">{formatDocAmount(doc, Math.round(item.quantity * item.unit_price))}</td>
                   <td className="py-2 px-3">{item.note ?? "-"}</td>
                 </tr>
               ))}
@@ -125,7 +126,9 @@ export function ProjectDocumentDetailModal({
 
         <p className="text-right text-sm font-semibold mb-4">합계 {formatDocAmount(doc, itemsTotal(doc))}</p>
 
-        {doc.doc_type === "tax_invoice" && (
+        {doc.doc_type === "tax_invoice" && <TaxInvoiceImages doc={doc} />}
+
+        {doc.doc_type === "tax_invoice" && doc.direction !== "purchase" && (
           <div className="mb-4">
             {doc.popbill_issued ? (
               <div className="bg-tile-green rounded-xl px-4 py-3">

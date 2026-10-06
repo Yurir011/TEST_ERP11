@@ -61,7 +61,7 @@ export interface ProjectDocumentItem {
 
 export interface ProjectDocument {
   id: number;
-  project_id: number;
+  project_id: number | null; // null이면 "기타"(project_name에 직접 입력한 내용)
   project_name: string;
   doc_type: ProjectDocType;
   issue_date: string;
@@ -89,6 +89,34 @@ export interface ProjectDocument {
   popbill_nts_confirm_num: string | null;
   popbill_issued_at: string | null;
   payment_recorded: boolean;
+  direction: "sales" | "purchase" | null;
+  approval_no: string | null;
+  images: { id: number; filename: string }[];
+}
+
+export interface TaxInvoiceParty {
+  reg_no: string | null;
+  name: string | null;
+  ceo_name: string | null;
+  address: string | null;
+  biz_type: string | null;
+  biz_class: string | null;
+  email: string | null;
+}
+
+/** 세금계산서 사진 인식(OCR) 결과 - 입력란을 미리 채우는 용도 (서버 TaxInvoiceOcrOut). */
+export interface TaxInvoiceOcrResult {
+  approval_no: string | null;
+  issue_date: string | null;
+  supplier: TaxInvoiceParty;
+  recipient: TaxInvoiceParty;
+  supply_amount: number | null;
+  vat_amount: number | null;
+  total_amount: number | null;
+  items: { content: string; spec: string | null; quantity: number; unit_price: number; supply_amount: number; vat_amount: number }[];
+  direction: "sales" | "purchase" | null;
+  counterparty_name: string | null;
+  warnings: string[];
 }
 
 export interface ProjectDocumentItemFormValues {

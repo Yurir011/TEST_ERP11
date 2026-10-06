@@ -1,10 +1,10 @@
-import { Eye, FileScan, Paperclip, Plus, Trash2 } from "lucide-react";
+import { Eye, FileScan, Landmark, Paperclip, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
-import type { BusinessRegOcrResult } from "./types";
+import type { BankbookOcrResult, BusinessRegOcrResult } from "./types";
 import {
   EMPTY_CLIENT_CONTACT,
   EMPTY_CLIENT_FORM,
@@ -113,12 +113,21 @@ export function ClientFormPage() {
   const [isBizRegUploading, setIsBizRegUploading] = useState(false);
   const [bizRegError, setBizRegError] = useState<string | null>(null);
 
+  // 통장사본: 이미지를 올리면 은행/계좌번호를 자동 입력하고 원본도 첨부한다 (신규 등록은 저장할 때 함께 업로드).
+  const bankbookInputRef = useRef<HTMLInputElement>(null);
+  const [isBankbookLoading, setIsBankbookLoading] = useState(false);
+  const [bankbookError, setBankbookError] = useState<string | null>(null);
+  const [bankbookMessage, setBankbookMessage] = useState<string | null>(null);
+  const [stagedBankbookFile, setStagedBankbookFile] = useState<File | null>(null);
+  const [hasBankbookImage, setHasBankbookImage] = useState(false);
+
   useEffect(() => {
     if (!isEdit) return;
     apiGet<Client>(`/api/clients/${id}`)
       .then((client) => {
         setValues(toFormValues(client));
         setHasBizRegImage(client.has_biz_reg_image);
+        setHasBankbookImage(client.has_bankbook_image);
       })
       .catch((err) => {
         logError("ClientForm", "조회 실패", err);
@@ -173,7 +182,7 @@ export function ClientFormPage() {
       setValues((prev) => {
         const next = { ...prev };
         for (const [key, v] of filled) {
-          if (v) next[key] = v as ClientFormValues[typeof key];
+          if (v) (next as Record<string, unknown>)[key] = v;
         }
         return next;
       });
@@ -187,6 +196,47 @@ export function ClientFormPage() {
       setOcrError(err instanceof ApiError ? err.message : "인식 중 오류가 발생했습니다.");
     } finally {
       setIsOcrLoading(false);
+    }
+  }
+
+  async function handleBankbookSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setBankbookError(null);
+    setBankbookMessage(null);
+    setIsBankbookLoading(true);
+    try {
+      logDebug("ClientForm", `통장사본 인식 시도: ${file.name}`);
+      const result = await apiUpload<BankbookOcrResult>("/api/clients/ocr/bankbook", file);
+      setValues((prev) => ({
+        ...prev,
+        bank_name: result.bank_name ?? prev.bank_name,
+        bank_account: result.bank_account ?? prev.bank_account,
+      }));
+      const filled = [result.bank_name, result.bank_account].filter(Boolean).length;
+      if (filled === 0) {
+        setBankbookError("통장사본에서 은행/계좌번호를 인식하지 못했습니다. 직접 입력해주세요.");
+      } else {
+        const holderNote = result.holder ? ` (예금주: ${result.holder})` : "";
+        setBankbookMessage(
+          `${filled}개 항목을 자동으로 채웠습니다${holderNote}. 저장 전 계좌번호를 통장과 꼭 대조해주세요 (OCR 인식은 오류가 있을 수 있습니다).`
+        );
+      }
+      // 수정 화면은 바로 첨부로 저장하고, 신규 등록은 거래처 저장 후 업로드한다.
+      if (isEdit && id) {
+        await apiUpload(`/api/clients/${id}/bankbook-image`, file);
+        setHasBankbookImage(true);
+      } else {
+        setStagedBankbookFile(file);
+      }
+      logDebug("ClientForm", `통장사본 인식 완료: bank=${result.bank_name}, account=${result.bank_account}`);
+    } catch (err) {
+      logError("ClientForm", "통장사본 인식 실패", err);
+      setBankbookError(err instanceof ApiError ? err.message : "인식 중 오류가 발생했습니다.");
+    } finally {
+      setIsBankbookLoading(false);
     }
   }
 
@@ -225,6 +275,13 @@ export function ClientFormPage() {
             await apiUpload(`/api/clients/${created.id}/biz-reg-image`, stagedBizRegFile);
           } catch (err) {
             logError("ClientForm", "사업자등록증 첨부 업로드 실패", err);
+          }
+        }
+        if (stagedBankbookFile) {
+          try {
+            await apiUpload(`/api/clients/${created.id}/bankbook-image`, stagedBankbookFile);
+          } catch (err) {
+            logError("ClientForm", "통장사본 첨부 업로드 실패", err);
           }
         }
         navigate(`/clients/${created.id}`, { replace: true });
@@ -344,6 +401,46 @@ export function ClientFormPage() {
                 />
               </div>
             ))}
+
+            <div className="col-span-2">
+              <label className="block text-xs text-text-muted mb-1.5">통장사본 (자동 입력 + 첨부)</label>
+              <input
+                ref={bankbookInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleBankbookSelect}
+                className="hidden"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => bankbookInputRef.current?.click()}
+                  disabled={isBankbookLoading}
+                  className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg disabled:opacity-60"
+                >
+                  <Landmark size={14} />
+                  {isBankbookLoading ? "인식 중..." : hasBankbookImage || stagedBankbookFile ? "통장사본 다시 업로드" : "통장사본 이미지 업로드"}
+                </button>
+                {hasBankbookImage && isEdit && (
+                  <button
+                    type="button"
+                    onClick={() => openFile(`/api/clients/${id}/bankbook-image`)}
+                    className="flex items-center gap-1.5 text-xs text-primary hover:opacity-80"
+                  >
+                    <Eye size={14} />
+                    첨부 보기
+                  </button>
+                )}
+              </div>
+              {stagedBankbookFile && (
+                <p className="text-xs text-text-muted mt-1.5 flex items-center gap-1">
+                  <Paperclip size={12} />
+                  {stagedBankbookFile.name} (저장 시 첨부파일로 함께 등록됩니다)
+                </p>
+              )}
+              {bankbookMessage && <p className="text-xs text-success mt-1.5">{bankbookMessage}</p>}
+              {bankbookError && <p className="text-xs text-danger mt-1.5">{bankbookError}</p>}
+            </div>
 
             <div className="col-span-2 grid grid-cols-2 gap-4">
               <div>

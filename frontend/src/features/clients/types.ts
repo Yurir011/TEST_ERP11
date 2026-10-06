@@ -24,9 +24,17 @@ export interface Client {
   payable_amount: number;
   memo: string | null;
   has_biz_reg_image: boolean;
+  has_bankbook_image: boolean;
   contacts: ClientContact[];
   created_at: string;
   updated_at: string;
+}
+
+export interface BankbookOcrResult {
+  bank_name: string | null;
+  bank_account: string | null;
+  holder: string | null; // 예금주 (거래처명과 비교하는 참고용)
+  raw_text: string;
 }
 
 export interface BusinessRegOcrResult {

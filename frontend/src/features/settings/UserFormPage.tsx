@@ -248,13 +248,15 @@ export function UserFormPage() {
                 {MENU_PERMISSION_OPTIONS.map((opt) => (
                   <label
                     key={opt.value}
-                    className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm cursor-pointer hover:bg-bg"
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer hover:bg-bg ${
+                      opt.sensitive ? "border-danger/40 text-danger font-medium" : "border-border"
+                    }`}
                   >
                     <input
                       type="checkbox"
                       checked={menuPermissions.includes(opt.value)}
                       onChange={() => toggleMenuPermission(opt.value)}
-                      className="accent-primary"
+                      className={opt.sensitive ? "accent-danger" : "accent-primary"}
                     />
                     {opt.label}
                   </label>

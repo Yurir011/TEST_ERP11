@@ -1,7 +1,9 @@
 import os
+import re
+import uuid
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
@@ -17,8 +19,10 @@ from app.models.project import Project
 from app.models.project_document import (
     ProjectDocType,
     ProjectDocument,
+    ProjectDocumentImage,
     ProjectDocumentItem,
     ProjectDocumentStatus,
+    calc_amount,
 )
 from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.transaction import Transaction, TransactionType
@@ -29,6 +33,9 @@ from app.schemas.project_document import (
     PopbillIssueOut,
     ProjectDocumentCreate,
     ProjectDocumentOut,
+    TaxInvoiceOcrOut,
+    TaxInvoiceOcrItemOut,
+    TaxInvoicePartyOut,
     ProjectDocumentSetCreate,
     ProjectDocumentUpdate,
     RejectIn,
@@ -41,9 +48,10 @@ from app.services.project_document_excel import generate_project_document_excel
 from app.services.project_document_pdf import generate_project_document_pdf
 from app.services.project_document_template import fill_project_document_template, next_doc_no
 from app.services.tax_invoice_list_excel import generate_tax_invoice_list_excel
+from app.services.tax_invoice_ocr import recognize_tax_invoice
 from popbill import PopbillException
 
-TEMPLATED_DOC_TYPES = (ProjectDocType.quotation, ProjectDocType.statement)
+TEMPLATED_DOC_TYPES = (ProjectDocType.quotation, ProjectDocType.statement, ProjectDocType.tax_invoice)
 
 router = APIRouter(prefix="/api/project-documents", tags=["project-documents"])
 logger = get_logger("ProjectDocuments")
@@ -62,17 +70,19 @@ def _doc_link(doc_type: ProjectDocType, doc_id: int) -> str:
 
 _DOC_QUERY_OPTIONS = (
     joinedload(ProjectDocument.project).joinedload(Project.client).joinedload(Client.contacts),
+    joinedload(ProjectDocument.other_client).joinedload(Client.contacts),
     joinedload(ProjectDocument.items),
     joinedload(ProjectDocument.approver),
+    joinedload(ProjectDocument.images),
 )
 
 
-def _first_contact_email(project: Project) -> str | None:
-    if project.client is None:
+def _first_contact_email(client: Client | None) -> str | None:
+    if client is None:
         return None
-    if project.client.email:
-        return project.client.email
-    for contact in project.client.contacts:
+    if client.email:
+        return client.email
+    for contact in client.contacts:
         if contact.email:
             return contact.email
     return None
@@ -82,7 +92,7 @@ def _to_out(doc: ProjectDocument, steps: list[ApprovalStep]) -> ProjectDocumentO
     return ProjectDocumentOut(
         id=doc.id,
         project_id=doc.project_id,
-        project_name=doc.project.name,
+        project_name=doc.project_display_name,
         doc_type=doc.doc_type,
         issue_date=doc.issue_date,
         doc_no=doc.doc_no,
@@ -102,13 +112,16 @@ def _to_out(doc: ProjectDocument, steps: list[ApprovalStep]) -> ProjectDocumentO
         is_final_decision=doc.is_final_decision,
         reviewed_at=doc.reviewed_at,
         reject_reason=doc.reject_reason,
-        client_contact_email=_first_contact_email(doc.project),
+        client_contact_email=_first_contact_email(doc.effective_client),
         created_by=doc.created_by,
         created_at=doc.created_at,
         popbill_issued=bool(doc.popbill_issued_at),
         popbill_nts_confirm_num=doc.popbill_nts_confirm_num,
         popbill_issued_at=doc.popbill_issued_at,
         payment_recorded=doc.payment_recorded,
+        direction=doc.direction,
+        approval_no=doc.approval_no,
+        images=doc.images,
     )
 
 
@@ -128,25 +141,33 @@ def _get_doc_or_404(db: Session, doc_id: int) -> ProjectDocument:
     return doc
 
 
+def _is_sales(doc: ProjectDocument) -> bool:
+    """세금계산서가 매출(우리가 발행)인지 여부. 받은 세금계산서 등록으로 direction이 정해진 문서는 그 값을,
+    그 외(직접 작성)는 작성목적(청구→매출, 영수→매입)으로 판단한다."""
+    if doc.direction:
+        return doc.direction == "sales"
+    return doc.purpose_type == "청구"
+
+
 def _record_tax_invoice_transaction(db: Session, doc: ProjectDocument, current_user: User) -> None:
     """세금계산서가 결재 승인되면 팝빌 발행 여부와 무관하게 즉시 매입매출관리에 자동 기록한다.
     청구 목적은 매출, 영수 목적은 매입으로 집계한다. doc.project는 호출 전에 반드시 로드되어 있어야 한다."""
     if doc.doc_type != ProjectDocType.tax_invoice or doc.ledger_transaction_id is not None:
         return
 
-    subtotal = sum(item.quantity * item.unit_price for item in doc.items)
+    subtotal = sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
     vat = round(subtotal * 0.1)
-    tx_type = TransactionType.sales if doc.purpose_type == "청구" else TransactionType.purchase
+    tx_type = TransactionType.sales if _is_sales(doc) else TransactionType.purchase
     tx = Transaction(
         type=tx_type,
         transaction_date=doc.issue_date,
-        client_id=doc.project.client_id,
+        client_id=doc.effective_client.id if doc.effective_client else None,
         counterparty=doc.client_name,
         item_name=f"세금계산서 ({doc.doc_no or doc.id})",
         supply_amount=subtotal,
         vat_amount=vat,
         total_amount=subtotal + vat,
-        tax_invoice_no=doc.doc_no,
+        tax_invoice_no=doc.doc_no or doc.approval_no,
         memo=f"[자동연동] 세금계산서 승인(project_document_id={doc.id})에서 자동 생성됨",
         created_by=current_user.id,
     )
@@ -166,15 +187,15 @@ def _finalize_tax_invoice_payment(db: Session, doc: ProjectDocument, received: b
     if doc.payment_recorded:
         return
 
-    subtotal = sum(item.quantity * item.unit_price for item in doc.items)
+    subtotal = sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
     total = subtotal + round(subtotal * 0.1)
-    is_billing = doc.purpose_type == "청구"
+    is_billing = _is_sales(doc)
     payment_type = PaymentType.deposit if is_billing else PaymentType.withdrawal
     category = ("외상매출금" if is_billing else "외상매입금") if not received else "기타"
     action_label = "입금" if is_billing else "지급"
     description = f"세금계산서 {doc.doc_no or doc.id} {action_label}" + ("" if received else " (미확정)")
 
-    client = doc.project.client if doc.project else None
+    client = doc.effective_client
     payment = Payment(
         type=payment_type,
         payment_date=doc.issue_date,
@@ -265,12 +286,40 @@ def _apply_approval_request(
     return steps
 
 
+def _normalize_company_name(name: str | None) -> str:
+    """거래처명 비교용: 공백과 법인 형태 표기(주식회사/(주)/유한회사 등)를 없앤다. OCR이 띄어쓰기를 바꿔 읽어도 같은 거래처로 찾기 위함."""
+    return re.sub(r"\s|\(주\)|\(유\)|주식회사|유한회사", "", name or "")
+
+
+def _find_client(db: Session, name: str, reg_no: str | None = None) -> Client | None:
+    """거래처관리에서 사업자번호(우선) 또는 정규화한 이름이 같은 거래처를 찾는다."""
+    clients = db.query(Client).all()
+    digits = "".join(ch for ch in (reg_no or "") if ch.isdigit())
+    if digits:
+        for c in clients:
+            if "".join(ch for ch in (c.biz_reg_no or "") if ch.isdigit()) == digits:
+                return c
+    target = _normalize_company_name(name)
+    return next((c for c in clients if target and _normalize_company_name(c.name) == target), None)
+
+
+def _resolve_project(db: Session, payload: ProjectDocumentCreate) -> Project | None:
+    """선택한 프로젝트를 조회한다. "기타"(project_id 없음)이면 None을 돌려준다."""
+    if payload.project_id is None:
+        return None
+    project = db.query(Project).filter(Project.id == payload.project_id).first()
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 프로젝트입니다.")
+    return project
+
+
 def _new_document(
-    db: Session, payload: ProjectDocumentCreate, doc_type: ProjectDocType, project: Project, current_user: User
+    db: Session, payload: ProjectDocumentCreate, doc_type: ProjectDocType, project: Project | None, current_user: User
 ) -> ProjectDocument:
     """문서 1건을 만들고 flush해서 id를 확보한 채로 돌려준다 (결재선 생성 전 단계)."""
     doc = ProjectDocument(
         project_id=payload.project_id,
+        project_other_name=payload.project_other_name,
         doc_type=doc_type,
         issue_date=payload.issue_date,
         currency=payload.currency.value,
@@ -279,6 +328,8 @@ def _new_document(
         manager_name=payload.manager_name,
         created_by=current_user.id,
         payment_received_hint=payload.received,
+        direction=payload.direction if doc_type == ProjectDocType.tax_invoice else None,
+        approval_no=payload.approval_no if doc_type == ProjectDocType.tax_invoice else None,
     )
     if doc_type == ProjectDocType.quotation:
         doc.doc_no = next_doc_no(db, doc_type, payload.issue_date)
@@ -288,6 +339,13 @@ def _new_document(
     ]
     doc.creator = current_user
     doc.project = project
+    snapshot = {k: v for k, v in (payload.counterparty.model_dump() if payload.counterparty else {}).items() if v}
+    if doc_type == ProjectDocType.tax_invoice and snapshot:
+        doc.counterparty_info = snapshot
+    if project is None:
+        # "기타": 거래처명이 같은 거래처가 있으면 연결해 대표자/사업자번호/이메일을 문서와 팝빌 발행에 쓴다.
+        doc.other_client = _find_client(db, payload.client_name, snapshot.get("reg_no"))
+        logger.debug(f"[ProjectDocuments] 기타 프로젝트 문서: other_name={payload.project_other_name}, client_matched={doc.other_client is not None}")
     db.add(doc)
     db.flush()  # id 확보 (ApprovalStep.target_id에 필요)
     return doc
@@ -306,7 +364,7 @@ def _set_siblings(db: Session, doc: ProjectDocument) -> list[ProjectDocument]:
 
 
 def _regenerate_pdf(db: Session, doc: ProjectDocument) -> None:
-    pdf_bytes = generate_project_document_pdf(doc, doc.project, doc.project.client)
+    pdf_bytes = generate_project_document_pdf(doc, doc.project, doc.effective_client)
     os.makedirs(settings.project_documents_dir, exist_ok=True)
     file_path = os.path.join(settings.project_documents_dir, f"{doc.id}_{doc.doc_type.value}.pdf")
     with open(file_path, "wb") as f:
@@ -319,7 +377,7 @@ def _regenerate_excel(db: Session, doc: ProjectDocument) -> None:
     """승인 완료된 문서만 회계 처리용 엑셀을 함께 생성한다."""
     if doc.status != ProjectDocumentStatus.approved:
         return
-    excel_bytes = generate_project_document_excel(doc, doc.project, doc.project.client)
+    excel_bytes = generate_project_document_excel(doc, doc.project, doc.effective_client)
     os.makedirs(settings.project_documents_dir, exist_ok=True)
     file_path = os.path.join(settings.project_documents_dir, f"{doc.id}_{doc.doc_type.value}.xlsx")
     with open(file_path, "wb") as f:
@@ -395,8 +453,8 @@ def export_tax_invoices_excel(
         query = query.filter(ProjectDocument.status == status_filter)
     docs = query.order_by(ProjectDocument.issue_date.desc(), ProjectDocument.id.desc()).all()
 
-    billing_docs = [d for d in docs if d.purpose_type == "청구"]
-    receipt_docs = [d for d in docs if d.purpose_type == "영수"]
+    billing_docs = [d for d in docs if _is_sales(d)]
+    receipt_docs = [d for d in docs if not _is_sales(d)]
 
     # 개요 탭의 매입 합계: 매입매출관리(Transactions)에 기록된 매입 거래 중 세금계산서번호가 입력된 건만 집계한다.
     purchase_query = db.query(
@@ -424,6 +482,121 @@ def export_tax_invoices_excel(
     )
 
 
+ALLOWED_IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+MAX_IMAGE_SIZE = 15 * 1024 * 1024  # 15MB
+
+
+def _normalize_company_no(value: str | None) -> str:
+    return "".join(ch for ch in (value or "") if ch.isdigit())
+
+
+@router.post("/ocr/tax-invoice", response_model=TaxInvoiceOcrOut)
+def ocr_tax_invoice(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    """홈택스 세금계산서 사진에서 내용을 인식해 입력란을 미리 채울 값을 돌려준다 (저장하지 않음).
+    공급자/공급받는자 중 우리 회사(설정의 사업자등록번호)가 어느 쪽인지로 매출/매입 방향을 판별한다."""
+    if not has_menu_permission(current_user, "tax_invoice"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 작성 권한이 없습니다.")
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
+    raw = file.file.read()
+    if len(raw) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 크기는 15MB를 초과할 수 없습니다.")
+
+    logger.debug(f"[ProjectDocuments] 세금계산서 사진 인식 시작: filename={file.filename}, size={len(raw)}, by={current_user.id}")
+    try:
+        r = recognize_tax_invoice(raw)
+    except Exception as exc:  # noqa: BLE001 - 깨진 이미지/OCR 실행 오류 모두 사용자에게는 같은 안내
+        logger.error(f"[ProjectDocuments] 세금계산서 사진 인식 실패: {exc}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지를 인식하지 못했습니다. 다른 파일로 시도하거나 직접 입력해주세요.")
+
+    ours = _normalize_company_no(settings.company_reg_no)
+    direction = None
+    counterparty = None
+    if ours and _normalize_company_no(r.supplier.reg_no) == ours:
+        direction, counterparty = "sales", r.recipient.name
+    elif ours and _normalize_company_no(r.recipient.reg_no) == ours:
+        direction, counterparty = "purchase", r.supplier.name
+    else:
+        r.warnings.append("공급자/공급받는자 중 우리 회사를 확인하지 못해 매입/매출을 판별하지 못했습니다. 거래처명을 직접 확인해주세요.")
+
+    logger.debug(f"[ProjectDocuments] 세금계산서 사진 인식 완료: direction={direction}, counterparty={counterparty}")
+    return TaxInvoiceOcrOut(
+        approval_no=r.approval_no,
+        issue_date=r.issue_date,
+        supplier=TaxInvoicePartyOut(**r.supplier.__dict__),
+        recipient=TaxInvoicePartyOut(**r.recipient.__dict__),
+        supply_amount=r.supply_amount,
+        vat_amount=r.vat_amount,
+        total_amount=r.total_amount,
+        items=[TaxInvoiceOcrItemOut(**i.__dict__) for i in r.items],
+        direction=direction,
+        counterparty_name=counterparty,
+        warnings=r.warnings,
+    )
+
+
+@router.post("/{doc_id}/images", response_model=ProjectDocumentOut, status_code=status.HTTP_201_CREATED)
+def upload_document_image(
+    doc_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = _get_doc_or_404(db, doc_id)
+    if doc.doc_type != ProjectDocType.tax_invoice:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서에만 사진을 등록할 수 있습니다.")
+    if doc.created_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 사진을 등록할 수 있습니다.")
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
+    content = file.file.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 크기는 15MB를 초과할 수 없습니다.")
+
+    os.makedirs(settings.tax_invoice_images_dir, exist_ok=True)
+    stored_name = f"{doc.id}_{uuid.uuid4().hex}.{ALLOWED_IMAGE_TYPES[file.content_type]}"
+    file_path = os.path.join(settings.tax_invoice_images_dir, stored_name)
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    doc.images.append(ProjectDocumentImage(filename=file.filename or stored_name, file_path=file_path))
+    db.commit()
+    logger.debug(f"[ProjectDocuments] 세금계산서 사진 등록: doc_id={doc_id}, filename={file.filename}, by={current_user.id}")
+    return _to_out_db(db, _get_doc_or_404(db, doc_id))
+
+
+@router.get("/{doc_id}/images/{image_id}")
+def get_document_image(
+    doc_id: int, image_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    image = (
+        db.query(ProjectDocumentImage)
+        .filter(ProjectDocumentImage.id == image_id, ProjectDocumentImage.document_id == doc_id)
+        .first()
+    )
+    if image is None or not os.path.exists(image.file_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사진을 찾을 수 없습니다.")
+    return FileResponse(image.file_path)
+
+
+@router.delete("/{doc_id}/images/{image_id}", response_model=ProjectDocumentOut)
+def delete_document_image(
+    doc_id: int, image_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    doc = _get_doc_or_404(db, doc_id)
+    if doc.created_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 사진을 삭제할 수 있습니다.")
+    image = next((i for i in doc.images if i.id == image_id), None)
+    if image is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사진을 찾을 수 없습니다.")
+    if os.path.exists(image.file_path):
+        os.remove(image.file_path)
+    doc.images.remove(image)
+    db.commit()
+    logger.debug(f"[ProjectDocuments] 세금계산서 사진 삭제: doc_id={doc_id}, image_id={image_id}, by={current_user.id}")
+    return _to_out_db(db, _get_doc_or_404(db, doc_id))
+
+
 @router.post("", response_model=ProjectDocumentOut, status_code=status.HTTP_201_CREATED)
 def create_project_document(
     payload: ProjectDocumentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
@@ -435,9 +608,7 @@ def create_project_document(
         if payload.received is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입금/지급 확인 여부를 선택해주세요.")
 
-    project = db.query(Project).filter(Project.id == payload.project_id).first()
-    if project is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 프로젝트입니다.")
+    project = _resolve_project(db, payload)
 
     logger.debug(
         f"[ProjectDocuments] 등록: doc_type={payload.doc_type}, project_id={payload.project_id}, "
@@ -460,9 +631,7 @@ def create_project_document_set(
 ):
     """견적서+거래명세서를 같은 내용으로 한 번에 작성한다. 두 문서는 set_id로 묶여 한 번의 결재(승인/반려)로
     함께 처리된다. 결재 요청/결과 알림은 견적서 기준으로 한 번만 보낸다. 반환: [견적서, 거래명세서]."""
-    project = db.query(Project).filter(Project.id == payload.project_id).first()
-    if project is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 프로젝트입니다.")
+    project = _resolve_project(db, payload)
 
     logger.debug(
         f"[ProjectDocuments] 견적서+거래명세서 동시 등록: project_id={payload.project_id}, "
@@ -724,6 +893,8 @@ def issue_popbill_tax_invoice(doc_id: int, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 발행 권한이 없습니다.")
     if doc.doc_type != ProjectDocType.tax_invoice:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서만 팝빌로 발행할 수 있습니다.")
+    if doc.direction == "purchase":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="받은(매입) 세금계산서는 팝빌로 발행할 수 없습니다.")
     if doc.status != ProjectDocumentStatus.approved:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 승인 후에 발행할 수 있습니다.")
     if doc.popbill_issued_at:
@@ -731,7 +902,12 @@ def issue_popbill_tax_invoice(doc_id: int, db: Session = Depends(get_db), curren
 
     logger.debug(f"[ProjectDocuments] 팝빌 세금계산서 발행 시도: doc_id={doc_id}, by={current_user.id}")
     try:
-        result = popbill_service.issue_tax_invoice(doc, doc.project.client)
+        client = doc.effective_client
+        if client is None:
+            raise popbill_service.PopbillConfigError(
+                f"거래처관리에 '{doc.client_name}'(으)로 등록된 거래처가 없어 발행할 수 없습니다. 거래처를 먼저 등록해주세요."
+            )
+        result = popbill_service.issue_tax_invoice(doc, client)
     except popbill_service.PopbillConfigError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
     except PopbillException as err:
@@ -785,6 +961,9 @@ def delete_project_document(doc_id: int, db: Session = Depends(get_db), current_
         if any(t.status == ProjectDocumentStatus.approved for t in targets):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제할 수 없습니다.")
     for target in targets:
+        for image in target.images:
+            if os.path.exists(image.file_path):
+                os.remove(image.file_path)
         db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == target.id).delete()
         db.delete(target)
     db.commit()

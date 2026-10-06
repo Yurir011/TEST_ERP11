@@ -10,7 +10,7 @@ from app.config import settings
 from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.project import Project
-from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus
+from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus, calc_amount
 from app.services.certificate_pdf import STAMP_PATH
 
 logger = get_logger("ProjectDocumentExcel")
@@ -24,7 +24,7 @@ DOC_TITLES = {
 ITEM_HEADERS = ["내용", "수량", "단가", "금액", "비고"]
 
 
-def generate_project_document_excel(doc: ProjectDocument, project: Project, client: Client | None) -> bytes:
+def generate_project_document_excel(doc: ProjectDocument, project: Project | None, client: Client | None) -> bytes:
     """승인 완료된 견적서/거래명세서/세금계산서를 회계 처리에 바로 쓸 수 있는 엑셀(.xlsx)로 내보낸다.
     project_document_pdf.py와 항목 구성을 동일하게 맞춘다."""
     wb = openpyxl.Workbook()
@@ -43,7 +43,7 @@ def generate_project_document_excel(doc: ProjectDocument, project: Project, clie
     ws.row_dimensions[1].height = 28
 
     meta_rows = [
-        ("프로젝트", project.name),
+        ("프로젝트", doc.project_display_name),
         ("공급자", settings.company_name),
         ("공급자 대표자", settings.company_ceo_name or "-"),
         ("거래처", doc.client_name),
@@ -70,12 +70,12 @@ def generate_project_document_excel(doc: ProjectDocument, project: Project, clie
 
     subtotal = 0
     for item in doc.items:
-        amount = item.quantity * item.unit_price
+        amount = calc_amount(item.quantity, item.unit_price)
         subtotal += amount
         ws.cell(row=row_idx, column=1, value=item.content)
         ws.cell(row=row_idx, column=2, value=item.quantity)
         unit_price_cell = ws.cell(row=row_idx, column=3, value=item.unit_price)
-        unit_price_cell.number_format = '"₩"#,##0'
+        unit_price_cell.number_format = '"₩"#,##0' if float(item.unit_price).is_integer() else '"₩"#,##0.00'
         amount_cell = ws.cell(row=row_idx, column=4, value=amount)
         amount_cell.number_format = '"₩"#,##0'
         ws.cell(row=row_idx, column=5, value=item.note or "-")

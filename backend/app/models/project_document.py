@@ -2,17 +2,28 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.client import Client
     from app.models.project import Project
     from app.models.user import User
 
 MAX_ITEMS = 8
+
+
+def calc_amount(quantity: int, unit_price: float) -> int:
+    """품목 금액 = 수량 x 단가 (원 단위 반올림). 단가는 소수(예: 454,545.5)일 수 있어 품목별로 반올림한 값을 공급가액으로 쓴다."""
+    return round(quantity * unit_price)
+
+
+def format_price(value: float) -> str:
+    """단가 표시용: 정수면 소수점 없이(1,000), 소수가 있으면 소수점 이하를 그대로(454,545.5) 천 단위 구분해 보여준다."""
+    return f"{value:,.0f}" if float(value).is_integer() else f"{value:,.2f}".rstrip("0")
 
 
 class ProjectDocType(str, enum.Enum):
@@ -55,7 +66,14 @@ class ProjectDocument(Base):
     __tablename__ = "project_documents"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    # 관련 프로젝트. "기타"를 고른 문서는 project_id가 None이고 project_other_name에 직접 입력한 내용이 들어간다.
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), index=True, nullable=True)
+    project_other_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # "기타" 문서의 거래처 정보(대표자/사업자번호/이메일 등)는 프로젝트를 통해 얻을 수 없어, 작성 시 거래처명이 같은 거래처를 찾아 연결한다.
+    # 세금계산서 사진에서 인식한 상대방(거래처) 정보 {reg_no, name, ceo_name, address, biz_type, biz_class, email}.
+    # 거래처관리에 등록되지 않은 거래처라도 엑셀/PDF 양식의 공급자(공급받는자) 칸을 채울 수 있도록 문서에 함께 저장한다.
+    counterparty_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    other_client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"), nullable=True)
     doc_type: Mapped[ProjectDocType] = mapped_column(Enum(ProjectDocType, name="projectdoctype"), index=True)
     issue_date: Mapped[date] = mapped_column(Date)
     doc_no: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 견적번호 (MMDD-NN, 당일 발행 순번). 견적서/거래명세서만 사용
@@ -91,12 +109,47 @@ class ProjectDocument(Base):
     # 대기 상태로 남더라도, 실제 승인되는 시점에 이 값을 그대로 사용해 입출금관리에 기록한다.
     payment_received_hint: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
-    project: Mapped["Project"] = relationship()
+    # 세금계산서 전용: 거래 방향. "sales"(우리가 발행한 매출) / "purchase"(받은 세금계산서, 매입). None이면 기존 방식대로
+    # 작성목적(청구→매출, 영수→매입)으로 판단한다. 받은 세금계산서 사진을 등록할 때 공급자/공급받는자로 자동 판별해 채운다.
+    direction: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    approval_no: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 국세청 승인번호 (등록한 세금계산서 사진에서 인식)
+
+    project: Mapped["Project | None"] = relationship()
+    other_client: Mapped["Client | None"] = relationship(foreign_keys=[other_client_id])
     creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+    images: Mapped[list["ProjectDocumentImage"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan", order_by="ProjectDocumentImage.id"
+    )
     approver: Mapped["User | None"] = relationship(foreign_keys=[approver_id])
     items: Mapped[list["ProjectDocumentItem"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="ProjectDocumentItem.sort_order"
     )
+
+
+def _project_display_name(self) -> str:
+    return self.project.name if self.project is not None else (self.project_other_name or "기타")
+
+
+def _effective_client(self) -> "Client | None":
+    return self.project.client if self.project is not None else self.other_client
+
+
+ProjectDocument.project_display_name = property(_project_display_name)  # type: ignore[attr-defined]
+ProjectDocument.effective_client = property(_effective_client)  # type: ignore[attr-defined]
+
+
+class ProjectDocumentImage(Base):
+    """세금계산서에 첨부(등록)한 사진/스캔 이미지. 문서 1건에 여러 장 가능."""
+
+    __tablename__ = "project_document_images"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("project_documents.id", ondelete="CASCADE"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))  # 업로드 당시 원본 파일명
+    file_path: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    document: Mapped["ProjectDocument"] = relationship(back_populates="images")
 
 
 class ProjectDocumentItem(Base):
@@ -108,7 +161,7 @@ class ProjectDocumentItem(Base):
     document_id: Mapped[int] = mapped_column(ForeignKey("project_documents.id", ondelete="CASCADE"), index=True)
     content: Mapped[str] = mapped_column(String(300))  # 내용
     quantity: Mapped[int] = mapped_column(Integer)  # 수량
-    unit_price: Mapped[int] = mapped_column(BigInteger)  # 단가
+    unit_price: Mapped[float] = mapped_column(Numeric(18, 2, asdecimal=False))  # 단가 (소수 둘째 자리까지)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)  # 비고
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 

@@ -1,12 +1,12 @@
-import { FileDown, Info, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { FileDown, ImagePlus, Info, Plus, ScanText, Trash2, X } from "lucide-react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { useAuth } from "../../context/AuthContext";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
-import { ApiError, apiGet, apiPost, downloadFile } from "../../lib/api";
+import { ApiError, apiGet, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
@@ -22,9 +22,11 @@ import {
   type ProjectDocType,
   type ProjectDocument,
   type ProjectDocumentItemFormValues,
+  type TaxInvoiceOcrResult,
   type TaxInvoicePurpose,
 } from "./types";
 
+const OTHER_PROJECT = "other";
 const CURRENCY_OPTIONS: DocCurrency[] = ["KRW", "USD", "JPY"];
 const PURPOSE_OPTIONS: TaxInvoicePurpose[] = ["청구", "영수"];
 
@@ -51,7 +53,9 @@ export function ProjectDocumentFormPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [approvedQuotations, setApprovedQuotations] = useState<ProjectDocument[]>([]);
   const [loadedQuotationId, setLoadedQuotationId] = useState("");
+  // projectId가 OTHER_PROJECT("기타")이면 프로젝트 없이 projectOtherName에 직접 입력한 내용으로 작성한다.
   const [projectId, setProjectId] = useState(routeProjectId ?? "");
+  const [projectOtherName, setProjectOtherName] = useState("");
   const [issueDate, setIssueDate] = useState(todayISO());
   const [clientName, setClientName] = useState("");
   const [managerName, setManagerName] = useState("");
@@ -62,6 +66,13 @@ export function ProjectDocumentFormPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showApproverPicker, setShowApproverPicker] = useState(false);
+
+  // 세금계산서 사진 등록: 올린 사진은 문서 생성 직후 함께 저장하고, 첫 사진은 OCR로 입력란을 자동으로 채운다.
+  const [invoiceImages, setInvoiceImages] = useState<File[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanSummary, setScanSummary] = useState<TaxInvoiceOcrResult | null>(null);
+  const [direction, setDirection] = useState<"sales" | "purchase" | null>(null);
+  const [approvalNo, setApprovalNo] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<Project[]>("/api/projects")
@@ -88,7 +99,12 @@ export function ProjectDocumentFormPage() {
     const quotation = approvedQuotations.find((q) => String(q.id) === id);
     if (!quotation) return;
     logDebug("ProjectDocumentForm", `견적서 불러오기: quotation_id=${quotation.id}`);
-    setProjectId(String(quotation.project_id));
+    if (quotation.project_id === null) {
+      setProjectId(OTHER_PROJECT);
+      setProjectOtherName(quotation.project_name);
+    } else {
+      setProjectId(String(quotation.project_id));
+    }
     setClientName(quotation.client_name);
     setManagerName(quotation.manager_name ?? "");
     setCurrency(quotation.currency);
@@ -122,6 +138,62 @@ export function ProjectDocumentFormPage() {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, [key]: value } : it)));
   }
 
+  /** 인식 결과를 입력란에 채운다. 사용자가 이어서 확인/수정할 수 있다. */
+  function applyOcrResult(r: TaxInvoiceOcrResult) {
+    if (r.issue_date) setIssueDate(r.issue_date);
+    const counterparty = r.counterparty_name ?? r.recipient.name;
+    if (counterparty) setClientName(counterparty);
+    setDirection(r.direction);
+    setApprovalNo(r.approval_no);
+    setPurposeType("청구"); // 받은 세금계산서 등록은 청구 / 미지급으로 처리한다.
+    setCurrency("KRW");
+    if (r.items.length > 0) {
+      setItems(
+        r.items.slice(0, MAX_PROJECT_DOC_ITEMS).map((it) => ({
+          content: it.content,
+          quantity: String(it.quantity),
+          unit_price: String(it.unit_price), // 단가는 소수(예: 454,545.5)도 그대로 입력된다
+          note: it.spec ?? "",
+        }))
+      );
+    }
+  }
+
+  async function handleInvoiceFilesSelect(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    setError(null);
+    const isFirst = invoiceImages.length === 0;
+    setInvoiceImages((prev) => [...prev, ...files]);
+    if (!isFirst) return;
+
+    setIsScanning(true);
+    try {
+      logDebug("ProjectDocumentForm", `세금계산서 사진 인식 요청: filename=${files[0].name}`);
+      const result = await apiUpload<TaxInvoiceOcrResult>("/api/project-documents/ocr/tax-invoice", files[0]);
+      setScanSummary(result);
+      applyOcrResult(result);
+      logDebug("ProjectDocumentForm", `세금계산서 사진 인식 성공: direction=${result.direction}, warnings=${result.warnings.length}`);
+    } catch (err) {
+      logError("ProjectDocumentForm", "세금계산서 사진 인식 실패", err);
+      setScanSummary(null);
+      setError(err instanceof ApiError ? err.message : "사진 인식 중 오류가 발생했습니다. 직접 입력해주세요.");
+    } finally {
+      setIsScanning(false);
+    }
+  }
+
+  function removeInvoiceImage(index: number) {
+    setInvoiceImages((prev) => prev.filter((_, i) => i !== index));
+    if (index === 0) {
+      // 인식에 사용한 첫 사진을 지우면 자동 판별된 방향/승인번호도 함께 비운다 (입력란 값은 그대로 둔다).
+      setScanSummary(null);
+      setDirection(null);
+      setApprovalNo(null);
+    }
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -129,17 +201,24 @@ export function ProjectDocumentFormPage() {
       setError("관련 프로젝트를 선택해주세요.");
       return;
     }
+    if (projectId === OTHER_PROJECT && !projectOtherName.trim()) {
+      setError("관련 프로젝트 '기타'의 내용을 입력해주세요.");
+      return;
+    }
     setShowApproverPicker(true);
   }
 
   async function handleRequestApproval(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
-    const received = docType === "tax_invoice" ? askTaxInvoicePaymentReceived(purposeType, clientName) : null;
+    // 사진으로 받은 세금계산서를 등록하는 경우(방향이 판별됨)는 항상 미지급(false)으로 처리하므로 입금/지급 확인창을 건너뛴다.
+    const received =
+      docType !== "tax_invoice" ? null : direction !== null ? false : askTaxInvoicePaymentReceived(purposeType, clientName);
     setIsSubmitting(true);
     try {
       logDebug("ProjectDocumentForm", `결재요청 시도: end_title=${endTitle}, is_final_decision=${isFinalDecision}`);
       const endpoint = isSet ? "/api/project-documents/set" : "/api/project-documents";
       const createdResult = await apiPost<ProjectDocument | ProjectDocument[]>(endpoint, {
-        project_id: Number(projectId),
+        project_id: projectId === OTHER_PROJECT ? null : Number(projectId),
+        project_other_name: projectId === OTHER_PROJECT ? projectOtherName.trim() : null,
         doc_type: docType,
         issue_date: issueDate,
         currency,
@@ -156,9 +235,24 @@ export function ProjectDocumentFormPage() {
         approver_ids: approverIds,
         is_final_decision: isFinalDecision,
         received,
+        direction: docType === "tax_invoice" ? direction : null,
+        approval_no: docType === "tax_invoice" ? approvalNo : null,
+        // 사진에서 인식한 상대방(우리 회사가 아닌 쪽) 정보 - 거래처관리에 없는 거래처여도 엑셀/PDF 양식을 채우는 데 쓴다.
+        counterparty:
+          docType === "tax_invoice" && scanSummary && direction
+            ? direction === "purchase"
+              ? scanSummary.supplier
+              : scanSummary.recipient
+            : null,
       });
 
       const createdDocs = Array.isArray(createdResult) ? createdResult : [createdResult];
+      if (docType === "tax_invoice") {
+        for (const file of invoiceImages) {
+          logDebug("ProjectDocumentForm", `세금계산서 사진 저장: doc_id=${createdDocs[0].id}, filename=${file.name}`);
+          await apiUpload(`/api/project-documents/${createdDocs[0].id}/images`, file);
+        }
+      }
       for (const created of createdDocs) {
         if (created.status === "approved" && created.has_pdf) {
           await downloadFile(
@@ -184,15 +278,83 @@ export function ProjectDocumentFormPage() {
   }
 
   return (
-    <MainLayout title={isSet ? "새 견적서 · 거래명세서 작성" : `새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`}>
+    <MainLayout
+      title={
+        isSet
+          ? "새 견적서 · 거래명세서 작성"
+          : docType === "tax_invoice"
+            ? "새 세금계산서 작성 및 등록"
+            : `새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`
+      }
+    >
       <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-2xl">
         {docType === "tax_invoice" && (
           <div className="flex items-start gap-2 bg-tile-purple text-tile-purple-fg rounded-xl px-4 py-3 text-xs">
             <Info size={14} className="mt-0.5 shrink-0" />
             <p>
-              세금계산서 발행은 홈택스·팝빌 연동 예정입니다. 지금은 관련 정보를 미리 기록해두는 용도로만
-              사용해주세요.
+              직접 작성하거나, 받은 세금계산서 사진을 올려 내용을 자동으로 등록할 수 있습니다.
             </p>
+          </div>
+        )}
+
+        {docType === "tax_invoice" && (
+          <div className="border border-dashed border-border rounded-xl px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-medium">
+                <ScanText size={14} />
+                세금계산서 사진 등록 (선택)
+              </span>
+              <label className="flex items-center gap-1 text-xs text-primary hover:opacity-80 cursor-pointer">
+                <ImagePlus size={14} />
+                사진 선택
+                <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={handleInvoiceFilesSelect} className="hidden" />
+              </label>
+            </div>
+            <p className="text-[11px] text-text-muted mt-1">
+              홈택스에서 받은 세금계산서 이미지(jpg, png, webp)를 올리면 첫 번째 사진에서 작성일자·거래처·품목·금액이 자동 입력되고,
+              내용은 청구 / 금액은 미지급으로 처리됩니다. 올린 사진은 문서와 함께 저장됩니다.
+            </p>
+            {isScanning && <p className="text-xs text-primary mt-2">사진에서 내용을 인식하는 중...</p>}
+            {invoiceImages.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {invoiceImages.map((f, idx) => (
+                  <li key={`${f.name}-${idx}`} className="flex items-center justify-between text-xs bg-bg rounded-lg px-2.5 py-1.5">
+                    <span className="truncate">
+                      {f.name}
+                      {idx === 0 && <span className="text-text-muted"> (자동 입력 기준)</span>}
+                    </span>
+                    <button type="button" onClick={() => removeInvoiceImage(idx)} className="text-text-muted hover:text-danger">
+                      <X size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {scanSummary && (
+              <div className="mt-2 text-xs bg-tile-green text-tile-green-fg rounded-lg px-3 py-2 space-y-0.5">
+                <p>
+                  {scanSummary.direction === "purchase"
+                    ? "받은 세금계산서(매입)로 인식했습니다."
+                    : scanSummary.direction === "sales"
+                      ? "발행한 세금계산서(매출)로 인식했습니다."
+                      : "매입/매출을 판별하지 못했습니다."}
+                  {scanSummary.approval_no && <span> · 승인번호 {scanSummary.approval_no}</span>}
+                </p>
+                <p className="opacity-80">
+                  공급자 {scanSummary.supplier.name ?? "-"} ({scanSummary.supplier.reg_no ?? "-"}) → 공급받는자{" "}
+                  {scanSummary.recipient.name ?? "-"} ({scanSummary.recipient.reg_no ?? "-"})
+                </p>
+                {scanSummary.total_amount !== null && (
+                  <p className="opacity-80">합계금액 {scanSummary.total_amount.toLocaleString()}원</p>
+                )}
+                {scanSummary.warnings.map((w) => (
+                  <p key={w} className="text-danger">
+                    ⚠ {w}
+                  </p>
+                ))}
+                <p className="opacity-80">자동 입력된 내용이 사진과 맞는지 아래 입력란에서 확인해주세요.</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -246,9 +408,10 @@ export function ProjectDocumentFormPage() {
                 {p.name} ({p.client_name})
               </option>
             ))}
+            <option value={OTHER_PROJECT}>기타 (직접 입력)</option>
             {(() => {
               const loaded = approvedQuotations.find((q) => String(q.id) === loadedQuotationId);
-              if (!loaded || projects.some((p) => p.id === loaded.project_id)) return null;
+              if (!loaded || loaded.project_id === null || projects.some((p) => p.id === loaded.project_id)) return null;
               return (
                 <option value={loaded.project_id}>
                   {loaded.project_name} ({loaded.client_name}) · 완료된 프로젝트
@@ -256,8 +419,18 @@ export function ProjectDocumentFormPage() {
               );
             })()}
           </select>
+          {projectId === OTHER_PROJECT && (
+            <input
+              required
+              value={projectOtherName}
+              onChange={(e) => setProjectOtherName(e.target.value)}
+              maxLength={200}
+              placeholder="프로젝트 내용을 직접 입력 (예: 샘플 납품, 수리 건)"
+              className="w-full mt-2 rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+            />
+          )}
           {projects.length === 0 && (
-            <p className="text-xs text-text-muted mt-1.5">진행 중인 프로젝트가 없습니다. 먼저 프로젝트를 등록해주세요.</p>
+            <p className="text-xs text-text-muted mt-1.5">진행 중인 프로젝트가 없습니다. 먼저 프로젝트를 등록하거나 '기타'를 선택해주세요.</p>
           )}
         </div>
 
@@ -393,6 +566,7 @@ export function ProjectDocumentFormPage() {
                     <input
                       type="number"
                       min={0}
+                      step="any"
                       required
                       value={item.unit_price}
                       onChange={(e) => updateItem(index, "unit_price", e.target.value)}

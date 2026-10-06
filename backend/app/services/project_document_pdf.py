@@ -9,7 +9,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from app.config import settings
 from app.models.client import Client
 from app.models.project import Project
-from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus
+from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus, calc_amount, format_price
 from app.services.certificate_pdf import FONT_BOLD, FONT_REGULAR, SEAL_MARKER, _ensure_fonts_registered, _StampedSignatureLine
 
 DOC_TITLES = {
@@ -19,7 +19,7 @@ DOC_TITLES = {
 }
 
 
-def generate_project_document_pdf(doc: ProjectDocument, project: Project, client: Client | None) -> bytes:
+def generate_project_document_pdf(doc: ProjectDocument, project: Project | None, client: Client | None) -> bytes:
     """견적서/거래명세서/세금계산서 PDF를 생성한다.
     결재 상태(doc.status)가 approved일 때만 결재란에 직인(투명 배경)을 찍는다 - 그 외 상태는 직인 없이 상태만 표기한다.
     """
@@ -81,10 +81,10 @@ def generate_project_document_pdf(doc: ProjectDocument, project: Project, client
     item_rows = [item_header]
     subtotal = 0
     for item in doc.items:
-        amount = item.quantity * item.unit_price
+        amount = calc_amount(item.quantity, item.unit_price)
         subtotal += amount
         item_rows.append(
-            [item.content, f"{item.quantity:,}", f"{item.unit_price:,}", f"{amount:,}", item.note or "-"]
+            [item.content, f"{item.quantity:,}", format_price(item.unit_price), f"{amount:,}", item.note or "-"]
         )
 
     items_table = Table(item_rows, colWidths=[60 * mm, 20 * mm, 30 * mm, 30 * mm, 30 * mm])
@@ -133,7 +133,7 @@ def generate_project_document_pdf(doc: ProjectDocument, project: Project, client
         Paragraph(DOC_TITLES[doc.doc_type], title_style),
         Paragraph(f"발행일 : {doc.issue_date.isoformat()}", meta_style),
         Spacer(1, 8 * mm),
-        Paragraph(f"프로젝트 : {project.name}", body_style),
+        Paragraph(f"프로젝트 : {doc.project_display_name}", body_style),
         Spacer(1, 4 * mm),
         parties,
         Spacer(1, 8 * mm),

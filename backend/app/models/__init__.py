@@ -7,7 +7,7 @@ from app.models.notice import Notice
 from app.models.notification import Notification
 from app.models.payment import Payment
 from app.models.project import Project
-from app.models.project_document import ProjectDocument, ProjectDocumentItem
+from app.models.project_document import ProjectDocument, ProjectDocumentImage, ProjectDocumentItem
 from app.models.proposal import Proposal, ProposalApprovalStep, ProposalAttachment
 from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
 from app.models.sales_document import SalesDocument, SalesDocumentItem
@@ -27,6 +27,7 @@ __all__ = [
     "Project",
     "ProjectDocument",
     "ProjectDocumentItem",
+    "ProjectDocumentImage",
     "Proposal",
     "ProposalApprovalStep",
     "ProposalAttachment",

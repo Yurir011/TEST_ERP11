@@ -11,7 +11,8 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client, ClientContact
 from app.models.user import User
-from app.schemas.client import BusinessRegOcrOut, ClientCreate, ClientOut
+from app.schemas.client import BankbookOcrOut, BusinessRegOcrOut, ClientCreate, ClientOut
+from app.services.bankbook_ocr import recognize_bankbook
 from app.services.business_reg_ocr import recognize_business_registration
 from app.services.client_list_excel import generate_client_list_excel
 
@@ -120,6 +121,26 @@ def ocr_business_registration(
     )
 
 
+@router.post("/ocr/bankbook", response_model=BankbookOcrOut)
+def ocr_bankbook(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    """통장사본 이미지를 인식해 은행명/계좌번호/예금주를 추출한다(참조용 - 저장 전 반드시 확인 필요)."""
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
+
+    raw = file.file.read()
+    logger.debug(f"[Clients] 통장사본 인식 시도: filename={file.filename}, size={len(raw)}, by={current_user.id}")
+    try:
+        fields = recognize_bankbook(raw)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"[Clients] 통장사본 인식 실패: {exc}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지를 인식하지 못했습니다. 다른 사진으로 시도해주세요.")
+
+    logger.debug(f"[Clients] 통장사본 인식 완료: bank={fields.bank_name}, account={fields.bank_account}, by={current_user.id}")
+    return BankbookOcrOut(
+        bank_name=fields.bank_name, bank_account=fields.bank_account, holder=fields.holder, raw_text=fields.raw_text
+    )
+
+
 @router.get("/{client_id}", response_model=ClientOut)
 def get_client(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     client = db.query(Client).options(joinedload(Client.contacts)).filter(Client.id == client_id).first()
@@ -200,6 +221,44 @@ def get_biz_reg_image(client_id: int, db: Session = Depends(get_db), current_use
     return FileResponse(client.biz_reg_image_path)
 
 
+@router.post("/{client_id}/bankbook-image", response_model=ClientOut)
+def upload_bankbook_image(
+    client_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    client = db.query(Client).options(joinedload(Client.contacts)).filter(Client.id == client_id).first()
+    if client is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래처를 찾을 수 없습니다.")
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
+
+    content = file.file.read()
+    os.makedirs(settings.bankbook_images_dir, exist_ok=True)
+    if client.bankbook_image_path and os.path.exists(client.bankbook_image_path):
+        os.remove(client.bankbook_image_path)
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[file.content_type]
+    file_path = os.path.join(settings.bankbook_images_dir, f"{client.id}.{ext}")
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    client.bankbook_image_path = file_path
+    db.commit()
+    db.refresh(client)
+    logger.debug(f"[Clients] 통장사본 첨부 업로드: client_id={client_id}, by={current_user.id}")
+    return client
+
+
+@router.get("/{client_id}/bankbook-image")
+def get_bankbook_image(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if client is None or not client.bankbook_image_path or not os.path.exists(client.bankbook_image_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="통장사본 파일을 찾을 수 없습니다.")
+    logger.debug(f"[Clients] 통장사본 첨부 조회: client_id={client_id}, by={current_user.id}")
+    return FileResponse(client.bankbook_image_path)
+
+
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_client(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     client = db.query(Client).filter(Client.id == client_id).first()
@@ -207,6 +266,8 @@ def delete_client(client_id: int, db: Session = Depends(get_db), current_user: U
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래처를 찾을 수 없습니다.")
     if client.biz_reg_image_path and os.path.exists(client.biz_reg_image_path):
         os.remove(client.biz_reg_image_path)
+    if client.bankbook_image_path and os.path.exists(client.bankbook_image_path):
+        os.remove(client.bankbook_image_path)
     db.delete(client)
     db.commit()
     logger.debug(f"[Clients] 삭제: id={client_id}, by={current_user.id}")

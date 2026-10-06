@@ -2,16 +2,16 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_admin
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.notification import Notification
 from app.models.proposal import ProposalApprovalStep, ProposalStepStatus
 from app.models.user import User
-from app.schemas.notification import NotificationOut, UnreadCountOut
+from app.schemas.notification import AllNotificationOut, NotificationOut, UnreadCountOut
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 logger = get_logger("Notifications")
@@ -107,7 +107,33 @@ def list_notifications(db: Session = Depends(get_db), current_user: User = Depen
     return _with_approval_done(db, current_user.id, items)
 
 
-@router.get("/unread-count", response_model=UnreadCountOut)
+@router.get("/all", response_model=list[AllNotificationOut])
+def list_all_notifications(db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    """대표 전용: 전 직원의 업무 알림 열람. 읽음 처리/안 읽은 개수는 본인 알림에만 적용된다."""
+    _purge_expired(db)
+    logger.debug(f"[Notifications] 전 직원 알림 조회: user_id={current_user.id}")
+    items = (
+        db.query(Notification)
+        .options(joinedload(Notification.user))
+        .order_by(Notification.created_at.desc())
+        .all()
+    )
+    return [
+        AllNotificationOut(
+            id=n.id,
+            user_id=n.user_id,
+            recipient_name=n.user.name,
+            title=n.title,
+            message=n.message,
+            link=n.link,
+            is_read=n.is_read,
+            created_at=n.created_at,
+        )
+        for n in items
+    ]
+
+
+@router.get("/unread-count",response_model=UnreadCountOut)
 def get_unread_count(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     count = (
         db.query(Notification)

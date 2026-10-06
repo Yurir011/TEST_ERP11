@@ -4,7 +4,7 @@ import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from app.models.project_document import ProjectDocument, ProjectDocumentStatus
+from app.models.project_document import ProjectDocument, ProjectDocumentStatus, calc_amount
 
 HEADERS = ["문서번호", "발행일", "거래처", "담당자", "공급가액", "부가세", "합계", "상태", "팝빌발행", "국세청승인번호"]
 COLUMN_WIDTHS = [16, 12, 20, 14, 14, 12, 14, 10, 10, 22]
@@ -18,7 +18,7 @@ STATUS_LABELS = {
 
 
 def _items_total(doc: ProjectDocument) -> int:
-    return sum(item.quantity * item.unit_price for item in doc.items)
+    return sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
 
 
 def _write_sheet(ws, docs: list[ProjectDocument]) -> int:
