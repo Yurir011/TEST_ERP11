@@ -53,6 +53,21 @@ def _clean(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+# 대표자 줄에는 같은 줄에 생년월일/개업연월일이 이어 붙는 서식이 많다 (예: "대 표 자 : 홍길동  생 년 월 일 : 1970 년 01 월 01 일").
+# 이름 뒤의 라벨과 날짜가 대표자명에 섞여 들어오지 않도록 라벨 또는 첫 숫자에서 잘라낸다.
+_CEO_STOP = re.compile(
+    "|".join([_spaced("생년월일"), _spaced("개업연월일"), _spaced("연월일"), _spaced("생년"), _spaced("주민"), _spaced("법인등록번호"), r"\d"])
+)
+
+
+def _clean_ceo(value: str) -> str | None:
+    value = _CEO_STOP.split(value, maxsplit=1)[0]
+    value = _clean(value)
+    # 이름에는 한글/영문만 쓰이므로 끝에 남은 기호(콜론, 괄호 등)를 정리한다.
+    value = re.sub(r"[^가-힣A-Za-z\s]+$", "", value).strip()
+    return value or None
+
+
 def _preprocess(image_bytes: bytes) -> Image.Image:
     image = Image.open(BytesIO(image_bytes))
     image = ImageOps.exif_transpose(image)  # 휴대폰 촬영 시 회전 메타데이터 보정
@@ -118,13 +133,13 @@ def _extract_fields(text: str) -> BusinessRegFields:
     ceo_label_pattern = _spaced("대표자")
     m = re.search(rf"{ceo_label_pattern}{_SEP}[:：)]?{_SEP}(.+)", text)
     if m:
-        fields.ceo_name = _clean(m.group(1)) or None
+        fields.ceo_name = _clean_ceo(m.group(1))
     else:
         # "대표자" 라벨 자체가 오인식된 경우 - 법인명 다음 줄이 항상 대표자이므로 그 값을 사용한다.
         fallback = _line_after(text, name_label_pattern)
         if fallback:
             fallback = re.sub(rf"^{_SEP}{ceo_label_pattern}{_SEP}[:：)]?{_SEP}", "", fallback)
-            fields.ceo_name = _clean(_strip_leading_noise(fallback)) or None
+            fields.ceo_name = _clean_ceo(_strip_leading_noise(fallback))
 
     head_office_pattern = _spaced("본점소재지")
     biz_office_pattern = _spaced("사업장소재지")
