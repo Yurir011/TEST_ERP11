@@ -27,9 +27,9 @@ const FIELDS_TOP: { key: keyof ClientFormValues; label: string; required?: boole
   { key: "name", label: "상호", required: true },
   { key: "biz_reg_no", label: "사업자등록번호" },
   { key: "ceo_name", label: "대표자명" },
+  { key: "phone", label: "전화번호(유선)" },
   { key: "biz_type", label: "업태" },
   { key: "biz_class", label: "종목" },
-  { key: "phone", label: "전화번호(유선)" },
   { key: "email", label: "이메일" },
 ];
 

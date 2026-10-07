@@ -43,6 +43,36 @@ class BusinessRegFields:
     raw_text: str = ""
 
 
+_PROVINCE = re.compile(r"^([가-힣]{2,5}도)(?=[가-힣])")
+_CITY_GU = re.compile(r"^(.+?[시군구])(?=[가-힣])")
+
+
+def _clean_address(s: str) -> str:
+    """주소는 띄어쓰기가 의미를 가지므로 _clean과 달리 한글 사이 공백을 지우지 않는다.
+    OCR이 띄어쓰기를 빠뜨린 경우(예: "인천광역시부평구청천동440-4남광센트렉스307")를 행정구역/번지 경계에서 보정한다."""
+    s = re.sub(r"[_|\[\]]", "", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    # "정 혜 란"처럼 한 글자씩 벌어진 잡음(한 글자 토큰 3개 이상 연속)만 붙인다.
+    s = re.sub(r"(?<![가-힣])[가-힣](?: [가-힣]){2,}(?![가-힣])", lambda m: m.group().replace(" ", ""), s)
+    # 앞쪽 토큰(시/도, 시/군/구)에서 붙어 있는 행정구역을 분리한다.
+    tokens = s.split(" ")
+    out: list[str] = []
+    for i, tok in enumerate(tokens):
+        if i < 3:
+            for _ in range(3):
+                m = _PROVINCE.match(tok) or _CITY_GU.match(tok)
+                if not m:
+                    break
+                out.append(m.group(1))
+                tok = tok[len(m.group(1)):]
+        out.append(tok)
+    s = " ".join(out)
+    s = re.sub(r"(?<=[가-힣])(?=\d)", " ", s)  # 동/로/길 뒤에 붙은 번지 숫자
+    s = re.sub(r"(?<=\d)(?=[가-힣])(?!(?:호|층|번지|동|가|번길|길)(?![가-힣]))", " ", s)  # 번지 뒤에 붙은 건물명
+    s = re.sub(r"(?<=[가-힣])(?=\()", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def _clean(s: str) -> str:
     # 스캔 품질에 따라 OCR이 한글 글자 사이사이에 공백을 끼워 넣는 경우가 많아(예: "정 혜 란"),
     # 한글-한글 사이의 공백은 우선 제거하고, 그 외 공백은 1칸으로 정리한다.
@@ -149,7 +179,7 @@ def _extract_fields(text: str) -> BusinessRegFields:
         addr_pattern = rf"{biz_office_pattern}{_SEP}[:：]?{_SEP}(.+?)(?={_STOP_LABELS}|$)"
         m = re.search(addr_pattern, text, re.S)
     if m:
-        fields.address = _clean(m.group(1)) or None
+        fields.address = _clean_address(m.group(1)) or None
 
     # "업태"는 자획이 비슷한 "엄태/업대/엄대" 등으로, "종목"은 "총목/종록/총록" 등으로 자주
     # 오인식되므로 첫/끝 글자를 유사 글자와 함께 허용한다.

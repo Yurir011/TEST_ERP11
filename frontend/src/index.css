@@ -50,3 +50,9 @@ body {
   font-family: system-ui, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* 한글 입력을 기본으로 (Firefox 등 ime-mode 지원 브라우저). 이메일/숫자/비밀번호 칸은 브라우저가 영문으로 고정한다. */
+input:not([type="email"]):not([type="number"]):not([type="password"]):not([type="file"]),
+textarea {
+  ime-mode: active;
+}
