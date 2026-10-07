@@ -6,6 +6,7 @@ import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet, openFile } from "../../lib/api";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { logError } from "../../lib/logger";
+import { NewClientButton } from "./NewClientButton";
 import type { Client } from "./types";
 
 function Field({ label, value }: { label: string; value: string | null }) {
@@ -49,7 +50,7 @@ export function ClientDetailPage() {
   }
 
   return (
-    <MainLayout title="거래처관리">
+    <MainLayout title="거래처관리" actions={<NewClientButton />}>
       <Link to="/clients" className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text mb-4">
         <ArrowLeft size={16} />
         목록으로

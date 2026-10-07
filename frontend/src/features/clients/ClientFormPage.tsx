@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { NewClientButton } from "./NewClientButton";
 import type { BankbookOcrResult, BusinessRegOcrResult } from "./types";
 import {
   EMPTY_CLIENT_CONTACT,
@@ -318,7 +319,7 @@ export function ClientFormPage() {
   }
 
   return (
-    <MainLayout title={isEdit ? "거래처 수정" : "새 거래처 등록"}>
+    <MainLayout title={isEdit ? "거래처 수정" : "새 거래처 등록"} actions={isEdit ? <NewClientButton /> : undefined}>
       {isLoading ? (
         <p className="text-sm text-text-muted">불러오는 중...</p>
       ) : (

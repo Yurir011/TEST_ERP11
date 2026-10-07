@@ -1,10 +1,11 @@
-import { Building2, Download, FileText, Plus, Search, Trash2 } from "lucide-react";
+import { Building2, Download, FileText, Search, Trash2 } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { NewClientButton } from "./NewClientButton";
 import type { Client } from "./types";
 
 function primaryContact(client: Client) {
@@ -106,13 +107,7 @@ export function ClientsPage() {
             <Download size={14} />
             {isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"}
           </button>
-          <Link
-            to="/clients/new"
-            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={16} />
-            새 거래처 등록
-          </Link>
+          <NewClientButton />
         </div>
       }
     >

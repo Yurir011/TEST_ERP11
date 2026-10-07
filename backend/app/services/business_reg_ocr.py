@@ -94,7 +94,7 @@ def _clean_ceo(value: str) -> str | None:
     value = _CEO_STOP.split(value, maxsplit=1)[0]
     value = _clean(value)
     # 이름에는 한글/영문만 쓰이므로 끝에 남은 기호(콜론, 괄호 등)를 정리한다.
-    value = re.sub(r"[^가-힣A-Za-z\s]+$", "", value).strip()
+    value = re.sub(r"^[^가-힣A-Za-z]+|[^가-힣A-Za-z\s]+$", "", value).strip()
     return value or None
 
 
@@ -160,7 +160,8 @@ def _extract_fields(text: str) -> BusinessRegFields:
         name = re.split(r"[(（]", m.group(1))[0]  # 괄호 안 영문 표기 제거
         fields.name = _clean(name) or None
 
-    ceo_label_pattern = _spaced("대표자")
+    # 법인 사업자는 "대표자", 개인 사업자는 "성명" 라벨을 쓴다.
+    ceo_label_pattern = rf"(?:{_spaced('대표자')}|{_spaced('성명')})"
     m = re.search(rf"{ceo_label_pattern}{_SEP}[:：)]?{_SEP}(.+)", text)
     if m:
         fields.ceo_name = _clean_ceo(m.group(1))
