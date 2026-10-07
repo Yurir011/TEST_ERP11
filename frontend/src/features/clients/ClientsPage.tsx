@@ -57,7 +57,7 @@ function FileButton({ exists, label, onClick }: { exists: boolean; label: string
       type="button"
       onClick={onClick}
       title={`${label} 보기`}
-      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary-hover border border-border rounded-lg px-2 py-1 hover:bg-bg"
+      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary-hover rounded-full px-2.5 py-1 hover:bg-primary/10"
     >
       <FileText size={13} />
       보기
@@ -174,13 +174,13 @@ export function ClientsPage() {
         </div>
       }
     >
-      <div className="relative mb-5 max-w-md">
+      <div className="relative mb-4 max-w-sm">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="상호, 담당자, 사업자번호로 검색"
-          className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-surface"
+          className="w-full rounded-xl border-0 bg-text/[0.06] pl-9 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary placeholder:text-text-muted"
         />
       </div>
 
@@ -197,8 +197,8 @@ export function ClientsPage() {
 
       {clients !== null && clients.length > 0 && (
         <>
-        <div className="sticky top-0 z-10 bg-bg pt-1 mb-3">
-          <div role="tablist" aria-label="초성 구간" className="flex gap-0.5 overflow-x-auto border-b border-border">
+        <div className="sticky top-0 z-10 -mx-2 px-2 py-2.5 bg-bg/80 backdrop-blur-xl">
+          <div role="tablist" aria-label="초성 구간" className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-xl bg-text/[0.06] p-[3px]">
             {tabs.map((tab) => {
               const count = tab === ALL_TAB ? clients.length : groups.find((g) => g.label === tab)?.items.length ?? 0;
               const selected = tab === currentTab;
@@ -209,43 +209,41 @@ export function ClientsPage() {
                   role="tab"
                   aria-selected={selected}
                   onClick={() => selectTab(tab)}
-                  className={`flex items-baseline gap-1.5 whitespace-nowrap px-3.5 py-2 text-sm -mb-px border-b-2 rounded-t-lg ${
-                    selected ? "border-primary text-primary font-bold" : "border-transparent text-text-muted hover:text-text hover:bg-primary/10"
+                  className={`flex items-baseline gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-[13px] transition-colors ${
+                    selected ? "bg-surface font-semibold text-text shadow-sm" : "text-text hover:bg-text/[0.06]"
                   }`}
                 >
                   {tab}
-                  <span className={`text-[11px] font-normal rounded-full px-1.5 ${selected ? "bg-primary text-white" : "bg-primary/10 text-text-muted"}`}>
-                    {count}
-                  </span>
+                  <span className="text-[11px] font-normal tabular-nums text-text-muted">{count}</span>
                 </button>
               );
             })}
           </div>
         </div>
-        <p className="flex items-baseline justify-between mb-2.5 text-sm">
-          <b className="text-base">{currentTab === ALL_TAB ? "전체" : `${currentTab} 구간`} {visibleCount}곳</b>
+        <p className="flex items-baseline justify-between mt-5 mb-2.5 px-1">
+          <b className="text-xl font-bold tracking-tight">{currentTab === ALL_TAB ? "전체" : `${currentTab} 구간`} {visibleCount}곳</b>
           <span className="text-xs text-text-muted">{query ? `검색어 '${query}' 적용 중` : "가나다순"}</span>
         </p>
-        <div className="border border-border rounded-2xl overflow-hidden overflow-x-auto">
+        <div className="bg-surface rounded-[20px] shadow-sm overflow-x-auto">
           <table className="w-full min-w-[960px] table-fixed text-sm border-collapse">
             <thead>
-              <tr className="text-left bg-primary/10 border-b-2 border-border">
-                <th className="py-3 px-4 font-semibold text-text border border-border w-[22%]">업체명</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border whitespace-nowrap w-[13%]">사업자번호</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border whitespace-nowrap w-[13%]">유선번호</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border whitespace-nowrap w-[15%]">담당자</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border whitespace-nowrap w-[14%]">담당자 연락처</th>
-                <th className="py-3 px-3 font-semibold text-text border border-border text-center whitespace-nowrap w-[8%]">사업자등록증</th>
-                <th className="py-3 px-3 font-semibold text-text border border-border text-center whitespace-nowrap w-[8%]">통장사본</th>
-                <th className="w-12 border border-border"></th>
+              <tr className="text-left text-xs text-text-muted">
+                <th className="py-3.5 pl-7 pr-4 font-medium text-text-muted w-[22%]">업체명</th>
+                <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[13%]">사업자번호</th>
+                <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[13%]">유선번호</th>
+                <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[15%]">담당자</th>
+                <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[14%]">담당자 연락처</th>
+                <th className="py-3.5 px-3 font-medium text-text-muted text-center whitespace-nowrap w-[8%]">사업자등록증</th>
+                <th className="py-3.5 px-3 font-medium text-text-muted text-center whitespace-nowrap w-[8%]">통장사본</th>
+                <th className="w-12"></th>
               </tr>
             </thead>
             <tbody>
               {visibleGroups.map((group) => (
                 <Fragment key={group.label}>
                   {currentTab === ALL_TAB && (
-                    <tr className="bg-primary/5">
-                      <td colSpan={8} className="py-1.5 px-4 text-xs font-semibold text-primary border border-border">
+                    <tr>
+                      <td colSpan={8} className="pt-4 pb-1.5 pl-7 text-xs font-semibold text-primary border-t border-border/60">
                         {group.label} <span className="font-normal text-text-muted">({group.items.length})</span>
                       </td>
                     </tr>
@@ -256,12 +254,12 @@ export function ClientsPage() {
                   <tr
                     key={client.id}
                     onClick={() => navigate(`/clients/${client.id}`)}
-                    className={`cursor-pointer hover:bg-bg/60 ${index % 2 === 1 ? "bg-bg/40" : "bg-surface"}`}
+                    className={`cursor-pointer hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""}`}
                   >
-                    <td className="py-3 px-4 font-medium text-text border border-border max-w-0 truncate" title={client.name}>{client.name}</td>
-                    <td className="py-3 px-4 border border-border whitespace-nowrap">{client.biz_reg_no || "-"}</td>
-                    <td className="py-3 px-4 border border-border whitespace-nowrap">{client.phone || "-"}</td>
-                    <td className="py-3 px-4 border border-border truncate">
+                    <td className="py-3.5 pl-7 pr-4 font-semibold text-text max-w-0 truncate" title={client.name}>{client.name}</td>
+                    <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.biz_reg_no || "-"}</td>
+                    <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.phone || "-"}</td>
+                    <td className="py-3.5 px-4 truncate">
                       {contact ? (
                         <>
                           {contact.name}
@@ -272,24 +270,24 @@ export function ClientsPage() {
                         "-"
                       )}
                     </td>
-                    <td className="py-3 px-4 border border-border whitespace-nowrap">
+                    <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">
                       {contact ? contact.mobile_phone || contact.landline_phone || "-" : "-"}
                     </td>
-                    <td className="py-3 px-2 border border-border text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                       <FileButton
                         exists={client.has_biz_reg_image}
                         label="사업자등록증"
                         onClick={() => handleOpenFile(client.id, "biz-reg-image")}
                       />
                     </td>
-                    <td className="py-3 px-2 border border-border text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                       <FileButton
                         exists={client.has_bankbook_image}
                         label="통장사본"
                         onClick={() => handleOpenFile(client.id, "bankbook-image")}
                       />
                     </td>
-                    <td className="py-3 px-2 border border-border" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3.5 px-2" onClick={(e) => e.stopPropagation()}>
                       {canDeleteClient(user) && (
                         <button
                           onClick={(e) => handleDelete(e, client)}
@@ -314,7 +312,7 @@ export function ClientsPage() {
             type="button"
             disabled={tabIndex <= 0}
             onClick={() => selectTab(tabs[tabIndex - 1])}
-            className="text-xs border border-border rounded-lg px-3 py-1.5 bg-surface hover:bg-bg disabled:opacity-35"
+            className="text-sm text-primary rounded-md px-1 py-1.5 hover:underline disabled:opacity-30 disabled:no-underline"
           >
             {tabIndex > 0 ? `← ${tabs[tabIndex - 1]}` : "← 이전"}
           </button>
@@ -322,7 +320,7 @@ export function ClientsPage() {
             type="button"
             disabled={tabIndex >= tabs.length - 1}
             onClick={() => selectTab(tabs[tabIndex + 1])}
-            className="text-xs border border-border rounded-lg px-3 py-1.5 bg-surface hover:bg-bg disabled:opacity-35"
+            className="text-sm text-primary rounded-md px-1 py-1.5 hover:underline disabled:opacity-30 disabled:no-underline"
           >
             {tabIndex < tabs.length - 1 ? `${tabs[tabIndex + 1]} →` : "다음 →"}
           </button>
