@@ -259,11 +259,34 @@ export function ClientFormPage() {
     }
   }
 
+  /** 같은 이름의 거래처가 이미 있으면 저장 전에 한 번 더 확인한다. 띄어쓰기/법인 형태(주식회사, (주))가 달라도 같은 이름으로 본다. */
+  async function confirmDuplicateName(): Promise<boolean> {
+    const normalize = (name: string) => name.replace(/\s|\(주\)|\(유\)|주식회사|유한회사/g, "").toLowerCase();
+    const target = normalize(values.name);
+    if (!target) return true;
+    try {
+      const clients = await apiGet<Client[]>("/api/clients");
+      const duplicates = clients.filter((c) => String(c.id) !== id && normalize(c.name) === target);
+      if (duplicates.length === 0) return true;
+      logDebug("ClientForm", `이름 중복 확인: name=${values.name}, duplicates=${duplicates.length}`);
+      const list = duplicates.map((c) => `- ${c.name}${c.biz_reg_no ? ` (${c.biz_reg_no})` : ""}`).join("\n");
+      return window.confirm(`이미 같은 이름의 거래처가 등록되어 있습니다.\n\n${list}\n\n그래도 ${isEdit ? "저장" : "등록"}하시겠습니까?`);
+    } catch (err) {
+      // 중복 조회에 실패해도 저장 자체는 막지 않는다.
+      logError("ClientForm", "이름 중복 확인 실패", err);
+      return true;
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setIsSubmitting(true);
     try {
+      if (!(await confirmDuplicateName())) {
+        logDebug("ClientForm", "이름 중복 확인에서 취소됨");
+        return;
+      }
       const payload = toPayload(values);
       if (isEdit) {
         await apiPut(`/api/clients/${id}`, payload);
