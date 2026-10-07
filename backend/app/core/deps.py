@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.logging_config import get_logger
-from app.models.user import User, UserRole, has_menu_permission, is_admin_role
+from app.models.user import User, UserRole, has_menu_permission, is_admin_role, is_dept_head_or_above
 
 logger = get_logger("Deps")
 
@@ -57,5 +57,17 @@ def require_menu_access(menu_key: str):
             return current_user
         logger.debug(f"[Auth] 메뉴 권한 없음, 접근 거부: user_id={current_user.id}, menu={menu_key}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="접근 권한이 없습니다.")
+
+    return _dependency
+
+
+def require_menu_access_dept_head(menu_key: str):
+    """해당 메뉴 권한이 있고(대표는 항상 허용) 동시에 부서장 이상 직책인 경우에만 허용 — 삭제처럼 책임이 필요한 작업에 사용."""
+
+    def _dependency(current_user: User = Depends(get_current_user)) -> User:
+        if has_menu_permission(current_user, menu_key) and is_dept_head_or_above(current_user):
+            return current_user
+        logger.debug(f"[Auth] 부서장 이상 + 메뉴 권한 필요, 접근 거부: user_id={current_user.id}, menu={menu_key}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="부서장 이상만 삭제할 수 있습니다.")
 
     return _dependency

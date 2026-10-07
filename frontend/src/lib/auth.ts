@@ -68,3 +68,14 @@ export function hasMenuPermission(user: CurrentUser | null | undefined, menu: Me
   if (isAdminRole(user.role)) return true;
   return user.menu_permissions?.includes(menu) ?? false;
 }
+
+// 거래처 삭제 등 책임이 필요한 작업: 해당 메뉴 권한이 있으면서 부서장 이상 직책(또는 대표)이어야 한다.
+export function isDeptHeadOrAbove(user: CurrentUser | null | undefined): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  return user.title === "dept_head" || user.title === "team_lead" || user.title === "ceo";
+}
+
+export function canDeleteClient(user: CurrentUser | null | undefined): boolean {
+  return hasMenuPermission(user, "clients") && isDeptHeadOrAbove(user);
+}

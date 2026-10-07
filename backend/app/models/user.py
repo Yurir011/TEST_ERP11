@@ -55,6 +55,13 @@ def has_menu_permission(user: "User", menu_key: str) -> bool:
     return user.role == UserRole.employee and menu_key in (user.menu_permissions or [])
 
 
+def is_dept_head_or_above(user: "User") -> bool:
+    """부서장 이상 직책(부서장/팀장/대표)이거나 대표(admin) 권한인 경우 True."""
+    if user.role == UserRole.admin:
+        return True
+    return user.title in (JobTitle.dept_head, JobTitle.team_lead, JobTitle.ceo)
+
+
 class User(Base):
     __tablename__ = "users"
 

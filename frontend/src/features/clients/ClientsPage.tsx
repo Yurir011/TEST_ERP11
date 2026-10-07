@@ -2,6 +2,7 @@ import { Building2, Download, FileText, Search, Trash2 } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import { canDeleteClient } from "../../lib/auth";
 import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
@@ -134,15 +135,16 @@ export function ClientsPage() {
 
       {clients !== null && clients.length > 0 && (
         <div className="border border-border rounded-2xl overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
+          <table className="w-full min-w-[960px] table-fixed text-sm border-collapse">
             <thead>
               <tr className="text-left bg-primary/10 border-b-2 border-border">
-                <th className="py-3 px-4 font-semibold text-text border border-border">업체명</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border">사업자번호</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border">담당자</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border">담당자 연락처</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border text-center">사업자등록증</th>
-                <th className="py-3 px-4 font-semibold text-text border border-border text-center">통장사본</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border w-[22%]">업체명</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border whitespace-nowrap w-[13%]">사업자번호</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border whitespace-nowrap w-[13%]">유선번호</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border whitespace-nowrap w-[15%]">담당자</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border whitespace-nowrap w-[14%]">담당자 연락처</th>
+                <th className="py-3 px-3 font-semibold text-text border border-border text-center whitespace-nowrap w-[8%]">사업자등록증</th>
+                <th className="py-3 px-3 font-semibold text-text border border-border text-center whitespace-nowrap w-[8%]">통장사본</th>
                 <th className="w-12 border border-border"></th>
               </tr>
             </thead>
@@ -155,9 +157,10 @@ export function ClientsPage() {
                     onClick={() => navigate(`/clients/${client.id}`)}
                     className={`cursor-pointer hover:bg-bg/60 ${index % 2 === 1 ? "bg-bg/40" : "bg-surface"}`}
                   >
-                    <td className="py-3 px-4 font-medium text-text border border-border">{client.name}</td>
-                    <td className="py-3 px-4 border border-border">{client.biz_reg_no || "-"}</td>
-                    <td className="py-3 px-4 border border-border">
+                    <td className="py-3 px-4 font-medium text-text border border-border max-w-0 truncate" title={client.name}>{client.name}</td>
+                    <td className="py-3 px-4 border border-border whitespace-nowrap">{client.biz_reg_no || "-"}</td>
+                    <td className="py-3 px-4 border border-border whitespace-nowrap">{client.phone || "-"}</td>
+                    <td className="py-3 px-4 border border-border truncate">
                       {contact ? (
                         <>
                           {contact.name}
@@ -168,7 +171,7 @@ export function ClientsPage() {
                         "-"
                       )}
                     </td>
-                    <td className="py-3 px-4 border border-border">
+                    <td className="py-3 px-4 border border-border whitespace-nowrap">
                       {contact ? contact.mobile_phone || contact.landline_phone || "-" : "-"}
                     </td>
                     <td className="py-3 px-2 border border-border text-center" onClick={(e) => e.stopPropagation()}>
@@ -186,7 +189,7 @@ export function ClientsPage() {
                       />
                     </td>
                     <td className="py-3 px-2 border border-border" onClick={(e) => e.stopPropagation()}>
-                      {user?.role === "admin" && (
+                      {canDeleteClient(user) && (
                         <button
                           onClick={(e) => handleDelete(e, client)}
                           disabled={deletingId === client.id}

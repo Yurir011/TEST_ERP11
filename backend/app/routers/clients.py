@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import require_menu_access, require_menu_access_dept_head
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client, ClientContact
@@ -67,7 +67,7 @@ def _build_client_query(db: Session, q: str | None):
 def list_clients(
     q: str | None = Query(default=None, description="상호/담당자/사업자번호 검색어"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_menu_access("clients")),
 ):
     logger.debug(f"[Clients] 목록 조회: user_id={current_user.id}, q={q}")
     clients = _build_client_query(db, q).all()
@@ -79,7 +79,7 @@ def list_clients(
 def export_clients_excel(
     q: str | None = Query(default=None, description="상호/담당자/사업자번호 검색어"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_menu_access("clients")),
 ):
     clients = _build_client_query(db, q).all()
     clients.sort(key=_client_sort_key)
@@ -93,7 +93,7 @@ def export_clients_excel(
 
 @router.post("/ocr/business-registration", response_model=BusinessRegOcrOut)
 def ocr_business_registration(
-    file: UploadFile = File(...), current_user: User = Depends(get_current_user)
+    file: UploadFile = File(...), current_user: User = Depends(require_menu_access("clients"))
 ):
     """사업자등록증 이미지를 인식해 상호/사업자번호/대표자/주소/업태·업종을 추출한다(참조용 - 저장 전 반드시 확인 필요)."""
     if file.content_type not in ALLOWED_IMAGE_TYPES:
@@ -122,7 +122,7 @@ def ocr_business_registration(
 
 
 @router.post("/ocr/bankbook", response_model=BankbookOcrOut)
-def ocr_bankbook(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+def ocr_bankbook(file: UploadFile = File(...), current_user: User = Depends(require_menu_access("clients"))):
     """통장사본 이미지를 인식해 은행명/계좌번호/예금주를 추출한다(참조용 - 저장 전 반드시 확인 필요)."""
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
@@ -142,7 +142,7 @@ def ocr_bankbook(file: UploadFile = File(...), current_user: User = Depends(get_
 
 
 @router.get("/{client_id}", response_model=ClientOut)
-def get_client(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_client(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_menu_access("clients"))):
     client = db.query(Client).options(joinedload(Client.contacts)).filter(Client.id == client_id).first()
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래처를 찾을 수 없습니다.")
@@ -151,7 +151,7 @@ def get_client(client_id: int, db: Session = Depends(get_db), current_user: User
 
 @router.post("", response_model=ClientOut, status_code=status.HTTP_201_CREATED)
 def create_client(
-    payload: ClientCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+    payload: ClientCreate, db: Session = Depends(get_db), current_user: User = Depends(require_menu_access("clients"))
 ):
     logger.debug(f"[Clients] 등록: name={payload.name}, contacts={len(payload.contacts)}, by={current_user.id}")
     data = payload.model_dump(exclude={"contacts"})
@@ -168,7 +168,7 @@ def update_client(
     client_id: int,
     payload: ClientCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_menu_access("clients")),
 ):
     client = db.query(Client).options(joinedload(Client.contacts)).filter(Client.id == client_id).first()
     if client is None:
@@ -188,7 +188,7 @@ def upload_biz_reg_image(
     client_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_menu_access("clients")),
 ):
     client = db.query(Client).options(joinedload(Client.contacts)).filter(Client.id == client_id).first()
     if client is None:
@@ -213,7 +213,7 @@ def upload_biz_reg_image(
 
 
 @router.get("/{client_id}/biz-reg-image")
-def get_biz_reg_image(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_biz_reg_image(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_menu_access("clients"))):
     client = db.query(Client).filter(Client.id == client_id).first()
     if client is None or not client.biz_reg_image_path or not os.path.exists(client.biz_reg_image_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사업자등록증 파일을 찾을 수 없습니다.")
@@ -226,7 +226,7 @@ def upload_bankbook_image(
     client_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_menu_access("clients")),
 ):
     client = db.query(Client).options(joinedload(Client.contacts)).filter(Client.id == client_id).first()
     if client is None:
@@ -251,7 +251,7 @@ def upload_bankbook_image(
 
 
 @router.get("/{client_id}/bankbook-image")
-def get_bankbook_image(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_bankbook_image(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_menu_access("clients"))):
     client = db.query(Client).filter(Client.id == client_id).first()
     if client is None or not client.bankbook_image_path or not os.path.exists(client.bankbook_image_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="통장사본 파일을 찾을 수 없습니다.")
@@ -260,7 +260,7 @@ def get_bankbook_image(client_id: int, db: Session = Depends(get_db), current_us
 
 
 @router.delete("/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_client(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def delete_client(client_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_menu_access_dept_head("clients"))):
     client = db.query(Client).filter(Client.id == client_id).first()
     if client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래처를 찾을 수 없습니다.")

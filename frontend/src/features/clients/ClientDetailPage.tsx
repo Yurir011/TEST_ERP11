@@ -2,6 +2,7 @@ import { ArrowLeft, FileText, Landmark, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import { canDeleteClient } from "../../lib/auth";
 import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet, openFile } from "../../lib/api";
 import { formatCurrency, formatDate } from "../../lib/format";
@@ -74,7 +75,7 @@ export function ClientDetailPage() {
                 <Pencil size={14} />
                 수정
               </Link>
-              {user?.role === "admin" && (
+              {canDeleteClient(user) && (
                 <button
                   onClick={handleDelete}
                   disabled={isDeleting}
