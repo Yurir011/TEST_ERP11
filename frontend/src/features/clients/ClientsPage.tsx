@@ -1,14 +1,29 @@
-import { Building2, Download, Plus, Search, Trash2 } from "lucide-react";
+import { Building2, Download, FileText, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
-import { apiDelete, apiGet, downloadFile } from "../../lib/api";
+import { apiDelete, apiGet, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { Client } from "./types";
 
 function primaryContact(client: Client) {
   return client.contacts[0] ?? null;
+}
+
+function FileButton({ exists, label, onClick }: { exists: boolean; label: string; onClick: () => void }) {
+  if (!exists) return <span className="text-text-muted">-</span>;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${label} 보기`}
+      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary-hover border border-border rounded-lg px-2 py-1 hover:bg-bg"
+    >
+      <FileText size={13} />
+      보기
+    </button>
+  );
 }
 
 export function ClientsPage() {
@@ -47,6 +62,16 @@ export function ClientsPage() {
       setError("목록을 다운로드하지 못했습니다.");
     } finally {
       setIsExporting(false);
+    }
+  }
+
+  async function handleOpenFile(clientId: number, kind: "biz-reg-image" | "bankbook-image") {
+    logDebug("Clients", `첨부파일 열기: id=${clientId}, kind=${kind}`);
+    try {
+      await openFile(`/api/clients/${clientId}/${kind}`);
+    } catch (err) {
+      logError("Clients", "첨부파일 열기 실패", err);
+      setError("파일을 열지 못했습니다.");
     }
   }
 
@@ -121,6 +146,8 @@ export function ClientsPage() {
                 <th className="py-3 px-4 font-semibold text-text border border-border">사업자번호</th>
                 <th className="py-3 px-4 font-semibold text-text border border-border">담당자</th>
                 <th className="py-3 px-4 font-semibold text-text border border-border">담당자 연락처</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border text-center">사업자등록증</th>
+                <th className="py-3 px-4 font-semibold text-text border border-border text-center">통장사본</th>
                 <th className="w-12 border border-border"></th>
               </tr>
             </thead>
@@ -148,6 +175,20 @@ export function ClientsPage() {
                     </td>
                     <td className="py-3 px-4 border border-border">
                       {contact ? contact.mobile_phone || contact.landline_phone || "-" : "-"}
+                    </td>
+                    <td className="py-3 px-2 border border-border text-center" onClick={(e) => e.stopPropagation()}>
+                      <FileButton
+                        exists={client.has_biz_reg_image}
+                        label="사업자등록증"
+                        onClick={() => handleOpenFile(client.id, "biz-reg-image")}
+                      />
+                    </td>
+                    <td className="py-3 px-2 border border-border text-center" onClick={(e) => e.stopPropagation()}>
+                      <FileButton
+                        exists={client.has_bankbook_image}
+                        label="통장사본"
+                        onClick={() => handleOpenFile(client.id, "bankbook-image")}
+                      />
                     </td>
                     <td className="py-3 px-2 border border-border" onClick={(e) => e.stopPropagation()}>
                       {user?.role === "admin" && (
