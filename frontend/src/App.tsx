@@ -1,4 +1,15 @@
-import { Route, Routes } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import type { MenuPermissionKey } from "./lib/auth";
+import { MobileApprovalsPage } from "./features/mobile/MobileApprovalsPage";
+import { MobileAttendancePage } from "./features/mobile/MobileAttendancePage";
+import { MobileClientsPage } from "./features/mobile/MobileClientsPage";
+import { MobileHome } from "./features/mobile/MobileHome";
+import { MobileLeavesPage } from "./features/mobile/MobileLeavesPage";
+import { MobileNoticesPage } from "./features/mobile/MobileNoticesPage";
+import { MobileNotificationsPage } from "./features/mobile/MobileNotificationsPage";
+import { MobileSchedulePage } from "./features/mobile/MobileSchedulePage";
+import { shouldUseMobile } from "./features/mobile/mobileMode";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { useAuth } from "./context/AuthContext";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
@@ -29,13 +40,33 @@ import { CalendarPage } from "./features/schedule/CalendarPage";
 
 function DashboardRoute() {
   const { user } = useAuth();
+  // 폰 화면 폭으로 처음 접속하면 모바일 화면으로 보낸다 (모바일 홈의 "PC 화면으로 보기"로 이 탭에서는 해제 가능).
+  if (shouldUseMobile()) return <Navigate to="/m" replace />;
   return user?.role === "site_admin" ? <SiteAdminDashboardPage /> : <DashboardPage />;
+}
+
+/** 모바일 화면(/m/*) 공통 접근 규칙: 로그인 필수, 메뉴 권한은 PC와 동일하게 적용한다. */
+function mobileRoute(element: ReactNode, options: { menuKey?: MenuPermissionKey; siteAdminAllowed?: boolean } = {}) {
+  return (
+    <ProtectedRoute siteAdminAllowed={options.siteAdminAllowed} menuKey={options.menuKey}>
+      {element}
+    </ProtectedRoute>
+  );
 }
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+
+      <Route path="/m" element={mobileRoute(<MobileHome />, { siteAdminAllowed: true })} />
+      <Route path="/m/attendance" element={mobileRoute(<MobileAttendancePage />)} />
+      <Route path="/m/leaves" element={mobileRoute(<MobileLeavesPage />)} />
+      <Route path="/m/notices" element={mobileRoute(<MobileNoticesPage />, { menuKey: "notices", siteAdminAllowed: true })} />
+      <Route path="/m/schedule" element={mobileRoute(<MobileSchedulePage />, { siteAdminAllowed: true })} />
+      <Route path="/m/clients" element={mobileRoute(<MobileClientsPage />, { menuKey: "clients" })} />
+      <Route path="/m/notifications" element={mobileRoute(<MobileNotificationsPage />, { siteAdminAllowed: true })} />
+      <Route path="/m/approvals" element={mobileRoute(<MobileApprovalsPage />)} />
 
       <Route
         path="/"
