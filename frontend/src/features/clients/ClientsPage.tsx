@@ -228,8 +228,7 @@ export function ClientsPage() {
           <table className="w-full min-w-[960px] table-fixed text-sm border-collapse">
             <thead>
               <tr className="text-left text-xs text-text-muted">
-                {currentTab === ALL_TAB && <th className="w-16"></th>}
-                <th className={`py-3.5 pr-4 font-medium text-text-muted w-[22%] ${currentTab === ALL_TAB ? "pl-2" : "pl-7"}`}>업체명</th>
+                <th className="py-3.5 pl-7 pr-4 font-medium text-text-muted w-[22%]">업체명</th>
                 <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[13%]">사업자번호</th>
                 <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[13%]">유선번호</th>
                 <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[15%]">담당자</th>
@@ -242,32 +241,21 @@ export function ClientsPage() {
             <tbody>
               {visibleGroups.map((group, groupIndex) => (
                 <Fragment key={group.label}>
+                  {/* 전체 보기에서는 구간 사이를 글자 없이 얇은 띠로만 구분한다. */}
+                  {currentTab === ALL_TAB && groupIndex > 0 && (
+                    <tr aria-hidden="true">
+                      <td colSpan={8} className="h-2.5 p-0 bg-text/[0.06]" />
+                    </tr>
+                  )}
                   {group.items.map((client, index) => {
                 const contact = primaryContact(client);
                 return (
                   <tr
                     key={client.id}
                     onClick={() => navigate(`/clients/${client.id}`)}
-                    className={`cursor-pointer hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""} ${
-                      currentTab === ALL_TAB && index === 0 && groupIndex > 0 ? "border-t border-border/60" : ""
-                    }`}
+                    className={`cursor-pointer hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""}`}
                   >
-                    {currentTab === ALL_TAB && (
-                      <td className="py-3.5 pl-5 whitespace-nowrap">
-                        {index === 0 && (
-                          <>
-                            <span className="text-sm font-bold text-primary">{group.label}</span>
-                            <span className="ml-1 text-[11px] font-normal tabular-nums text-text-muted">{group.items.length}</span>
-                          </>
-                        )}
-                      </td>
-                    )}
-                    <td
-                      className={`py-3.5 pr-4 font-semibold text-text max-w-0 truncate ${currentTab === ALL_TAB ? "pl-2" : "pl-7"}`}
-                      title={client.name}
-                    >
-                      {client.name}
-                    </td>
+                    <td className="py-3.5 pl-7 pr-4 font-semibold text-text max-w-0 truncate" title={client.name}>{client.name}</td>
                     <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.biz_reg_no || "-"}</td>
                     <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.phone || "-"}</td>
                     <td className="py-3.5 px-4 truncate">
