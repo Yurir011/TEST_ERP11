@@ -1,17 +1,27 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import extract, func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
 from app.core.deps import require_menu_access
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.transaction import Transaction, TransactionType
-from app.models.user import User
-from app.schemas.transaction import TransactionCreate, TransactionOut, VatReportOut
+from app.models.user import User, has_menu_permission
+from app.schemas.transaction import (
+    HometaxImportResult,
+    HometaxPreviewOut,
+    HometaxPreviewRow,
+    TransactionCreate,
+    TransactionOut,
+    VatReportOut,
+)
+from app.services.hometax_apply import apply_plan, build_plan
+from app.services.hometax_import import HometaxParseError, parse_hometax_excel
 from app.services.transaction_list_excel import generate_transaction_list_excel
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
@@ -130,6 +140,67 @@ def get_vat_report(
         purchase_supply=purchase_supply,
         purchase_vat=purchase_vat,
         payable_vat=sales_vat - purchase_vat,
+    )
+
+
+def _plan_from_upload(db: Session, file: UploadFile):
+    raw = file.file.read()
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="빈 파일입니다.")
+    try:
+        invoices = parse_hometax_excel(raw, file.filename or "")
+    except HometaxParseError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return build_plan(db, invoices)
+
+
+@router.post("/import-hometax/preview", response_model=HometaxPreviewOut)
+def preview_hometax_import(
+    file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(require_transactions_access)
+):
+    logger.debug(f"[Transactions] 홈택스 엑셀 미리보기: file={file.filename}, by={current_user.id}")
+    plan = _plan_from_upload(db, file)
+    rows = [
+        HometaxPreviewRow(
+            approval_no=p.approval_no,
+            transaction_date=p.transaction_date,
+            type=p.type,
+            counterparty_name=p.counterparty_name,
+            counterparty_reg_no=p.counterparty_reg_no,
+            item_name=p.item_name,
+            supply_amount=p.supply,
+            vat_amount=p.vat,
+            status=p.status,
+            message=p.message,
+            client_action=p.client_action,
+        )
+        for p in plan
+    ]
+    return HometaxPreviewOut(
+        company_reg_no=settings.company_reg_no,
+        total=len(rows),
+        new_count=sum(1 for r in rows if r.status == "new"),
+        duplicate_count=sum(1 for r in rows if r.status == "duplicate"),
+        error_count=sum(1 for r in rows if r.status == "error"),
+        new_client_count=len({p.counterparty_reg_no for p in plan if p.status == "new" and p.client_action in ("create", "create_same")}),
+        rows=rows,
+    )
+
+
+@router.post("/import-hometax", response_model=HometaxImportResult)
+def import_hometax(
+    file: UploadFile = File(...),
+    create_clients: bool = Query(default=True),
+    create_documents: bool = Query(default=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_transactions_access),
+):
+    logger.debug(f"[Transactions] 홈택스 엑셀 적용: file={file.filename}, create_clients={create_clients}, by={current_user.id}")
+    plan = _plan_from_upload(db, file)
+    # 세금계산서 문서는 세금계산서 메뉴 권한이 있는 사용자만 만든다 (없으면 매입매출만 입력).
+    make_documents = create_documents and has_menu_permission(current_user, "tax_invoice")
+    return HometaxImportResult(
+        **apply_plan(db, plan, current_user.id, create_clients=create_clients, create_documents=make_documents)
     )
 
 

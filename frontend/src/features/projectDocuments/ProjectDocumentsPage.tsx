@@ -22,6 +22,7 @@ import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { ProposalsPage } from "../proposals/ProposalsPage";
+import { HometaxImportModal } from "../transactions/HometaxImportModal";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import { useOpenTarget } from "../../lib/useOpenTarget";
 import { ProjectDocumentDetailModal } from "./ProjectDocumentDetailModal";
@@ -262,6 +263,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [showHometax, setShowHometax] = useState(false);
 
   function loadDocs() {
     if (tab === "proposal") return;
@@ -888,18 +890,28 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       description={layoutDescription}
       actions={
         lockedDocType === "tax_invoice" ? (
-          <button
-            onClick={handleExportTaxInvoicesExcel}
-            disabled={isExportingExcel}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
-          >
-            <Download size={14} />
-            {isExportingExcel ? "다운로드 중..." : "엑셀 다운로드 (청구/영수/개요)"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowHometax(true)}
+              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
+            >
+              <FileSpreadsheet size={14} />
+              홈택스 엑셀 가져오기
+            </button>
+            <button
+              onClick={handleExportTaxInvoicesExcel}
+              disabled={isExportingExcel}
+              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
+            >
+              <Download size={14} />
+              {isExportingExcel ? "다운로드 중..." : "엑셀 다운로드 (청구/영수/개요)"}
+            </button>
+          </div>
         ) : undefined
       }
     >
       {content}
+      {showHometax && <HometaxImportModal onClose={() => setShowHometax(false)} onImported={loadDocs} />}
     </MainLayout>
   );
 }

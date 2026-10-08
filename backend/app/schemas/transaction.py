@@ -35,6 +35,38 @@ class TransactionOut(BaseModel):
     created_at: datetime
 
 
+class HometaxPreviewRow(BaseModel):
+    approval_no: str
+    transaction_date: date | None
+    type: TransactionType | None
+    counterparty_name: str
+    counterparty_reg_no: str
+    item_name: str
+    supply_amount: int
+    vat_amount: int
+    status: str  # new | duplicate | error
+    message: str
+    client_action: str  # existing | create | create_same | none
+
+
+class HometaxPreviewOut(BaseModel):
+    company_reg_no: str
+    total: int
+    new_count: int
+    duplicate_count: int
+    error_count: int
+    new_client_count: int
+    rows: list[HometaxPreviewRow]
+
+
+class HometaxImportResult(BaseModel):
+    imported: int
+    skipped_duplicates: int
+    errors: int
+    created_clients: int
+    created_documents: int = 0
+
+
 class VatReportOut(BaseModel):
     year: int
     month: int

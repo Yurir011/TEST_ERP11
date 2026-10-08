@@ -1,10 +1,11 @@
-import { ChevronLeft, ChevronRight, Download, Plus, Receipt, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Plus, Receipt, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { apiDelete, apiGet, downloadFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
+import { HometaxImportModal } from "./HometaxImportModal";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
 
 const TABS: { key: TransactionType | "all"; label: string }[] = [
@@ -45,6 +46,7 @@ export function TransactionsPage() {
   const [activePreset, setActivePreset] = useState<number | null>(1);
 
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
+  const [showHometax, setShowHometax] = useState(false);
   const [report, setReport] = useState<VatReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -128,6 +130,13 @@ export function TransactionsPage() {
       description="매입·매출을 기록하고 부가세를 자동으로 집계합니다."
       actions={
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowHometax(true)}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
+          >
+            <FileSpreadsheet size={14} />
+            홈택스 엑셀 가져오기
+          </button>
           <button
             onClick={handleExportExcel}
             disabled={isExporting}
@@ -299,6 +308,16 @@ export function TransactionsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showHometax && (
+        <HometaxImportModal
+          onClose={() => setShowHometax(false)}
+          onImported={() => {
+            loadTransactions();
+            loadReport();
+          }}
+        />
       )}
     </MainLayout>
   );
