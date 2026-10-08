@@ -179,7 +179,8 @@ def list_proposals(
 
 @router.post("", response_model=ProposalOut, status_code=status.HTTP_201_CREATED)
 def create_proposal(payload: ProposalCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    issue_date = date.today()
+    issue_date = payload.issue_date or date.today()
+    logger.debug(f"[Proposals] 기안일자: {issue_date} (입력값={payload.issue_date})")
     p = Proposal(
         kind=payload.kind or None,
         title=payload.title,

@@ -11,6 +11,7 @@ class ProposalCreate(BaseModel):
     title: str
     topic: str
     content: str
+    issue_date: date | None = None  # 기안일자. 비우면 오늘
     is_final_decision: bool = False
     end_title: JobTitle | None = None  # 결재선 종료 단계 (부서장/팀장/대표). 전결이면 불필요
     approver_ids: list[int] = Field(default_factory=list)  # 부서장부터 end_title까지의 단계 수만큼, 순서대로. 전결이면 불필요

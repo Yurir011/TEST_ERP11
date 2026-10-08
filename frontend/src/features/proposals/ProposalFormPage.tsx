@@ -22,6 +22,7 @@ export function ProposalFormPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  const [issueDate, setIssueDate] = useState(todayLabel());
   const [kind, setKind] = useState("");
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
@@ -66,6 +67,7 @@ export function ProposalFormPage() {
     setIsSubmitting(true);
     try {
       const created = await apiPost<Proposal>("/api/proposals", {
+        issue_date: issueDate || todayLabel(),
         kind: kind.trim() || null,
         title,
         topic,
@@ -114,7 +116,13 @@ export function ProposalFormPage() {
           </div>
           <div>
             <p className="text-xs text-text-muted mb-1">기안일자</p>
-            <p className="font-medium">{todayLabel()}</p>
+            <input
+              type="date"
+              required
+              value={issueDate}
+              onChange={(e) => setIssueDate(e.target.value)}
+              className="rounded-lg border border-border px-2 py-1 text-sm font-medium outline-none focus:border-primary bg-bg"
+            />
           </div>
           <div>
             <p className="text-xs text-text-muted mb-1">문서번호</p>
