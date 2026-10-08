@@ -227,14 +227,14 @@ export function ClientsPage() {
         <div className="bg-surface rounded-[20px] shadow-sm overflow-x-auto">
           <table className="w-full min-w-[960px] table-fixed text-sm border-collapse">
             <thead>
-              <tr className="text-left text-xs text-text-muted">
-                <th className="py-3.5 pl-7 pr-4 font-medium text-text-muted w-[22%]">업체명</th>
-                <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[13%]">사업자번호</th>
-                <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[13%]">유선번호</th>
-                <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[15%]">담당자</th>
-                <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[14%]">담당자 연락처</th>
-                <th className="py-3.5 px-3 font-medium text-text-muted text-center whitespace-nowrap w-[8%]">사업자등록증</th>
-                <th className="py-3.5 px-3 font-medium text-text-muted text-center whitespace-nowrap w-[8%]">통장사본</th>
+              <tr className="text-left text-xs bg-primary/[0.12]">
+                <th className="py-3.5 pl-7 pr-4 font-semibold text-primary w-[22%]">업체명</th>
+                <th className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap w-[13%]">사업자번호</th>
+                <th className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap w-[13%]">유선번호</th>
+                <th className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap w-[15%]">담당자</th>
+                <th className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap w-[14%]">담당자 연락처</th>
+                <th className="py-3.5 px-3 font-semibold text-primary text-center whitespace-nowrap w-[8%]">사업자등록증</th>
+                <th className="py-3.5 px-3 font-semibold text-primary text-center whitespace-nowrap w-[8%]">통장사본</th>
                 <th className="w-12"></th>
               </tr>
             </thead>
