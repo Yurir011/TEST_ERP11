@@ -128,6 +128,16 @@ export function ClientDetailPage() {
                 사업자등록증 보기
               </button>
             )}
+            {client.has_biz_reg_image2 && (
+              <button
+                type="button"
+                onClick={() => openFile(`/api/clients/${client.id}/biz-reg-image2`)}
+                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5"
+              >
+                <FileText size={14} />
+                사업자등록증 2쪽 보기
+              </button>
+            )}
           </div>
 
           {showBankInfo && (

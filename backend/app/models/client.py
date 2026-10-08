@@ -29,6 +29,7 @@ class Client(Base):
     payable_amount: Mapped[int] = mapped_column(BigInteger, default=0)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     biz_reg_image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 사업자등록증 첨부파일
+    biz_reg_image2_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 사업자등록증 2쪽 첨부파일
     bankbook_image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 통장사본 첨부파일
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -44,6 +45,10 @@ class Client(Base):
     @property
     def has_biz_reg_image(self) -> bool:
         return bool(self.biz_reg_image_path)
+
+    @property
+    def has_biz_reg_image2(self) -> bool:
+        return bool(self.biz_reg_image2_path)
 
     @property
     def has_bankbook_image(self) -> bool:

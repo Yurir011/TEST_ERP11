@@ -24,6 +24,7 @@ export interface Client {
   payable_amount: number;
   memo: string | null;
   has_biz_reg_image: boolean;
+  has_biz_reg_image2: boolean;
   has_bankbook_image: boolean;
   contacts: ClientContact[];
   created_at: string;

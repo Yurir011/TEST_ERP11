@@ -111,6 +111,10 @@ export function ClientFormPage() {
 
   const bizRegInputRef = useRef<HTMLInputElement>(null);
   const [hasBizRegImage, setHasBizRegImage] = useState(false);
+  // 사업자등록증이 2장인 거래처를 위한 2쪽 첨부 (OCR 없이 첨부만 한다)
+  const bizReg2InputRef = useRef<HTMLInputElement>(null);
+  const [stagedBizReg2File, setStagedBizReg2File] = useState<File | null>(null);
+  const [hasBizRegImage2, setHasBizRegImage2] = useState(false);
   const [isBizRegUploading, setIsBizRegUploading] = useState(false);
   const [bizRegError, setBizRegError] = useState<string | null>(null);
 
@@ -128,6 +132,7 @@ export function ClientFormPage() {
       .then((client) => {
         setValues(toFormValues(client));
         setHasBizRegImage(client.has_biz_reg_image);
+        setHasBizRegImage2(client.has_biz_reg_image2);
         setHasBankbookImage(client.has_bankbook_image);
       })
       .catch((err) => {
@@ -260,6 +265,31 @@ export function ClientFormPage() {
     }
   }
 
+  async function handleBizReg2Select(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setBizRegError(null);
+    // 수정 화면은 바로 첨부로 저장하고, 신규 등록은 거래처 저장 후 업로드한다.
+    if (!isEdit || !id) {
+      logDebug("ClientForm", `사업자등록증 2쪽 대기: ${file.name}`);
+      setStagedBizReg2File(file);
+      return;
+    }
+    setIsBizRegUploading(true);
+    try {
+      logDebug("ClientForm", `사업자등록증 2쪽 업로드 시도: ${file.name}`);
+      await apiUpload(`/api/clients/${id}/biz-reg-image2`, file);
+      setHasBizRegImage2(true);
+    } catch (err) {
+      logError("ClientForm", "사업자등록증 2쪽 업로드 실패", err);
+      setBizRegError(err instanceof ApiError ? err.message : "업로드 중 오류가 발생했습니다.");
+    } finally {
+      setIsBizRegUploading(false);
+    }
+  }
+
   /** 같은 이름의 거래처가 이미 있으면 저장 전에 한 번 더 확인한다. 띄어쓰기/법인 형태(주식회사, (주))가 달라도 같은 이름으로 본다. */
   async function confirmDuplicateName(): Promise<boolean> {
     const normalize = (name: string) => name.replace(/\s|\(주\)|\(유\)|주식회사|유한회사/g, "").toLowerCase();
@@ -299,6 +329,13 @@ export function ClientFormPage() {
             await apiUpload(`/api/clients/${created.id}/biz-reg-image`, stagedBizRegFile);
           } catch (err) {
             logError("ClientForm", "사업자등록증 첨부 업로드 실패", err);
+          }
+        }
+        if (stagedBizReg2File) {
+          try {
+            await apiUpload(`/api/clients/${created.id}/biz-reg-image2`, stagedBizReg2File);
+          } catch (err) {
+            logError("ClientForm", "사업자등록증 2쪽 업로드 실패", err);
           }
         }
         if (stagedBankbookFile) {
@@ -347,6 +384,27 @@ export function ClientFormPage() {
                 <p className="text-xs text-text-muted mt-1.5 flex items-center gap-1">
                   <Paperclip size={12} />
                   {stagedBizRegFile.name} (저장 시 첨부파일로 함께 등록됩니다)
+                </p>
+              )}
+              <input
+                ref={bizReg2InputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={handleBizReg2Select}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => bizReg2InputRef.current?.click()}
+                className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg mt-2"
+              >
+                <Paperclip size={14} />
+                {stagedBizReg2File ? "2쪽 다시 첨부" : "2쪽 첨부 (2장짜리인 경우)"}
+              </button>
+              {stagedBizReg2File && (
+                <p className="text-xs text-text-muted mt-1.5 flex items-center gap-1">
+                  <Paperclip size={12} />
+                  {stagedBizReg2File.name} (저장 시 2쪽으로 함께 등록됩니다)
                 </p>
               )}
               {ocrFilledCount !== null && ocrFilledCount > 0 && (
@@ -402,6 +460,34 @@ export function ClientFormPage() {
                   >
                     <Eye size={14} />
                     첨부 보기
+                  </button>
+                )}
+              </div>
+              <input
+                ref={bizReg2InputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={handleBizReg2Select}
+                className="hidden"
+              />
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => bizReg2InputRef.current?.click()}
+                  disabled={isBizRegUploading}
+                  className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg disabled:opacity-60"
+                >
+                  <Paperclip size={14} />
+                  {hasBizRegImage2 ? "2쪽 다시 첨부" : "2쪽 첨부 (2장짜리인 경우)"}
+                </button>
+                {hasBizRegImage2 && (
+                  <button
+                    type="button"
+                    onClick={() => openFile(`/api/clients/${id}/biz-reg-image2`)}
+                    className="flex items-center gap-1.5 text-xs text-primary hover:opacity-80"
+                  >
+                    <Eye size={14} />
+                    2쪽 보기
                   </button>
                 )}
               </div>

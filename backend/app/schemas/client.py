@@ -80,6 +80,7 @@ class ClientOut(BaseModel):
     payable_amount: int
     memo: str | None
     has_biz_reg_image: bool
+    has_biz_reg_image2: bool
     has_bankbook_image: bool
     contacts: list[ClientContactOut]
     created_at: datetime
