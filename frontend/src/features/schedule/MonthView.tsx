@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { isSameDay, isSameMonth, toISODate, WEEKDAY_LABELS } from "./dateUtils";
 import { getHolidayMap, getLunarLabel } from "./holidays";
 import { EVENT_COLOR_STYLES, type ScheduleEvent } from "./types";
@@ -10,10 +10,15 @@ interface MonthViewProps {
   onDayClick: (date: Date) => void;
   onDayNumberClick: (date: Date) => void;
   onEventClick: (event: ScheduleEvent) => void;
+  canDrag: (event: ScheduleEvent) => boolean;
+  onDragStart: (event: ScheduleEvent) => void;
+  onDragEnd: () => void;
+  onDropOnDate: (date: string) => void;
 }
 
-export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberClick, onEventClick }: MonthViewProps) {
+export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberClick, onEventClick, canDrag, onDragStart, onDragEnd, onDropOnDate }: MonthViewProps) {
   const today = new Date();
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const years = useMemo(() => Array.from(new Set(days.map((d) => d.getFullYear()))), [days]);
   const holidayMap = useMemo(() => getHolidayMap(years), [years]);
 
@@ -50,11 +55,20 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
             <div
               key={key}
               onClick={() => onDayClick(day)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOverKey(key);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverKey(null);
+                onDropOnDate(key);
+              }}
               role="button"
               tabIndex={0}
               className={`min-h-24 border-b border-r border-border p-1.5 text-left align-top hover:bg-bg transition-colors cursor-pointer ${
                 inMonth ? "" : "bg-bg/50"
-              }`}
+              } ${dragOverKey === key ? "ring-2 ring-primary ring-inset" : ""}`}
             >
               <div className="flex items-center gap-1">
                 <button
@@ -79,6 +93,13 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
                 {dayEvents.slice(0, holiday ? 2 : 3).map((ev) => (
                   <div
                     key={ev.id}
+                    draggable={canDrag(ev)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", String(ev.id));
+                      e.dataTransfer.effectAllowed = "move";
+                      onDragStart(ev);
+                    }}
+                    onDragEnd={onDragEnd}
                     onClick={(e) => {
                       e.stopPropagation();
                       onEventClick(ev);

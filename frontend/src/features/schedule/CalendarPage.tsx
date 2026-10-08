@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
@@ -64,12 +64,111 @@ export function CalendarPage() {
   }, [events]);
 
   function shift(delta: number) {
-    if (view === "month") {
-      setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + delta, 1));
-    } else if (view === "week") {
-      setAnchor(addDays(anchor, delta * 7));
-    } else {
-      setAnchor(addDays(anchor, delta));
+    setAnchor((prev) => {
+      if (view === "month") return new Date(prev.getFullYear(), prev.getMonth() + delta, 1);
+      if (view === "week") return addDays(prev, delta * 7);
+      return addDays(prev, delta);
+    });
+  }
+
+  // 드래그 이동 관련 상태
+  const draggingRef = useRef<ScheduleEvent | null>(null);
+  const edgeTimerRef = useRef<number | null>(null);
+  const shiftRef = useRef(shift);
+  shiftRef.current = shift;
+
+  function canDrag(ev: ScheduleEvent) {
+    return ev.created_by === user?.id || isAdminRole(user?.role);
+  }
+
+  function handleDragStart(ev: ScheduleEvent) {
+    logDebug("Calendar", `드래그 시작: id=${ev.id}`);
+    draggingRef.current = ev;
+  }
+
+  function handleDragEnd() {
+    draggingRef.current = null;
+    stopEdgeShift();
+  }
+
+  async function handleMoveEvent(targetDate: string) {
+    const ev = draggingRef.current;
+    draggingRef.current = null;
+    stopEdgeShift();
+    if (!ev || ev.start_date === targetDate) return;
+    const diff = Math.round(
+      (new Date(targetDate + "T00:00:00").getTime() - new Date(ev.start_date + "T00:00:00").getTime()) / 86400000,
+    );
+    const newStart = targetDate;
+    const newEnd = toISODate(addDays(new Date(ev.end_date + "T00:00:00"), diff));
+    logDebug("Calendar", `일정 이동: id=${ev.id}, ${ev.start_date} -> ${newStart}`);
+    try {
+      await apiPut(`/api/schedule/${ev.id}`, {
+        title: ev.title,
+        description: ev.description,
+        start_date: newStart,
+        end_date: newEnd,
+        color: ev.color,
+        is_lunar: ev.is_lunar,
+      });
+      loadEvents();
+    } catch (err) {
+      logError("Calendar", "일정 이동 실패", err);
+      setError("일정을 이동하지 못했습니다.");
+    }
+  }
+
+  // 일정을 끌고 이전/다음 버튼 위에 머무르면 자동으로 페이지를 넘긴다.
+  function startEdgeShift(delta: number) {
+    if (!draggingRef.current || edgeTimerRef.current !== null) return;
+    edgeTimerRef.current = window.setInterval(() => shiftRef.current(delta), 700);
+  }
+
+  function stopEdgeShift() {
+    if (edgeTimerRef.current !== null) {
+      window.clearInterval(edgeTimerRef.current);
+      edgeTimerRef.current = null;
+    }
+  }
+
+  // 캘린더 위에서 마우스 휠을 굴리면 이전/다음으로 넘긴다. (연속 입력은 0.4초 간격으로 제한)
+  const wheelAreaRef = useRef<HTMLDivElement | null>(null);
+  const lastWheelRef = useRef(0);
+
+  useEffect(() => {
+    const el = wheelAreaRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (Math.abs(e.deltaY) < 4) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastWheelRef.current < 400) return;
+      lastWheelRef.current = now;
+      logDebug("Calendar", `휠 이동: ${e.deltaY > 0 ? "다음" : "이전"}`);
+      shiftRef.current(e.deltaY > 0 ? 1 : -1);
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // 빈 영역을 좌우로 끌면(스와이프) 이전/다음으로 넘긴다.
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
+
+  function handleSwipeDown(e: React.PointerEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest('[draggable="true"], button, input, textarea')) return;
+    swipeRef.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function handleSwipeUp(e: React.PointerEvent) {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start || view === "day") return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      logDebug("Calendar", `스와이프 이동: ${dx < 0 ? "다음" : "이전"}`);
+      shift(dx < 0 ? 1 : -1);
     }
   }
 
@@ -133,11 +232,6 @@ export function CalendarPage() {
     }
   }
 
-  const headerLabel =
-    view === "day"
-      ? `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월 ${anchor.getDate()}일`
-      : `${anchor.getFullYear()}년 ${anchor.getMonth() + 1}월`;
-
   const canEditModalEvent = !modalEvent || modalEvent.created_by === user?.id || isAdminRole(user?.role);
 
   return (
@@ -156,11 +250,29 @@ export function CalendarPage() {
     >
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
-          <button onClick={() => shift(-1)} className="p-1.5 rounded-lg hover:bg-surface text-text-muted">
+          <button
+            onClick={() => shift(-1)}
+            onDragEnter={() => startEdgeShift(-1)}
+            onDragLeave={stopEdgeShift}
+            onDragOver={(e) => e.preventDefault()}
+            className="p-1.5 rounded-lg hover:bg-surface text-text-muted"
+          >
             <ChevronLeft size={16} />
           </button>
-          <p className="text-sm font-medium w-36">{headerLabel}</p>
-          <button onClick={() => shift(1)} className="p-1.5 rounded-lg hover:bg-surface text-text-muted">
+          <p className="flex items-baseline gap-0.5 w-44 justify-center">
+            <span className="text-[40px] font-extrabold leading-none tracking-tight">{anchor.getMonth() + 1}</span>
+            <span className="text-base font-bold mr-1.5">월</span>
+            <span className="text-[13px] font-medium text-text-muted">
+              {anchor.getFullYear()}년{view === "day" && ` ${anchor.getDate()}일`}
+            </span>
+          </p>
+          <button
+            onClick={() => shift(1)}
+            onDragEnter={() => startEdgeShift(1)}
+            onDragLeave={stopEdgeShift}
+            onDragOver={(e) => e.preventDefault()}
+            className="p-1.5 rounded-lg hover:bg-surface text-text-muted"
+          >
             <ChevronRight size={16} />
           </button>
           <button
@@ -188,6 +300,7 @@ export function CalendarPage() {
 
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
+      <div ref={wheelAreaRef} onPointerDown={handleSwipeDown} onPointerUp={handleSwipeUp} className="select-none">
       {view === "month" && (
         <MonthView
           days={monthDays}
@@ -196,6 +309,10 @@ export function CalendarPage() {
           onDayClick={openCreate}
           onDayNumberClick={openDay}
           onEventClick={openEdit}
+          canDrag={canDrag}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDropOnDate={handleMoveEvent}
         />
       )}
       {view === "week" && (
@@ -205,6 +322,10 @@ export function CalendarPage() {
           onDayClick={openCreate}
           onDayNumberClick={openDay}
           onEventClick={openEdit}
+          canDrag={canDrag}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDropOnDate={handleMoveEvent}
         />
       )}
       {view === "day" && (
@@ -217,6 +338,7 @@ export function CalendarPage() {
           onReorder={handleReorder}
         />
       )}
+      </div>
 
       {modalDate && (
         <EventFormModal

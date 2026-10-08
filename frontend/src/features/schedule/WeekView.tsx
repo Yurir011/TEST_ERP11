@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { isSameDay, toISODate, WEEKDAY_LABELS } from "./dateUtils";
 import { getHolidayMap } from "./holidays";
 import { EVENT_COLOR_STYLES, type ScheduleEvent } from "./types";
@@ -10,10 +10,15 @@ interface WeekViewProps {
   onDayClick: (date: Date) => void;
   onDayNumberClick: (date: Date) => void;
   onEventClick: (event: ScheduleEvent) => void;
+  canDrag: (event: ScheduleEvent) => boolean;
+  onDragStart: (event: ScheduleEvent) => void;
+  onDragEnd: () => void;
+  onDropOnDate: (date: string) => void;
 }
 
-export function WeekView({ days, eventsByDate, onDayClick, onDayNumberClick, onEventClick }: WeekViewProps) {
+export function WeekView({ days, eventsByDate, onDayClick, onDayNumberClick, onEventClick, canDrag, onDragStart, onDragEnd, onDropOnDate }: WeekViewProps) {
   const today = new Date();
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const years = useMemo(() => Array.from(new Set(days.map((d) => d.getFullYear()))), [days]);
   const holidayMap = useMemo(() => getHolidayMap(years), [years]);
 
@@ -27,7 +32,21 @@ export function WeekView({ days, eventsByDate, onDayClick, onDayNumberClick, onE
         const headerColor = holiday || i === 0 ? "text-danger" : i === 6 ? "text-primary" : "";
 
         return (
-          <div key={key} className="bg-surface border border-border rounded-2xl overflow-hidden flex flex-col">
+          <div
+            key={key}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOverKey(key);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOverKey(null);
+              onDropOnDate(key);
+            }}
+            className={`bg-surface border rounded-2xl overflow-hidden flex flex-col ${
+              dragOverKey === key ? "border-primary ring-2 ring-primary" : "border-border"
+            }`}
+          >
             <div className={`text-center py-2 border-b border-border ${headerColor}`}>
               <p className="text-xs">{WEEKDAY_LABELS[i]}</p>
               <button
@@ -44,6 +63,13 @@ export function WeekView({ days, eventsByDate, onDayClick, onDayNumberClick, onE
               {dayEvents.map((ev) => (
                 <div
                   key={ev.id}
+                    draggable={canDrag(ev)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", String(ev.id));
+                      e.dataTransfer.effectAllowed = "move";
+                      onDragStart(ev);
+                    }}
+                    onDragEnd={onDragEnd}
                   onClick={() => onEventClick(ev)}
                   className={`text-[11px] px-1.5 py-1 rounded font-medium cursor-pointer truncate ${ev.is_completed ? "opacity-50 line-through" : ""}`}
                   style={{ backgroundColor: EVENT_COLOR_STYLES[ev.color].bg, color: EVENT_COLOR_STYLES[ev.color].fg }}
