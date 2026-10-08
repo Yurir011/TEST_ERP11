@@ -29,8 +29,8 @@ class PaymentCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_proof(self):
-        # 계좌이체가 아니면 증빙 정보를 저장하지 않는다.
-        if self.method != PaymentMethod.bank_transfer:
+        # 계좌이체·현금이 아니면 증빙 정보를 저장하지 않는다.
+        if self.method not in (PaymentMethod.bank_transfer, PaymentMethod.cash):
             self.proof_type = None
             self.proof_type_detail = None
             return self

@@ -6,6 +6,7 @@ import {
   Image,
   Plus,
   Printer,
+  Repeat,
   Search,
   Trash2,
   Upload,
@@ -20,6 +21,7 @@ import { ApiError, apiDelete, apiGet, apiUpload, downloadFile, openFile } from "
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { PaymentDetailModal } from "./PaymentDetailModal";
+import { RecurringPaymentsModal } from "./RecurringPaymentsModal";
 import { SettleModal } from "./SettleModal";
 import {
   PAYMENT_TYPE_LABELS,
@@ -58,6 +60,7 @@ export function PaymentsPage() {
   const [importResult, setImportResult] = useState<CsvImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showRecurring, setShowRecurring] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -218,6 +221,13 @@ export function PaymentsPage() {
       actions={
         <div className="flex items-center gap-2">
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvSelected} className="hidden" />
+          <button
+            onClick={() => setShowRecurring(true)}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
+          >
+            <Repeat size={14} />
+            정기 자동이체
+          </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
@@ -455,7 +465,7 @@ export function PaymentsPage() {
                       <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-purple text-tile-purple-fg">
                         {p.proof_type === "other" && p.proof_type_detail ? p.proof_type_detail : PROOF_TYPE_LABELS[p.proof_type]}
                       </span>
-                    ) : p.method === "bank_transfer" ? (
+                    ) : p.method === "bank_transfer" || p.method === "cash" ? (
                       <span className="text-xs text-text-muted">미발행</span>
                     ) : (
                       <span className="text-xs text-text-muted">-</span>
@@ -513,6 +523,16 @@ export function PaymentsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showRecurring && (
+        <RecurringPaymentsModal
+          onClose={() => setShowRecurring(false)}
+          onChanged={() => {
+            loadPayments();
+            loadReport();
+          }}
+        />
       )}
 
       {selectedPayment && (

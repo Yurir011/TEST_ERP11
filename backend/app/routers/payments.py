@@ -16,6 +16,7 @@ from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.user import User
+from app.services.recurring_payment import generate_recurring_payments
 from app.schemas.payment import CsvImportResult, PaymentCreate, PaymentOut, PaymentReportOut
 from app.services.payment_csv import CsvParseError, parse_card_statement_csv
 from app.services.payment_list_excel import generate_payment_list_excel
@@ -125,6 +126,7 @@ def list_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
+    generate_recurring_payments(db)  # 도래한 정기 자동이체를 먼저 기록한다
     payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q).all()
     return [_to_out(p) for p in payments]
 
@@ -140,6 +142,7 @@ def export_payments_excel(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
+    generate_recurring_payments(db)
     payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q).all()
     logger.debug(
         f"[Payments] 목록 엑셀 내보내기: count={len(payments)}, date_from={date_from}, date_to={date_to}, "
@@ -159,6 +162,8 @@ def get_monthly_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
+    generate_recurring_payments(db)
+
     def total(payment_type: PaymentType) -> int:
         value = (
             db.query(sa_func.coalesce(sa_func.sum(Payment.amount), 0))
@@ -314,6 +319,15 @@ def get_payment_voucher_excel(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@router.get("/{payment_id}", response_model=PaymentOut)
+def get_payment(payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)):
+    payment = db.query(Payment).options(joinedload(Payment.client)).filter(Payment.id == payment_id).first()
+    if payment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
+    logger.debug(f"[Payments] 단건 조회: id={payment_id}, by={current_user.id}")
+    return _to_out(payment)
 
 
 @router.put("/{payment_id}", response_model=PaymentOut)

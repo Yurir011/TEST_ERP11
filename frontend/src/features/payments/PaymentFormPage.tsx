@@ -1,10 +1,10 @@
 import { Search } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { Client } from "../clients/types";
-import { ApiError, apiGet, apiPost, apiUpload } from "../../lib/api";
-import { logError } from "../../lib/logger";
+import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
+import { logDebug, logError } from "../../lib/logger";
 import {
   BANK_TYPE_LABELS,
   CARD_TYPE_LABELS,
@@ -28,6 +28,8 @@ function todayISO() {
 
 export function PaymentFormPage() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = !!id;
 
   const [type, setType] = useState<PaymentType>("withdrawal");
   const [paymentDate, setPaymentDate] = useState(todayISO());
@@ -48,6 +50,10 @@ export function PaymentFormPage() {
   const [cardType, setCardType] = useState<CardType | null>(null);
   const [bankType, setBankType] = useState<BankType | null>(null);
 
+  // 증빙(세금계산서/영수증 등) 발행 여부는 계좌이체와 현금 건에서 선택한다.
+  const usesProof = method === "bank_transfer" || method === "cash";
+  const [hasReceipt, setHasReceipt] = useState(false);
+  const [isLoading, setIsLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -76,9 +82,11 @@ export function PaymentFormPage() {
   }, []);
 
   useEffect(() => {
-    if (method !== "bank_transfer") {
+    if (method !== "bank_transfer" && method !== "cash") {
       setProofType(null);
       setProofTypeDetail("");
+    }
+    if (method !== "bank_transfer") {
       setBankType(null);
     }
     if (method !== "corporate_card") {
@@ -92,11 +100,53 @@ export function PaymentFormPage() {
   const needsManualItem = !categoryItems;
   const needsCustomText = !needsManualItem && item === "기타";
 
-  useEffect(() => {
+  function changeCategory(next: PaymentCategory) {
+    setCategory(next);
     setItem("");
     setCustomText("");
     setManualItem("");
-  }, [category]);
+  }
+
+  // 수정 화면: 기존 내역을 불러와 입력칸을 채운다.
+  useEffect(() => {
+    if (!id) return;
+    logDebug("PaymentForm", `수정할 내역 조회: id=${id}`);
+    apiGet<Payment>(`/api/payments/${id}`)
+      .then((p) => {
+        const cat = (PAYMENT_CATEGORIES as readonly string[]).includes(p.category) ? (p.category as PaymentCategory) : PAYMENT_CATEGORIES[0];
+        const items = PAYMENT_CATEGORY_ITEMS[cat];
+        setType(p.type);
+        setPaymentDate(p.payment_date);
+        setCategory(cat);
+        if (items) {
+          if (items.includes(p.description)) {
+            setItem(p.description);
+          } else {
+            setItem("기타");
+            setCustomText(p.description);
+          }
+        } else {
+          setManualItem(p.description);
+        }
+        setAmount(String(p.amount));
+        setMethod(p.method);
+        setCardType(p.card_type);
+        setBankType(p.bank_type);
+        setProofType(p.proof_type);
+        setProofTypeDetail(p.proof_type_detail ?? "");
+        if (p.client_id !== null && p.client_name) {
+          setSelectedClient({ id: p.client_id, name: p.client_name } as Client);
+          setPartyQuery(p.client_name);
+        }
+        setMemo(p.memo ?? "");
+        setHasReceipt(p.has_receipt);
+      })
+      .catch((err) => {
+        logError("PaymentForm", "수정할 내역 조회 실패", err);
+        setError("입출금 내역을 불러오지 못했습니다.");
+      })
+      .finally(() => setIsLoading(false));
+  }, [id]);
 
   function pickClient(client: Client) {
     setSelectedClient(client);
@@ -108,7 +158,7 @@ export function PaymentFormPage() {
     e.preventDefault();
     setError(null);
 
-    if (method === "bank_transfer" && proofType === "other" && !proofTypeDetail.trim()) {
+    if (usesProof && proofType === "other" && !proofTypeDetail.trim()) {
       setError("증빙 종류를 '기타'로 선택한 경우 내용을 입력해주세요.");
       return;
     }
@@ -137,7 +187,7 @@ export function PaymentFormPage() {
 
     setIsSubmitting(true);
     try {
-      const created = await apiPost<Payment>("/api/payments", {
+      const body = {
         type,
         payment_date: paymentDate,
         category,
@@ -146,27 +196,33 @@ export function PaymentFormPage() {
         method,
         client_id: selectedClient?.id ?? null,
         memo: memo || null,
-        proof_type: method === "bank_transfer" ? proofType : null,
-        proof_type_detail: method === "bank_transfer" && proofType === "other" ? proofTypeDetail : null,
+        proof_type: usesProof ? proofType : null,
+        proof_type_detail: usesProof && proofType === "other" ? proofTypeDetail : null,
         card_type: method === "corporate_card" ? cardType : null,
         bank_type: method === "bank_transfer" ? bankType : null,
-      });
+      };
+
+      logDebug("PaymentForm", `${isEdit ? "수정" : "등록"} 시도: category=${category}, amount=${body.amount}`);
+      const saved = isEdit ? await apiPut<Payment>(`/api/payments/${id}`, body) : await apiPost<Payment>("/api/payments", body);
 
       if (receiptFile) {
-        await apiUpload(`/api/payments/${created.id}/receipt`, receiptFile);
+        await apiUpload(`/api/payments/${saved.id}/receipt`, receiptFile);
       }
 
       navigate("/payments", { replace: true });
     } catch (err) {
-      logError("PaymentForm", "등록 실패", err);
-      setError(err instanceof ApiError ? err.message : "등록 중 오류가 발생했습니다.");
+      logError("PaymentForm", `${isEdit ? "수정" : "등록"} 실패`, err);
+      setError(err instanceof ApiError ? err.message : `${isEdit ? "수정" : "등록"} 중 오류가 발생했습니다.`);
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <MainLayout title="새 입출금 등록">
+    <MainLayout title={isEdit ? "입출금 수정" : "새 입출금 등록"}>
+      {isLoading ? (
+        <p className="text-sm text-text-muted">불러오는 중...</p>
+      ) : (
       <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-xl">
         <div>
           <label className="block text-xs text-text-muted mb-1.5">구분</label>
@@ -259,7 +315,7 @@ export function PaymentFormPage() {
           </div>
         )}
 
-        {method === "bank_transfer" && (
+        {usesProof && (
           <div>
             <label className="block text-xs text-text-muted mb-1.5">증빙 발행 여부</label>
             <div className="grid grid-cols-2 gap-2">
@@ -287,7 +343,7 @@ export function PaymentFormPage() {
                 className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg mt-2"
               />
             )}
-            <p className="text-xs text-text-muted mt-1.5">계좌이체 건은 세금계산서/영수증 등 증빙 발행 여부를 선택할 수 있습니다.</p>
+            <p className="text-xs text-text-muted mt-1.5">계좌이체·현금 건은 세금계산서/영수증 등 증빙 발행 여부를 선택할 수 있습니다.</p>
           </div>
         )}
 
@@ -296,7 +352,7 @@ export function PaymentFormPage() {
             <label className="block text-xs text-text-muted mb-1.5">분류</label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as PaymentCategory)}
+              onChange={(e) => changeCategory(e.target.value as PaymentCategory)}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             >
               {PAYMENT_CATEGORIES.map((c) => (
@@ -400,7 +456,9 @@ export function PaymentFormPage() {
         </div>
 
         <div>
-          <label className="block text-xs text-text-muted mb-1.5">영수증 이미지 (선택)</label>
+          <label className="block text-xs text-text-muted mb-1.5">
+            영수증 이미지 (선택){isEdit && hasReceipt && " · 이미 첨부되어 있습니다. 새 파일을 고르면 교체됩니다."}
+          </label>
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
@@ -427,7 +485,7 @@ export function PaymentFormPage() {
             disabled={isSubmitting}
             className="rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60"
           >
-            {isSubmitting ? "등록 중..." : "등록"}
+            {isSubmitting ? (isEdit ? "저장 중..." : "등록 중...") : isEdit ? "저장" : "등록"}
           </button>
           <button
             type="button"
@@ -438,6 +496,7 @@ export function PaymentFormPage() {
           </button>
         </div>
       </form>
+      )}
     </MainLayout>
   );
 }

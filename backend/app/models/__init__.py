@@ -6,6 +6,7 @@ from app.models.leave import LeaveRequest
 from app.models.notice import Notice
 from app.models.notification import Notification
 from app.models.payment import Payment
+from app.models.recurring_payment import RecurringPayment, RecurringPaymentRun
 from app.models.project import Project
 from app.models.project_document import ProjectDocument, ProjectDocumentImage, ProjectDocumentItem
 from app.models.proposal import Proposal, ProposalApprovalStep, ProposalAttachment
@@ -38,6 +39,8 @@ __all__ = [
     "SalesDocumentItem",
     "Transaction",
     "Payment",
+    "RecurringPayment",
+    "RecurringPaymentRun",
     "ScheduleEvent",
     "TodoItem",
 ]

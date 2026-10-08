@@ -4,8 +4,9 @@ from sqlalchemy import text
 
 from app import models  # noqa: F401  (테이블 메타데이터 등록을 위해 import)
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, SessionLocal, engine
 from app.logging_config import get_logger, setup_logging
+from app.services.recurring_payment import generate_recurring_payments
 from app.routers import (
     attendance,
     auth,
@@ -15,6 +16,7 @@ from app.routers import (
     notices,
     notifications,
     payments,
+    recurring_payments,
     project_documents,
     project_progress,
     projects,
@@ -53,6 +55,7 @@ app.include_router(project_progress.router)
 app.include_router(sales_documents.router)
 app.include_router(transactions.router)
 app.include_router(payments.router)
+app.include_router(recurring_payments.router)
 app.include_router(users.router)
 app.include_router(schedule.router)
 app.include_router(todos.router)
@@ -67,6 +70,10 @@ def on_startup():
         logger.debug("[Main] DB 연결 확인 성공")
         Base.metadata.create_all(bind=engine)
         logger.debug("[Main] 테이블 생성/확인 완료")
+        # 도래한 정기 자동이체를 입출금 내역으로 기록한다 (서버가 꺼져 있던 기간분도 함께 채운다).
+        with SessionLocal() as db:
+            created = generate_recurring_payments(db)
+            logger.debug(f"[Main] 정기 자동이체 기록: {created}건")
     except Exception as exc:
         logger.error(f"[Main] DB 연결 실패: {exc}")
 

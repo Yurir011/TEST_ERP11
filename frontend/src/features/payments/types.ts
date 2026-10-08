@@ -99,6 +99,21 @@ export function paymentMethodDetailLabel(p: Payment): string {
   return base;
 }
 
+export interface RecurringPayment {
+  id: number;
+  type: PaymentType;
+  category: string;
+  description: string;
+  amount: number;
+  day_of_month: number;
+  start_month: string; // "YYYY-MM-01"
+  bank_type: BankType;
+  memo: string | null;
+  is_active: boolean;
+  last_recorded_month: string | null;
+  created_at: string;
+}
+
 export interface PaymentReport {
   year: number;
   month: number;

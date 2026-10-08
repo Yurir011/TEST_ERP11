@@ -1,4 +1,5 @@
-import { FileSpreadsheet, Image, Printer, X } from "lucide-react";
+import { FileSpreadsheet, Image, Pencil, Printer, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { downloadFile, openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logError } from "../../lib/logger";
@@ -20,11 +21,12 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onClose: () => void }) {
+  const navigate = useNavigate();
   const proofText = payment.proof_type
     ? payment.proof_type === "other" && payment.proof_type_detail
       ? payment.proof_type_detail
       : PROOF_TYPE_LABELS[payment.proof_type]
-    : payment.method === "bank_transfer"
+    : payment.method === "bank_transfer" || payment.method === "cash"
       ? "미발행"
       : "-";
 
@@ -96,6 +98,13 @@ export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onC
           >
             <FileSpreadsheet size={14} />
             엑셀 다운로드
+          </button>
+          <button
+            onClick={() => navigate(`/payments/${payment.id}/edit`)}
+            className="flex items-center gap-1.5 text-xs bg-primary hover:bg-primary-hover text-white rounded-lg px-3 py-2"
+          >
+            <Pencil size={14} />
+            수정
           </button>
           <button
             onClick={onClose}
