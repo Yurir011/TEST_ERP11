@@ -11,16 +11,16 @@ import type { Client } from "./types";
 
 // 거래처 수가 많아졌을 때 찾기 쉽도록 초성 구간별로 묶어서 보여준다 (모든 자음으로 나누지 않고 비슷한 자음끼리 묶음).
 const CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
-const GROUP_ORDER = ["ㄱ", "ㄴ·ㄷ", "ㄹ·ㅁ", "ㅂ", "ㅅ", "ㅇ", "ㅈ", "ㅊ·ㅋ·ㅌ·ㅍ·ㅎ", "A-Z", "기타"];
+const GROUP_ORDER = ["ㄱ", "ㄴ~ㄷ", "ㄹ~ㅁ", "ㅂ", "ㅅ", "ㅇ", "ㅈ", "ㅊ~ㅎ", "A-Z", "기타"];
 const CHOSEONG_GROUP: Record<string, string> = {
   ㄱ: "ㄱ", ㄲ: "ㄱ",
-  ㄴ: "ㄴ·ㄷ", ㄷ: "ㄴ·ㄷ", ㄸ: "ㄴ·ㄷ",
-  ㄹ: "ㄹ·ㅁ", ㅁ: "ㄹ·ㅁ",
+  ㄴ: "ㄴ~ㄷ", ㄷ: "ㄴ~ㄷ", ㄸ: "ㄴ~ㄷ",
+  ㄹ: "ㄹ~ㅁ", ㅁ: "ㄹ~ㅁ",
   ㅂ: "ㅂ", ㅃ: "ㅂ",
   ㅅ: "ㅅ", ㅆ: "ㅅ",
   ㅇ: "ㅇ",
   ㅈ: "ㅈ", ㅉ: "ㅈ",
-  ㅊ: "ㅊ·ㅋ·ㅌ·ㅍ·ㅎ", ㅋ: "ㅊ·ㅋ·ㅌ·ㅍ·ㅎ", ㅌ: "ㅊ·ㅋ·ㅌ·ㅍ·ㅎ", ㅍ: "ㅊ·ㅋ·ㅌ·ㅍ·ㅎ", ㅎ: "ㅊ·ㅋ·ㅌ·ㅍ·ㅎ",
+  ㅊ: "ㅊ~ㅎ", ㅋ: "ㅊ~ㅎ", ㅌ: "ㅊ~ㅎ", ㅍ: "ㅊ~ㅎ", ㅎ: "ㅊ~ㅎ",
 };
 
 // "(주)", "주식회사" 같은 법인 표기는 빼고 실제 상호의 첫 글자로 구간을 정한다.
@@ -228,7 +228,8 @@ export function ClientsPage() {
           <table className="w-full min-w-[960px] table-fixed text-sm border-collapse">
             <thead>
               <tr className="text-left text-xs text-text-muted">
-                <th className="py-3.5 pl-7 pr-4 font-medium text-text-muted w-[22%]">업체명</th>
+                {currentTab === ALL_TAB && <th className="w-16"></th>}
+                <th className={`py-3.5 pr-4 font-medium text-text-muted w-[22%] ${currentTab === ALL_TAB ? "pl-2" : "pl-7"}`}>업체명</th>
                 <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[13%]">사업자번호</th>
                 <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[13%]">유선번호</th>
                 <th className="py-3.5 px-4 font-medium text-text-muted whitespace-nowrap w-[15%]">담당자</th>
@@ -239,24 +240,34 @@ export function ClientsPage() {
               </tr>
             </thead>
             <tbody>
-              {visibleGroups.map((group) => (
+              {visibleGroups.map((group, groupIndex) => (
                 <Fragment key={group.label}>
-                  {currentTab === ALL_TAB && (
-                    <tr>
-                      <td colSpan={8} className="pt-4 pb-1.5 pl-7 text-xs font-semibold text-primary border-t border-border/60">
-                        {group.label} <span className="font-normal text-text-muted">({group.items.length})</span>
-                      </td>
-                    </tr>
-                  )}
                   {group.items.map((client, index) => {
                 const contact = primaryContact(client);
                 return (
                   <tr
                     key={client.id}
                     onClick={() => navigate(`/clients/${client.id}`)}
-                    className={`cursor-pointer hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""}`}
+                    className={`cursor-pointer hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""} ${
+                      currentTab === ALL_TAB && index === 0 && groupIndex > 0 ? "border-t border-border/60" : ""
+                    }`}
                   >
-                    <td className="py-3.5 pl-7 pr-4 font-semibold text-text max-w-0 truncate" title={client.name}>{client.name}</td>
+                    {currentTab === ALL_TAB && (
+                      <td className="py-3.5 pl-5 whitespace-nowrap">
+                        {index === 0 && (
+                          <>
+                            <span className="text-sm font-bold text-primary">{group.label}</span>
+                            <span className="ml-1 text-[11px] font-normal tabular-nums text-text-muted">{group.items.length}</span>
+                          </>
+                        )}
+                      </td>
+                    )}
+                    <td
+                      className={`py-3.5 pr-4 font-semibold text-text max-w-0 truncate ${currentTab === ALL_TAB ? "pl-2" : "pl-7"}`}
+                      title={client.name}
+                    >
+                      {client.name}
+                    </td>
                     <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.biz_reg_no || "-"}</td>
                     <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.phone || "-"}</td>
                     <td className="py-3.5 px-4 truncate">
