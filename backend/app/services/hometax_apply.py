@@ -46,6 +46,10 @@ def _our_reg_no() -> str:
 
 def build_plan(db: Session, invoices: list[HometaxInvoice]) -> list[PlanRow]:
     ours = _our_reg_no()
+    if not ours:
+        # 서버 .env에 번호가 없으면 모든 행이 "사업자번호 다름"으로 나와 원인을 알기 어렵다. 처음부터 분명히 알려준다.
+        logger.error("[HometaxImport] COMPANY_REG_NO 설정이 비어 있습니다 (서버의 backend/.env 확인)")
+        raise ValueError("서버 설정(backend/.env)의 COMPANY_REG_NO(우리 회사 사업자등록번호)가 비어 있습니다. 설정 후 서버를 다시 시작해주세요.")
     # 직접 입력한 번호에 하이픈이 있어도 같은 번호로 보도록 숫자만 남겨 비교한다.
     existing_numbers = {
         approval_key(n) for (n,) in db.query(Transaction.tax_invoice_no).filter(Transaction.tax_invoice_no.isnot(None)).all()
@@ -94,7 +98,11 @@ def build_plan(db: Session, invoices: list[HometaxInvoice]) -> list[PlanRow]:
             row.type = TransactionType.purchase
             name, reg, ceo, addr = inv.supplier_name, inv.supplier_reg, inv.supplier_ceo, inv.supplier_addr
         else:
-            row.status, row.message = "error", "공급자/공급받는자 어느 쪽도 우리 회사 사업자번호와 다릅니다."
+            row.status = "error"
+            row.message = (
+                "공급자/공급받는자 어느 쪽도 우리 회사 사업자번호와 다릅니다. "
+                f"(공급자 {format_reg_no(inv.supplier_reg) or '없음'}, 공급받는자 {format_reg_no(inv.buyer_reg) or '없음'}, 우리 {format_reg_no(ours)})"
+            )
             logger.debug(
                 f"[HometaxImport] 사업자번호 불일치: 승인번호={inv.approval_no} 공급자={inv.supplier_reg!r} "
                 f"공급받는자={inv.buyer_reg!r} 우리={ours!r}"
