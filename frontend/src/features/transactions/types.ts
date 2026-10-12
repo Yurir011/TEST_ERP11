@@ -26,6 +26,19 @@ export interface Transaction {
   created_at: string;
 }
 
+export interface TaxInvoiceCandidate {
+  id: number;
+  issue_date: string;
+  type: TransactionType;
+  client_id: number | null;
+  client_name: string;
+  item_name: string;
+  supply_amount: number;
+  vat_amount: number;
+  tax_invoice_no: string | null;
+  status: string;
+}
+
 export interface VatReport {
   year: number;
   month: number;

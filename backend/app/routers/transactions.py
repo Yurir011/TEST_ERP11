@@ -10,12 +10,14 @@ from app.core.deps import require_menu_access
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
+from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus, calc_amount
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import User, has_menu_permission
 from app.schemas.transaction import (
     HometaxImportResult,
     HometaxPreviewOut,
     HometaxPreviewRow,
+    TaxInvoiceCandidateOut,
     TransactionCreate,
     TransactionOut,
     VatReportOut,
@@ -207,6 +209,56 @@ def import_hometax(
     )
 
 
+def _doc_is_sales(doc: ProjectDocument) -> bool:
+    # 문서관리의 세금계산서 매출/매입 판단과 같은 기준 (받은 세금계산서는 direction, 직접 작성은 청구=매출)
+    return doc.direction == "sales" if doc.direction else doc.purpose_type == "청구"
+
+
+def _doc_amounts(doc: ProjectDocument) -> tuple[int, int]:
+    supply = sum(calc_amount(i.quantity, i.unit_price) for i in doc.items)
+    return supply, round(supply * 0.1)
+
+
+@router.get("/linkable-tax-invoices", response_model=list[TaxInvoiceCandidateOut])
+def list_linkable_tax_invoices(
+    q: str | None = Query(default=None), db: Session = Depends(get_db), current_user: User = Depends(require_transactions_access)
+):
+    """매입매출에 아직 연결되지 않은 세금계산서 문서 목록. 새 거래 등록 화면의 "세금계산서 불러오기"에서 쓴다."""
+    query = (
+        db.query(ProjectDocument)
+        .options(joinedload(ProjectDocument.items), joinedload(ProjectDocument.other_client), joinedload(ProjectDocument.project))
+        .filter(
+            ProjectDocument.doc_type == ProjectDocType.tax_invoice,
+            ProjectDocument.ledger_transaction_id.is_(None),
+            ProjectDocument.status != ProjectDocumentStatus.rejected,
+        )
+    )
+    if q:
+        query = query.filter(ProjectDocument.client_name.ilike(f"%{q.strip()}%"))
+    docs = query.order_by(ProjectDocument.issue_date.desc(), ProjectDocument.id.desc()).limit(100).all()
+    out = []
+    for d in docs:
+        supply, vat = _doc_amounts(d)
+        names = [i.content for i in d.items if i.content]
+        client = d.effective_client
+        out.append(
+            TaxInvoiceCandidateOut(
+                id=d.id,
+                issue_date=d.issue_date,
+                type=TransactionType.sales if _doc_is_sales(d) else TransactionType.purchase,
+                client_id=client.id if client else None,
+                client_name=d.client_name,
+                item_name=(names[0] + (f" 외 {len(names) - 1}건" if len(names) > 1 else "")) if names else "세금계산서",
+                supply_amount=supply,
+                vat_amount=vat,
+                tax_invoice_no=d.doc_no or d.approval_no or d.popbill_nts_confirm_num,
+                status=d.status.value,
+            )
+        )
+    logger.debug(f"[Transactions] 불러올 세금계산서 {len(out)}건 조회: q={q!r}, by={current_user.id}")
+    return out
+
+
 @router.get("/{tx_id}", response_model=TransactionOut)
 def get_transaction(tx_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_transactions_access)):
     tx = db.query(Transaction).options(joinedload(Transaction.client)).filter(Transaction.id == tx_id).first()
@@ -224,7 +276,15 @@ def create_transaction(
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
-    logger.debug(f"[Transactions] 등록: type={payload.type}, item={payload.item_name}, by={current_user.id}")
+    doc = None
+    if payload.tax_invoice_doc_id is not None:
+        doc = db.query(ProjectDocument).filter(ProjectDocument.id == payload.tax_invoice_doc_id).first()
+        if doc is None or doc.doc_type != ProjectDocType.tax_invoice:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="불러온 세금계산서를 찾을 수 없습니다.")
+        if doc.ledger_transaction_id is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 매입매출에 연결된 세금계산서입니다.")
+
+    logger.debug(f"[Transactions] 등록: type={payload.type}, item={payload.item_name}, doc={payload.tax_invoice_doc_id}, by={current_user.id}")
     tx = Transaction(
         type=payload.type,
         transaction_date=payload.transaction_date,
@@ -239,6 +299,10 @@ def create_transaction(
         created_by=current_user.id,
     )
     db.add(tx)
+    if doc is not None:
+        db.flush()
+        doc.ledger_transaction_id = tx.id
+        logger.debug(f"[Transactions] 세금계산서 문서 연결: doc_id={doc.id}, tx_id={tx.id}")
     db.commit()
     db.refresh(tx)
     return _to_out(tx)

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Plus, Receipt, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -278,7 +278,7 @@ export function TransactionsPage() {
                 <th className="py-2.5 px-4 font-medium text-right">공급가액</th>
                 <th className="py-2.5 px-4 font-medium text-right">부가세</th>
                 <th className="py-2.5 px-4 font-medium text-right">합계</th>
-                <th className="w-10"></th>
+                <th className="w-20"></th>
               </tr>
             </thead>
             <tbody>
@@ -295,7 +295,15 @@ export function TransactionsPage() {
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.supply_amount)}</td>
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.vat_amount)}</td>
                   <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(tx.total_amount)}</td>
-                  <td className="py-2.5 px-2">
+                  <td className="py-2.5 px-2 whitespace-nowrap">
+                    <Link
+                      to={`/transactions/${tx.id}/edit`}
+                      aria-label="수정"
+                      title="수정"
+                      className="inline-block p-1.5 text-text-muted hover:text-primary"
+                    >
+                      <Pencil size={14} />
+                    </Link>
                     <button
                       onClick={() => handleDelete(tx.id)}
                       className="p-1.5 text-text-muted hover:text-danger"

@@ -221,6 +221,14 @@ function App() {
         }
       />
       <Route
+        path="/transactions/:id/edit"
+        element={
+          <ProtectedRoute menuKey="transactions">
+            <TransactionFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/payments"
         element={
           <ProtectedRoute menuKey="payments">

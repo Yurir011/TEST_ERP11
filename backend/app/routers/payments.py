@@ -15,9 +15,11 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.payment import Payment, PaymentMethod, PaymentType
+from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus
+from app.routers.transactions import _doc_amounts, _doc_is_sales
 from app.models.user import User
 from app.services.recurring_payment import generate_recurring_payments
-from app.schemas.payment import CsvImportResult, PaymentCreate, PaymentOut, PaymentReportOut
+from app.schemas.payment import CsvImportResult, PaymentCreate, PaymentOut, PaymentReportOut, PaymentTaxInvoiceCandidateOut
 from app.services.payment_csv import CsvParseError, parse_card_statement_csv
 from app.services.payment_list_excel import generate_payment_list_excel
 from app.services.payment_voucher_excel import generate_payment_voucher_excel
@@ -181,6 +183,45 @@ def get_monthly_report(
     return PaymentReportOut(year=year, month=month, total_deposit=deposit, total_withdrawal=withdrawal, net=deposit - withdrawal)
 
 
+@router.get("/linkable-tax-invoices", response_model=list[PaymentTaxInvoiceCandidateOut])
+def list_linkable_tax_invoices(
+    q: str | None = Query(default=None), db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
+):
+    """입출금에 아직 기록되지 않은(payment_recorded=False) 세금계산서 문서 목록. 새 입출금 등록 화면의 "세금계산서 불러오기"에서 쓴다."""
+    query = (
+        db.query(ProjectDocument)
+        .options(joinedload(ProjectDocument.items), joinedload(ProjectDocument.other_client), joinedload(ProjectDocument.project))
+        .filter(
+            ProjectDocument.doc_type == ProjectDocType.tax_invoice,
+            ProjectDocument.payment_recorded.is_(False),
+            ProjectDocument.status != ProjectDocumentStatus.rejected,
+        )
+    )
+    if q:
+        query = query.filter(ProjectDocument.client_name.ilike(f"%{q.strip()}%"))
+    docs = query.order_by(ProjectDocument.issue_date.desc(), ProjectDocument.id.desc()).limit(100).all()
+    out = []
+    for d in docs:
+        supply, vat = _doc_amounts(d)
+        names = [i.content for i in d.items if i.content]
+        client = d.effective_client
+        out.append(
+            PaymentTaxInvoiceCandidateOut(
+                id=d.id,
+                issue_date=d.issue_date,
+                type=PaymentType.deposit if _doc_is_sales(d) else PaymentType.withdrawal,
+                client_id=client.id if client else None,
+                client_name=d.client_name,
+                item_name=(names[0] + (f" 외 {len(names) - 1}건" if len(names) > 1 else "")) if names else "세금계산서",
+                total_amount=supply + vat,
+                tax_invoice_no=d.doc_no or d.approval_no or d.popbill_nts_confirm_num,
+                status=d.status.value,
+            )
+        )
+    logger.debug(f"[Payments] 불러올 세금계산서 {len(out)}건 조회: q={q!r}, by={current_user.id}")
+    return out
+
+
 @router.post("", response_model=PaymentOut, status_code=status.HTTP_201_CREATED)
 def create_payment(
     payload: PaymentCreate, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
@@ -191,7 +232,15 @@ def create_payment(
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
-    logger.debug(f"[Payments] 등록: type={payload.type}, amount={payload.amount}, by={current_user.id}")
+    doc = None
+    if payload.tax_invoice_doc_id is not None:
+        doc = db.query(ProjectDocument).filter(ProjectDocument.id == payload.tax_invoice_doc_id).first()
+        if doc is None or doc.doc_type != ProjectDocType.tax_invoice:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="불러온 세금계산서를 찾을 수 없습니다.")
+        if doc.payment_recorded:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 입출금에 기록된 세금계산서입니다.")
+
+    logger.debug(f"[Payments] 등록: type={payload.type}, amount={payload.amount}, doc={payload.tax_invoice_doc_id}, by={current_user.id}")
 
     settlement_field = _settlement_field(payload.type, payload.category)
     if client is not None and settlement_field is not None:
@@ -213,6 +262,10 @@ def create_payment(
         created_by=current_user.id,
     )
     db.add(payment)
+    if doc is not None:
+        # 이후 결재 승인 시 같은 세금계산서의 입출금이 한 번 더 기록되지 않도록 표시한다.
+        doc.payment_recorded = True
+        logger.debug(f"[Payments] 세금계산서 문서 연결: doc_id={doc.id}")
     db.commit()
     db.refresh(payment)
     return _to_out(payment)

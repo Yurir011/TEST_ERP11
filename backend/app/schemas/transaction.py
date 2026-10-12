@@ -15,6 +15,23 @@ class TransactionCreate(BaseModel):
     vat_amount: int
     tax_invoice_no: str | None = None
     memo: str | None = None
+    # 새 거래 등록 시 불러온 세금계산서 문서. 지정하면 그 문서를 이 거래와 연결해 같은 세금계산서가 매입매출에 두 번 잡히지 않게 한다.
+    tax_invoice_doc_id: int | None = None
+
+
+class TaxInvoiceCandidateOut(BaseModel):
+    """매입매출에 아직 연결되지 않은 세금계산서 문서(불러오기 후보)."""
+
+    id: int
+    issue_date: date
+    type: TransactionType
+    client_id: int | None
+    client_name: str
+    item_name: str
+    supply_amount: int
+    vat_amount: int
+    tax_invoice_no: str | None
+    status: str
 
 
 class TransactionOut(BaseModel):
