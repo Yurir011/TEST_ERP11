@@ -15,7 +15,7 @@ from app.models.project_document import (
     ProjectDocumentStatus,
 )
 from app.models.transaction import Transaction, TransactionType
-from app.services.hometax_import import HometaxInvoice, HometaxItem, digits_only, format_reg_no, is_valid_reg_no
+from app.services.hometax_import import HometaxInvoice, HometaxItem, approval_key, digits_only, format_reg_no, is_valid_reg_no
 
 logger = get_logger("HometaxImport")
 
@@ -48,7 +48,7 @@ def build_plan(db: Session, invoices: list[HometaxInvoice]) -> list[PlanRow]:
     ours = _our_reg_no()
     # 직접 입력한 번호에 하이픈이 있어도 같은 번호로 보도록 숫자만 남겨 비교한다.
     existing_numbers = {
-        digits_only(n) for (n,) in db.query(Transaction.tax_invoice_no).filter(Transaction.tax_invoice_no.isnot(None)).all()
+        approval_key(n) for (n,) in db.query(Transaction.tax_invoice_no).filter(Transaction.tax_invoice_no.isnot(None)).all()
     }
     # 문서관리의 세금계산서(직접 발행/등록한 것)도 같은 번호로 보고 중복 처리한다. 이 문서들은 이미 매입매출에 연동되어 있다.
     for approval, nts in (
@@ -58,7 +58,9 @@ def build_plan(db: Session, invoices: list[HometaxInvoice]) -> list[PlanRow]:
     ):
         for n in (approval, nts):
             if n:
-                existing_numbers.add(digits_only(n))
+                existing_numbers.add(approval_key(n))
+    # 예전 버전은 승인번호의 영문을 지우고 숫자만 저장했다. 그렇게 저장된(숫자만 있는) 번호와도 비교해 중복 입력을 막는다.
+    legacy_numbers = {n for n in existing_numbers if n.isdigit()}
     clients_by_reg = {}
     for c in db.query(Client).all():
         d = digits_only(c.biz_reg_no)
@@ -93,6 +95,10 @@ def build_plan(db: Session, invoices: list[HometaxInvoice]) -> list[PlanRow]:
             name, reg, ceo, addr = inv.supplier_name, inv.supplier_reg, inv.supplier_ceo, inv.supplier_addr
         else:
             row.status, row.message = "error", "공급자/공급받는자 어느 쪽도 우리 회사 사업자번호와 다릅니다."
+            logger.debug(
+                f"[HometaxImport] 사업자번호 불일치: 승인번호={inv.approval_no} 공급자={inv.supplier_reg!r} "
+                f"공급받는자={inv.buyer_reg!r} 우리={ours!r}"
+            )
             plan.append(row)
             continue
 
@@ -107,7 +113,7 @@ def build_plan(db: Session, invoices: list[HometaxInvoice]) -> list[PlanRow]:
             row.status, row.message = "error", "작성일자를 읽지 못했습니다."
         elif inv.supply is None:
             row.status, row.message = "error", "공급가액을 읽지 못했습니다."
-        elif inv.approval_no in existing_numbers:
+        elif inv.approval_no in existing_numbers or digits_only(inv.approval_no) in legacy_numbers:
             row.status, row.message = "duplicate", "이미 입력된 승인번호입니다."
         else:
             existing = clients_by_reg.get(reg) if reg else None
@@ -156,6 +162,19 @@ def _document_items(row: PlanRow) -> list[ProjectDocumentItem]:
         ProjectDocumentItem(content=name, quantity=1, unit_price=amount, note=note, sort_order=idx)
         for idx, (name, amount, note) in enumerate(built)
     ]
+
+
+def _brief(row: PlanRow) -> dict:
+    return {
+        "approval_no": row.approval_no,
+        "transaction_date": row.transaction_date,
+        "type": row.type,
+        "counterparty_name": row.counterparty_name,
+        "item_name": row.item_name,
+        "supply_amount": row.supply,
+        "vat_amount": row.vat,
+        "message": row.message,
+    }
 
 
 def apply_plan(db: Session, plan: list[PlanRow], user_id: int, create_clients: bool = True, create_documents: bool = True) -> dict:
@@ -244,6 +263,8 @@ def apply_plan(db: Session, plan: list[PlanRow], user_id: int, create_clients: b
     errors = sum(1 for r in plan if r.status == "error")
     logger.debug(f"[HometaxImport] 적용 완료: imported={imported}, duplicates={skipped}, errors={errors}, new_clients={created_clients}, documents={created_documents}")
     return {
+        "duplicates": [_brief(r) for r in plan if r.status == "duplicate"],
+        "error_rows": [_brief(r) for r in plan if r.status == "error"],
         "imported": imported,
         "skipped_duplicates": skipped,
         "errors": errors,

@@ -81,6 +81,11 @@ def _norm(value) -> str:
     return re.sub(r"[\s()/]", "", str(value)) if value is not None else ""
 
 
+def approval_key(value) -> str:
+    """승인번호 비교용: 하이픈/공백을 빼고 소문자로 맞춘다. 홈택스 승인번호 끝 8자리는 영문+숫자라 영문을 지우면 안 된다."""
+    return re.sub(r"[\s-]", "", str(value)).lower() if value is not None else ""
+
+
 def digits_only(value) -> str:
     return re.sub(r"\D", "", str(value)) if value is not None else ""
 
@@ -209,7 +214,7 @@ def parse_hometax_excel(raw: bytes, filename: str) -> list[HometaxInvoice]:
 
     invoices: dict[str, HometaxInvoice] = {}
     for row in rows[header_idx + 1 :]:
-        approval = digits_only(get(row, "approval_no")) or str(get(row, "approval_no") or "").strip()
+        approval = approval_key(get(row, "approval_no"))
         if not approval:
             continue
         item_name = str(get(row, "item_name") or "").strip()

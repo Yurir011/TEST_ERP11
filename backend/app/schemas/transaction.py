@@ -59,12 +59,25 @@ class HometaxPreviewOut(BaseModel):
     rows: list[HometaxPreviewRow]
 
 
+class HometaxSkippedRow(BaseModel):
+    approval_no: str
+    transaction_date: date | None
+    type: TransactionType | None
+    counterparty_name: str
+    item_name: str
+    supply_amount: int
+    vat_amount: int
+    message: str
+
+
 class HometaxImportResult(BaseModel):
     imported: int
     skipped_duplicates: int
     errors: int
     created_clients: int
     created_documents: int = 0
+    duplicates: list[HometaxSkippedRow] = []
+    error_rows: list[HometaxSkippedRow] = []
 
 
 class VatReportOut(BaseModel):
