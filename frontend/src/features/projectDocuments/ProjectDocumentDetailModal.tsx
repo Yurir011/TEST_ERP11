@@ -75,7 +75,7 @@ export function ProjectDocumentDetailModal({
 
         <div className="flex items-center gap-2 mb-4">
           <span
-            className={`text-xs px-2 py-1 rounded-full font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
+            className={`text-xs px-2 py-1 font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
           >
             {PROJECT_DOC_STATUS_LABELS[doc.status]}
           </span>

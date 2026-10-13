@@ -4,6 +4,7 @@ import { ApiError, apiPut, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { useApprovalQueue, type ApprovalItem } from "./approvalQueue";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 function shortDate(iso: string) {
   const d = new Date(iso);
@@ -90,7 +91,7 @@ export function MobileApprovalsPage() {
               <MobileCard key={item.key} className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <span className="inline-block text-[11px] font-semibold bg-tile-blue text-tile-blue-fg rounded-full px-2 py-0.5">
+                    <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 ${SOFT_BADGE.blue}`}>
                       {item.kindLabel}
                     </span>
                     <p className="text-sm font-semibold mt-1.5 break-words">{item.title}</p>

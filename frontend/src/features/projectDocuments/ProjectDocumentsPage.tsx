@@ -36,10 +36,11 @@ import {
   type ProjectDocumentStatus,
   type TaxInvoicePurpose,
 } from "./types";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 const TAX_PURPOSE_STYLES: Record<TaxInvoicePurpose, string> = {
-  청구: "bg-tile-blue text-tile-blue-fg",
-  영수: "bg-tile-green text-tile-green-fg",
+  청구: SOFT_BADGE.blue,
+  영수: SOFT_BADGE.green,
 };
 
 type DocTab = ProjectDocType | "all" | "proposal";
@@ -832,14 +833,14 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                     {lockedDocType === "tax_invoice" && (
                       <td className="py-2.5 px-4">
                         <span
-                          className={`text-xs px-2 py-1 rounded-full font-medium ${
-                            doc.direction === "purchase" ? "bg-tile-orange text-tile-orange-fg" : "bg-tile-purple text-tile-purple-fg"
+                          className={`text-xs px-2 py-1 font-medium ${
+                            doc.direction === "purchase" ? SOFT_BADGE.orange : SOFT_BADGE.purple
                           }`}
                         >
                           {doc.direction === "purchase" ? "매입" : "매출"}
                         </span>
                         {doc.is_paper && (
-                          <span className="ml-1 text-[11px] px-[7px] py-[3px] rounded-full font-medium bg-[#f1f2f4] text-[#4b5563]">
+                          <span className={`ml-1 text-[11px] px-[7px] py-[3px] font-medium ${SOFT_BADGE.gray}`}>
                             종이
                           </span>
                         )}
@@ -847,28 +848,28 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                     )}
                     <td className="py-2.5 px-4">
                       {lockedDocType === "tax_invoice" ? (
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${TAX_PURPOSE_STYLES[doc.purpose_type]}`}>
+                        <span className={`text-xs px-2 py-1 font-medium ${TAX_PURPOSE_STYLES[doc.purpose_type]}`}>
                           {doc.purpose_type}용
                         </span>
                       ) : (
-                        <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-blue text-tile-blue-fg">
+                        <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.blue}`}>
                           {PROJECT_DOC_TYPE_LABELS[doc.doc_type]}
                         </span>
                       )}
                     </td>
                     <td className="py-2.5 px-4">
                       <span
-                        className={`text-xs px-2 py-1 rounded-full font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
+                        className={`text-xs px-2 py-1 font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
                         title={doc.status === "rejected" ? doc.reject_reason ?? undefined : undefined}
                       >
                         {PROJECT_DOC_STATUS_LABELS[doc.status]}
                       </span>
                       {doc.delete_requested && (
-                        <span className="ml-1.5 text-xs px-2 py-1 rounded-full font-medium bg-danger/10 text-danger">삭제 결재 중</span>
+                        <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>
                       )}
                       {doc.doc_type === "tax_invoice" && doc.popbill_issued && (
                         <span
-                          className="ml-1.5 text-xs px-2 py-1 rounded-full font-medium bg-tile-green text-tile-green-fg"
+                          className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.green}`}
                           title={`국세청 승인번호 ${doc.popbill_nts_confirm_num}`}
                         >
                           팝빌 발행됨

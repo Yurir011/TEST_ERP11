@@ -71,7 +71,7 @@ function TaxInvoicePicker({ onPick, onClose }: { onPick: (c: TaxInvoiceCandidate
                 {rows.map((r) => (
                   <tr key={r.id} onClick={() => onPick(r)} className="border-t border-border cursor-pointer hover:bg-bg">
                     <td className="py-2 px-3">
-                      <span className={`px-2 py-0.5 rounded-full font-medium ${TX_TYPE_STYLES[r.type]}`}>{TX_TYPE_LABELS[r.type]}</span>
+                      <span className={`px-2 py-0.5 font-medium ${TX_TYPE_STYLES[r.type]}`}>{TX_TYPE_LABELS[r.type]}</span>
                     </td>
                     <td className="py-2 px-3 tabular-nums">{r.issue_date}</td>
                     <td className="py-2 px-3">{r.client_name}</td>

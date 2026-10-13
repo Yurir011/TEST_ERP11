@@ -14,6 +14,7 @@ import {
   type RecurringPayment,
 } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 interface FormState {
   type: PaymentType;
@@ -319,8 +320,8 @@ export function RecurringPaymentsModal({ onClose, onChanged }: { onClose: () => 
                       <button
                         type="button"
                         onClick={() => handleToggle(t)}
-                        className={`text-xs rounded-full px-2.5 py-1 ${
-                          t.is_active ? "bg-tile-green text-tile-green-fg" : "bg-bg text-text-muted border border-border"
+                        className={`text-xs rounded-md px-2.5 py-1 ${
+                          t.is_active ? SOFT_BADGE.green : "bg-bg text-text-muted border border-border"
                         }`}
                       >
                         {t.is_active ? "사용 중" : "중지됨"}

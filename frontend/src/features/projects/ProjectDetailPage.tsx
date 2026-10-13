@@ -711,7 +711,7 @@ export function ProjectDetailPage() {
                       {doc.client_name} · {doc.issue_date}
                     </p>
                   </Link>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}>
+                  <span className={`text-xs px-2 py-1 font-medium shrink-0 ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}>
                     {PROJECT_DOC_STATUS_LABELS[doc.status]}
                   </span>
                   {doc.status === "approved" && doc.has_pdf && (

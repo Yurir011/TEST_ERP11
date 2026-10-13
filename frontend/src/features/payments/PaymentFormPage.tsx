@@ -87,7 +87,7 @@ function TransactionPicker({ onPick, onClose }: { onPick: (c: PaymentTransaction
                 {rows.map((r) => (
                   <tr key={r.id} onClick={() => onPick(r)} className="border-t border-border cursor-pointer hover:bg-bg">
                     <td className="py-2 px-3">
-                      <span className={`px-2 py-0.5 rounded-full font-medium ${PAYMENT_TYPE_STYLES[r.type]}`}>
+                      <span className={`px-2 py-0.5 font-medium ${PAYMENT_TYPE_STYLES[r.type]}`}>
                         {r.type === "deposit" ? "외상매출" : "외상매입"}
                       </span>
                     </td>

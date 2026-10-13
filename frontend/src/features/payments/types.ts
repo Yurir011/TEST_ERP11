@@ -1,3 +1,5 @@
+import { SOFT_BADGE } from "../../components/ui/softBadge";
+
 export type PaymentType = "deposit" | "withdrawal";
 
 export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
@@ -6,8 +8,8 @@ export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
 };
 
 export const PAYMENT_TYPE_STYLES: Record<PaymentType, string> = {
-  deposit: "bg-tile-green text-tile-green-fg",
-  withdrawal: "bg-red-50 text-danger",
+  deposit: SOFT_BADGE.green,
+  withdrawal: SOFT_BADGE.red,
 };
 
 export interface PaymentTransactionCandidate {

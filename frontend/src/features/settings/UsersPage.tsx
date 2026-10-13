@@ -6,6 +6,7 @@ import type { CurrentUser, JobGrade, JobTitle } from "../../lib/auth";
 import { apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { UserDetailModal } from "./UserDetailModal";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 const GRADE_LABELS: Record<JobGrade, string> = {
   staff: "사원",
@@ -115,8 +116,8 @@ export function UsersPage() {
                   <td className="py-2.5 px-4">{u.title ? TITLE_LABELS[u.title] : "-"}</td>
                   <td className="py-2.5 px-4">
                     <span
-                      className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        u.is_active ? "bg-tile-green text-tile-green-fg" : "bg-red-50 text-danger"
+                      className={`text-xs px-2 py-1 font-medium ${
+                        u.is_active ? SOFT_BADGE.green : SOFT_BADGE.red
                       }`}
                     >
                       {u.is_active ? "활성" : "비활성"}

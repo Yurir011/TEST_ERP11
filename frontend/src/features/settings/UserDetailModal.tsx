@@ -7,6 +7,7 @@ import {
   type CurrentUser,
   type JobTitle,
 } from "../../lib/auth";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 const TITLE_LABELS: Record<JobTitle, string> = {
   ceo: "대표",
@@ -41,8 +42,8 @@ export function UserDetailModal({ user, onClose }: { user: CurrentUser; onClose:
         <div className="flex items-start justify-between mb-4">
           <div>
             <span
-              className={`text-xs px-2 py-1 rounded-full font-medium ${
-                user.is_active ? "bg-tile-green text-tile-green-fg" : "bg-red-50 text-danger"
+              className={`text-xs px-2 py-1 font-medium ${
+                user.is_active ? SOFT_BADGE.green : SOFT_BADGE.red
               }`}
             >
               {user.is_active ? "활성" : "비활성"}

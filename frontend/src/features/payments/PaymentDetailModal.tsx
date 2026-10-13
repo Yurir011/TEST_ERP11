@@ -54,7 +54,7 @@ export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onC
       >
         <div className="flex items-start justify-between mb-4">
           <div>
-            <span className={`text-xs px-2 py-1 rounded-full font-medium ${PAYMENT_TYPE_STYLES[payment.type]}`}>
+            <span className={`text-xs px-2 py-1 font-medium ${PAYMENT_TYPE_STYLES[payment.type]}`}>
               {PAYMENT_TYPE_LABELS[payment.type]}
             </span>
             <h3 className="text-sm font-semibold mt-2">

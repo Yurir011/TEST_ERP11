@@ -1,3 +1,5 @@
+import { SOFT_BADGE } from "../../components/ui/softBadge";
+
 export type ProjectStatus = "estimate" | "in_progress" | "completed";
 
 export interface Project {
@@ -22,9 +24,9 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 };
 
 export const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = {
-  estimate: "bg-tile-orange text-tile-orange-fg",
-  in_progress: "bg-tile-blue text-tile-blue-fg",
-  completed: "bg-tile-green text-tile-green-fg",
+  estimate: SOFT_BADGE.orange,
+  in_progress: SOFT_BADGE.blue,
+  completed: SOFT_BADGE.green,
 };
 
 export type SalesDocType = "estimate" | "statement";

@@ -33,6 +33,7 @@ import {
   type PaymentReport,
   type PaymentType,
 } from "./types";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 const TABS: { key: PaymentType | "all"; label: string }[] = [
   { key: "all", label: "전체" },
@@ -449,7 +450,7 @@ export function PaymentsPage() {
                   className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60 transition-colors"
                 >
                   <td className="py-2.5 px-4">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${PAYMENT_TYPE_STYLES[p.type]}`}>
+                    <span className={`text-xs px-2 py-1 font-medium ${PAYMENT_TYPE_STYLES[p.type]}`}>
                       {PAYMENT_TYPE_LABELS[p.type]}
                     </span>
                   </td>
@@ -462,7 +463,7 @@ export function PaymentsPage() {
                   <td className="py-2.5 px-4">{paymentMethodDetailLabel(p)}</td>
                   <td className="py-2.5 px-4">
                     {p.proof_type ? (
-                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-purple text-tile-purple-fg">
+                      <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>
                         {p.proof_type === "other" && p.proof_type_detail ? p.proof_type_detail : PROOF_TYPE_LABELS[p.proof_type]}
                       </span>
                     ) : p.method === "bank_transfer" || p.method === "cash" ? (

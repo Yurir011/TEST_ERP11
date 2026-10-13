@@ -207,7 +207,7 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
                     <td className="py-2.5 px-4">{p.creator_name}</td>
                     <td className="py-2.5 px-4">{p.issue_date}</td>
                     <td className="py-2.5 px-4">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}>
+                      <span className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}>
                         {PROPOSAL_STATUS_LABELS[p.status]}
                       </span>
                     </td>

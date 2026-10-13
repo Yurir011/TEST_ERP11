@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { Project } from "./types";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 const RING_R = 42;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
@@ -96,7 +97,7 @@ export function ProjectOverviewCard({ projects }: { projects: Project[] }) {
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
                   <span className={`truncate ${style.label}`}>{project.name}</span>
                   {kind === "overdue" && (
-                    <span className="text-[10px] font-medium text-danger bg-danger/10 px-1.5 py-0.5 rounded-full shrink-0">
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 shrink-0 ${SOFT_BADGE.red}`}>
                       지연
                     </span>
                   )}

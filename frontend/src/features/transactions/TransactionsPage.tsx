@@ -7,6 +7,7 @@ import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { HometaxImportModal } from "./HometaxImportModal";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 const TABS: { key: TransactionType | "all"; label: string }[] = [
   { key: "all", label: "전체" },
@@ -310,7 +311,7 @@ export function TransactionsPage() {
               {visible.map((tx) => (
                 <tr key={tx.id} className="border-b border-border last:border-0">
                   <td className="py-2.5 px-4">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${TX_TYPE_STYLES[tx.type]}`}>
+                    <span className={`text-xs px-2 py-1 font-medium ${TX_TYPE_STYLES[tx.type]}`}>
                       {TX_TYPE_LABELS[tx.type]}
                     </span>
                   </td>
@@ -322,12 +323,12 @@ export function TransactionsPage() {
                   <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(tx.total_amount)}</td>
                   <td className="py-2.5 px-4 whitespace-nowrap">
                     {tx.settled ? (
-                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-green text-tile-green-fg">
+                      <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.green}`}>
                         {tx.type === "sales" ? "입금완료" : "결제완료"}
                         {tx.settled_date ? ` ${tx.settled_date.slice(2).replace(/-/g, ".")}` : ""}
                       </span>
                     ) : (
-                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-orange text-tile-orange-fg">
+                      <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>
                         {tx.type === "sales" ? "외상매출" : "외상매입"}
                       </span>
                     )}

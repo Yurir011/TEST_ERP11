@@ -1,3 +1,5 @@
+import { SOFT_BADGE } from "../../components/ui/softBadge";
+
 export type TransactionType = "sales" | "purchase";
 
 export const TX_TYPE_LABELS: Record<TransactionType, string> = {
@@ -6,8 +8,8 @@ export const TX_TYPE_LABELS: Record<TransactionType, string> = {
 };
 
 export const TX_TYPE_STYLES: Record<TransactionType, string> = {
-  sales: "bg-tile-green text-tile-green-fg",
-  purchase: "bg-tile-orange text-tile-orange-fg",
+  sales: SOFT_BADGE.green,
+  purchase: SOFT_BADGE.orange,
 };
 
 export interface Transaction {

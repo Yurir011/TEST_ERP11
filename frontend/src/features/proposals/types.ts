@@ -1,3 +1,5 @@
+import { SOFT_BADGE } from "../../components/ui/softBadge";
+
 export type ProposalStatus = "pending" | "approved" | "rejected";
 
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
@@ -7,9 +9,9 @@ export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
 };
 
 export const PROPOSAL_STATUS_STYLES: Record<ProposalStatus, string> = {
-  pending: "bg-tile-blue text-tile-blue-fg",
-  approved: "bg-tile-green text-tile-green-fg",
-  rejected: "bg-red-50 text-danger",
+  pending: SOFT_BADGE.blue,
+  approved: SOFT_BADGE.green,
+  rejected: SOFT_BADGE.red,
 };
 
 export type ProposalStepStatus = "pending" | "approved" | "rejected";

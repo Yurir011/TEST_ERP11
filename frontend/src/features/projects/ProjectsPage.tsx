@@ -157,7 +157,7 @@ export function ProjectsPage() {
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${PROJECT_STATUS_STYLES[p.status]}`}>
+                      <span className={`text-xs px-2.5 py-1 font-medium ${PROJECT_STATUS_STYLES[p.status]}`}>
                         {PROJECT_STATUS_LABELS[p.status]}
                       </span>
                     </td>

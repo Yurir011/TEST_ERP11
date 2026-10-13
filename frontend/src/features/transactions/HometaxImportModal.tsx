@@ -49,7 +49,7 @@ function SkippedTable({ title, rows, tone }: { title: string; rows: SkippedRow[]
               <tr key={r.approval_no} className="border-t border-border" title={r.message || undefined}>
                 <td className="py-2 px-3">
                   {r.type ? (
-                    <span className={`px-2 py-0.5 rounded-full font-medium ${TX_TYPE_STYLES[r.type]}`}>{TX_TYPE_LABELS[r.type]}</span>
+                    <span className={`px-2 py-0.5 font-medium ${TX_TYPE_STYLES[r.type]}`}>{TX_TYPE_LABELS[r.type]}</span>
                   ) : (
                     "-"
                   )}

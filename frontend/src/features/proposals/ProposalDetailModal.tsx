@@ -118,7 +118,7 @@ export function ProposalDetailModal({
         </div>
 
         <div className="flex items-center gap-2 mb-4">
-          <span className={`text-xs px-2 py-1 rounded-full font-medium ${PROPOSAL_STATUS_STYLES[proposal.status]}`}>
+          <span className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[proposal.status]}`}>
             {PROPOSAL_STATUS_LABELS[proposal.status]}
           </span>
           {proposal.status === "pending" && currentStep && (
