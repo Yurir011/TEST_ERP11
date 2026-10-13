@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
 import { ApiError, apiGet, apiPost, apiUpload, downloadFile } from "../../lib/api";
-import { hasMenuPermission } from "../../lib/auth";
+import { GRADE_LABELS, TITLE_LABELS, hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import {
@@ -73,6 +73,15 @@ export function ProjectDocumentFormPage() {
   const [scanSummary, setScanSummary] = useState<TaxInvoiceOcrResult | null>(null);
   const [direction, setDirection] = useState<"sales" | "purchase" | null>(null);
   const [approvalNo, setApprovalNo] = useState<string | null>(null);
+
+  // 세금계산서는 담당자를 로그인한 사용자(이름 + 직책, 직책이 없으면 직급)로 자동 입력한다. 이미 입력된 값은 덮어쓰지 않는다.
+  useEffect(() => {
+    if (docType !== "tax_invoice" || !user) return;
+    const position = user.title ? TITLE_LABELS[user.title] : GRADE_LABELS[user.grade];
+    const label = [user.name, position].filter(Boolean).join(" ");
+    logDebug("ProjectDocumentForm", `세금계산서 담당자 자동입력: ${label}`);
+    setManagerName((prev) => prev || label);
+  }, [docType, user]);
 
   useEffect(() => {
     apiGet<Project[]>("/api/projects")

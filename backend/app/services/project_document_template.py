@@ -157,6 +157,19 @@ def _fill_tax_invoice_template(doc: ProjectDocument) -> str:
     for key, cell in _RECIPIENT_CELLS.items():
         ws[cell] = recipient[key] or None
 
+    # 공급받는자 칸의 글꼴/정렬/이메일 칸 구성을 공급자 칸 기준으로 맞춘다 (양식 원본은 양쪽이 서로 다르게 되어 있음).
+    for key, s_cell in _SUPPLIER_CELLS.items():
+        s, r = ws[s_cell], ws[_RECIPIENT_CELLS[key]]
+        r.font = Font(name=s.font.name, size=s.font.sz, bold=s.font.b, italic=s.font.i, color=r.font.color)
+        r.alignment = Alignment(horizontal=s.alignment.horizontal, vertical=s.alignment.vertical, wrap_text=s.alignment.wrap_text)
+    # 공급자는 이메일이 두 줄을 합친 한 칸이므로 공급받는자도 두 줄(6~7행)을 하나로 합친다.
+    ws["O7"] = None
+    ws.merge_cells("N6:N7")
+    ws.unmerge_cells("O6:S6")
+    ws.unmerge_cells("O7:S7")
+    ws.merge_cells("O6:S7")
+    logger.debug(f"[ProjectDocumentTemplate] 공급받는자 칸 서식을 공급자 기준으로 통일: doc_id={doc.id}")
+
     ws["O1"] = doc.approval_no
 
     # 품목: 양식 칸(4줄)보다 많으면 마지막 줄에 나머지를 "외 N건"으로 합산해 금액이 빠지지 않게 한다.

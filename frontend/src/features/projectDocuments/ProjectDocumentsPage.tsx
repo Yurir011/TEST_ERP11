@@ -111,15 +111,13 @@ function computeTaxInvoiceStats(docs: ProjectDocument[]) {
   };
 }
 
-// "세금계산서 통계" 카드 — 전월 대비 증감 KPI(안 5) + 청구/영수 구분 비교(안 4)를 하나로 합친 최종 구성.
+// "세금계산서 통계" 카드 — 이번 달/전월 발행 금액(전월 대비 증감)과 팝빌 미발행 건수.
 interface TaxInvoiceStatsCardProps {
   docs: ProjectDocument[];
   monthFilter: "all" | "this" | "last";
   onToggleMonth: (value: "this" | "last") => void;
   issuedFilter: "all" | "issued" | "not_issued";
   onToggleIssued: (value: "issued" | "not_issued") => void;
-  purposeFilter: "all" | TaxInvoicePurpose;
-  onTogglePurpose: (value: TaxInvoicePurpose) => void;
 }
 
 function TaxInvoiceStatsCard({
@@ -128,21 +126,9 @@ function TaxInvoiceStatsCard({
   onToggleMonth,
   issuedFilter,
   onToggleIssued,
-  purposeFilter,
-  onTogglePurpose,
 }: TaxInvoiceStatsCardProps) {
   const s = computeTaxInvoiceStats(docs);
   const isUp = s.momChangePct >= 0;
-
-  const purposeTotals: Record<"청구" | "영수", { count: number; amount: number }> = {
-    청구: { count: 0, amount: 0 },
-    영수: { count: 0, amount: 0 },
-  };
-  for (const d of docs) {
-    purposeTotals[d.purpose_type].count += 1;
-    if (d.currency === "KRW") purposeTotals[d.purpose_type].amount += itemsTotal(d);
-  }
-  const totalCount = docs.length || 1;
 
   const cardBase = "bg-bg rounded-xl p-4 text-left w-full transition-colors hover:bg-border/40 cursor-pointer";
   const activeRing = "ring-2 ring-primary";
@@ -182,31 +168,6 @@ function TaxInvoiceStatsCard({
           <p className="text-xs text-text-muted mt-1.5">전체 {s.totalCount}건 중</p>
         </button>
       </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        {(["청구", "영수"] as const).map((purpose) => {
-          const p = purposeTotals[purpose];
-          const pct = Math.round((p.count / totalCount) * 100);
-          return (
-            <button
-              key={purpose}
-              onClick={() => onTogglePurpose(purpose)}
-              className={`${cardBase} ${purposeFilter === purpose ? activeRing : ""}`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium">{purpose}용</p>
-                <span className="text-xs text-text-muted">
-                  {p.count}건 ({pct}%)
-                </span>
-              </div>
-              <p className="text-lg font-semibold">₩{p.amount.toLocaleString()}</p>
-              <div className="h-2 rounded-full bg-surface overflow-hidden mt-3">
-                <div className="h-full rounded-full bg-primary/70" style={{ width: `${pct}%` }} />
-              </div>
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -227,8 +188,9 @@ interface ProjectDocumentsPageProps {
 export function ProjectDocumentsPage({ embedded = false, lockedDocType }: ProjectDocumentsPageProps) {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
+  // 세금계산서는 매입매출/입출금관리처럼 우측 상단 "새 ... 등록" 버튼으로 작성하므로 카드는 두지 않는다.
   const visibleActions = lockedDocType
-    ? NEW_DOC_ACTIONS.filter((action) => action.type === lockedDocType)
+    ? NEW_DOC_ACTIONS.filter((action) => action.type === lockedDocType && action.type !== "tax_invoice")
     : NEW_DOC_ACTIONS.filter((action) => action.type !== "tax_invoice");
   const visibleTabs = TABS.filter((t) => t.key !== "tax_invoice");
   // 업무 알림("결재 요청") 클릭 시 ?tab=proposal 등으로 해당 탭(내 결재함)에 바로 진입할 수 있게 한다.
@@ -243,6 +205,13 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   const [detailDoc, setDetailDoc] = useState<ProjectDocument | null>(null);
   const openTargetId = useOpenTarget();
   const openedTargetRef = useRef(false);
+  const listTopRef = useRef<HTMLDivElement>(null);
+
+  // 통계 카드를 누르면 필터가 적용된 목록이 바로 보이도록 목록 위치로 스크롤한다.
+  function scrollToList(label: string) {
+    logDebug("ProjectDocuments", `통계 카드 클릭 → 목록으로 이동: ${label}`);
+    window.setTimeout(() => listTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
 
   // 업무 알림(?open=문서ID)으로 들어오면 해당 문서 상세를 바로 연다. 승인/반려 이후에도 동일하게 열린다.
   useEffect(() => {
@@ -523,8 +492,13 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           return true;
         });
 
+  // 검색 결과 합계: 원화(KRW) 문서만 합산한다 (외화는 섞으면 왜곡되므로 건수만 안내).
+  const visibleKrwTotal = (visibleDocs ?? []).filter((d) => d.currency === "KRW").reduce((sum, d) => sum + itemsTotal(d), 0);
+  const foreignCount = (visibleDocs ?? []).filter((d) => d.currency !== "KRW").length;
+
   const content = (
     <>
+      {newDocCardCount > 0 && (
       <div className={`grid gap-4 mb-6 ${newDocGridCols}`}>
         {!lockedDocType && (
           <Link
@@ -560,6 +534,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           </Link>
         ))}
       </div>
+      )}
 
       {lockedDocType === "tax_invoice" && docs !== null && (
         <TaxInvoiceStatsCard
@@ -569,11 +544,13 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
             setMonthFilter((prev) => (prev === v ? "all" : v));
             setDateFrom("");
             setDateTo("");
+            scrollToList(`발행월=${v}`);
           }}
           issuedFilter={issuedFilter}
-          onToggleIssued={(v) => setIssuedFilter((prev) => (prev === v ? "all" : v))}
-          purposeFilter={purposeFilter}
-          onTogglePurpose={(v) => setPurposeFilter((prev) => (prev === v ? "all" : v))}
+          onToggleIssued={(v) => {
+            setIssuedFilter((prev) => (prev === v ? "all" : v));
+            scrollToList(`팝빌발행=${v}`);
+          }}
         />
       )}
 
@@ -639,7 +616,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
       {lockedDocType === "tax_invoice" && docs !== null && docs.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div ref={listTopRef} className="flex flex-wrap items-center gap-3 mb-4 scroll-mt-4">
           <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
             {(["all", "sales", "purchase"] as const).map((d) => (
               <button
@@ -679,6 +656,25 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
             <option value="approved">{PROJECT_DOC_STATUS_LABELS.approved}</option>
             <option value="rejected">{PROJECT_DOC_STATUS_LABELS.rejected}</option>
           </select>
+
+          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
+            {([["this", "당월"], ["last", "전월"]] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => {
+                  logDebug("ProjectDocuments", `기간 빠른 선택: ${label}`);
+                  setMonthFilter((prev) => (prev === key ? "all" : key));
+                  setDateFrom("");
+                  setDateTo("");
+                }}
+                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
+                  monthFilter === key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           <div className="flex items-center gap-1.5">
             <input
@@ -724,7 +720,11 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
             className="flex-1 min-w-[180px] text-xs border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:border-primary"
           />
 
-          <span className="text-xs text-text-muted shrink-0">{visibleDocs?.length ?? 0}건</span>
+          <span className="text-xs text-text-muted shrink-0">
+            {visibleDocs?.length ?? 0}건 · 합계{" "}
+            <span className="font-semibold text-text">₩{visibleKrwTotal.toLocaleString()}</span>
+            {foreignCount > 0 && ` (외화 ${foreignCount}건 제외)`}
+          </span>
         </div>
       )}
 
@@ -930,6 +930,13 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
               <Download size={14} />
               {isExportingExcel ? "다운로드 중..." : "엑셀 다운로드 (청구/영수/개요)"}
             </button>
+            <Link
+              to="/project-documents/new?type=tax_invoice"
+              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={16} />
+              새 세금계산서 작성
+            </Link>
           </div>
         ) : undefined
       }
