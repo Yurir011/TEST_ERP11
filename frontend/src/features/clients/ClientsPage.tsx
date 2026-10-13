@@ -255,7 +255,7 @@ export function ClientsPage() {
                     onClick={() => navigate(`/clients/${client.id}`)}
                     className={`cursor-pointer hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""}`}
                   >
-                    <td className="py-3.5 pl-7 pr-4 font-semibold text-text max-w-0 truncate" title={client.name}>{client.name}</td>
+                    <td className="py-3.5 pl-7 pr-4 font-medium [-webkit-text-stroke:0.35px_currentColor] text-text/85 max-w-0 truncate" title={client.name}>{client.name}</td>
                     <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.biz_reg_no || "-"}</td>
                     <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.phone || "-"}</td>
                     <td className="py-3.5 px-4 truncate">

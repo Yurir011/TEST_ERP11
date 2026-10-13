@@ -839,7 +839,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                           {doc.direction === "purchase" ? "매입" : "매출"}
                         </span>
                         {doc.is_paper && (
-                          <span className="ml-1 text-[11px] px-[7px] py-[3px] rounded-full font-medium bg-[#9299a4] text-white">
+                          <span className="ml-1 text-[11px] px-[7px] py-[3px] rounded-full font-medium bg-[#f1f2f4] text-[#4b5563]">
                             종이
                           </span>
                         )}
