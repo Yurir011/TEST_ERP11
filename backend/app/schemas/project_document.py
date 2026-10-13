@@ -217,6 +217,23 @@ class ProjectDocumentOut(BaseModel):
     images: list[ProjectDocumentImageOut] = Field(default_factory=list)
 
 
+class PopbillIssueIn(BaseModel):
+    """팝빌 발행 전에 팝업에서 보완 입력한 거래처 정보. 값이 있는 항목만 거래처관리에 저장한다."""
+
+    biz_reg_no: str | None = None
+    ceo_name: str | None = None
+    address: str | None = None
+    biz_type: str | None = None
+    biz_class: str | None = None
+    email: str | None = None
+
+
+class PopbillRequiredInfoOut(BaseModel):
+    client_name: str
+    missing: list[str]
+    values: dict[str, str]
+
+
 class PopbillIssueOut(BaseModel):
     nts_confirm_num: str
     issued_at: datetime

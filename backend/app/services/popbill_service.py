@@ -47,14 +47,56 @@ def _round_tax(supply: int) -> int:
     return int((Decimal(supply) / 10).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def build_taxinvoice(doc: ProjectDocument, client: Client) -> Taxinvoice:
+# 세금계산서 발행 시 공급받는자(거래처)에 반드시 있어야 하는 정보: (필드명, 화면 라벨)
+REQUIRED_CLIENT_FIELDS: list[tuple[str, str]] = [
+    ("biz_reg_no", "사업자등록번호"),
+    ("ceo_name", "대표자명"),
+    ("address", "사업장 주소"),
+    ("biz_type", "업태"),
+    ("biz_class", "종목"),
+    ("email", "이메일"),
+]
+
+
+def client_email(client: Client) -> str:
+    """거래처 대표 이메일. 거래처 이메일이 없으면 담당자 이메일 중 첫 번째를 쓴다."""
+    if client.email:
+        return client.email
+    return next((c.email for c in client.contacts if c.email), "")
+
+
+def client_field_values(client: Client) -> dict[str, str]:
+    return {
+        "biz_reg_no": client.biz_reg_no or "",
+        "ceo_name": client.ceo_name or "",
+        "address": client.address or "",
+        "biz_type": client.biz_type or "",
+        "biz_class": client.biz_class or "",
+        "email": client_email(client),
+    }
+
+
+def find_missing_client_fields(client: Client) -> list[str]:
+    """발행에 필요한데 비어 있거나 형식이 틀린 거래처 필드명 목록."""
+    values = client_field_values(client)
+    missing = [key for key, _ in REQUIRED_CLIENT_FIELDS if not values[key].strip()]
+    if "biz_reg_no" not in missing and len(_digits_only(values["biz_reg_no"])) != 10:
+        missing.append("biz_reg_no")
+    if "email" not in missing and "@" not in values["email"]:
+        missing.append("email")
+    return missing
+
+
+def supplier_email(user_email: str | None) -> str:
+    return settings.company_email or user_email or ""
+
+
+def build_taxinvoice(doc: ProjectDocument, client: Client, issuer_email: str | None = None) -> Taxinvoice:
+    missing = find_missing_client_fields(client)
+    if missing:
+        labels = dict(REQUIRED_CLIENT_FIELDS)
+        raise PopbillConfigError(f"거래처 '{client.name}'의 필수 정보가 부족합니다: {', '.join(labels[k] for k in missing)}")
     biz_no = _digits_only(client.biz_reg_no)
-    if len(biz_no) != 10:
-        raise PopbillConfigError(
-            f"거래처 '{client.name}'의 사업자번호가 올바르지 않습니다. 거래처관리에서 10자리 사업자번호를 등록해주세요."
-        )
-    if not client.ceo_name:
-        raise PopbillConfigError(f"거래처 '{client.name}'의 대표자명이 없습니다. 거래처관리에서 등록해주세요.")
 
     written = doc.issue_date.strftime("%Y%m%d")
 
@@ -100,8 +142,8 @@ def build_taxinvoice(doc: ProjectDocument, client: Client) -> Taxinvoice:
         supplyCostTotal=str(supply_total),
         taxTotal=str(tax_total),
         totalAmount=str(supply_total + tax_total),
-        invoicerEmail="",
-        invoiceeEmail1="",
+        invoicerEmail=supplier_email(issuer_email),
+        invoiceeEmail1=client_email(client),
         invoicerSMSSendYN=False,
         invoiceeSMSSendYN=False,
     )
@@ -109,10 +151,10 @@ def build_taxinvoice(doc: ProjectDocument, client: Client) -> Taxinvoice:
     return invoice
 
 
-def issue_tax_invoice(doc: ProjectDocument, client: Client) -> dict:
+def issue_tax_invoice(doc: ProjectDocument, client: Client, issuer_email: str | None = None) -> dict:
     """세금계산서를 팝빌로 정발행한다. 성공 시 (mgt_key, nts_confirm_num)을 반환한다."""
     sdk = get_service()
-    invoice = build_taxinvoice(doc, client)
+    invoice = build_taxinvoice(doc, client, issuer_email)
     logger.debug(f"[PopbillService] 세금계산서 발행 시도: doc_id={doc.id}, mgt_key={invoice.invoicerMgtKey}")
     try:
         result = sdk.registIssue(

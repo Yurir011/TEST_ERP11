@@ -106,6 +106,8 @@ class PaymentOut(BaseModel):
     proof_type_detail: str | None
     card_type: CardType | None
     bank_type: BankType | None
+    card_pending: bool = False
+    card_used_date: date | None = None
     created_at: datetime
 
 
@@ -121,3 +123,26 @@ class CsvImportResult(BaseModel):
     imported: int
     skipped: int
     errors: list[str]
+
+
+class CardPendingSummaryOut(BaseModel):
+    card_type: CardType
+    count: int
+    total_amount: int
+    oldest_used_date: date | None
+    newest_used_date: date | None
+    default_settle_date: date  # 다음에 처리할 카드 결제일 (휴일이면 다음 영업일)
+    usage_from: date  # 그 결제일에 청구되는 사용기간
+    usage_to: date
+    later_count: int  # 사용기간 이후라 다음 결제일로 넘어가는 결제예정 건수
+    later_amount: int
+
+
+class CardSettleIn(BaseModel):
+    card_type: CardType
+    settle_date: date
+
+
+class CardSettleOut(BaseModel):
+    settled_count: int
+    total_amount: int

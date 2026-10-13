@@ -1,3 +1,4 @@
+import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import { FileDown, ImagePlus, Info, Plus, ScanText, Trash2, X } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -539,19 +540,7 @@ export function ProjectDocumentFormPage() {
           </div>
           <div>
             <label className="block text-xs text-text-muted mb-1.5">거래처명</label>
-            <input
-              required
-              list="client-name-options"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-            />
-            {/* 자동완성 목록에 거래처명과 함께 사업자번호가 보이도록 label에 넣는다 (입력칸에는 거래처명만 들어간다). */}
-            <datalist id="client-name-options">
-              {clients.map((c) => (
-                <option key={c.id} value={c.name} label={c.biz_reg_no ? `사업자번호 ${c.biz_reg_no}` : "사업자번호 미등록"} />
-              ))}
-            </datalist>
+            <ClientCombobox required value={clientName} onChange={setClientName} clients={clients} />
             {matchedClient && (
               <p className="text-[11px] text-text-muted mt-1">
                 사업자번호 {matchedClient.biz_reg_no ?? "미등록"}

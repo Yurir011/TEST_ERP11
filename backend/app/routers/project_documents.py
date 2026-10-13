@@ -31,7 +31,9 @@ from app.models.user import JobTitle, User, has_menu_permission, is_admin_role
 from app.schemas.approval import to_approval_step_out
 from app.schemas.project_document import (
     ApprovalRequestIn,
+    PopbillIssueIn,
     PopbillIssueOut,
+    PopbillRequiredInfoOut,
     ProjectDocumentCreate,
     ProjectDocumentOut,
     TaxInvoiceOcrOut,
@@ -659,7 +661,7 @@ def update_project_document(
     if editing_approved:
         if doc.doc_type != ProjectDocType.tax_invoice:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서만 수정할 수 있습니다.")
-        if doc.popbill_issued:
+        if doc.popbill_issued_at is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="팝빌로 발행된 세금계산서는 수정할 수 없습니다.")
         # 대금 결제(입금/출금)가 끝난 뒤에도 수정할 수 있다. 재승인 시 매입매출 내역이 새 내용으로 갱신된다.
         if not payload.request_approval:
@@ -1032,9 +1034,7 @@ def download_project_document_excel(doc_id: int, db: Session = Depends(get_db), 
     )
 
 
-@router.post("/{doc_id}/popbill/issue", response_model=PopbillIssueOut)
-def issue_popbill_tax_invoice(doc_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    doc = _get_doc_or_404(db, doc_id)
+def _check_popbill_issuable(doc: ProjectDocument, current_user: User) -> Client:
     if not has_menu_permission(current_user, "tax_invoice"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 발행 권한이 없습니다.")
     if doc.doc_type != ProjectDocType.tax_invoice:
@@ -1047,15 +1047,48 @@ def issue_popbill_tax_invoice(doc_id: int, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 승인 후에 발행할 수 있습니다.")
     if doc.popbill_issued_at:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 발행된 세금계산서입니다.")
+    client = doc.effective_client
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"거래처관리에 '{doc.client_name}'(으)로 등록된 거래처가 없어 발행할 수 없습니다. 거래처를 먼저 등록해주세요.",
+        )
+    return client
+
+
+@router.get("/{doc_id}/popbill/required-info", response_model=PopbillRequiredInfoOut)
+def get_popbill_required_info(doc_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """발행 전에 거래처 정보 중 부족한 항목을 알려준다 (프론트가 입력 팝업을 띄우는 데 사용)."""
+    doc = _get_doc_or_404(db, doc_id)
+    client = _check_popbill_issuable(doc, current_user)
+    missing = popbill_service.find_missing_client_fields(client)
+    logger.debug(f"[ProjectDocuments] 팝빌 필수정보 점검: doc_id={doc_id}, client_id={client.id}, missing={missing}")
+    return PopbillRequiredInfoOut(client_name=client.name, missing=missing, values=popbill_service.client_field_values(client))
+
+
+@router.post("/{doc_id}/popbill/issue", response_model=PopbillIssueOut)
+def issue_popbill_tax_invoice(
+    doc_id: int,
+    payload: PopbillIssueIn | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = _get_doc_or_404(db, doc_id)
+    client = _check_popbill_issuable(doc, current_user)
+
+    if payload is not None:
+        # 팝업에서 보완 입력한 값은 거래처관리에도 저장해 다음 발행부터 다시 묻지 않는다.
+        for field in ("biz_reg_no", "ceo_name", "address", "biz_type", "biz_class", "email"):
+            value = (getattr(payload, field) or "").strip()
+            if value:
+                setattr(client, field, value)
+        db.commit()
+        client = _check_popbill_issuable(_get_doc_or_404(db, doc_id), current_user)
+        logger.debug(f"[ProjectDocuments] 팝빌 발행 전 거래처 정보 보완 저장: doc_id={doc_id}, client_id={client.id}")
 
     logger.debug(f"[ProjectDocuments] 팝빌 세금계산서 발행 시도: doc_id={doc_id}, by={current_user.id}")
     try:
-        client = doc.effective_client
-        if client is None:
-            raise popbill_service.PopbillConfigError(
-                f"거래처관리에 '{doc.client_name}'(으)로 등록된 거래처가 없어 발행할 수 없습니다. 거래처를 먼저 등록해주세요."
-            )
-        result = popbill_service.issue_tax_invoice(doc, client)
+        result = popbill_service.issue_tax_invoice(doc, client, current_user.email)
     except popbill_service.PopbillConfigError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
     except PopbillException as err:

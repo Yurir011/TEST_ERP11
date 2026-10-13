@@ -26,6 +26,8 @@ import { HometaxImportModal } from "../transactions/HometaxImportModal";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import { useOpenTarget } from "../../lib/useOpenTarget";
 import { ProjectDocumentDetailModal } from "./ProjectDocumentDetailModal";
+import { ProjectSearchBox } from "./ProjectSearchBox";
+import { PopbillRequiredInfoModal, type PopbillClientInfo } from "./PopbillRequiredInfoModal";
 import {
   DOC_CURRENCY_SYMBOLS,
   PROJECT_DOC_STATUS_LABELS,
@@ -204,6 +206,12 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [resubmitDoc, setResubmitDoc] = useState<ProjectDocument | null>(null);
+  const [popbillInfoTarget, setPopbillInfoTarget] = useState<{
+    doc: ProjectDocument;
+    client_name: string;
+    missing: string[];
+    values: PopbillClientInfo;
+  } | null>(null);
   const [deleteRequestDoc, setDeleteRequestDoc] = useState<ProjectDocument | null>(null);
   const [detailDoc, setDetailDoc] = useState<ProjectDocument | null>(null);
   const openTargetId = useOpenTarget();
@@ -456,6 +464,28 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   }
 
   async function handlePopbillIssue(doc: ProjectDocument) {
+    logDebug("ProjectDocuments", `팝빌 필수정보 점검 시작: doc_id=${doc.id}`);
+    setBusyId(doc.id);
+    try {
+      const info = await apiGet<{ client_name: string; missing: string[]; values: PopbillClientInfo }>(
+        `/api/project-documents/${doc.id}/popbill/required-info`
+      );
+      if (info.missing.length > 0) {
+        logDebug("ProjectDocuments", `팝빌 필수정보 부족 → 입력 팝업: doc_id=${doc.id}, missing=${info.missing.join(",")}`);
+        setPopbillInfoTarget({ doc, ...info });
+        return;
+      }
+    } catch (err) {
+      logError("ProjectDocuments", "팝빌 필수정보 점검 실패", err);
+      window.alert(err instanceof ApiError ? err.message : "발행 정보를 확인하는 중 오류가 발생했습니다.");
+      return;
+    } finally {
+      setBusyId(null);
+    }
+    await issuePopbill(doc);
+  }
+
+  async function issuePopbill(doc: ProjectDocument, info?: PopbillClientInfo) {
     if (!window.confirm("이 세금계산서를 팝빌로 발행하시겠습니까? 발행 즉시 국세청에 전송되며, 이후에는 취소(수정발행)만 가능합니다.")) {
       return;
     }
@@ -463,8 +493,10 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     setBusyId(doc.id);
     try {
       const result = await apiPost<{ nts_confirm_num: string; issued_at: string }>(
-        `/api/project-documents/${doc.id}/popbill/issue`
+        `/api/project-documents/${doc.id}/popbill/issue`,
+        info
       );
+      setPopbillInfoTarget(null);
       setDetailDoc((prev) =>
         prev && prev.id === doc.id
           ? { ...prev, popbill_issued: true, popbill_nts_confirm_num: result.nts_confirm_num, popbill_issued_at: result.issued_at }
@@ -515,6 +547,12 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`;
+
+  // 검색창 자동완성 목록: 최근 1년 안에 발행일이 있는 문서의 프로젝트명 (중복 제거, 가나다순).
+  const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+  const recentProjectNames = Array.from(
+    new Set((docs ?? []).filter((d) => d.issue_date >= oneYearAgo && d.project_name).map((d) => d.project_name))
+  ).sort((x, y) => x.localeCompare(y, "ko"));
 
   const visibleDocs =
     docs === null
@@ -668,123 +706,108 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
       {lockedDocType === "tax_invoice" && docs !== null && docs.length > 0 && (
-        <div ref={listTopRef} className="flex flex-wrap items-center gap-3 mb-4 scroll-mt-4">
-          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
-            {(["all", "sales", "purchase"] as const).map((d) => (
-              <button
-                key={d}
-                onClick={() => setDirectionFilter(d)}
-                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                  directionFilter === d ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
-                }`}
-              >
-                {d === "all" ? "매입/매출 전체" : d === "sales" ? "매출" : "매입"}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
-            {(["all", "electronic", "paper"] as const).map((k) => (
-              <button
-                key={k}
-                onClick={() => setPaperFilter(k)}
-                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                  paperFilter === k ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
-                }`}
-              >
-                {k === "all" ? "발행형태 전체" : k === "electronic" ? "전자" : "종이"}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
-            {(["all", "청구", "영수"] as const).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPurposeFilter(p)}
-                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                  purposeFilter === p ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
-                }`}
-              >
-                {p === "all" ? "전체" : p}
-              </button>
-            ))}
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as "all" | ProjectDocumentStatus)}
-            className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
-          >
-            <option value="all">상태 전체</option>
-            <option value="draft">{PROJECT_DOC_STATUS_LABELS.draft}</option>
-            <option value="pending">{PROJECT_DOC_STATUS_LABELS.pending}</option>
-            <option value="approved">{PROJECT_DOC_STATUS_LABELS.approved}</option>
-            <option value="rejected">{PROJECT_DOC_STATUS_LABELS.rejected}</option>
-          </select>
-
-          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
-            {([["this", "당월"], ["last", "전월"]] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => {
-                  logDebug("ProjectDocuments", `기간 빠른 선택: ${label}`);
-                  setMonthFilter((prev) => (prev === key ? "all" : key));
-                  setDateFrom("");
-                  setDateTo("");
-                }}
-                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
-                  monthFilter === key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <input
-              type="date"
-              value={dateFrom}
-              max={dateTo || undefined}
-              onChange={(e) => {
-                setDateFrom(e.target.value);
-                setMonthFilter("all");
-              }}
+        <div ref={listTopRef} className="flex flex-wrap items-center gap-x-16 gap-y-3 mb-4 scroll-mt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-text-muted">구분</span>
+            <select
+              value={directionFilter}
+              onChange={(e) => setDirectionFilter(e.target.value as typeof directionFilter)}
               className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
-            />
-            <span className="text-text-muted text-xs">~</span>
-            <input
-              type="date"
-              value={dateTo}
-              min={dateFrom || undefined}
-              onChange={(e) => {
-                setDateTo(e.target.value);
-                setMonthFilter("all");
-              }}
+            >
+              <option value="all">매입/매출 전체</option>
+              <option value="sales">매출</option>
+              <option value="purchase">매입</option>
+            </select>
+            <select
+              value={paperFilter}
+              onChange={(e) => setPaperFilter(e.target.value as typeof paperFilter)}
               className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
-            />
-            {(dateFrom || dateTo) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDateFrom("");
-                  setDateTo("");
-                }}
-                className="text-xs text-text-muted hover:text-text px-1"
-                title="기간 초기화"
-              >
-                <X size={14} />
-              </button>
-            )}
+            >
+              <option value="all">발행형태 전체</option>
+              <option value="electronic">전자</option>
+              <option value="paper">종이</option>
+            </select>
+            <select
+              value={purposeFilter}
+              onChange={(e) => setPurposeFilter(e.target.value as typeof purposeFilter)}
+              className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
+            >
+              <option value="all">청구/영수 전체</option>
+              <option value="청구">청구</option>
+              <option value="영수">영수</option>
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as "all" | ProjectDocumentStatus)}
+              className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
+            >
+              <option value="all">상태 전체</option>
+              <option value="draft">{PROJECT_DOC_STATUS_LABELS.draft}</option>
+              <option value="pending">{PROJECT_DOC_STATUS_LABELS.pending}</option>
+              <option value="approved">{PROJECT_DOC_STATUS_LABELS.approved}</option>
+              <option value="rejected">{PROJECT_DOC_STATUS_LABELS.rejected}</option>
+            </select>
           </div>
 
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="프로젝트·거래처·담당자·번호 검색"
-            className="flex-1 min-w-[180px] text-xs border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:border-primary"
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-text-muted">기간</span>
+            <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
+              {([["this", "당월"], ["last", "전월"]] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    logDebug("ProjectDocuments", `기간 빠른 선택: ${label}`);
+                    setMonthFilter((prev) => (prev === key ? "all" : key));
+                    setDateFrom("");
+                    setDateTo("");
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
+                    monthFilter === key ? "bg-tile-blue text-tile-blue-fg font-semibold" : "text-text-muted hover:text-text"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  setMonthFilter("all");
+                }}
+                className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
+              />
+              <span className="text-text-muted text-xs">~</span>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  setMonthFilter("all");
+                }}
+                className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
+              />
+              {(dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFrom("");
+                    setDateTo("");
+                  }}
+                  className="text-xs text-text-muted hover:text-text px-1"
+                  title="기간 초기화"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <ProjectSearchBox value={searchQuery} onChange={setSearchQuery} projectNames={recentProjectNames} />
 
           <span className="text-xs text-text-muted shrink-0">
             {visibleDocs?.length ?? 0}건 · 합계{" "}
@@ -968,6 +991,17 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           isSubmitting={busyId === resubmitDoc.id}
           onConfirm={handleResubmit}
           onCancel={() => setResubmitDoc(null)}
+        />
+      )}
+
+      {popbillInfoTarget && (
+        <PopbillRequiredInfoModal
+          clientName={popbillInfoTarget.client_name}
+          missing={popbillInfoTarget.missing}
+          values={popbillInfoTarget.values}
+          isSubmitting={busyId === popbillInfoTarget.doc.id}
+          onConfirm={(info) => issuePopbill(popbillInfoTarget.doc, info)}
+          onCancel={() => setPopbillInfoTarget(null)}
         />
       )}
 

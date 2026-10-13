@@ -34,3 +34,5 @@ pytesseract==0.3.13
 pywin32==312
 popbill==1.64.2
 linkhub==1.6.0
+holidays==0.106
+python-dateutil==2.9.0.post0

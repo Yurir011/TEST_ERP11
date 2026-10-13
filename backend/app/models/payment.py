@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -92,6 +92,10 @@ class Payment(Base):
     proof_type_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # 법인카드 건의 카드 종류. 법인카드가 아닌 경우 항상 None.
     card_type: Mapped[CardType | None] = mapped_column(Enum(CardType, name="cardtype"), nullable=True)
+    # 법인카드 사용내역은 카드 결제일에 일괄 확정한다. 확정 전(결제예정)에는 card_pending=True이고 월 입출금 집계에서 제외된다.
+    # 확정하면 payment_date가 카드 결제일로 바뀌고, 원래 사용일은 card_used_date에 남는다.
+    card_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    card_used_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # 계좌이체 건의 계좌 종류. 계좌이체가 아닌 경우 항상 None.
     bank_type: Mapped[BankType | None] = mapped_column(Enum(BankType, name="banktype"), nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -102,7 +102,22 @@ export interface Payment {
   proof_type_detail: string | null;
   card_type: CardType | null;
   bank_type: BankType | null;
+  card_pending: boolean;
+  card_used_date: string | null;
   created_at: string;
+}
+
+export interface CardPendingSummary {
+  card_type: CardType;
+  count: number;
+  total_amount: number;
+  oldest_used_date: string | null;
+  newest_used_date: string | null;
+  default_settle_date: string;
+  usage_from: string;
+  usage_to: string;
+  later_count: number;
+  later_amount: number;
 }
 
 export function paymentMethodDetailLabel(p: Payment): string {

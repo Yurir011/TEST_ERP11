@@ -1,6 +1,7 @@
 import {
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   Download,
   FileSpreadsheet,
   Image,
@@ -22,12 +23,16 @@ import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { PaymentDetailModal } from "./PaymentDetailModal";
 import { RecurringPaymentsModal } from "./RecurringPaymentsModal";
+import { CardSettleModal } from "./CardSettleModal";
 import { SettleModal } from "./SettleModal";
 import {
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
+  CARD_TYPE_LABELS,
   PROOF_TYPE_LABELS,
   paymentMethodDetailLabel,
+  type CardPendingSummary,
+  type CardType,
   type CsvImportResult,
   type Payment,
   type PaymentReport,
@@ -62,6 +67,9 @@ export function PaymentsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
+  const [csvCardType, setCsvCardType] = useState<CardType>("bc");
+  const [cardPending, setCardPending] = useState<CardPendingSummary[]>([]);
+  const [showCardSettle, setShowCardSettle] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -191,10 +199,22 @@ export function PaymentsPage() {
       await apiDelete(`/api/payments/${id}`);
       loadPayments();
       loadReport();
+      loadCardPending();
     } catch (err) {
       logError("Payments", "삭제 실패", err);
     }
   }
+
+  function loadCardPending() {
+    apiGet<CardPendingSummary[]>("/api/payments/card-pending")
+      .then((data) => {
+        logDebug("Payments", `카드 결제예정 ${data.reduce((n, s) => n + s.count, 0)}건`);
+        setCardPending(data);
+      })
+      .catch((err) => logError("Payments", "카드 결제예정 조회 실패", err));
+  }
+
+  useEffect(loadCardPending, []);
 
   async function handleCsvSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -202,10 +222,11 @@ export function PaymentsPage() {
     setIsImporting(true);
     setImportResult(null);
     try {
-      const result = await apiUpload<CsvImportResult>("/api/payments/import-csv", file);
+      const result = await apiUpload<CsvImportResult>(`/api/payments/import-csv?card_type=${csvCardType}`, file);
       setImportResult(result);
       loadPayments();
       loadReport();
+      loadCardPending();
     } catch (err) {
       logError("Payments", "CSV 가져오기 실패", err);
       setError(err instanceof ApiError ? err.message : "CSV 가져오기 중 오류가 발생했습니다.");
@@ -229,6 +250,28 @@ export function PaymentsPage() {
             <Repeat size={14} />
             정기 자동이체
           </button>
+          <button
+            onClick={() => setShowCardSettle(true)}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
+          >
+            <CreditCard size={14} />
+            카드 결제일 일괄처리
+            {cardPending.some((s) => s.count > 0) && (
+              <span className={`px-1.5 py-0.5 ${SOFT_BADGE.orange}`}>{cardPending.reduce((n, s) => n + s.count, 0)}</span>
+            )}
+          </button>
+          <select
+            value={csvCardType}
+            onChange={(e) => setCsvCardType(e.target.value as CardType)}
+            className="text-xs border border-border rounded-lg px-2 py-2 bg-surface"
+            title="가져올 CSV 명세서의 카드 종류"
+          >
+            {(Object.keys(CARD_TYPE_LABELS) as CardType[]).map((k) => (
+              <option key={k} value={k}>
+                {CARD_TYPE_LABELS[k]}카드
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isImporting}
@@ -460,7 +503,10 @@ export function PaymentsPage() {
                     {p.description}
                     {p.client_name && <span className="text-text-muted"> · {p.client_name}</span>}
                   </td>
-                  <td className="py-2.5 px-4">{paymentMethodDetailLabel(p)}</td>
+                  <td className="py-2.5 px-4">
+                    {paymentMethodDetailLabel(p)}
+                    {p.card_pending && <span className={`ml-1.5 text-xs px-2 py-0.5 font-medium ${SOFT_BADGE.orange}`}>결제예정</span>}
+                  </td>
                   <td className="py-2.5 px-4">
                     {p.proof_type ? (
                       <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>
@@ -524,6 +570,18 @@ export function PaymentsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showCardSettle && (
+        <CardSettleModal
+          summaries={cardPending}
+          onClose={() => setShowCardSettle(false)}
+          onSuccess={() => {
+            loadPayments();
+            loadReport();
+            loadCardPending();
+          }}
+        />
       )}
 
       {showRecurring && (

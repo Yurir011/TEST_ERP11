@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     company_reg_no: str = ""
     company_biz_type: str = ""  # 업태
     company_biz_class: str = ""  # 종목
+    card_bc_pay_day: int = 23  # BC카드 매월 결제일 (사용기간 1일~말일, 다음 달 결제)
+    card_kb_pay_day: int = 15  # KB국민카드 매월 결제일
+    company_email: str = "info@bench-soft.com"  # 세금계산서 공급자 이메일 (비어 있으면 발행자 로그인 이메일 사용)
 
     documents_dir: str = "storage/documents"
     receipts_dir: str = "storage/receipts"
