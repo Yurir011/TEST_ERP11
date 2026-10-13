@@ -1,5 +1,5 @@
-import { FileText, Search, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { FileText, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { Client } from "../clients/types";
@@ -8,6 +8,7 @@ import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type TaxInvoiceCandidate, type Transaction, type TransactionType } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
+import { ClientCombobox } from "../../components/ui/ClientCombobox";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -99,8 +100,7 @@ export function TransactionFormPage() {
   const [transactionDate, setTransactionDate] = useState(todayISO());
   const [partyQuery, setPartyQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [suggestions, setSuggestions] = useState<Client[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
   const [itemName, setItemName] = useState("");
   const [supplyAmount, setSupplyAmount] = useState("0");
   const [vatAmount, setVatAmount] = useState("0");
@@ -114,7 +114,6 @@ export function TransactionFormPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
 
   // 수정 모드: 기존 내용을 불러와 채운다. 부가세는 저장된 값을 그대로 쓰도록 자동계산을 끈다.
   useEffect(() => {
@@ -152,26 +151,10 @@ export function TransactionFormPage() {
   }, [editingId]);
 
   useEffect(() => {
-    if (!partyQuery || selectedClient) {
-      setSuggestions([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      apiGet<Client[]>(`/api/clients?q=${encodeURIComponent(partyQuery)}`)
-        .then(setSuggestions)
-        .catch((err) => logError("TransactionForm", "거래처 검색 실패", err));
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [partyQuery, selectedClient]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    logDebug("TransactionForm", "거래처 전체 목록 불러오기");
+    apiGet<Client[]>("/api/clients")
+      .then(setClients)
+      .catch((err) => logError("TransactionForm", "거래처 목록 불러오기 실패", err));
   }, []);
 
   useEffect(() => {
@@ -180,10 +163,9 @@ export function TransactionFormPage() {
     setVatAmount(String(Math.round(supply * 0.1)));
   }, [supplyAmount, vatManuallyEdited]);
 
-  function pickClient(client: Client) {
-    setSelectedClient(client);
-    setPartyQuery(client.name);
-    setShowSuggestions(false);
+  function changeParty(name: string) {
+    setPartyQuery(name);
+    setSelectedClient(clients.find((c) => c.name === name) ?? null);
   }
 
   async function pickInvoice(c: TaxInvoiceCandidate) {
@@ -299,37 +281,9 @@ export function TransactionFormPage() {
           />
         </div>
 
-        <div className="relative" ref={boxRef}>
-          <label className="block text-xs text-text-muted mb-1.5">거래처 (등록된 거래처 검색, 없으면 직접 입력)</label>
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              value={partyQuery}
-              onChange={(e) => {
-                setPartyQuery(e.target.value);
-                setSelectedClient(null);
-                setShowSuggestions(true);
-              }}
-              onFocus={() => setShowSuggestions(true)}
-              placeholder="거래처명 검색 또는 직접 입력"
-              className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-            />
-          </div>
-          {showSuggestions && suggestions.length > 0 && (
-            <ul className="absolute z-10 mt-1 w-full bg-surface border border-border rounded-lg shadow-sm max-h-56 overflow-y-auto">
-              {suggestions.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => pickClient(c)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-bg"
-                  >
-                    {c.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div>
+          <label className="block text-xs text-text-muted mb-1.5">거래처 (목록에서 선택하거나 검색, 없으면 직접 입력)</label>
+          <ClientCombobox value={partyQuery} onChange={changeParty} clients={clients} />
           {selectedClient && <p className="text-xs text-success mt-1.5">등록된 거래처: {selectedClient.name}</p>}
         </div>
 

@@ -1,5 +1,5 @@
-import { FileText, Search, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { FileText, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { Client } from "../clients/types";
@@ -24,6 +24,7 @@ import {
   type PaymentType,
   type ProofType,
 } from "./types";
+import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import { NumberInput } from "../../components/ui/NumberInput";
 
 function todayISO() {
@@ -121,8 +122,7 @@ export function PaymentFormPage() {
   const [method, setMethod] = useState<PaymentMethod>("corporate_card");
   const [partyQuery, setPartyQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [suggestions, setSuggestions] = useState<Client[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [memo, setMemo] = useState("");
   const [proofType, setProofType] = useState<ProofType | null>(null);
@@ -138,29 +138,12 @@ export function PaymentFormPage() {
   const [isLoading, setIsLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!partyQuery || selectedClient) {
-      setSuggestions([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      apiGet<Client[]>(`/api/clients?q=${encodeURIComponent(partyQuery)}`)
-        .then(setSuggestions)
-        .catch((err) => logError("PaymentForm", "거래처 검색 실패", err));
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [partyQuery, selectedClient]);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    logDebug("PaymentForm", "거래처 전체 목록 불러오기");
+    apiGet<Client[]>("/api/clients")
+      .then(setClients)
+      .catch((err) => logError("PaymentForm", "거래처 목록 불러오기 실패", err));
   }, []);
 
   useEffect(() => {
@@ -230,10 +213,9 @@ export function PaymentFormPage() {
       .finally(() => setIsLoading(false));
   }, [id]);
 
-  function pickClient(client: Client) {
-    setSelectedClient(client);
-    setPartyQuery(client.name);
-    setShowSuggestions(false);
+  function changeParty(name: string) {
+    setPartyQuery(name);
+    setSelectedClient(clients.find((c) => c.name === name) ?? null);
   }
 
   // 외상 매출/매입을 불러와 입력칸을 채운다. 분류는 외상매출금/외상매입금으로 두고, 결제수단과 계좌 종류는 직접 고른다.
@@ -546,37 +528,9 @@ export function PaymentFormPage() {
           />
         </div>
 
-        <div className="relative" ref={boxRef}>
+        <div>
           <label className="block text-xs text-text-muted mb-1.5">거래처 (선택)</label>
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              value={partyQuery}
-              onChange={(e) => {
-                setPartyQuery(e.target.value);
-                setSelectedClient(null);
-                setShowSuggestions(true);
-              }}
-              onFocus={() => setShowSuggestions(true)}
-              placeholder="거래처명 검색"
-              className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-            />
-          </div>
-          {showSuggestions && suggestions.length > 0 && (
-            <ul className="absolute z-10 mt-1 w-full bg-surface border border-border rounded-lg shadow-sm max-h-56 overflow-y-auto">
-              {suggestions.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => pickClient(c)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-bg"
-                  >
-                    {c.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ClientCombobox value={partyQuery} onChange={changeParty} clients={clients} />
           {selectedClient && <p className="text-xs text-success mt-1.5">선택됨: {selectedClient.name}</p>}
         </div>
 
