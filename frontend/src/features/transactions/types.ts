@@ -23,6 +23,8 @@ export interface Transaction {
   total_amount: number;
   tax_invoice_no: string | null;
   memo: string | null;
+  settled: boolean;
+  settled_date: string | null;
   created_at: string;
 }
 

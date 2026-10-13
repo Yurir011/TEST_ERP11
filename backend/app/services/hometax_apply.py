@@ -15,6 +15,7 @@ from app.models.project_document import (
     ProjectDocumentStatus,
 )
 from app.models.transaction import Transaction, TransactionType
+from app.services.transaction_credit import credit_add
 from app.services.hometax_import import HometaxInvoice, HometaxItem, approval_key, digits_only, format_reg_no, is_valid_reg_no
 
 logger = get_logger("HometaxImport")
@@ -226,10 +227,12 @@ def apply_plan(db: Session, plan: list[PlanRow], user_id: int, create_clients: b
                 total_amount=row.supply + row.vat,
                 tax_invoice_no=row.approval_no,
                 memo="홈택스 가져오기",
+                settled=False,  # 세금계산서는 외상으로 기록한다. 실제 입금/출금은 입출금관리에서 처리한다.
                 created_by=user_id,
             )
         db.add(tx)
         db.flush()
+        credit_add(db, tx)
         imported += 1
 
         if create_documents:

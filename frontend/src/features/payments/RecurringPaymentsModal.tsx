@@ -13,6 +13,7 @@ import {
   type PaymentType,
   type RecurringPayment,
 } from "./types";
+import { NumberInput } from "../../components/ui/NumberInput";
 
 interface FormState {
   type: PaymentType;
@@ -220,12 +221,10 @@ export function RecurringPaymentsModal({ onClose, onChanged }: { onClose: () => 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-text-muted mb-1.5">금액</label>
-                <input
-                  type="number"
-                  min={1}
+                <NumberInput
                   required
                   value={editing.form.amount}
-                  onChange={(e) => patch({ amount: e.target.value })}
+                  onChange={(v) => patch({ amount: v })}
                   className={inputClass}
                 />
               </div>

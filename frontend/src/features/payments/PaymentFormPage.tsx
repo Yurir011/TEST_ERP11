@@ -19,31 +19,32 @@ import {
   type CardType,
   type Payment,
   type PaymentCategory,
-  type PaymentTaxInvoiceCandidate,
+  type PaymentTransactionCandidate,
   type PaymentMethod,
   type PaymentType,
   type ProofType,
 } from "./types";
+import { NumberInput } from "../../components/ui/NumberInput";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function TaxInvoicePicker({ onPick, onClose }: { onPick: (c: PaymentTaxInvoiceCandidate) => void; onClose: () => void }) {
+function TransactionPicker({ onPick, onClose }: { onPick: (c: PaymentTransactionCandidate) => void; onClose: () => void }) {
   const [q, setQ] = useState("");
-  const [rows, setRows] = useState<PaymentTaxInvoiceCandidate[] | null>(null);
+  const [rows, setRows] = useState<PaymentTransactionCandidate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      logDebug("PaymentForm", `불러올 세금계산서 조회: q=${q}`);
-      apiGet<PaymentTaxInvoiceCandidate[]>(`/api/payments/linkable-tax-invoices?q=${encodeURIComponent(q)}`)
+      logDebug("PaymentForm", `불러올 외상 매입매출 조회: q=${q}`);
+      apiGet<PaymentTransactionCandidate[]>(`/api/payments/linkable-transactions?q=${encodeURIComponent(q)}`)
         .then((r) => {
           setRows(r);
           setError(null);
         })
         .catch((err) => {
-          logError("PaymentForm", "세금계산서 목록 조회 실패", err);
+          logError("PaymentForm", "외상 매입매출 목록 조회 실패", err);
           setError(err instanceof ApiError ? err.message : "목록을 불러오지 못했습니다.");
         });
     }, 200);
@@ -54,29 +55,29 @@ function TaxInvoicePicker({ onPick, onClose }: { onPick: (c: PaymentTaxInvoiceCa
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
       <div className="bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-1">
-          <h3 className="text-base font-semibold">세금계산서 불러오기</h3>
+          <h3 className="text-base font-semibold">매입매출 불러오기 (외상)</h3>
           <button onClick={onClose} aria-label="닫기" className="text-text-muted hover:text-text">
             <X size={18} />
           </button>
         </div>
         <p className="text-xs text-text-muted mb-3">
-          아직 입출금에 기록되지 않은 세금계산서만 보입니다. 선택하면 거래처와 금액 등이 채워지고, 저장하면 그 세금계산서는 입출금 기록 완료로 처리됩니다.
+          아직 결제되지 않은 외상매출/외상매입만 보입니다. 선택해 저장하면 해당 내역이 매입매출관리에서 결제완료로 바뀌고, 입출금 날짜가 완료일로 기록됩니다.
         </p>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="거래처명 검색"
+          placeholder="거래처/품목 검색"
           className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg mb-3"
         />
         {error && <p className="text-xs text-danger mb-2">{error}</p>}
-        {rows !== null && rows.length === 0 && <p className="text-sm text-text-muted py-6 text-center">불러올 세금계산서가 없습니다.</p>}
+        {rows !== null && rows.length === 0 && <p className="text-sm text-text-muted py-6 text-center">결제할 외상 내역이 없습니다.</p>}
         {rows !== null && rows.length > 0 && (
           <div className="border border-border rounded-xl overflow-x-auto">
             <table className="w-full text-xs min-w-[520px]">
               <thead className="bg-bg text-text-muted">
                 <tr className="text-left">
                   <th className="py-2 px-3 font-medium">구분</th>
-                  <th className="py-2 px-3 font-medium">작성일</th>
+                  <th className="py-2 px-3 font-medium">거래일</th>
                   <th className="py-2 px-3 font-medium">거래처</th>
                   <th className="py-2 px-3 font-medium">품목</th>
                   <th className="py-2 px-3 font-medium text-right">합계금액</th>
@@ -86,9 +87,11 @@ function TaxInvoicePicker({ onPick, onClose }: { onPick: (c: PaymentTaxInvoiceCa
                 {rows.map((r) => (
                   <tr key={r.id} onClick={() => onPick(r)} className="border-t border-border cursor-pointer hover:bg-bg">
                     <td className="py-2 px-3">
-                      <span className={`px-2 py-0.5 rounded-full font-medium ${PAYMENT_TYPE_STYLES[r.type]}`}>{PAYMENT_TYPE_LABELS[r.type]}</span>
+                      <span className={`px-2 py-0.5 rounded-full font-medium ${PAYMENT_TYPE_STYLES[r.type]}`}>
+                        {r.type === "deposit" ? "외상매출" : "외상매입"}
+                      </span>
                     </td>
-                    <td className="py-2 px-3 tabular-nums">{r.issue_date}</td>
+                    <td className="py-2 px-3 tabular-nums">{r.transaction_date}</td>
                     <td className="py-2 px-3">{r.client_name}</td>
                     <td className="py-2 px-3 max-w-[200px] truncate">{r.item_name}</td>
                     <td className="py-2 px-3 text-right tabular-nums">{formatCurrency(r.total_amount)}</td>
@@ -130,7 +133,7 @@ export function PaymentFormPage() {
   // 증빙(세금계산서/영수증 등) 발행 여부는 계좌이체와 현금 건에서 선택한다.
   const usesProof = method === "bank_transfer" || method === "cash";
   const [hasReceipt, setHasReceipt] = useState(false);
-  const [linkedDoc, setLinkedDoc] = useState<PaymentTaxInvoiceCandidate | null>(null);
+  const [linkedTx, setLinkedTx] = useState<PaymentTransactionCandidate | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -233,20 +236,19 @@ export function PaymentFormPage() {
     setShowSuggestions(false);
   }
 
-  // 세금계산서에 뒤따르는 입금/지급을 다시 입력하지 않도록 계산서 내용으로 입력칸을 채운다.
-  // 분류는 거래처 잔액(미수금/미지급금)에 영향이 없는 "기타"로 두고, 필요하면 사용자가 바꾼다. 계좌 종류만 직접 고른다.
-  async function pickInvoice(c: PaymentTaxInvoiceCandidate) {
-    logDebug("PaymentForm", `세금계산서 불러오기: doc_id=${c.id}`);
-    setLinkedDoc(c);
+  // 외상 매출/매입을 불러와 입력칸을 채운다. 분류는 외상매출금/외상매입금으로 두고, 결제수단과 계좌 종류는 직접 고른다.
+  async function pickTransaction(c: PaymentTransactionCandidate) {
+    logDebug("PaymentForm", `외상 매입매출 불러오기: tx_id=${c.id}`);
+    setLinkedTx(c);
     setShowPicker(false);
     setType(c.type);
     setPaymentDate(todayISO());
-    changeCategory("기타");
-    setManualItem(`세금계산서 ${c.item_name} ${c.type === "deposit" ? "입금" : "지급"}`.slice(0, 300));
+    changeCategory(c.type === "deposit" ? "외상매출금" : "외상매입금");
+    setManualItem(`${c.item_name} ${c.type === "deposit" ? "입금" : "지급"}`.slice(0, 300));
     setAmount(String(c.total_amount));
     setMethod("bank_transfer");
     setProofType("tax_invoice");
-    setMemo(`세금계산서 불러오기 (문서 #${c.id}${c.tax_invoice_no ? `, ${c.tax_invoice_no}` : ""})`);
+    setMemo(`매입매출 불러오기 (내역 #${c.id}${c.tax_invoice_no ? `, ${c.tax_invoice_no}` : ""})`);
     setPartyQuery(c.client_name);
     setSelectedClient(null);
     if (c.client_id !== null) {
@@ -306,7 +308,7 @@ export function PaymentFormPage() {
         proof_type_detail: usesProof && proofType === "other" ? proofTypeDetail : null,
         card_type: method === "corporate_card" ? cardType : null,
         bank_type: method === "bank_transfer" ? bankType : null,
-        ...(!isEdit && linkedDoc ? { tax_invoice_doc_id: linkedDoc.id } : {}),
+        ...(!isEdit && linkedTx ? { transaction_id: linkedTx.id } : {}),
       };
 
       logDebug("PaymentForm", `${isEdit ? "수정" : "등록"} 시도: category=${category}, amount=${body.amount}`);
@@ -339,15 +341,16 @@ export function PaymentFormPage() {
               className="flex items-center gap-1.5 text-sm border border-border bg-surface rounded-lg px-4 py-2 hover:bg-bg"
             >
               <FileText size={15} />
-              {linkedDoc ? "다른 세금계산서 불러오기" : "세금계산서 불러오기"}
+              {linkedTx ? "다른 매입매출 불러오기" : "매입매출 불러오기 (외상)"}
             </button>
             <p className="text-xs text-text-muted mt-1.5">
-              {linkedDoc
-                ? `불러온 세금계산서: ${linkedDoc.client_name} · ${linkedDoc.issue_date} · ${formatCurrency(linkedDoc.total_amount)} (계좌 종류를 고른 뒤 저장하세요)`
-                : "세금계산서에 뒤따르는 입금/지급이면 불러와서 다시 입력하지 않아도 됩니다."}
+              {linkedTx
+                ? `불러온 내역: ${linkedTx.client_name} · ${linkedTx.transaction_date} · ${formatCurrency(linkedTx.total_amount)} (계좌 종류를 고른 뒤 저장하면 결제완료로 처리됩니다)`
+                : "세금계산서로 기록된 외상매출/외상매입에 대한 입금·출금이면 불러와서 결제 처리하세요."}
             </p>
           </div>
         )}
+
         <div>
           <label className="block text-xs text-text-muted mb-1.5">구분</label>
           <div className="flex gap-2">
@@ -535,12 +538,10 @@ export function PaymentFormPage() {
 
         <div>
           <label className="block text-xs text-text-muted mb-1.5">금액</label>
-          <input
-            type="number"
-            min={0}
+          <NumberInput
             required
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={setAmount}
             className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
           />
         </div>
@@ -621,7 +622,7 @@ export function PaymentFormPage() {
         </div>
       </form>
       )}
-      {showPicker && <TaxInvoicePicker onPick={pickInvoice} onClose={() => setShowPicker(false)} />}
+      {showPicker && <TransactionPicker onPick={pickTransaction} onClose={() => setShowPicker(false)} />}
     </MainLayout>
   );
 }

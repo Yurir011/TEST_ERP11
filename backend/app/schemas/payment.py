@@ -13,18 +13,17 @@ from app.models.payment import (
 )
 
 
-class PaymentTaxInvoiceCandidateOut(BaseModel):
-    """입출금에 아직 기록되지 않은 세금계산서 문서(불러오기 후보)."""
+class PaymentTransactionCandidateOut(BaseModel):
+    """입출금으로 결제 처리할 수 있는 외상 매출/매입(매입매출관리에서 아직 결제완료되지 않은 내역)."""
 
     id: int
-    issue_date: date
-    type: PaymentType  # 매출 세금계산서 → 입금, 매입 → 출금
+    transaction_date: date
+    type: PaymentType  # 외상매출 → 입금, 외상매입 → 출금
     client_id: int | None
     client_name: str
     item_name: str
     total_amount: int
     tax_invoice_no: str | None
-    status: str
 
 
 class PaymentCreate(BaseModel):
@@ -40,8 +39,8 @@ class PaymentCreate(BaseModel):
     proof_type_detail: str | None = None
     card_type: CardType | None = None
     bank_type: BankType | None = None
-    # 새 입출금 등록 시 불러온 세금계산서 문서. 지정하면 그 문서를 "입출금 기록됨"으로 표시해 같은 세금계산서가 두 번 기록되지 않게 한다.
-    tax_invoice_doc_id: int | None = None
+    # 새 입출금 등록 시 불러온 외상 매출/매입(매입매출 내역). 지정하면 그 내역이 결제완료로 바뀌고 이 입출금의 날짜가 완료일로 기록된다.
+    transaction_id: int | None = None
 
     @model_validator(mode="after")
     def _validate_proof(self):

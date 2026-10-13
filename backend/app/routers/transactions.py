@@ -23,6 +23,7 @@ from app.schemas.transaction import (
     VatReportOut,
 )
 from app.services.hometax_apply import apply_plan, build_plan
+from app.services.transaction_credit import credit_add, credit_remove
 from app.services.hometax_import import HometaxParseError, parse_hometax_excel
 from app.services.transaction_list_excel import generate_transaction_list_excel
 
@@ -38,8 +39,11 @@ def _build_transaction_query(
     month: int | None,
     start_date: date | None,
     end_date: date | None,
+    settled: bool | None = None,
 ):
     query = db.query(Transaction).options(joinedload(Transaction.client))
+    if settled is not None:
+        query = query.filter(Transaction.settled.is_(settled))
     if type_filter is not None:
         query = query.filter(Transaction.type == type_filter)
     if year is not None:
@@ -67,6 +71,8 @@ def _to_out(tx: Transaction) -> TransactionOut:
         total_amount=tx.total_amount,
         tax_invoice_no=tx.tax_invoice_no,
         memo=tx.memo,
+        settled=tx.settled,
+        settled_date=tx.settled_date,
         created_at=tx.created_at,
     )
 
@@ -78,6 +84,7 @@ def list_transactions(
     month: int | None = Query(default=None),
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    settled: bool | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_transactions_access),
 ):
@@ -85,7 +92,7 @@ def list_transactions(
         f"[Transactions] 목록 조회: type={type_filter}, year={year}, month={month}, "
         f"start_date={start_date}, end_date={end_date}, by={current_user.id}"
     )
-    transactions = _build_transaction_query(db, type_filter, year, month, start_date, end_date).all()
+    transactions = _build_transaction_query(db, type_filter, year, month, start_date, end_date, settled).all()
     return [_to_out(t) for t in transactions]
 
 
@@ -296,9 +303,13 @@ def create_transaction(
         total_amount=payload.supply_amount + payload.vat_amount,
         tax_invoice_no=payload.tax_invoice_no,
         memo=payload.memo,
+        settled=payload.settled,
+        settled_date=(payload.settled_date or date.today()) if payload.settled else None,
         created_by=current_user.id,
     )
     db.add(tx)
+    db.flush()
+    credit_add(db, tx)
     if doc is not None:
         db.flush()
         doc.ledger_transaction_id = tx.id
@@ -324,6 +335,7 @@ def update_transaction(
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
+    credit_remove(db, tx)  # 수정 전 상태가 외상이었다면 거래처 잔액에 반영한 금액을 먼저 되돌린다.
     tx.type = payload.type
     tx.transaction_date = payload.transaction_date
     tx.client_id = payload.client_id
@@ -334,6 +346,14 @@ def update_transaction(
     tx.total_amount = payload.supply_amount + payload.vat_amount
     tx.tax_invoice_no = payload.tax_invoice_no
     tx.memo = payload.memo
+    if payload.settled:
+        tx.settled = True
+        tx.settled_date = payload.settled_date or tx.settled_date or date.today()
+    else:
+        tx.settled = False
+        tx.settled_date = None
+        tx.settled_payment_id = None
+    credit_add(db, tx)
     db.commit()
     db.refresh(tx)
     logger.debug(f"[Transactions] 수정: id={tx_id}, by={current_user.id}")
@@ -345,6 +365,7 @@ def delete_transaction(tx_id: int, db: Session = Depends(get_db), current_user: 
     tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래 내역을 찾을 수 없습니다.")
+    credit_remove(db, tx)
     db.delete(tx)
     db.commit()
     logger.debug(f"[Transactions] 삭제: id={tx_id}, by={current_user.id}")

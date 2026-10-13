@@ -10,16 +10,15 @@ export const PAYMENT_TYPE_STYLES: Record<PaymentType, string> = {
   withdrawal: "bg-red-50 text-danger",
 };
 
-export interface PaymentTaxInvoiceCandidate {
+export interface PaymentTransactionCandidate {
   id: number;
-  issue_date: string;
+  transaction_date: string;
   type: PaymentType;
   client_id: number | null;
   client_name: string;
   item_name: string;
   total_amount: number;
   tax_invoice_no: string | null;
-  status: string;
 }
 
 export type PaymentMethod = "corporate_card" | "cash" | "bank_transfer" | "other";

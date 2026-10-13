@@ -13,6 +13,7 @@ import {
   type ClientContactFormValues,
   type ClientFormValues,
 } from "./types";
+import { NumberInput } from "../../components/ui/NumberInput";
 
 const NUMBER_FIELDS = new Set<keyof ClientFormValues>(["receivable_amount", "payable_amount"]);
 
@@ -574,12 +575,16 @@ export function ClientFormPage() {
             {FIELDS_BOTTOM.map(({ key, label, span2 }) => (
               <div key={key} className={span2 ? "col-span-2" : ""}>
                 <label className="block text-xs text-text-muted mb-1.5">{label}</label>
-                <input
-                  type={NUMBER_FIELDS.has(key) ? "number" : "text"}
-                  value={values[key] as string}
-                  onChange={(e) => update(key, e.target.value)}
-                  className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-                />
+                {NUMBER_FIELDS.has(key) ? (
+                  <NumberInput value={values[key] as string} onChange={(v) => update(key, v)} className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg" />
+                ) : (
+                  <input
+                    type="text"
+                    value={values[key] as string}
+                    onChange={(e) => update(key, e.target.value)}
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+                  />
+                )}
               </div>
             ))}
           </div>

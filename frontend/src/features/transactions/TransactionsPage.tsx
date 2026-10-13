@@ -40,6 +40,7 @@ export function TransactionsPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [tab, setTab] = useState<TransactionType | "all">("all");
+  const [statusTab, setStatusTab] = useState<"all" | "unsettled" | "settled">("all");
 
   const [startDate, setStartDate] = useState(monthsAgoISO(1));
   const [endDate, setEndDate] = useState(todayISO());
@@ -50,6 +51,8 @@ export function TransactionsPage() {
   const [report, setReport] = useState<VatReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  const visible = transactions === null ? null : transactions.filter((t) => statusTab === "all" || (statusTab === "settled") === t.settled);
 
   function loadTransactions() {
     logDebug("Transactions", `목록 조회: ${startDate} ~ ${endDate}, type=${tab}`);
@@ -156,6 +159,7 @@ export function TransactionsPage() {
       }
     >
       <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-3">
         <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit">
           {TABS.map((t) => (
             <button
@@ -168,6 +172,26 @@ export function TransactionsPage() {
               {t.label}
             </button>
           ))}
+        </div>
+        <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit">
+          {(
+            [
+              ["all", "전체"],
+              ["unsettled", "외상"],
+              ["settled", "결제완료"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setStatusTab(key)}
+              className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
+                statusTab === key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -259,14 +283,14 @@ export function TransactionsPage() {
 
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
-      {transactions !== null && transactions.length === 0 && (
+      {visible !== null && visible.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <Receipt className="mx-auto mb-2 text-text-muted" size={24} />
           <p className="text-sm text-text-muted">해당 기간의 거래 내역이 없습니다.</p>
         </div>
       )}
 
-      {transactions !== null && transactions.length > 0 && (
+      {visible !== null && visible.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -278,11 +302,12 @@ export function TransactionsPage() {
                 <th className="py-2.5 px-4 font-medium text-right">공급가액</th>
                 <th className="py-2.5 px-4 font-medium text-right">부가세</th>
                 <th className="py-2.5 px-4 font-medium text-right">합계</th>
+                <th className="py-2.5 px-4 font-medium">결제</th>
                 <th className="w-20"></th>
               </tr>
             </thead>
             <tbody>
-              {transactions.map((tx) => (
+              {visible.map((tx) => (
                 <tr key={tx.id} className="border-b border-border last:border-0">
                   <td className="py-2.5 px-4">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${TX_TYPE_STYLES[tx.type]}`}>
@@ -295,6 +320,18 @@ export function TransactionsPage() {
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.supply_amount)}</td>
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.vat_amount)}</td>
                   <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(tx.total_amount)}</td>
+                  <td className="py-2.5 px-4 whitespace-nowrap">
+                    {tx.settled ? (
+                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-green text-tile-green-fg">
+                        {tx.type === "sales" ? "입금완료" : "결제완료"}
+                        {tx.settled_date ? ` ${tx.settled_date.slice(2).replace(/-/g, ".")}` : ""}
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-tile-orange text-tile-orange-fg">
+                        {tx.type === "sales" ? "외상매출" : "외상매입"}
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2.5 px-2 whitespace-nowrap">
                     <Link
                       to={`/transactions/${tx.id}/edit`}

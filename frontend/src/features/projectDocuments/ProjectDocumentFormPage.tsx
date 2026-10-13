@@ -10,7 +10,6 @@ import { ApiError, apiGet, apiPost, apiUpload, downloadFile } from "../../lib/ap
 import { hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
-import { askTaxInvoicePaymentReceived } from "./taxInvoicePaymentConfirm";
 import {
   DOC_CURRENCY_LABELS,
   DOC_CURRENCY_SYMBOLS,
@@ -25,6 +24,7 @@ import {
   type TaxInvoiceOcrResult,
   type TaxInvoicePurpose,
 } from "./types";
+import { NumberInput } from "../../components/ui/NumberInput";
 
 const OTHER_PROJECT = "other";
 const CURRENCY_OPTIONS: DocCurrency[] = ["KRW", "USD", "JPY"];
@@ -209,9 +209,8 @@ export function ProjectDocumentFormPage() {
   }
 
   async function handleRequestApproval(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
-    // 사진으로 받은 세금계산서를 등록하는 경우(방향이 판별됨)는 항상 미지급(false)으로 처리하므로 입금/지급 확인창을 건너뛴다.
-    const received =
-      docType !== "tax_invoice" ? null : direction !== null ? false : askTaxInvoicePaymentReceived(purposeType, clientName);
+    // 세금계산서는 항상 외상(미수/미지급)으로 매입매출에 기록된다. 입금/출금은 입출금관리에서 매입매출을 불러와 처리한다.
+    const received = null;
     setIsSubmitting(true);
     try {
       logDebug("ProjectDocumentForm", `결재요청 시도: end_title=${endTitle}, is_final_decision=${isFinalDecision}`);
@@ -552,24 +551,20 @@ export function ProjectDocumentFormPage() {
                   </div>
                   <div>
                     <label className="block text-[11px] text-text-muted mb-1">수량</label>
-                    <input
-                      type="number"
-                      min={0}
+                    <NumberInput
                       required
                       value={item.quantity}
-                      onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                      onChange={(v) => updateItem(index, "quantity", v)}
                       className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
                     />
                   </div>
                   <div>
                     <label className="block text-[11px] text-text-muted mb-1">단가 ({DOC_CURRENCY_SYMBOLS[currency]})</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
+                    <NumberInput
+                      allowDecimal
                       required
                       value={item.unit_price}
-                      onChange={(e) => updateItem(index, "unit_price", e.target.value)}
+                      onChange={(v) => updateItem(index, "unit_price", v)}
                       className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
                     />
                   </div>

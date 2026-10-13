@@ -13,6 +13,7 @@ from app.core.approval import advance_chain_self_approvals, build_chain_steps, g
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
+from app.services.transaction_credit import credit_add
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.client import Client
 from app.models.project import Project
@@ -24,7 +25,6 @@ from app.models.project_document import (
     ProjectDocumentStatus,
     calc_amount,
 )
-from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import JobTitle, User, has_menu_permission
 from app.schemas.approval import to_approval_step_out
@@ -39,7 +39,6 @@ from app.schemas.project_document import (
     ProjectDocumentSetCreate,
     ProjectDocumentUpdate,
     RejectIn,
-    TaxInvoicePaymentConfirm,
 )
 from app.services.approval_notice import create_decision_notification, create_request_notification
 from app.services.excel_to_pdf import convert_xlsx_to_pdf
@@ -169,59 +168,16 @@ def _record_tax_invoice_transaction(db: Session, doc: ProjectDocument, current_u
         total_amount=subtotal + vat,
         tax_invoice_no=doc.doc_no or doc.approval_no,
         memo=f"[자동연동] 세금계산서 승인(project_document_id={doc.id})에서 자동 생성됨",
+        settled=False,  # 세금계산서는 항상 외상으로 기록하고, 실제 입금/출금은 입출금관리에서 처리한다.
         created_by=current_user.id,
     )
     db.add(tx)
     db.flush()
+    credit_add(db, tx)
     doc.ledger_transaction_id = tx.id
     logger.debug(
         f"[ProjectDocuments] 세금계산서 매입매출 자동 기록: doc_id={doc.id}, tx_id={tx.id}, "
         f"type={tx_type.value}, amount={tx.total_amount}"
-    )
-
-
-def _finalize_tax_invoice_payment(db: Session, doc: ProjectDocument, received: bool, current_user: User) -> None:
-    """세금계산서 승인 시점에 확정된 입금(청구)/지급(영수) 여부를 입출금관리에 기록한다.
-    미수(청구)/미지급(영수)인 경우 외상매출금/외상매입금으로 남기고 거래처 잔액을 늘려,
-    나중에 기존 미수금/미지급금 수금·지급 처리(정산) 화면에서 정상화할 수 있게 한다."""
-    if doc.payment_recorded:
-        return
-
-    subtotal = sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
-    total = subtotal + round(subtotal * 0.1)
-    is_billing = _is_sales(doc)
-    payment_type = PaymentType.deposit if is_billing else PaymentType.withdrawal
-    category = ("외상매출금" if is_billing else "외상매입금") if not received else "기타"
-    action_label = "입금" if is_billing else "지급"
-    description = f"세금계산서 {doc.doc_no or doc.id} {action_label}" + ("" if received else " (미확정)")
-
-    client = doc.effective_client
-    payment = Payment(
-        type=payment_type,
-        payment_date=doc.issue_date,
-        category=category,
-        description=description,
-        amount=total,
-        method=PaymentMethod.other,
-        client_id=client.id if client else None,
-        memo=f"[자동연동] 세금계산서 project_document_id={doc.id}",
-        created_by=current_user.id,
-    )
-    db.add(payment)
-
-    if not received and client is not None:
-        field = "receivable_amount" if is_billing else "payable_amount"
-        current = getattr(client, field)
-        setattr(client, field, current + total)
-        logger.debug(
-            f"[ProjectDocuments] 세금계산서 미확정 처리로 거래처 {field} 자동 증가: "
-            f"client_id={client.id}, {current} -> {current + total}"
-        )
-
-    doc.payment_recorded = True
-    logger.debug(
-        f"[ProjectDocuments] 세금계산서 입출금 확인 기록: doc_id={doc.id}, received={received}, "
-        f"amount={total}, category={category}, by={current_user.id}"
     )
 
 
@@ -247,8 +203,6 @@ def _apply_approval_request(
         doc.approver_id = current_user.id
         doc.reviewed_at = datetime.now(timezone.utc)
         _record_tax_invoice_transaction(db, doc, current_user)
-        if doc.doc_type == ProjectDocType.tax_invoice and doc.payment_received_hint is not None:
-            _finalize_tax_invoice_payment(db, doc, doc.payment_received_hint, current_user)
         if notify:
             create_decision_notification(
                 db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
@@ -265,8 +219,6 @@ def _apply_approval_request(
         doc.approver_id = steps[-1].approver_id
         doc.reviewed_at = datetime.now(timezone.utc)
         _record_tax_invoice_transaction(db, doc, current_user)
-        if doc.doc_type == ProjectDocType.tax_invoice and doc.payment_received_hint is not None:
-            _finalize_tax_invoice_payment(db, doc, doc.payment_received_hint, current_user)
         if notify:
             create_decision_notification(
                 db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
@@ -327,7 +279,6 @@ def _new_document(
         client_name=payload.client_name,
         manager_name=payload.manager_name,
         created_by=current_user.id,
-        payment_received_hint=payload.received,
         direction=payload.direction if doc_type == ProjectDocType.tax_invoice else None,
         approval_no=payload.approval_no if doc_type == ProjectDocType.tax_invoice else None,
     )
@@ -605,8 +556,6 @@ def create_project_document(
         if not has_menu_permission(current_user, "tax_invoice"):
             logger.debug(f"[ProjectDocuments] 세금계산서 권한 없음, 접근 거부: user_id={current_user.id}")
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 작성 권한이 없습니다.")
-        if payload.received is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입금/지급 확인 여부를 선택해주세요.")
 
     project = _resolve_project(db, payload)
 
@@ -707,11 +656,6 @@ def request_approval(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 결재를 요청할 수 있습니다.")
     if doc.status not in (ProjectDocumentStatus.draft, ProjectDocumentStatus.rejected):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="작성 중이거나 반려된 문서만 결재 요청할 수 있습니다.")
-    if doc.doc_type == ProjectDocType.tax_invoice and payload.received is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입금/지급 확인 여부를 선택해주세요.")
-
-    if doc.doc_type == ProjectDocType.tax_invoice:
-        doc.payment_received_hint = payload.received
     steps = _apply_approval_request(db, doc, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user)
     # 묶음이면 나머지 문서도 같은 결재선으로 다시 요청한다 (알림은 한 번만).
     siblings = [s for s in _set_siblings(db, doc) if s.status in (ProjectDocumentStatus.draft, ProjectDocumentStatus.rejected)]
@@ -742,8 +686,6 @@ def _approve_one(db: Session, doc: ProjectDocument, current_user: User, notify: 
         doc.status = ProjectDocumentStatus.approved
         doc.reviewed_at = datetime.now(timezone.utc)
         _record_tax_invoice_transaction(db, doc, current_user)
-        if doc.doc_type == ProjectDocType.tax_invoice and doc.payment_received_hint is not None:
-            _finalize_tax_invoice_payment(db, doc, doc.payment_received_hint, current_user)
         if notify:
             create_decision_notification(
                 db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
@@ -783,29 +725,6 @@ def approve_project_document(doc_id: int, db: Session = Depends(get_db), current
     doc = _get_doc_or_404(db, doc.id)
     logger.debug(f"[ProjectDocuments] 결재 승인 완료: id={doc_id}, by={current_user.id}")
     return _to_out(doc, get_steps(db, _TARGET, doc.id))
-
-
-@router.post("/{doc_id}/confirm-payment", response_model=ProjectDocumentOut)
-def confirm_tax_invoice_payment(
-    doc_id: int,
-    payload: TaxInvoicePaymentConfirm,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """작성/재요청 시점에 입금·지급 확인 여부를 받지 못한 세금계산서를 위한 수동 확인용 보조 엔드포인트.
-    정상적인 흐름에서는 작성 시점에 받은 응답이 승인과 동시에 자동 반영되므로 호출될 일이 거의 없다."""
-    doc = _get_doc_or_404(db, doc_id)
-    if doc.doc_type != ProjectDocType.tax_invoice:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서만 입금/지급 확인이 가능합니다.")
-    if doc.status != ProjectDocumentStatus.approved:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 승인된 세금계산서만 확인할 수 있습니다.")
-    if doc.payment_recorded:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 입출금 내역이 기록된 문서입니다.")
-
-    _finalize_tax_invoice_payment(db, doc, payload.received, current_user)
-    db.commit()
-    db.refresh(doc)
-    return _to_out_db(db, doc)
 
 
 def _reject_one(db: Session, doc: ProjectDocument, reason: str, notify: bool) -> None:

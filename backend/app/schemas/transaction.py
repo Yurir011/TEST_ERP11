@@ -17,6 +17,9 @@ class TransactionCreate(BaseModel):
     memo: str | None = None
     # 새 거래 등록 시 불러온 세금계산서 문서. 지정하면 그 문서를 이 거래와 연결해 같은 세금계산서가 매입매출에 두 번 잡히지 않게 한다.
     tax_invoice_doc_id: int | None = None
+    # 결제 상태. 기본은 외상(False). 결제완료(True)면 완료일을 함께 기록한다(비우면 오늘).
+    settled: bool = False
+    settled_date: date | None = None
 
 
 class TaxInvoiceCandidateOut(BaseModel):
@@ -49,6 +52,8 @@ class TransactionOut(BaseModel):
     total_amount: int
     tax_invoice_no: str | None
     memo: str | None
+    settled: bool
+    settled_date: date | None
     created_at: datetime
 
 

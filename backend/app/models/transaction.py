@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -32,6 +32,11 @@ class Transaction(Base):
     total_amount: Mapped[int] = mapped_column(BigInteger)
     tax_invoice_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 외상 상태. settled=False면 아직 대금을 주고받지 않은 외상매출/외상매입이고, 입출금관리에서 이 거래를 불러 입금/출금 처리하면
+    # 결제완료(settled=True)가 되며 완료일(settled_date)과 연결된 입출금(settled_payment_id)이 기록된다.
+    settled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    settled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    settled_payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id", ondelete="SET NULL"), nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

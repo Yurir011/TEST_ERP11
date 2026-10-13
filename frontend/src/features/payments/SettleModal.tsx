@@ -12,6 +12,7 @@ import {
   type Payment,
   type PaymentMethod,
 } from "./types";
+import { NumberInput } from "../../components/ui/NumberInput";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -93,12 +94,10 @@ export function SettleModal({ kind, client, onClose, onSuccess }: SettleModalPro
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-text-muted mb-1.5">금액</label>
-            <input
-              type="number"
-              min={0}
+            <NumberInput
               required
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={setAmount}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
           </div>

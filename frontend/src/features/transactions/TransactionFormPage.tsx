@@ -7,6 +7,7 @@ import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type TaxInvoiceCandidate, type Transaction, type TransactionType } from "./types";
+import { NumberInput } from "../../components/ui/NumberInput";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -106,6 +107,8 @@ export function TransactionFormPage() {
   const [vatManuallyEdited, setVatManuallyEdited] = useState(false);
   const [taxInvoiceNo, setTaxInvoiceNo] = useState("");
   const [memo, setMemo] = useState("");
+  const [settled, setSettled] = useState(false);
+  const [settledDate, setSettledDate] = useState(todayISO());
   const [linkedDoc, setLinkedDoc] = useState<TaxInvoiceCandidate | null>(null);
   const [showPicker, setShowPicker] = useState(false);
 
@@ -127,6 +130,8 @@ export function TransactionFormPage() {
         setVatManuallyEdited(true);
         setTaxInvoiceNo(tx.tax_invoice_no ?? "");
         setMemo(tx.memo ?? "");
+        setSettled(tx.settled);
+        setSettledDate(tx.settled_date ?? todayISO());
         if (tx.client_id !== null) {
           try {
             const client = await apiGet<Client>(`/api/clients/${tx.client_id}`);
@@ -185,6 +190,7 @@ export function TransactionFormPage() {
     logDebug("TransactionForm", `세금계산서 불러오기: doc_id=${c.id}`);
     setLinkedDoc(c);
     setShowPicker(false);
+    setSettled(false);
     setType(c.type);
     setTransactionDate(c.issue_date);
     setItemName(c.item_name);
@@ -223,6 +229,8 @@ export function TransactionFormPage() {
         vat_amount: Number(vatAmount) || 0,
         tax_invoice_no: taxInvoiceNo || null,
         memo: memo || null,
+        settled,
+        settled_date: settled ? settledDate : null,
         ...(editingId === null && linkedDoc ? { tax_invoice_doc_id: linkedDoc.id } : {}),
       };
       if (editingId !== null) {
@@ -338,22 +346,18 @@ export function TransactionFormPage() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-text-muted mb-1.5">공급가액</label>
-            <input
-              type="number"
-              min={0}
+            <NumberInput
               value={supplyAmount}
-              onChange={(e) => setSupplyAmount(e.target.value)}
+              onChange={setSupplyAmount}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
           </div>
           <div>
             <label className="block text-xs text-text-muted mb-1.5">부가세 (자동계산, 수정 가능)</label>
-            <input
-              type="number"
-              min={0}
+            <NumberInput
               value={vatAmount}
-              onChange={(e) => {
-                setVatAmount(e.target.value);
+              onChange={(v) => {
+                setVatAmount(v);
                 setVatManuallyEdited(true);
               }}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
@@ -369,6 +373,31 @@ export function TransactionFormPage() {
             onChange={(e) => setTaxInvoiceNo(e.target.value)}
             className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
           />
+        </div>
+
+        <div>
+          <label className="block text-xs text-text-muted mb-1.5">결제 상태</label>
+          <div className="flex items-center gap-2">
+            <select
+              value={settled ? "settled" : "unsettled"}
+              onChange={(e) => setSettled(e.target.value === "settled")}
+              className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+            >
+              <option value="unsettled">{type === "sales" ? "외상매출 (미수)" : "외상매입 (미지급)"}</option>
+              <option value="settled">{type === "sales" ? "입금완료" : "결제완료"}</option>
+            </select>
+            {settled && (
+              <input
+                type="date"
+                value={settledDate}
+                onChange={(e) => setSettledDate(e.target.value)}
+                className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              />
+            )}
+          </div>
+          <p className="text-xs text-text-muted mt-1.5">
+            외상으로 두면 입출금관리에서 이 내역을 불러와 입금/출금 처리할 때 자동으로 결제완료로 바뀝니다.
+          </p>
         </div>
 
         <div>
