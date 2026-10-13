@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -113,6 +113,14 @@ class ProjectDocument(Base):
     # 작성목적(청구→매출, 영수→매입)으로 판단한다. 받은 세금계산서 사진을 등록할 때 공급자/공급받는자로 자동 판별해 채운다.
     direction: Mapped[str | None] = mapped_column(String(10), nullable=True)
     approval_no: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 국세청 승인번호 (등록한 세금계산서 사진에서 인식)
+
+    # 세금계산서 전용: 종이로 받은 매입 세금계산서(팝빌/전자 발행 대상이 아님). 등록 시점에 체크하며 목록에서 따로 구분해 보여준다.
+    is_paper: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+
+    # 세금계산서 전용: 승인된 문서의 삭제 결재가 진행 중인지 여부. 삭제 결재 동안 문서는 결재 대기(pending) 상태가 되고,
+    # 최종 승인되면 문서와 연결된 매입매출 내역이 삭제되며, 반려되면 delete_prev_steps에 저장해 둔 이전 승인 상태로 되돌린다.
+    delete_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    delete_prev_steps: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     project: Mapped["Project | None"] = relationship()
     other_client: Mapped["Client | None"] = relationship(foreign_keys=[other_client_id])

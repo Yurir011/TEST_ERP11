@@ -13,7 +13,7 @@ from app.core.approval import advance_chain_self_approvals, build_chain_steps, g
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
-from app.services.transaction_credit import credit_add
+from app.services.transaction_credit import credit_add, credit_remove
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.client import Client
 from app.models.project import Project
@@ -25,8 +25,9 @@ from app.models.project_document import (
     ProjectDocumentStatus,
     calc_amount,
 )
+from app.models.payment import Payment, PaymentType
 from app.models.transaction import Transaction, TransactionType
-from app.models.user import JobTitle, User, has_menu_permission
+from app.models.user import JobTitle, User, has_menu_permission, is_admin_role
 from app.schemas.approval import to_approval_step_out
 from app.schemas.project_document import (
     ApprovalRequestIn,
@@ -120,6 +121,8 @@ def _to_out(doc: ProjectDocument, steps: list[ApprovalStep]) -> ProjectDocumentO
         payment_recorded=doc.payment_recorded,
         direction=doc.direction,
         approval_no=doc.approval_no,
+        is_paper=bool(doc.is_paper),
+        delete_requested=bool(doc.delete_requested),
         images=doc.images,
     )
 
@@ -151,12 +154,44 @@ def _is_sales(doc: ProjectDocument) -> bool:
 def _record_tax_invoice_transaction(db: Session, doc: ProjectDocument, current_user: User) -> None:
     """세금계산서가 결재 승인되면 팝빌 발행 여부와 무관하게 즉시 매입매출관리에 자동 기록한다.
     청구 목적은 매출, 영수 목적은 매입으로 집계한다. doc.project는 호출 전에 반드시 로드되어 있어야 한다."""
-    if doc.doc_type != ProjectDocType.tax_invoice or doc.ledger_transaction_id is not None:
+    if doc.doc_type != ProjectDocType.tax_invoice:
         return
 
     subtotal = sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
     vat = round(subtotal * 0.1)
     tx_type = TransactionType.sales if _is_sales(doc) else TransactionType.purchase
+
+    existing = db.get(Transaction, doc.ledger_transaction_id) if doc.ledger_transaction_id is not None else None
+    if doc.ledger_transaction_id is not None:
+        # 승인된 세금계산서를 수정해 다시 승인받은 경우: 이미 기록된 매입매출 내역을 새 내용으로 고친다.
+        # 대금 결제(입금/출금)가 끝난 내역도 결제 상태와 연결된 입출금은 그대로 두고 금액/거래처 등만 고친다.
+        if existing is None:
+            doc.ledger_transaction_id = None
+        else:
+            credit_remove(db, existing)
+            existing.type = tx_type
+            existing.transaction_date = doc.issue_date
+            existing.client_id = doc.effective_client.id if doc.effective_client else None
+            existing.counterparty = doc.client_name
+            existing.supply_amount = subtotal
+            existing.vat_amount = vat
+            existing.total_amount = subtotal + vat
+            credit_add(db, existing)
+            logger.debug(
+                f"[ProjectDocuments] 수정된 세금계산서 재승인 → 매입매출 내역 갱신: doc_id={doc.id}, tx_id={existing.id}, "
+                f"settled={existing.settled}, amount={existing.total_amount}"
+            )
+            # 대금 결제가 끝난 건이면 연결된 입출금 내역(금액/거래처/입금·출금 구분)도 같은 내용으로 맞춘다. 결제일/방법/메모는 그대로 둔다.
+            payment = db.get(Payment, existing.settled_payment_id) if existing.settled_payment_id is not None else None
+            if payment is not None:
+                payment.amount = existing.total_amount
+                payment.client_id = existing.client_id
+                payment.type = PaymentType.deposit if tx_type == TransactionType.sales else PaymentType.withdrawal
+                logger.debug(
+                    f"[ProjectDocuments] 수정된 세금계산서 재승인 → 입출금 내역 갱신: doc_id={doc.id}, payment_id={payment.id}, "
+                    f"amount={payment.amount}, type={payment.type.value}"
+                )
+            return
     tx = Transaction(
         type=tx_type,
         transaction_date=doc.issue_date,
@@ -281,7 +316,10 @@ def _new_document(
         created_by=current_user.id,
         direction=payload.direction if doc_type == ProjectDocType.tax_invoice else None,
         approval_no=payload.approval_no if doc_type == ProjectDocType.tax_invoice else None,
+        is_paper=payload.is_paper if doc_type == ProjectDocType.tax_invoice else False,
     )
+    if doc.is_paper:
+        doc.direction = "purchase"  # 종이 세금계산서는 받은(매입) 세금계산서다
     if doc_type == ProjectDocType.quotation:
         doc.doc_no = next_doc_no(db, doc_type, payload.issue_date)
     doc.items = [
@@ -615,7 +653,18 @@ def update_project_document(
     doc = _get_doc_or_404(db, doc_id)
     if doc.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 수정할 수 있습니다.")
-    if doc.status not in (ProjectDocumentStatus.draft, ProjectDocumentStatus.rejected):
+
+    # 승인된 세금계산서는 팝빌로 발행하기 전까지만 수정할 수 있고, 수정하면 결재를 다시 받아야 한다.
+    editing_approved = doc.status == ProjectDocumentStatus.approved
+    if editing_approved:
+        if doc.doc_type != ProjectDocType.tax_invoice:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서만 수정할 수 있습니다.")
+        if doc.popbill_issued:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="팝빌로 발행된 세금계산서는 수정할 수 없습니다.")
+        # 대금 결제(입금/출금)가 끝난 뒤에도 수정할 수 있다. 재승인 시 매입매출 내역이 새 내용으로 갱신된다.
+        if not payload.request_approval:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서를 수정하려면 결재를 다시 요청해야 합니다.")
+    elif doc.status not in (ProjectDocumentStatus.draft, ProjectDocumentStatus.rejected):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="작성 중이거나 반려된 문서만 수정할 수 있습니다.")
     if doc.set_id is not None:
         raise HTTPException(
@@ -623,6 +672,18 @@ def update_project_document(
             detail="견적서와 거래명세서를 함께 작성한 문서는 수정할 수 없습니다. 삭제 후 다시 작성해주세요.",
         )
 
+    if payload.update_project:
+        if payload.project_id is None and not (payload.project_other_name or "").strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="관련 프로젝트를 선택하거나 '기타' 내용을 입력해주세요.")
+        if payload.project_id is not None and db.query(Project).filter(Project.id == payload.project_id).first() is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 프로젝트입니다.")
+        doc.project_id = payload.project_id
+        doc.project_other_name = None if payload.project_id is not None else (payload.project_other_name or "").strip()
+
+    if payload.is_paper is not None and doc.doc_type == ProjectDocType.tax_invoice:
+        doc.is_paper = payload.is_paper
+        if payload.is_paper:
+            doc.direction = "purchase"
     doc.issue_date = payload.issue_date
     doc.currency = payload.currency.value
     doc.purpose_type = payload.purpose_type.value
@@ -640,11 +701,20 @@ def update_project_document(
     db.commit()
 
     doc = _get_doc_or_404(db, doc.id)
+    if payload.update_project and doc.project is None:
+        doc.other_client = _find_client(db, payload.client_name, (doc.counterparty_info or {}).get("reg_no"))
+    steps = []
+    if payload.request_approval:
+        steps = _apply_approval_request(db, doc, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user)
+        db.commit()
+        doc = _get_doc_or_404(db, doc.id)
     _regenerate_documents(db, doc)
     db.commit()
     db.refresh(doc)
-    logger.debug(f"[ProjectDocuments] 수정: doc_id={doc_id}, by={current_user.id}")
-    return _to_out_db(db, doc)
+    logger.debug(
+        f"[ProjectDocuments] 수정: doc_id={doc_id}, by={current_user.id}, was_approved={editing_approved}, request_approval={payload.request_approval}"
+    )
+    return _to_out(doc, steps) if payload.request_approval else _to_out_db(db, doc)
 
 
 @router.post("/{doc_id}/request-approval", response_model=ProjectDocumentOut)
@@ -674,14 +744,146 @@ def request_approval(
     return _to_out(doc, steps)
 
 
-def _approve_one(db: Session, doc: ProjectDocument, current_user: User, notify: bool) -> None:
-    """문서 1건의 현재 결재 단계를 승인하고, 마지막 단계면 승인 완료, 아니면 다음 결재권자로 넘긴다 (commit은 호출자가)."""
+def _delete_label(doc: ProjectDocument) -> str:
+    return f"세금계산서 삭제({doc.client_name})"
+
+
+def _delete_document_now(db: Session, doc: ProjectDocument) -> None:
+    """문서를 실제로 지운다. 승인 때 자동 기록된 매입매출 내역과, 대금 결제가 끝난 건의 입출금 내역도 함께 지우고
+    거래처 미수금/미지급금을 되돌린다 (commit은 호출자가)."""
+    if doc.ledger_transaction_id is not None:
+        tx = db.get(Transaction, doc.ledger_transaction_id)
+        doc.ledger_transaction_id = None
+        db.flush()
+        if tx is not None:
+            credit_remove(db, tx)
+            payment = db.get(Payment, tx.settled_payment_id) if tx.settled_payment_id is not None else None
+            db.delete(tx)
+            logger.debug(f"[ProjectDocuments] 삭제: 연결된 매입매출 내역 삭제 tx_id={tx.id}, doc_id={doc.id}")
+            if payment is not None:
+                # 대금 결제가 끝난 건이면 연결된 입출금 내역(과 첨부 영수증)도 함께 삭제한다.
+                db.flush()
+                if payment.receipt_path and os.path.exists(payment.receipt_path):
+                    os.remove(payment.receipt_path)
+                db.delete(payment)
+                logger.debug(f"[ProjectDocuments] 삭제: 연결된 입출금 내역 삭제 payment_id={payment.id}, doc_id={doc.id}")
+    for image in doc.images:
+        if os.path.exists(image.file_path):
+            os.remove(image.file_path)
+    for path in (doc.file_path, doc.excel_path):
+        if path and os.path.exists(path):
+            os.remove(path)
+    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == doc.id).delete()
+    db.delete(doc)
+    logger.debug(f"[ProjectDocuments] 문서 삭제 완료: doc_id={doc.id}")
+
+
+def _restore_after_delete_rejected(db: Session, doc: ProjectDocument) -> None:
+    """삭제 결재가 반려되면 삭제 요청 전의 승인 상태(결재선 포함)로 되돌린다."""
+    snap = doc.delete_prev_steps or {}
+    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == doc.id).delete()
+    for st in snap.get("steps", []):
+        db.add(
+            ApprovalStep(
+                target_type=_TARGET,
+                target_id=doc.id,
+                step_order=st["step_order"],
+                title=JobTitle(st["title"]),
+                approver_id=st["approver_id"],
+                status=ApprovalStepStatus(st["status"]),
+                decided_at=datetime.fromisoformat(st["decided_at"]) if st.get("decided_at") else None,
+            )
+        )
+    doc.status = ProjectDocumentStatus.approved
+    doc.approver_id = snap.get("approver_id")
+    doc.current_step = snap.get("current_step", 1)
+    doc.is_final_decision = snap.get("is_final_decision", False)
+    doc.reviewed_at = datetime.fromisoformat(snap["reviewed_at"]) if snap.get("reviewed_at") else None
+    doc.reject_reason = None
+    doc.delete_requested = False
+    doc.delete_prev_steps = None
+
+
+@router.post("/{doc_id}/request-delete", response_model=ProjectDocumentOut)
+def request_delete_document(
+    doc_id: int, payload: ApprovalRequestIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """승인된 세금계산서의 삭제를 결재 요청한다. 결재가 최종 승인되면 삭제되고, 반려되면 그대로 유지된다."""
+    doc = _get_doc_or_404(db, doc_id)
+    if doc.doc_type != ProjectDocType.tax_invoice:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서만 삭제 결재를 요청할 수 있습니다.")
+    if doc.created_by != current_user.id and not is_admin_role(current_user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자 또는 관리자만 삭제 결재를 요청할 수 있습니다.")
+    if doc.status != ProjectDocumentStatus.approved or doc.delete_requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서만 삭제 결재를 요청할 수 있습니다.")
+
+    # 결재선 검증은 이전 상태를 건드리기 전에 한다 (잘못된 요청이면 문서가 바뀌지 않도록).
+    chain = approvers = None
+    if not payload.is_final_decision:
+        chain, approvers = validate_chain_approvers(db, payload.end_title, payload.approver_ids)
+
+    old_steps = get_steps(db, _TARGET, doc.id)
+    doc.delete_prev_steps = {
+        "steps": [
+            {
+                "step_order": st.step_order,
+                "title": st.title.value,
+                "approver_id": st.approver_id,
+                "status": st.status.value,
+                "decided_at": st.decided_at.isoformat() if st.decided_at else None,
+            }
+            for st in old_steps
+        ],
+        "approver_id": doc.approver_id,
+        "current_step": doc.current_step,
+        "is_final_decision": doc.is_final_decision,
+        "reviewed_at": doc.reviewed_at.isoformat() if doc.reviewed_at else None,
+    }
+    doc.delete_requested = True
+    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == doc.id).delete()
+    logger.debug(f"[ProjectDocuments] 삭제 결재 요청: doc_id={doc_id}, by={current_user.id}, final={payload.is_final_decision}")
+
+    if payload.is_final_decision:
+        steps: list[ApprovalStep] = []
+        fully_approved = True
+    else:
+        steps = build_chain_steps(db, _TARGET, doc.id, chain, approvers)
+        fully_approved = advance_chain_self_approvals(steps, current_user)
+
+    if fully_approved:
+        out = _to_out(doc, steps)
+        _delete_document_now(db, doc)
+        db.commit()
+        logger.debug(f"[ProjectDocuments] 삭제 결재 전결/자기결재로 즉시 삭제: doc_id={doc_id}")
+        return out
+
+    pending_step = next(s for s in steps if s.status == ApprovalStepStatus.pending)
+    doc.status = ProjectDocumentStatus.pending
+    doc.current_step = pending_step.step_order
+    doc.approver_id = pending_step.approver_id
+    doc.reviewed_at = None
+    create_request_notification(
+        db, target_user_id=pending_step.approver_id, requester_name=current_user.name, doc_label=_delete_label(doc), link=_doc_link(doc.doc_type, doc.id)
+    )
+    db.commit()
+    doc = _get_doc_or_404(db, doc_id)
+    _regenerate_documents(db, doc)
+    db.commit()
+    db.refresh(doc)
+    return _to_out(doc, steps)
+
+
+def _approve_one(db: Session, doc: ProjectDocument, current_user: User, notify: bool) -> bool:
+    """문서 1건의 현재 결재 단계를 승인하고, 마지막 단계면 승인 완료, 아니면 다음 결재권자로 넘긴다 (commit은 호출자가).
+    삭제 결재의 마지막 단계를 승인한 경우에는 상태를 바꾸지 않고 True(지금 삭제해야 함)를 돌려준다."""
     steps = get_steps(db, _TARGET, doc.id)
     current = next(s for s in steps if s.step_order == doc.current_step)
     current.status = ApprovalStepStatus.approved
     current.decided_at = datetime.now(timezone.utc)
     doc_label = f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})"
 
+    if current.step_order == len(steps) and doc.delete_requested:
+        return True
     if current.step_order == len(steps):
         doc.status = ProjectDocumentStatus.approved
         doc.reviewed_at = datetime.now(timezone.utc)
@@ -696,9 +898,11 @@ def _approve_one(db: Session, doc: ProjectDocument, current_user: User, notify: 
         doc.approver_id = next_step.approver_id
         if notify:
             create_request_notification(
-                db, target_user_id=next_step.approver_id, requester_name=doc.creator.name, doc_label=doc_label, link=_doc_link(doc.doc_type, doc.id)
+                db, target_user_id=next_step.approver_id, requester_name=doc.creator.name,
+                doc_label=_delete_label(doc) if doc.delete_requested else doc_label, link=_doc_link(doc.doc_type, doc.id)
             )
             logger.debug(f"[ProjectDocuments] 다음 결재 요청 알림 발송: doc_id={doc.id}, approver_id={next_step.approver_id}")
+    return False
 
 
 @router.put("/{doc_id}/approve", response_model=ProjectDocumentOut)
@@ -710,7 +914,16 @@ def approve_project_document(doc_id: int, db: Session = Depends(get_db), current
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 대기 중인 문서만 승인할 수 있습니다.")
 
     logger.debug(f"[ProjectDocuments] 결재 승인 시도: id={doc_id}, by={current_user.id}")
-    _approve_one(db, doc, current_user, notify=True)
+    if _approve_one(db, doc, current_user, notify=True):
+        # 삭제 결재가 최종 승인됨: 문서와 연결된 매입매출 내역을 지우고 요청자에게 알린다.
+        out = _to_out(doc, get_steps(db, _TARGET, doc.id)).model_copy(update={"status": ProjectDocumentStatus.approved})
+        create_decision_notification(
+            db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=_delete_label(doc), approved=True
+        )
+        _delete_document_now(db, doc)
+        db.commit()
+        logger.debug(f"[ProjectDocuments] 삭제 결재 최종 승인 → 삭제 완료: id={doc_id}, by={current_user.id}")
+        return out
     # 견적서+거래명세서 묶음이면 한 번의 승인으로 나머지 문서도 같은 단계까지 함께 승인한다 (알림은 중복 발송하지 않는다).
     siblings = [s for s in _set_siblings(db, doc) if s.status == ProjectDocumentStatus.pending and s.approver_id == current_user.id]
     for sibling in siblings:
@@ -757,6 +970,20 @@ def reject_project_document(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="배정된 결재권자만 반려할 수 있습니다.")
     if doc.status != ProjectDocumentStatus.pending:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 대기 중인 문서만 반려할 수 있습니다.")
+
+    if doc.delete_requested:
+        # 삭제 결재 반려: 문서는 삭제 요청 전의 승인 상태로 되돌아간다.
+        create_decision_notification(
+            db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=_delete_label(doc), approved=False,
+            detail=f"반려 사유: {payload.reason}", link=_doc_link(doc.doc_type, doc.id),
+        )
+        _restore_after_delete_rejected(db, doc)
+        db.commit()
+        doc = _get_doc_or_404(db, doc_id)
+        _regenerate_documents(db, doc)
+        db.commit()
+        logger.debug(f"[ProjectDocuments] 삭제 결재 반려 → 승인 상태 복원: id={doc_id}, by={current_user.id}, reason={payload.reason}")
+        return _to_out(doc, get_steps(db, _TARGET, doc.id))
 
     _reject_one(db, doc, payload.reason, notify=True)
     # 묶음이면 나머지 문서도 함께 반려한다 (알림은 한 번만).
@@ -812,6 +1039,8 @@ def issue_popbill_tax_invoice(doc_id: int, db: Session = Depends(get_db), curren
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 발행 권한이 없습니다.")
     if doc.doc_type != ProjectDocType.tax_invoice:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서만 팝빌로 발행할 수 있습니다.")
+    if doc.is_paper:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="종이 세금계산서는 팝빌로 발행할 수 없습니다.")
     if doc.direction == "purchase":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="받은(매입) 세금계산서는 팝빌로 발행할 수 없습니다.")
     if doc.status != ProjectDocumentStatus.approved:
@@ -871,7 +1100,11 @@ def delete_project_document(doc_id: int, db: Session = Depends(get_db), current_
     doc = db.query(ProjectDocument).filter(ProjectDocument.id == doc_id).first()
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="문서를 찾을 수 없습니다.")
+    if doc.delete_requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="삭제 결재가 진행 중인 문서입니다.")
     if doc.status == ProjectDocumentStatus.approved:
+        if doc.doc_type == ProjectDocType.tax_invoice:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서는 삭제 결재를 요청해야 삭제할 수 있습니다.")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제할 수 없습니다.")
     # 묶음(견적서+거래명세서)이면 함께 삭제한다.
     targets = [doc]

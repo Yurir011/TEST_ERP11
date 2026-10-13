@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { useAuth } from "../../context/AuthContext";
@@ -188,6 +188,7 @@ interface ProjectDocumentsPageProps {
 export function ProjectDocumentsPage({ embedded = false, lockedDocType }: ProjectDocumentsPageProps) {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   // 세금계산서는 매입매출/입출금관리처럼 우측 상단 "새 ... 등록" 버튼으로 작성하므로 카드는 두지 않는다.
   const visibleActions = lockedDocType
     ? NEW_DOC_ACTIONS.filter((action) => action.type === lockedDocType && action.type !== "tax_invoice")
@@ -202,6 +203,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [resubmitDoc, setResubmitDoc] = useState<ProjectDocument | null>(null);
+  const [deleteRequestDoc, setDeleteRequestDoc] = useState<ProjectDocument | null>(null);
   const [detailDoc, setDetailDoc] = useState<ProjectDocument | null>(null);
   const openTargetId = useOpenTarget();
   const openedTargetRef = useRef(false);
@@ -224,6 +226,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     }
   }, [openTargetId, docs, pendingForMe]);
   const [purposeFilter, setPurposeFilter] = useState<"all" | TaxInvoicePurpose>("all");
+  const [paperFilter, setPaperFilter] = useState<"all" | "electronic" | "paper">("all");
   const [directionFilter, setDirectionFilter] = useState<"all" | "sales" | "purchase">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectDocumentStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -283,8 +286,53 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     }
   }
 
+  // 승인된 세금계산서는 바로 삭제할 수 없고, 결재선을 지정해 삭제 결재를 요청한다. 최종 승인되면 삭제된다.
+  function handleDeleteClick(doc: ProjectDocument) {
+    if (doc.status !== "approved") {
+      handleDelete(doc.id);
+      return;
+    }
+    const issuedNote = doc.popbill_issued
+      ? "\n\n※ 팝빌로 이미 발행(국세청 전송)된 세금계산서입니다. 여기서 삭제해도 국세청 발행은 취소되지 않으며, 취소는 수정세금계산서를 별도로 발행해야 합니다."
+      : "";
+    if (
+      !window.confirm(
+        `승인된 세금계산서는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?\n최종 승인되면 연결된 매입매출 내역과 입출금 내역도 함께 삭제됩니다.${issuedNote}`
+      )
+    ) {
+      return;
+    }
+    logDebug("ProjectDocuments", `삭제 결재 요청 시작: doc_id=${doc.id}`);
+    setDeleteRequestDoc(doc);
+  }
+
+  async function handleRequestDelete(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
+    if (!deleteRequestDoc) return;
+    setBusyId(deleteRequestDoc.id);
+    try {
+      await apiPost(`/api/project-documents/${deleteRequestDoc.id}/request-delete`, {
+        end_title: endTitle,
+        approver_ids: approverIds,
+        is_final_decision: isFinalDecision,
+      });
+      logDebug("ProjectDocuments", `삭제 결재 요청 성공: doc_id=${deleteRequestDoc.id}`);
+      setDeleteRequestDoc(null);
+      reloadAll();
+      window.alert(isFinalDecision ? "삭제되었습니다." : "삭제 결재 요청이 완료되었습니다. 최종 승인되면 삭제됩니다.");
+    } catch (err) {
+      logError("ProjectDocuments", "삭제 결재 요청 실패", err);
+      setDeleteRequestDoc(null);
+      setError(err instanceof ApiError ? err.message : "삭제 결재 요청 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleApprove(doc: ProjectDocument) {
-    if (!window.confirm(`"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}" 문서를 결재 승인하시겠습니까? 승인 후 PDF에 직인이 찍힙니다.`)) return;
+    const approveMessage = doc.delete_requested
+      ? `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}"의 삭제 요청을 승인하시겠습니까? 최종 승인되면 문서와 연결된 매입매출 내역이 삭제됩니다.`
+      : `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}" 문서를 결재 승인하시겠습니까? 승인 후 PDF에 직인이 찍힙니다.`;
+    if (!window.confirm(approveMessage)) return;
     logDebug("ProjectDocuments", `결재 승인 시도: id=${doc.id}`);
     setBusyId(doc.id);
     try {
@@ -472,6 +520,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       ? null
       : docs.filter((doc) => {
           if (lockedDocType !== "tax_invoice") return true;
+          if (paperFilter === "paper" && !doc.is_paper) return false;
+          if (paperFilter === "electronic" && doc.is_paper) return false;
           if (directionFilter !== "all" && (doc.direction === "purchase" ? "purchase" : "sales") !== directionFilter) return false;
           if (purposeFilter !== "all" && doc.purpose_type !== purposeFilter) return false;
           if (statusFilter !== "all" && doc.status !== statusFilter) return false;
@@ -562,6 +612,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
               <div key={doc.id} className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
                 <div>
                   <p className="text-sm font-medium">
+                    {doc.delete_requested && <span className="text-danger">[삭제 요청] </span>}
                     {PROJECT_DOC_TYPE_LABELS[doc.doc_type]} · {doc.project_name}
                   </p>
                   <p className="text-xs text-text-muted mt-0.5">
@@ -627,6 +678,20 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                 }`}
               >
                 {d === "all" ? "매입/매출 전체" : d === "sales" ? "매출" : "매입"}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
+            {(["all", "electronic", "paper"] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => setPaperFilter(k)}
+                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
+                  paperFilter === k ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+                }`}
+              >
+                {k === "all" ? "발행형태 전체" : k === "electronic" ? "전자" : "종이"}
               </button>
             ))}
           </div>
@@ -773,6 +838,11 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                         >
                           {doc.direction === "purchase" ? "매입" : "매출"}
                         </span>
+                        {doc.is_paper && (
+                          <span className="ml-1 text-xs px-2 py-1 rounded-full font-medium bg-[#27272a] text-white">
+                            종이
+                          </span>
+                        )}
                       </td>
                     )}
                     <td className="py-2.5 px-4">
@@ -793,6 +863,9 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                       >
                         {PROJECT_DOC_STATUS_LABELS[doc.status]}
                       </span>
+                      {doc.delete_requested && (
+                        <span className="ml-1.5 text-xs px-2 py-1 rounded-full font-medium bg-danger/10 text-danger">삭제 결재 중</span>
+                      )}
                       {doc.doc_type === "tax_invoice" && doc.popbill_issued && (
                         <span
                           className="ml-1.5 text-xs px-2 py-1 rounded-full font-medium bg-tile-green text-tile-green-fg"
@@ -854,9 +927,17 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                           <Mail size={14} />
                         </button>
                         <button
-                          onClick={() => handleDelete(doc.id)}
-                          disabled={doc.status === "approved"}
-                          title={doc.status === "approved" ? "승인된 문서는 삭제할 수 없습니다." : "삭제"}
+                          onClick={() => handleDeleteClick(doc)}
+                          disabled={doc.delete_requested || (doc.status === "approved" && doc.doc_type !== "tax_invoice")}
+                          title={
+                            doc.delete_requested
+                              ? "삭제 결재가 진행 중입니다."
+                              : doc.status === "approved"
+                                ? doc.doc_type === "tax_invoice"
+                                  ? "삭제 결재 요청"
+                                  : "승인된 문서는 삭제할 수 없습니다."
+                                : "삭제"
+                          }
                           className="p-1.5 text-text-muted hover:text-danger disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                           <Trash2 size={14} />
@@ -871,6 +952,14 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
         </div>
       )}
         </>
+      )}
+
+      {deleteRequestDoc && (
+        <ApproverPickerModal
+          isSubmitting={busyId === deleteRequestDoc.id}
+          onConfirm={handleRequestDelete}
+          onCancel={() => setDeleteRequestDoc(null)}
+        />
       )}
 
       {resubmitDoc && (
@@ -895,6 +984,10 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           onPopbillIssue={handlePopbillIssue}
           onPopbillView={handlePopbillView}
           onPopbillPdf={handlePopbillPdf}
+          onEdit={(d) => {
+            logDebug("ProjectDocuments", `세금계산서 수정 진입: doc_id=${d.id}, status=${d.status}`);
+            navigate(`/project-documents/new?type=tax_invoice&edit=${d.id}`);
+          }}
         />
       )}
     </>

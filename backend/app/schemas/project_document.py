@@ -94,6 +94,7 @@ class ProjectDocumentCreate(BaseModel):
     received: bool | None = None  # 세금계산서 작성 시점에 물어보는 입금(청구)/지급(영수) 확인 여부
     direction: str | None = None  # 세금계산서 등록: "sales" / "purchase" (사진 인식으로 판별된 값)
     approval_no: str | None = None  # 세금계산서 등록: 국세청 승인번호
+    is_paper: bool = False  # 세금계산서 등록: 종이로 받은 매입 세금계산서 (팝빌 등록 대상 아님)
     counterparty: TaxInvoicePartyIn | None = None  # 세금계산서 등록: 사진에서 인식한 상대방 정보
 
     @field_validator("items")
@@ -130,8 +131,17 @@ class ProjectDocumentSetCreate(ProjectDocumentCreate):
 
 
 class ProjectDocumentUpdate(BaseModel):
-    """반려된 문서를 재수정할 때 사용 (draft/rejected 상태에서만 허용)."""
+    """문서를 수정할 때 사용. draft/rejected 상태에서 허용하고, 세금계산서는 팝빌 발행 전이면 승인된 문서도 수정할 수 있다.
+    request_approval=True이면 수정과 동시에 결재를 다시 요청한다 (승인된 세금계산서 수정은 반드시 결재를 다시 받아야 한다)."""
 
+    project_id: int | None = None
+    project_other_name: str | None = None
+    is_paper: bool | None = None  # 세금계산서: 종이 세금계산서 여부 (None이면 변경하지 않는다)
+    update_project: bool = False  # True일 때만 project_id / project_other_name을 반영한다
+    request_approval: bool = False
+    is_final_decision: bool = False
+    end_title: JobTitle | None = None
+    approver_ids: list[int] = Field(default_factory=list)
     issue_date: date
     currency: DocCurrency = DocCurrency.KRW
     purpose_type: TaxInvoicePurpose = TaxInvoicePurpose.billing
@@ -202,6 +212,8 @@ class ProjectDocumentOut(BaseModel):
     payment_recorded: bool
     direction: str | None = None
     approval_no: str | None = None
+    is_paper: bool = False
+    delete_requested: bool = False
     images: list[ProjectDocumentImageOut] = Field(default_factory=list)
 
 

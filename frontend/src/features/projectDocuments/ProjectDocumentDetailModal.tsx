@@ -1,5 +1,5 @@
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
-import { Check, Download, Eye, Mail, Printer, Send, Sheet, X } from "lucide-react";
+import { Check, Download, Eye, Mail, Pencil, Printer, Send, Sheet, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { TaxInvoiceImages } from "./TaxInvoiceImages";
 import {
@@ -31,6 +31,7 @@ export function ProjectDocumentDetailModal({
   onPopbillIssue,
   onPopbillView,
   onPopbillPdf,
+  onEdit,
 }: {
   doc: ProjectDocument;
   isBusy: boolean;
@@ -44,12 +45,16 @@ export function ProjectDocumentDetailModal({
   onPopbillIssue: (doc: ProjectDocument) => void;
   onPopbillView: (doc: ProjectDocument) => void;
   onPopbillPdf: (doc: ProjectDocument) => void;
+  onEdit: (doc: ProjectDocument) => void;
 }) {
   const { user } = useAuth();
   const currentStep = doc.steps.find((st) => st.step_order === doc.current_step);
   const canDecide = doc.status === "pending" && currentStep?.approver_id === user?.id;
   const approved = doc.status === "approved" && doc.has_pdf;
   const disabledTitle = "결재 승인 후 이용 가능합니다.";
+  // 세금계산서는 팝빌로 발행하기 전까지 작성자가 수정할 수 있다 (승인된 문서는 수정 후 결재를 다시 받아야 한다).
+  const canEdit =
+    doc.doc_type === "tax_invoice" && doc.created_by === user?.id && !doc.popbill_issued && doc.status !== "pending" && !doc.delete_requested;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
@@ -126,6 +131,12 @@ export function ProjectDocumentDetailModal({
 
         <p className="text-right text-sm font-semibold mb-4">합계 {formatDocAmount(doc, itemsTotal(doc))}</p>
 
+        {doc.delete_requested && (
+          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-4">
+            이 세금계산서는 삭제 결재가 진행 중입니다. 최종 승인되면 문서와 연결된 매입매출·입출금 내역이 함께 삭제되고, 반려되면 기존 승인 상태로 유지됩니다.
+          </p>
+        )}
+
         {doc.doc_type === "tax_invoice" && <TaxInvoiceImages doc={doc} />}
 
         {doc.doc_type === "tax_invoice" && doc.direction !== "purchase" && (
@@ -170,6 +181,18 @@ export function ProjectDocumentDetailModal({
               <p className="text-xs text-text-muted">결재 승인 후 팝빌로 발행할 수 있습니다.</p>
             )}
           </div>
+        )}
+
+        {canEdit && (
+          <button
+            onClick={() => onEdit(doc)}
+            disabled={isBusy}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 mb-4 hover:bg-bg disabled:opacity-50"
+            title={doc.status === "approved" ? "수정하면 결재를 다시 받아야 합니다." : undefined}
+          >
+            <Pencil size={13} />
+            수정{doc.status === "approved" ? " (재결재 필요)" : ""}
+          </button>
         )}
 
         {doc.set_id !== null && (

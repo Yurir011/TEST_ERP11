@@ -91,6 +91,8 @@ export interface ProjectDocument {
   payment_recorded: boolean;
   direction: "sales" | "purchase" | null;
   approval_no: string | null;
+  is_paper: boolean; // 종이로 받은 매입 세금계산서 (팝빌 등록 대상 아님)
+  delete_requested: boolean; // 승인된 세금계산서의 삭제 결재가 진행 중
   images: { id: number; filename: string }[];
 }
 

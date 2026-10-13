@@ -6,7 +6,7 @@ import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPi
 import { useAuth } from "../../context/AuthContext";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
-import { ApiError, apiGet, apiPost, apiUpload, downloadFile } from "../../lib/api";
+import { ApiError, apiGet, apiPost, apiPut, apiUpload, downloadFile } from "../../lib/api";
 import { GRADE_LABELS, TITLE_LABELS, hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
@@ -43,6 +43,9 @@ export function ProjectDocumentFormPage() {
   const typeParam = searchParams.get("type");
   // ?type=set 이면 견적서+거래명세서를 같은 내용으로 한 번에 작성하고, 한 번의 결재로 함께 승인/반려된다.
   const isSet = typeParam === "set";
+  // ?edit=문서ID 이면 기존 세금계산서를 수정한다. 팝빌 발행 전이면 승인된 문서도 수정할 수 있고, 저장하면 결재를 다시 받아야 한다.
+  const editId = searchParams.get("edit");
+  const isEdit = editId !== null && typeParam === "tax_invoice";
   const docType: ProjectDocType = isProjectDocType(typeParam) ? typeParam : "quotation";
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -72,16 +75,59 @@ export function ProjectDocumentFormPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanSummary, setScanSummary] = useState<TaxInvoiceOcrResult | null>(null);
   const [direction, setDirection] = useState<"sales" | "purchase" | null>(null);
+  const [isPaper, setIsPaper] = useState(false); // 종이로 받은 매입 세금계산서 (팝빌 등록 대상 아님)
   const [approvalNo, setApprovalNo] = useState<string | null>(null);
 
   // 세금계산서는 담당자를 로그인한 사용자(이름 + 직책, 직책이 없으면 직급)로 자동 입력한다. 이미 입력된 값은 덮어쓰지 않는다.
   useEffect(() => {
-    if (docType !== "tax_invoice" || !user) return;
+    if (docType !== "tax_invoice" || !user || isEdit) return;
     const position = user.title ? TITLE_LABELS[user.title] : GRADE_LABELS[user.grade];
     const label = [user.name, position].filter(Boolean).join(" ");
     logDebug("ProjectDocumentForm", `세금계산서 담당자 자동입력: ${label}`);
     setManagerName((prev) => prev || label);
   }, [docType, user]);
+
+  useEffect(() => {
+    if (!isEdit) return;
+    logDebug("ProjectDocumentForm", `세금계산서 수정 불러오기: doc_id=${editId}`);
+    apiGet<ProjectDocument[]>("/api/project-documents?doc_type=tax_invoice")
+      .then((list) => {
+        const target = list.find((d) => String(d.id) === editId);
+        if (!target) {
+          setError("수정할 세금계산서를 찾을 수 없습니다.");
+          return;
+        }
+        if (target.popbill_issued) {
+          setError("팝빌로 발행된 세금계산서는 수정할 수 없습니다.");
+          return;
+        }
+        if (target.project_id === null) {
+          setProjectId(OTHER_PROJECT);
+          setProjectOtherName(target.project_name);
+        } else {
+          setProjectId(String(target.project_id));
+        }
+        setIssueDate(target.issue_date);
+        setClientName(target.client_name);
+        setManagerName(target.manager_name ?? "");
+        setCurrency(target.currency);
+        setPurposeType(target.purpose_type);
+        setIsPaper(target.is_paper);
+        setItems(
+          target.items.map((it) => ({
+            content: it.content,
+            quantity: String(it.quantity),
+            unit_price: String(it.unit_price),
+            note: it.note ?? "",
+          }))
+        );
+      })
+      .catch((err) => {
+        logError("ProjectDocumentForm", "세금계산서 수정 불러오기 실패", err);
+        setError("수정할 세금계산서를 불러오지 못했습니다.");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, editId]);
 
   useEffect(() => {
     apiGet<Project[]>("/api/projects")
@@ -222,7 +268,33 @@ export function ProjectDocumentFormPage() {
     const received = null;
     setIsSubmitting(true);
     try {
-      logDebug("ProjectDocumentForm", `결재요청 시도: end_title=${endTitle}, is_final_decision=${isFinalDecision}`);
+      logDebug("ProjectDocumentForm", `결재요청 시도: end_title=${endTitle}, is_final_decision=${isFinalDecision}, edit=${isEdit}`);
+      if (isEdit) {
+        await apiPut(`/api/project-documents/${editId}`, {
+          update_project: true,
+          project_id: projectId === OTHER_PROJECT ? null : Number(projectId),
+          project_other_name: projectId === OTHER_PROJECT ? projectOtherName.trim() : null,
+          issue_date: issueDate,
+          currency,
+          purpose_type: purposeType,
+          client_name: clientName,
+          manager_name: managerName || null,
+          items: items.map((it) => ({
+            content: it.content,
+            quantity: Number(it.quantity) || 0,
+            unit_price: Number(it.unit_price) || 0,
+            note: it.note || null,
+          })),
+          is_paper: isPaper,
+          request_approval: true,
+          end_title: endTitle,
+          approver_ids: approverIds,
+          is_final_decision: isFinalDecision,
+        });
+        window.alert("수정 후 결재 요청이 완료되었습니다.");
+        navigate("/tax-invoices", { replace: true });
+        return;
+      }
       const endpoint = isSet ? "/api/project-documents/set" : "/api/project-documents";
       const createdResult = await apiPost<ProjectDocument | ProjectDocument[]>(endpoint, {
         project_id: projectId === OTHER_PROJECT ? null : Number(projectId),
@@ -243,7 +315,8 @@ export function ProjectDocumentFormPage() {
         approver_ids: approverIds,
         is_final_decision: isFinalDecision,
         received,
-        direction: docType === "tax_invoice" ? direction : null,
+        direction: docType === "tax_invoice" ? (isPaper ? "purchase" : direction) : null,
+        is_paper: docType === "tax_invoice" ? isPaper : false,
         approval_no: docType === "tax_invoice" ? approvalNo : null,
         // 사진에서 인식한 상대방(우리 회사가 아닌 쪽) 정보 - 거래처관리에 없는 거래처여도 엑셀/PDF 양식을 채우는 데 쓴다.
         counterparty:
@@ -291,7 +364,9 @@ export function ProjectDocumentFormPage() {
         isSet
           ? "새 견적서 · 거래명세서 작성"
           : docType === "tax_invoice"
-            ? "새 세금계산서 작성 및 등록"
+            ? isEdit
+              ? "세금계산서 수정"
+              : "새 세금계산서 작성 및 등록"
             : `새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`
       }
     >
@@ -305,7 +380,14 @@ export function ProjectDocumentFormPage() {
           </div>
         )}
 
-        {docType === "tax_invoice" && (
+        {isEdit && (
+          <div className="flex items-start gap-2 bg-tile-orange text-tile-orange-fg rounded-xl px-4 py-3 text-xs">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <p>수정한 세금계산서는 결재를 다시 받아야 합니다. 승인되기 전까지는 출력·팝빌 발행을 할 수 없고, 재승인되면 매입매출 내역과, 대금 결제가 끝난 건은 입출금 내역(금액·거래처·입금/출금 구분)도 수정한 내용으로 함께 갱신됩니다. 결제일·결제방법·메모는 그대로 유지됩니다.</p>
+          </div>
+        )}
+
+        {docType === "tax_invoice" && !isEdit && (
           <div className="border border-dashed border-border rounded-xl px-4 py-3">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs font-medium">
@@ -497,6 +579,25 @@ export function ProjectDocumentFormPage() {
               </select>
             </div>
             <p className="text-[11px] text-text-muted mt-1.5">{TAX_INVOICE_PURPOSE_HELP[purposeType]}</p>
+
+            <label className="flex items-start gap-2 mt-3 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPaper}
+                onChange={(e) => {
+                  logDebug("ProjectDocumentForm", `종이 세금계산서 체크: ${e.target.checked}`);
+                  setIsPaper(e.target.checked);
+                  setDirection(e.target.checked ? "purchase" : scanSummary?.direction ?? null);
+                }}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium">종이 세금계산서 (매입)</span>
+                <span className="block text-[11px] text-text-muted mt-0.5">
+                  종이로 받아 팝빌에 등록하지 않는 매입 세금계산서입니다. 목록에서 따로 구분되며 팝빌로 발행하지 않습니다.
+                </span>
+              </span>
+            </label>
           </div>
         )}
 
