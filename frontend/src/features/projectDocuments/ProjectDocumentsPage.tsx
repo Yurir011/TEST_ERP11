@@ -26,7 +26,6 @@ import { HometaxImportModal } from "../transactions/HometaxImportModal";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import { useOpenTarget } from "../../lib/useOpenTarget";
 import { ProjectDocumentDetailModal } from "./ProjectDocumentDetailModal";
-import { askTaxInvoicePaymentReceived } from "./taxInvoicePaymentConfirm";
 import {
   DOC_CURRENCY_SYMBOLS,
   PROJECT_DOC_STATUS_LABELS,
@@ -256,6 +255,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     }
   }, [openTargetId, docs, pendingForMe]);
   const [purposeFilter, setPurposeFilter] = useState<"all" | TaxInvoicePurpose>("all");
+  const [directionFilter, setDirectionFilter] = useState<"all" | "sales" | "purchase">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectDocumentStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [monthFilter, setMonthFilter] = useState<"all" | "this" | "last">("all");
@@ -350,10 +350,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
 
   async function handleResubmit(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
     if (!resubmitDoc) return;
-    const received =
-      resubmitDoc.doc_type === "tax_invoice"
-        ? askTaxInvoicePaymentReceived(resubmitDoc.purpose_type, resubmitDoc.client_name)
-        : null;
+    const received = null;
     setBusyId(resubmitDoc.id);
     try {
       await apiPost(`/api/project-documents/${resubmitDoc.id}/request-approval`, {
@@ -506,6 +503,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       ? null
       : docs.filter((doc) => {
           if (lockedDocType !== "tax_invoice") return true;
+          if (directionFilter !== "all" && (doc.direction === "purchase" ? "purchase" : "sales") !== directionFilter) return false;
           if (purposeFilter !== "all" && doc.purpose_type !== purposeFilter) return false;
           if (statusFilter !== "all" && doc.status !== statusFilter) return false;
           if (issuedFilter === "issued" && !doc.popbill_issued) return false;
@@ -643,6 +641,20 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       {lockedDocType === "tax_invoice" && docs !== null && docs.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
+            {(["all", "sales", "purchase"] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setDirectionFilter(d)}
+                className={`px-3 py-1.5 rounded-md text-xs transition-colors ${
+                  directionFilter === d ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+                }`}
+              >
+                {d === "all" ? "매입/매출 전체" : d === "sales" ? "매출" : "매입"}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
             {(["all", "청구", "영수"] as const).map((p) => (
               <button
                 key={p}
@@ -730,7 +742,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-text-muted border-b border-border">
-                <th className="py-2.5 px-4 font-medium">{lockedDocType === "tax_invoice" ? "구분(청구/영수)" : "구분"}</th>
+                {lockedDocType === "tax_invoice" && <th className="py-2.5 px-4 font-medium">구분</th>}
+                <th className="py-2.5 px-4 font-medium">{lockedDocType === "tax_invoice" ? "청구/영수" : "구분"}</th>
                 <th className="py-2.5 px-4 font-medium">상태</th>
                 <th className="py-2.5 px-4 font-medium">날짜</th>
                 <th className="py-2.5 px-4 font-medium">프로젝트</th>
@@ -751,6 +764,17 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                     onClick={() => setDetailDoc(doc)}
                     className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
                   >
+                    {lockedDocType === "tax_invoice" && (
+                      <td className="py-2.5 px-4">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full font-medium ${
+                            doc.direction === "purchase" ? "bg-tile-orange text-tile-orange-fg" : "bg-tile-purple text-tile-purple-fg"
+                          }`}
+                        >
+                          {doc.direction === "purchase" ? "매입" : "매출"}
+                        </span>
+                      </td>
+                    )}
                     <td className="py-2.5 px-4">
                       {lockedDocType === "tax_invoice" ? (
                         <span className={`text-xs px-2 py-1 rounded-full font-medium ${TAX_PURPOSE_STYLES[doc.purpose_type]}`}>

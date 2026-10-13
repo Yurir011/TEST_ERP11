@@ -81,6 +81,14 @@ export function Sidebar() {
             key={to}
             to={to}
             end={end}
+            onClick={(e) => {
+              // 메뉴를 누르면 현재 메뉴 여부와 관계없이 해당 페이지를 새로고침(전체 재로드)한다.
+              // 새 탭 열기(Ctrl/Shift/휠 클릭)는 기본 동작을 그대로 둔다.
+              if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+              e.preventDefault();
+              console.debug(`[Sidebar] 메뉴 클릭 → 페이지 새로고침: ${to}`);
+              window.location.assign(to);
+            }}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                 colorClass || (isActive ? "text-text" : "text-text-muted")
