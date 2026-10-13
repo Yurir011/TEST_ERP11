@@ -749,7 +749,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
             </select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <span className="text-[11px] text-text-muted">기간</span>
             <div className="flex gap-1 bg-surface border border-border rounded-lg p-1">
               {([["this", "당월"], ["last", "전월"]] as const).map(([key, label]) => (
@@ -807,13 +807,15 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
             </div>
           </div>
 
-          <ProjectSearchBox value={searchQuery} onChange={setSearchQuery} projectNames={recentProjectNames} />
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <ProjectSearchBox value={searchQuery} onChange={setSearchQuery} projectNames={recentProjectNames} />
 
-          <span className="text-xs text-text-muted shrink-0">
-            {visibleDocs?.length ?? 0}건 · 합계{" "}
-            <span className="font-semibold text-text">₩{visibleKrwTotal.toLocaleString()}</span>
-            {foreignCount > 0 && ` (외화 ${foreignCount}건 제외)`}
-          </span>
+            <span className="text-xs text-text-muted shrink-0">
+              {visibleDocs?.length ?? 0}건 · 합계{" "}
+              <span className="font-semibold text-text">₩{visibleKrwTotal.toLocaleString()}</span>
+              {foreignCount > 0 && ` (외화 ${foreignCount}건 제외)`}
+            </span>
+          </div>
         </div>
       )}
 
