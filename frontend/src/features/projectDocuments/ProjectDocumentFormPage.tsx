@@ -61,6 +61,8 @@ export function ProjectDocumentFormPage() {
   const [projectOtherName, setProjectOtherName] = useState("");
   const [issueDate, setIssueDate] = useState(todayISO());
   const [clientName, setClientName] = useState("");
+  // 입력한 거래처명과 같은 등록 거래처가 있으면 사업자번호를 입력칸 아래에 함께 보여준다.
+  const matchedClient = clients.find((c) => c.name === clientName.trim());
   const [managerName, setManagerName] = useState("");
   const [currency, setCurrency] = useState<DocCurrency>("KRW");
   const [purposeType, setPurposeType] = useState<TaxInvoicePurpose>("청구");
@@ -544,11 +546,17 @@ export function ProjectDocumentFormPage() {
               onChange={(e) => setClientName(e.target.value)}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
+            {/* 자동완성 목록에 거래처명과 함께 사업자번호가 보이도록 label에 넣는다 (입력칸에는 거래처명만 들어간다). */}
             <datalist id="client-name-options">
               {clients.map((c) => (
-                <option key={c.id} value={c.name} />
+                <option key={c.id} value={c.name} label={c.biz_reg_no ? `사업자번호 ${c.biz_reg_no}` : "사업자번호 미등록"} />
               ))}
             </datalist>
+            {matchedClient && (
+              <p className="text-[11px] text-text-muted mt-1">
+                사업자번호 {matchedClient.biz_reg_no ?? "미등록"}
+              </p>
+            )}
           </div>
         </div>
 
