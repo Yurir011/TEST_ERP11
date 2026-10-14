@@ -25,6 +25,7 @@ import { PaymentDetailModal } from "./PaymentDetailModal";
 import { RecurringPaymentsModal } from "./RecurringPaymentsModal";
 import { CardSettleModal } from "./CardSettleModal";
 import { SettleModal } from "./SettleModal";
+import { OutstandingDetailModal } from "./OutstandingDetailModal";
 import {
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
@@ -77,6 +78,8 @@ export function PaymentsPage() {
   const [dateTo, setDateTo] = useState("");
   const [clients, setClients] = useState<Client[]>([]);
   const [settleTarget, setSettleTarget] = useState<{ kind: "receivable" | "payable"; client: Client } | null>(null);
+
+  const [detailTarget, setDetailTarget] = useState<{ kind: "receivable" | "payable"; client: Client } | null>(null);
 
   const usingCustomRange = Boolean(dateFrom || dateTo);
 
@@ -417,10 +420,15 @@ export function PaymentsPage() {
               <ul className="space-y-2">
                 {receivableClients.map((c) => (
                   <li key={c.id} className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
-                    <div>
+                    <button
+                      type="button"
+                      onClick={() => setDetailTarget({ kind: "receivable", client: c })}
+                      className="text-left flex-1 min-w-0 hover:opacity-70"
+                      title="상세 내역 보기"
+                    >
                       <p className="text-sm font-medium">{c.name}</p>
                       <p className="text-xs text-text-muted mt-0.5">{formatCurrency(c.receivable_amount)}</p>
-                    </div>
+                    </button>
                     <button
                       onClick={() => setSettleTarget({ kind: "receivable", client: c })}
                       className="text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-tile-blue shrink-0"
@@ -441,10 +449,15 @@ export function PaymentsPage() {
               <ul className="space-y-2">
                 {payableClients.map((c) => (
                   <li key={c.id} className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
-                    <div>
+                    <button
+                      type="button"
+                      onClick={() => setDetailTarget({ kind: "payable", client: c })}
+                      className="text-left flex-1 min-w-0 hover:opacity-70"
+                      title="상세 내역 보기"
+                    >
                       <p className="text-sm font-medium">{c.name}</p>
                       <p className="text-xs text-text-muted mt-0.5">{formatCurrency(c.payable_amount)}</p>
-                    </div>
+                    </button>
                     <button
                       onClick={() => setSettleTarget({ kind: "payable", client: c })}
                       className="text-xs text-danger border border-danger/30 rounded-lg px-3 py-1.5 hover:bg-red-50 shrink-0"
@@ -604,6 +617,18 @@ export function PaymentsPage() {
           client={settleTarget.client}
           onClose={() => setSettleTarget(null)}
           onSuccess={handleSettleSuccess}
+        />
+      )}
+
+      {detailTarget && (
+        <OutstandingDetailModal
+          kind={detailTarget.kind}
+          client={detailTarget.client}
+          onClose={() => setDetailTarget(null)}
+          onSettle={() => {
+            setSettleTarget(detailTarget);
+            setDetailTarget(null);
+          }}
         />
       )}
     </MainLayout>
