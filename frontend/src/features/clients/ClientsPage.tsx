@@ -1,10 +1,8 @@
-import { Building2, Download, FileText, Search, Trash2 } from "lucide-react";
-import { Fragment, useEffect, useState, type MouseEvent } from "react";
+import { Building2, Download, FileText, Search } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { canDeleteClient } from "../../lib/auth";
-import { useAuth } from "../../context/AuthContext";
-import { apiDelete, apiGet, downloadFile, openFile } from "../../lib/api";
+import { apiGet, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { NewClientButton } from "./NewClientButton";
 import type { Client } from "./types";
@@ -66,12 +64,10 @@ function FileButton({ exists, label, onClick }: { exists: boolean; label: string
 }
 
 export function ClientsPage() {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [clients, setClients] = useState<Client[] | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
@@ -118,23 +114,6 @@ export function ClientsPage() {
     } catch (err) {
       logError("Clients", "첨부파일 열기 실패", err);
       setError("파일을 열지 못했습니다.");
-    }
-  }
-
-  async function handleDelete(e: MouseEvent, client: Client) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!window.confirm(`"${client.name}" 거래처를 삭제하시겠습니까?`)) return;
-    logDebug("Clients", `삭제 시도: id=${client.id}`);
-    setDeletingId(client.id);
-    try {
-      await apiDelete(`/api/clients/${client.id}`);
-      loadClients(query);
-    } catch (err) {
-      logError("Clients", "삭제 실패", err);
-      setError("삭제 중 오류가 발생했습니다.");
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -229,14 +208,13 @@ export function ClientsPage() {
           <table className="w-full min-w-[960px] table-fixed text-sm border-collapse [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-primary/[0.12] [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
             <thead>
               <tr className="text-left text-xs bg-primary/[0.06]">
-                <th className="py-3.5 pl-7 pr-4 font-semibold text-[#3A4F7A] w-[22%]">업체명</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[13%]">사업자번호</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[13%]">유선번호</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[15%]">담당자</th>
+                <th className="py-3.5 pl-7 pr-4 font-semibold text-[#3A4F7A] w-[24%]">업체명</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[14%]">사업자번호</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[14%]">유선번호</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[16%]">담당자</th>
                 <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[14%]">담당자 연락처</th>
-                <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[8%]">사업자등록증</th>
-                <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[8%]">통장사본</th>
-                <th className="py-3.5 px-2 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-14">{canDeleteClient(user) ? "삭제" : ""}</th>
+                <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[9%]">사업자등록증</th>
+                <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[9%]">통장사본</th>
               </tr>
             </thead>
             <tbody>
@@ -245,7 +223,7 @@ export function ClientsPage() {
                   {/* 전체 보기에서는 구간 사이를 글자 없이 얇은 띠로만 구분한다. */}
                   {currentTab === ALL_TAB && groupIndex > 0 && (
                     <tr aria-hidden="true">
-                      <td colSpan={8} className="h-2.5 p-0 bg-text/[0.06]" />
+                      <td colSpan={7} className="h-2.5 p-0 bg-text/[0.06]" />
                     </tr>
                   )}
                   {group.items.map((client, index) => {
@@ -286,18 +264,6 @@ export function ClientsPage() {
                         label="통장사본"
                         onClick={() => handleOpenFile(client.id, "bankbook-image")}
                       />
-                    </td>
-                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                      {canDeleteClient(user) && (
-                        <button
-                          onClick={(e) => handleDelete(e, client)}
-                          disabled={deletingId === client.id}
-                          title="거래처 삭제"
-                          className="p-1.5 text-text-muted hover:text-danger disabled:opacity-50"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
                     </td>
                   </tr>
                 );
