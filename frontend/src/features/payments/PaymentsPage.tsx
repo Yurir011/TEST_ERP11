@@ -26,6 +26,7 @@ import { RecurringPaymentsModal } from "./RecurringPaymentsModal";
 import { CardSettleModal } from "./CardSettleModal";
 import { SettleModal } from "./SettleModal";
 import { OutstandingDetailModal } from "./OutstandingDetailModal";
+import type { Transaction } from "../transactions/types";
 import {
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
@@ -81,6 +82,12 @@ export function PaymentsPage() {
 
   const [detailTarget, setDetailTarget] = useState<{ kind: "receivable" | "payable"; client: Client } | null>(null);
 
+  // 미수금/미지급금 현황 기간: all=거래처 전체 잔액, this/last=해당 월에 발생한 미결제 매출·매입
+  const [outstandingPeriod, setOutstandingPeriod] = useState<"all" | "month">("all");
+  const [periodTx, setPeriodTx] = useState<Transaction[] | null>(null);
+  // 발생일 표시용: 아직 결제되지 않은 전체 매출/매입 (매입매출 권한이 없으면 비어 있다)
+  const [unsettledTx, setUnsettledTx] = useState<Transaction[]>([]);
+
   const usingCustomRange = Boolean(dateFrom || dateTo);
 
   function buildFilterParams() {
@@ -114,6 +121,12 @@ export function PaymentsPage() {
       .catch((err) => logError("Payments", "월별 리포트 조회 실패", err));
   }
 
+  function loadUnsettledTx() {
+    apiGet<Transaction[]>("/api/transactions?settled=false")
+      .then(setUnsettledTx)
+      .catch((err) => logError("Payments", "미결제 매입매출 조회 실패(발생일 표시 생략)", err));
+  }
+
   function loadClients() {
     logDebug("Payments", "미수금/미지급금 현황용 거래처 목록 조회 시작");
     apiGet<Client[]>("/api/clients")
@@ -132,17 +145,93 @@ export function PaymentsPage() {
 
   useEffect(() => {
     loadClients();
+    loadUnsettledTx();
   }, []);
 
   function handleSettleSuccess() {
     setSettleTarget(null);
     loadClients();
+    loadUnsettledTx();
     loadPayments();
     loadReport();
   }
 
-  const receivableClients = clients.filter((c) => c.receivable_amount > 0);
-  const payableClients = clients.filter((c) => c.payable_amount > 0);
+  // 월별 보기는 화면 상단의 월 선택(year/month)을 그대로 따른다.
+  const periodYm = { year, month };
+
+  function selectOutstandingPeriod(key: "all" | "this" | "last") {
+    if (key === "all") {
+      setOutstandingPeriod("all");
+      return;
+    }
+    const d = new Date();
+    if (key === "last") d.setMonth(d.getMonth() - 1, 1);
+    logDebug("Payments", `미수/미지급 기간 선택: ${key} -> ${d.getFullYear()}-${d.getMonth() + 1}`);
+    setDateFrom("");
+    setDateTo("");
+    setYear(d.getFullYear());
+    setMonth(d.getMonth() + 1);
+    setOutstandingPeriod("month");
+  }
+
+  const nowDate = new Date();
+  const lastDate = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1);
+  const activePeriodKey: "all" | "this" | "last" | null =
+    outstandingPeriod === "all"
+      ? "all"
+      : year === nowDate.getFullYear() && month === nowDate.getMonth() + 1
+        ? "this"
+        : year === lastDate.getFullYear() && month === lastDate.getMonth() + 1
+          ? "last"
+          : null;
+
+  useEffect(() => {
+    if (outstandingPeriod === "all") {
+      setPeriodTx(null);
+      return;
+    }
+    logDebug("Payments", `미수/미지급 월별 조회: ${periodYm.year}-${periodYm.month}`);
+    setPeriodTx(null);
+    apiGet<Transaction[]>(`/api/transactions?settled=false&year=${periodYm.year}&month=${periodYm.month}`)
+      .then(setPeriodTx)
+      .catch((err) => {
+        logError("Payments", "미수/미지급 월별 조회 실패", err);
+        setPeriodTx([]);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outstandingPeriod, year, month]);
+
+  function buildOutstandingRows(kind: "receivable" | "payable") {
+    if (outstandingPeriod === "all") {
+      return clients
+        .map((client) => ({ client, amount: kind === "receivable" ? client.receivable_amount : client.payable_amount }))
+        .filter((r) => r.amount > 0);
+    }
+    const txType = kind === "receivable" ? "sales" : "purchase";
+    const byClient = new Map<number, number>();
+    (periodTx ?? []).forEach((t) => {
+      if (t.type === txType && t.client_id !== null) byClient.set(t.client_id, (byClient.get(t.client_id) ?? 0) + t.total_amount);
+    });
+    return clients.filter((c) => byClient.has(c.id)).map((client) => ({ client, amount: byClient.get(client.id) ?? 0 }));
+  }
+  // 거래처별 미수금/미지급금 발생일(미결제 매출·매입의 거래일). 여러 건이면 가장 이른 날부터 가장 늦은 날까지 표시한다.
+  function occurredLabel(kind: "receivable" | "payable", clientId: number) {
+    const txType = kind === "receivable" ? "sales" : "purchase";
+    const dates = unsettledTx
+      .filter((t) => t.type === txType && t.client_id === clientId)
+      .map((t) => t.transaction_date)
+      .sort();
+    if (dates.length === 0) return null;
+    const first = dates[0];
+    const last = dates[dates.length - 1];
+    return first === last ? first : `${first} ~ ${last}`;
+  }
+
+  const receivableRows = buildOutstandingRows("receivable");
+  const payableRows = buildOutstandingRows("payable");
+  const receivableTotal = receivableRows.reduce((sum, r) => sum + r.amount, 0);
+  const payableTotal = payableRows.reduce((sum, r) => sum + r.amount, 0);
+  const periodLabel = outstandingPeriod === "all" ? "" : ` (${periodYm.month}월 발생분)`;
 
   function clearFilters() {
     setKeyword("");
@@ -410,66 +499,79 @@ export function PaymentsPage() {
         </section>
       )}
 
-      {(receivableClients.length > 0 || payableClients.length > 0) && (
-        <section className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-surface border border-border rounded-2xl p-5">
-            <h2 className="text-sm font-medium mb-3">미수금 현황</h2>
-            {receivableClients.length === 0 ? (
-              <p className="text-sm text-text-muted">미수금이 있는 거래처가 없습니다.</p>
-            ) : (
-              <ul className="space-y-2">
-                {receivableClients.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => setDetailTarget({ kind: "receivable", client: c })}
-                      className="text-left flex-1 min-w-0 hover:opacity-70"
-                      title="상세 내역 보기"
-                    >
-                      <p className="text-sm font-medium">{c.name}</p>
-                      <p className="text-xs text-text-muted mt-0.5">{formatCurrency(c.receivable_amount)}</p>
-                    </button>
-                    <button
-                      onClick={() => setSettleTarget({ kind: "receivable", client: c })}
-                      className="text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-tile-blue shrink-0"
-                    >
-                      수금완료
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+      {(receivableRows.length > 0 || payableRows.length > 0 || outstandingPeriod !== "all") && (
+        <>
+          <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit mb-3">
+            {(
+              [
+                ["all", "전체"],
+                ["this", "이번달"],
+                ["last", "지난달"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => selectOutstandingPeriod(key)}
+                className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
+                  activePeriodKey === key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-
-          <div className="bg-surface border border-border rounded-2xl p-5">
-            <h2 className="text-sm font-medium mb-3">미지급금 현황</h2>
-            {payableClients.length === 0 ? (
-              <p className="text-sm text-text-muted">미지급금이 있는 거래처가 없습니다.</p>
-            ) : (
-              <ul className="space-y-2">
-                {payableClients.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => setDetailTarget({ kind: "payable", client: c })}
-                      className="text-left flex-1 min-w-0 hover:opacity-70"
-                      title="상세 내역 보기"
-                    >
-                      <p className="text-sm font-medium">{c.name}</p>
-                      <p className="text-xs text-text-muted mt-0.5">{formatCurrency(c.payable_amount)}</p>
-                    </button>
-                    <button
-                      onClick={() => setSettleTarget({ kind: "payable", client: c })}
-                      className="text-xs text-danger border border-danger/30 rounded-lg px-3 py-1.5 hover:bg-red-50 shrink-0"
-                    >
-                      지급완료
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
+          <section className="grid grid-cols-2 gap-4 mb-6">
+            {(
+              [
+                { kind: "receivable", title: "미수금 현황", empty: "미수금", rows: receivableRows, total: receivableTotal, action: "수금완료", style: "text-primary border-primary/30 hover:bg-tile-blue" },
+                { kind: "payable", title: "미지급금 현황", empty: "미지급금", rows: payableRows, total: payableTotal, action: "지급완료", style: "text-danger border-danger/30 hover:bg-red-50" },
+              ] as const
+            ).map((card) => (
+              <div key={card.kind} className="bg-surface border border-border rounded-2xl p-5">
+                <div className="flex items-baseline justify-between mb-3">
+                  <h2 className="text-sm font-medium">
+                    {card.title}
+                    <span className="text-xs font-normal text-text-muted">{periodLabel}</span>
+                  </h2>
+                  <span className="text-sm font-semibold tabular-nums">총 {formatCurrency(card.total)}</span>
+                </div>
+                {outstandingPeriod !== "all" && periodTx === null ? (
+                  <p className="text-sm text-text-muted">불러오는 중...</p>
+                ) : card.rows.length === 0 ? (
+                  <p className="text-sm text-text-muted">{card.empty}이 있는 거래처가 없습니다.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {card.rows.map(({ client: c, amount }) => (
+                      <li key={c.id} className="flex items-center justify-between bg-bg rounded-xl px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => setDetailTarget({ kind: card.kind, client: c })}
+                          className="text-left flex-1 min-w-0 hover:opacity-70"
+                          title="상세 내역 보기"
+                        >
+                          <p className="text-sm font-medium">{c.name}</p>
+                          <p className="text-xs text-text-muted mt-0.5">{formatCurrency(amount)}</p>
+                          {occurredLabel(card.kind, c.id) && (
+                            <p className="text-xs text-text-muted mt-0.5">
+                              {card.kind === "receivable" ? "미수금" : "미지급금"} 발생일 {occurredLabel(card.kind, c.id)}
+                            </p>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setSettleTarget({ kind: card.kind, client: c })}
+                          className={`text-xs border rounded-lg px-3 py-1.5 shrink-0 ${card.style}`}
+                        >
+                          {card.action}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </section>
+        </>
       )}
 
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
@@ -485,16 +587,18 @@ export function PaymentsPage() {
 
       {payments !== null && payments.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm">
+          {/* 표 스타일: 가로선 없이 연한 세로선 + 줄무늬 (첫 열 앞, 버튼 열 앞은 선 제외) */}
+          <table className="w-full text-sm [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-text/[0.07] [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
             <thead>
               <tr className="text-left text-text-muted border-b border-border">
-                <th className="py-2.5 px-4 font-medium">구분</th>
-                <th className="py-2.5 px-4 font-medium">날짜</th>
-                <th className="py-2.5 px-4 font-medium">분류</th>
+                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">구분</th>
+                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">날짜</th>
+                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">분류</th>
                 <th className="py-2.5 px-4 font-medium">내용</th>
-                <th className="py-2.5 px-4 font-medium">수단</th>
-                <th className="py-2.5 px-4 font-medium">증빙발행</th>
-                <th className="py-2.5 px-4 font-medium text-right">금액</th>
+                <th className="py-2.5 px-4 font-medium">거래처</th>
+                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">수단</th>
+                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">증빙발행</th>
+                <th className="py-2.5 px-4 font-medium text-right w-px whitespace-nowrap">금액</th>
                 <th className="w-24"></th>
               </tr>
             </thead>
@@ -503,24 +607,29 @@ export function PaymentsPage() {
                 <tr
                   key={p.id}
                   onClick={() => setSelectedPayment(p)}
-                  className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60 transition-colors"
+                  className="cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
                 >
-                  <td className="py-2.5 px-4">
+                  <td className="py-2.5 px-4 whitespace-nowrap">
                     <span className={`text-xs px-2 py-1 font-medium ${PAYMENT_TYPE_STYLES[p.type]}`}>
                       {PAYMENT_TYPE_LABELS[p.type]}
                     </span>
                   </td>
-                  <td className="py-2.5 px-4">{p.payment_date}</td>
-                  <td className="py-2.5 px-4">{p.category}</td>
-                  <td className="py-2.5 px-4">
-                    {p.description}
-                    {p.client_name && <span className="text-text-muted"> · {p.client_name}</span>}
+                  <td className="py-2.5 px-4 whitespace-nowrap">
+                    {p.payment_date}
+                    {p.occurred_date && (
+                      <span className="block text-xs text-text-muted">
+                        {p.type === "deposit" ? "미수금" : "미지급금"} 발생 {p.occurred_date}
+                      </span>
+                    )}
                   </td>
-                  <td className="py-2.5 px-4">
+                  <td className="py-2.5 px-4 whitespace-nowrap">{p.category}</td>
+                  <td className="py-2.5 px-4">{p.description}</td>
+                  <td className="py-2.5 px-4">{p.client_name ?? <span className="text-text-muted">-</span>}</td>
+                  <td className="py-2.5 px-4 whitespace-nowrap">
                     {paymentMethodDetailLabel(p)}
                     {p.card_pending && <span className={`ml-1.5 text-xs px-2 py-0.5 font-medium ${SOFT_BADGE.orange}`}>결제예정</span>}
                   </td>
-                  <td className="py-2.5 px-4">
+                  <td className="py-2.5 px-4 whitespace-nowrap">
                     {p.proof_type ? (
                       <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>
                         {p.proof_type === "other" && p.proof_type_detail ? p.proof_type_detail : PROOF_TYPE_LABELS[p.proof_type]}
@@ -531,7 +640,7 @@ export function PaymentsPage() {
                       <span className="text-xs text-text-muted">-</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(p.amount)}</td>
+                  <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap">{formatCurrency(p.amount)}</td>
                   <td className="py-2.5 px-2">
                     <div className="flex items-center justify-end gap-1">
                       {p.has_receipt && (
@@ -615,6 +724,7 @@ export function PaymentsPage() {
         <SettleModal
           kind={settleTarget.kind}
           client={settleTarget.client}
+          occurredLabel={occurredLabel(settleTarget.kind, settleTarget.client.id)}
           onClose={() => setSettleTarget(null)}
           onSuccess={handleSettleSuccess}
         />
@@ -624,6 +734,7 @@ export function PaymentsPage() {
         <OutstandingDetailModal
           kind={detailTarget.kind}
           client={detailTarget.client}
+          period={outstandingPeriod === "all" ? null : periodYm}
           onClose={() => setDetailTarget(null)}
           onSettle={() => {
             setSettleTarget(detailTarget);

@@ -104,6 +104,7 @@ export interface Payment {
   bank_type: BankType | null;
   card_pending: boolean;
   card_used_date: string | null;
+  occurred_date: string | null;
   created_at: string;
 }
 

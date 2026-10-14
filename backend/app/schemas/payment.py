@@ -108,6 +108,8 @@ class PaymentOut(BaseModel):
     bank_type: BankType | None
     card_pending: bool = False
     card_used_date: date | None = None
+    # 이 입출금으로 결제완료 처리된 매입매출의 거래일(미수금/미지급금 발생일). 연결된 내역이 없으면 None.
+    occurred_date: date | None = None
     created_at: datetime
 
 

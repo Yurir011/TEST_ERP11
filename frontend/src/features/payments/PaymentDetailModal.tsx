@@ -67,7 +67,10 @@ export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onC
         </div>
 
         <div>
-          <Row label="날짜" value={payment.payment_date} />
+          <Row label={payment.type === "deposit" ? "수금일" : "지급일"} value={payment.payment_date} />
+          {payment.occurred_date && (
+            <Row label={payment.type === "deposit" ? "미수금 발생일" : "미지급금 발생일"} value={payment.occurred_date} />
+          )}
           <Row label="금액" value={formatCurrency(payment.amount)} />
           <Row label="결제수단" value={paymentMethodDetailLabel(payment)} />
           <Row label="거래처" value={payment.client_name ?? "-"} />

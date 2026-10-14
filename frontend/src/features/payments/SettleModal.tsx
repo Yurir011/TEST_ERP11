@@ -21,11 +21,12 @@ function todayISO() {
 interface SettleModalProps {
   kind: "receivable" | "payable";
   client: Client;
+  occurredLabel?: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function SettleModal({ kind, client, onClose, onSuccess }: SettleModalProps) {
+export function SettleModal({ kind, client, occurredLabel, onClose, onSuccess }: SettleModalProps) {
   const outstanding = kind === "receivable" ? client.receivable_amount : client.payable_amount;
   const title = kind === "receivable" ? "수금 완료 처리" : "지급 완료 처리";
   const actionLabel = kind === "receivable" ? "수금 완료" : "지급 완료";
@@ -68,7 +69,8 @@ export function SettleModal({ kind, client, onClose, onSuccess }: SettleModalPro
         amount: amountNum,
         method,
         client_id: client.id,
-        memo: memo || null,
+        // 거래처 잔액만 줄이는 처리라 연결된 매입매출이 없으므로, 발생일은 메모에 남겨 상세에서 볼 수 있게 한다.
+        memo: [occurredLabel ? `발생일 ${occurredLabel}` : "", memo].filter(Boolean).join(" / ") || null,
         proof_type: null,
         proof_type_detail: null,
         card_type: method === "corporate_card" ? cardType : null,
@@ -89,6 +91,7 @@ export function SettleModal({ kind, client, onClose, onSuccess }: SettleModalPro
         <h3 className="text-sm font-semibold mb-1">{title}</h3>
         <p className="text-xs text-text-muted mb-4">
           {client.name} · {kind === "receivable" ? "미수금" : "미지급금"} {formatCurrency(outstanding)}
+          {occurredLabel && ` · 발생일 ${occurredLabel}`}
         </p>
 
         <div className="space-y-3">

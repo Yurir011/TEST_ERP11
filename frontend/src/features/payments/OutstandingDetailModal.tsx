@@ -9,12 +9,13 @@ import type { Transaction } from "../transactions/types";
 interface OutstandingDetailModalProps {
   kind: "receivable" | "payable";
   client: Client;
+  period?: { year: number; month: number } | null;
   onClose: () => void;
   onSettle: () => void;
 }
 
 // 미수금(매출)/미지급금(매입) 잔액을 이루는 미결제 매입매출 내역을 보여준다.
-export function OutstandingDetailModal({ kind, client, onClose, onSettle }:OutstandingDetailModalProps) {
+export function OutstandingDetailModal({ kind, client, period, onClose, onSettle }:OutstandingDetailModalProps) {
   const label = kind === "receivable" ? "미수금" : "미지급금";
   const settleLabel = kind === "receivable" ? "수금완료" : "지급완료";
   const txType =kind === "receivable" ? "sales" : "purchase";
@@ -25,7 +26,7 @@ export function OutstandingDetailModal({ kind, client, onClose, onSettle }:Outst
 
   useEffect(() => {
     logDebug("Payments", `${label} 상세 조회 시작: client_id=${client.id}`);
-    apiGet<Transaction[]>(`/api/transactions?type=${txType}&settled=false`)
+    apiGet<Transaction[]>(`/api/transactions?type=${txType}&settled=false${period ? `&year=${period.year}&month=${period.month}` : ""}`)
       .then((list) => {
         const mine = list.filter((t) => t.client_id === client.id);
         logDebug("Payments", `${label} 상세 조회 성공: ${mine.length}건`);
@@ -35,7 +36,7 @@ export function OutstandingDetailModal({ kind, client, onClose, onSettle }:Outst
         logError("Payments", `${label} 상세 조회 실패`, err);
         setError("상세 내역을 불러오지 못했습니다.");
       });
-  }, [client.id, txType, label]);
+  }, [client.id, txType, label, period?.year, period?.month]);
 
   const listTotal = (items ?? []).reduce((sum, t) => sum + t.total_amount, 0);
 
@@ -45,7 +46,7 @@ export function OutstandingDetailModal({ kind, client, onClose, onSettle }:Outst
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold">{client.name} {label} 상세</h3>
-            <p className="text-xs text-text-muted mt-1">{label} 잔액 {formatCurrency(outstanding)}</p>
+            <p className="text-xs text-text-muted mt-1">{period ? `${period.month}월 발생 미결제 내역 · ` : `${label} 잔액 `}{formatCurrency(period ? listTotal : outstanding)}</p>
           </div>
           <button onClick={onClose} className="p-1 text-text-muted hover:text-text" title="닫기">
             <X size={16} />
@@ -65,7 +66,7 @@ export function OutstandingDetailModal({ kind, client, onClose, onSettle }:Outst
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{t.item_name}</p>
                     <p className="text-xs text-text-muted mt-0.5">
-                      {t.transaction_date}
+                      {label} 발생일 {t.transaction_date}
                       {t.tax_invoice_no && ` · 계산서 ${t.tax_invoice_no}`}
                       {t.memo && ` · ${t.memo}`}
                     </p>

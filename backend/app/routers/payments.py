@@ -67,7 +67,19 @@ def _revert_settlement(client: Client, field: str, amount: int) -> None:
     setattr(client, field, current + amount)
 
 
-def _to_out(p: Payment) -> PaymentOut:
+def _occurred_dates(db: Session, payment_ids: list[int]) -> dict[int, date]:
+    """입출금 id -> 그 입출금으로 결제완료된 매입매출의 거래일(미수금/미지급금 발생일)."""
+    if not payment_ids:
+        return {}
+    rows = (
+        db.query(Transaction.settled_payment_id, Transaction.transaction_date)
+        .filter(Transaction.settled_payment_id.in_(payment_ids))
+        .all()
+    )
+    return {pid: d for pid, d in rows}
+
+
+def _to_out(p: Payment, occurred_date: date | None = None) -> PaymentOut:
     return PaymentOut(
         id=p.id,
         type=p.type,
@@ -86,6 +98,7 @@ def _to_out(p: Payment) -> PaymentOut:
         bank_type=p.bank_type,
         card_pending=bool(p.card_pending),
         card_used_date=p.card_used_date,
+        occurred_date=occurred_date,
         created_at=p.created_at,
     )
 
@@ -142,7 +155,8 @@ def list_payments(
 ):
     generate_recurring_payments(db)  # 도래한 정기 자동이체를 먼저 기록한다
     payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q).all()
-    return [_to_out(p) for p in payments]
+    occurred = _occurred_dates(db, [p.id for p in payments])
+    return [_to_out(p, occurred.get(p.id)) for p in payments]
 
 
 @router.get("/export/excel")
@@ -339,7 +353,7 @@ def create_payment(
         logger.debug(f"[Payments] 매입매출 결제완료 처리: tx_id={linked_tx.id}, payment_id={payment.id}, date={payload.payment_date}")
     db.commit()
     db.refresh(payment)
-    return _to_out(payment)
+    return _to_out(payment, linked_tx.transaction_date if linked_tx is not None else None)
 
 
 @router.post("/import-csv", response_model=CsvImportResult)
