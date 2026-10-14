@@ -207,12 +207,12 @@ export function ClientsPage() {
           {/* 열 사이 세로선: 모든 열 경계에 연하게 (첫 열 앞만 제외) */}
           <table className="w-full min-w-[960px] table-fixed text-sm border-collapse [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-primary/[0.12] [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
             <thead>
-              <tr className="text-left text-xs bg-primary/[0.06]">
-                <th className="py-3.5 pl-7 pr-4 font-semibold text-[#3A4F7A] w-[24%]">업체명</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[14%]">사업자번호</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[14%]">유선번호</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[16%]">담당자</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[14%]">담당자 연락처</th>
+              <tr className="text-center text-xs bg-primary/[0.06]">
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center w-[24%]">업체명</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[14%]">사업자번호</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[14%]">유선번호</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[16%]">담당자</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[14%]">담당자 연락처</th>
                 <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[9%]">사업자등록증</th>
                 <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[9%]">통장사본</th>
               </tr>
@@ -234,10 +234,10 @@ export function ClientsPage() {
                     onClick={() => navigate(`/clients/${client.id}`)}
                     className={`cursor-pointer hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""}`}
                   >
-                    <td className="py-3.5 pl-7 pr-4 font-medium [-webkit-text-stroke:0.35px_currentColor] text-text/85 max-w-0 truncate" title={client.name}>{client.name}</td>
-                    <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.biz_reg_no || "-"}</td>
-                    <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.phone || "-"}</td>
-                    <td className="py-3.5 px-4 truncate">
+                    <td className="py-3.5 px-4 text-center font-medium [-webkit-text-stroke:0.35px_currentColor] text-text/85 max-w-0 truncate" title={client.name}>{client.name}</td>
+                    <td className="py-3.5 px-4 text-center tabular-nums text-text-muted whitespace-nowrap">{client.biz_reg_no || "-"}</td>
+                    <td className="py-3.5 px-4 text-center tabular-nums text-text-muted whitespace-nowrap">{client.phone || "-"}</td>
+                    <td className="py-3.5 px-4 text-center truncate">
                       {contact ? (
                         <>
                           {contact.name}
@@ -248,7 +248,7 @@ export function ClientsPage() {
                         "-"
                       )}
                     </td>
-                    <td className="py-3.5 px-4 tabular-nums text-text-muted whitespace-nowrap">
+                    <td className="py-3.5 px-4 text-center tabular-nums text-text-muted whitespace-nowrap">
                       {contact ? contact.mobile_phone || contact.landline_phone || "-" : "-"}
                     </td>
                     <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
