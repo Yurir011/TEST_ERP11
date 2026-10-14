@@ -53,8 +53,11 @@ export function ProjectDocumentDetailModal({
   const approved = doc.status === "approved" && doc.has_pdf;
   const disabledTitle = "결재 승인 후 이용 가능합니다.";
   // 세금계산서는 팝빌로 발행하기 전까지 작성자가 수정할 수 있다 (승인된 문서는 수정 후 결재를 다시 받아야 한다).
+  // 견적서/거래명세서는 반려(또는 작성 중)된 문서를 작성자가 수정한 뒤 결재를 다시 요청할 수 있다 (함께 작성한 문서 쌍은 제외).
   const canEdit =
-    doc.doc_type === "tax_invoice" && doc.created_by === user?.id && !doc.popbill_issued && doc.status !== "pending" && !doc.delete_requested;
+    doc.doc_type === "tax_invoice"
+      ? doc.created_by === user?.id && !doc.popbill_issued && doc.status !== "pending" && !doc.delete_requested
+      : doc.created_by === user?.id && doc.set_id === null && (doc.status === "rejected" || doc.status === "draft") && !doc.delete_requested;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
@@ -188,10 +191,10 @@ export function ProjectDocumentDetailModal({
             onClick={() => onEdit(doc)}
             disabled={isBusy}
             className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 mb-4 hover:bg-bg disabled:opacity-50"
-            title={doc.status === "approved" ? "수정하면 결재를 다시 받아야 합니다." : undefined}
+            title={doc.status === "approved" ? "수정하면 결재를 다시 받아야 합니다." : doc.status === "rejected" ? "수정한 뒤 결재를 다시 요청합니다." : undefined}
           >
             <Pencil size={13} />
-            수정{doc.status === "approved" ? " (재결재 필요)" : ""}
+            수정{doc.status === "approved" ? " (재결재 필요)" : doc.status === "rejected" ? " 후 재요청" : ""}
           </button>
         )}
 

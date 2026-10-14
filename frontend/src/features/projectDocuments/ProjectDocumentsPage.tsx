@@ -842,7 +842,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                 <th className="py-2.5 px-4 font-medium">담당자</th>
                 <th className="py-2.5 px-4 font-medium">내용</th>
                 <th className="py-2.5 px-4 font-medium text-right">합계</th>
-                <th className="w-36"></th>
+                <th className="w-px whitespace-nowrap"></th>
               </tr>
             </thead>
             <tbody>
@@ -910,12 +910,12 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                     <td className="py-2.5 px-4">{doc.manager_name ?? "-"}</td>
                     <td className="py-2.5 px-4">{itemsSummary(doc)}</td>
                     <td className="py-2.5 px-4 text-right font-medium">{formatDocAmount(doc, itemsTotal(doc))}</td>
-                    <td className="py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         {doc.status === "rejected" && doc.created_by === user?.id && (
                           <button
                             onClick={() => setResubmitDoc(doc)}
-                            className="text-xs text-primary hover:opacity-80 border border-primary/30 rounded-lg px-2 py-1"
+                            className="text-xs text-primary hover:opacity-80 border border-primary/30 rounded-lg px-2 py-1 whitespace-nowrap shrink-0"
                           >
                             재요청
                           </button>
@@ -1022,8 +1022,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           onPopbillView={handlePopbillView}
           onPopbillPdf={handlePopbillPdf}
           onEdit={(d) => {
-            logDebug("ProjectDocuments", `세금계산서 수정 진입: doc_id=${d.id}, status=${d.status}`);
-            navigate(`/project-documents/new?type=tax_invoice&edit=${d.id}`);
+            logDebug("ProjectDocuments", `${PROJECT_DOC_TYPE_LABELS[d.doc_type]} 수정 진입: doc_id=${d.id}, status=${d.status}`);
+            navigate(`/project-documents/new?type=${d.doc_type}&edit=${d.id}`);
           }}
         />
       )}

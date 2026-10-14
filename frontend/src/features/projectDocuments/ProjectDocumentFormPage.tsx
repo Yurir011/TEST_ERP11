@@ -44,9 +44,10 @@ export function ProjectDocumentFormPage() {
   const typeParam = searchParams.get("type");
   // ?type=set 이면 견적서+거래명세서를 같은 내용으로 한 번에 작성하고, 한 번의 결재로 함께 승인/반려된다.
   const isSet = typeParam === "set";
-  // ?edit=문서ID 이면 기존 세금계산서를 수정한다. 팝빌 발행 전이면 승인된 문서도 수정할 수 있고, 저장하면 결재를 다시 받아야 한다.
+  // ?edit=문서ID 이면 기존 문서를 수정한다. 세금계산서는 팝빌 발행 전이면 승인된 문서도 수정할 수 있고,
+  // 견적서/거래명세서는 반려(또는 작성 중)된 문서를 수정할 수 있다. 저장하면 결재를 다시 받아야 한다.
   const editId = searchParams.get("edit");
-  const isEdit = editId !== null && typeParam === "tax_invoice";
+  const isEdit = editId !== null && !isSet && isProjectDocType(typeParam);
   const docType: ProjectDocType = isProjectDocType(typeParam) ? typeParam : "quotation";
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -92,12 +93,16 @@ export function ProjectDocumentFormPage() {
 
   useEffect(() => {
     if (!isEdit) return;
-    logDebug("ProjectDocumentForm", `세금계산서 수정 불러오기: doc_id=${editId}`);
-    apiGet<ProjectDocument[]>("/api/project-documents?doc_type=tax_invoice")
+    logDebug("ProjectDocumentForm", `${PROJECT_DOC_TYPE_LABELS[docType]} 수정 불러오기: doc_id=${editId}`);
+    apiGet<ProjectDocument[]>(`/api/project-documents?doc_type=${docType}`)
       .then((list) => {
         const target = list.find((d) => String(d.id) === editId);
         if (!target) {
-          setError("수정할 세금계산서를 찾을 수 없습니다.");
+          setError(`수정할 ${PROJECT_DOC_TYPE_LABELS[docType]}를 찾을 수 없습니다.`);
+          return;
+        }
+        if (target.set_id !== null) {
+          setError("견적서와 거래명세서를 함께 작성한 문서는 수정할 수 없습니다. 삭제 후 다시 작성해주세요.");
           return;
         }
         if (target.popbill_issued) {
@@ -126,8 +131,8 @@ export function ProjectDocumentFormPage() {
         );
       })
       .catch((err) => {
-        logError("ProjectDocumentForm", "세금계산서 수정 불러오기 실패", err);
-        setError("수정할 세금계산서를 불러오지 못했습니다.");
+        logError("ProjectDocumentForm", "수정 불러오기 실패", err);
+        setError(`수정할 ${PROJECT_DOC_TYPE_LABELS[docType]}를 불러오지 못했습니다.`);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, editId]);
@@ -295,7 +300,7 @@ export function ProjectDocumentFormPage() {
           is_final_decision: isFinalDecision,
         });
         window.alert("수정 후 결재 요청이 완료되었습니다.");
-        navigate("/tax-invoices", { replace: true });
+        navigate(docType === "tax_invoice" ? "/tax-invoices" : "/project-documents", { replace: true });
         return;
       }
       const endpoint = isSet ? "/api/project-documents/set" : "/api/project-documents";
@@ -370,7 +375,9 @@ export function ProjectDocumentFormPage() {
             ? isEdit
               ? "세금계산서 수정"
               : "새 세금계산서 작성 및 등록"
-            : `새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`
+            : isEdit
+              ? `${PROJECT_DOC_TYPE_LABELS[docType]} 수정`
+              : `새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`
       }
     >
       <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-2xl">
@@ -383,7 +390,14 @@ export function ProjectDocumentFormPage() {
           </div>
         )}
 
-        {isEdit && (
+        {isEdit && docType !== "tax_invoice" && (
+          <div className="flex items-start gap-2 bg-tile-orange text-tile-orange-fg rounded-xl px-4 py-3 text-xs">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <p>반려된 {PROJECT_DOC_TYPE_LABELS[docType]}를 수정한 뒤 결재를 다시 요청합니다. 저장하면 이전 결재 내역은 초기화되고 선택한 결재권자에게 새로 요청됩니다.</p>
+          </div>
+        )}
+
+        {isEdit && docType === "tax_invoice" && (
           <div className="flex items-start gap-2 bg-tile-orange text-tile-orange-fg rounded-xl px-4 py-3 text-xs">
             <Info size={14} className="mt-0.5 shrink-0" />
             <p>수정한 세금계산서는 결재를 다시 받아야 합니다. 승인되기 전까지는 출력·팝빌 발행을 할 수 없고, 재승인되면 매입매출 내역과, 대금 결제가 끝난 건은 입출금 내역(금액·거래처·입금/출금 구분)도 수정한 내용으로 함께 갱신됩니다. 결제일·결제방법·메모는 그대로 유지됩니다.</p>
