@@ -123,8 +123,8 @@ export function MyNotificationsBoard() {
           <Bell size={13} />내 업무 알림
         </h2>
         {unread.length > 0 && (
-          <span className="font-medium bg-badge-bg border border-badge-border text-badge-fg px-2 py-0.5 rounded-full text-[11px]">
-            {unread.length}건
+          <span className="font-semibold bg-badge-bg border border-badge-border text-badge-fg px-3 py-px rounded-full text-[13px] min-w-[2.2em] text-center tabular-nums">
+            {unread.length}
           </span>
         )}
       </div>
@@ -141,7 +141,7 @@ export function MyNotificationsBoard() {
             className="flex items-center gap-1 text-[11px] text-text-muted hover:text-text"
           >
             {showRead ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            읽은 알림 보기 ({read.length}건)
+            읽은 알림 보기 ({read.length})
           </button>
           {showRead && (
             <div className="mt-2 max-h-56 overflow-y-auto">

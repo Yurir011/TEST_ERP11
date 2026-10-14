@@ -170,8 +170,8 @@ export function DashboardPage() {
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-xs font-semibold">공지사항</h2>
               {recentNotices !== null && recentNotices.length > 0 && (
-                <span className="font-medium bg-badge-bg border border-badge-border text-badge-fg px-2 py-0.5 rounded-full text-[11px]">
-                  {recentNotices.length}건
+                <span className="font-semibold bg-badge-bg border border-badge-border text-badge-fg px-3 py-px rounded-full text-[13px] min-w-[2.2em] text-center tabular-nums">
+                  {recentNotices.length}
                 </span>
               )}
             </div>
@@ -202,7 +202,7 @@ export function DashboardPage() {
                   className="flex items-center justify-between bg-bg rounded-lg px-3 py-2 hover:bg-border/40 transition-colors"
                 >
                   <span>미결 견적</span>
-                  <span className="font-medium bg-badge-bg border border-badge-border text-badge-fg px-2 py-0.5 rounded-full text-[11px]">
+                  <span className="font-semibold bg-badge-bg border border-badge-border text-badge-fg px-3 py-px rounded-full text-[13px] min-w-[2.2em] text-center tabular-nums">
                     {pendingEstimateCount ?? "-"}
                   </span>
                 </Link>
@@ -213,7 +213,7 @@ export function DashboardPage() {
                   className="flex items-center justify-between bg-bg rounded-lg px-3 py-2 hover:bg-border/40 transition-colors"
                 >
                   <span>결재 대기</span>
-                  <span className="font-medium bg-badge-bg border border-badge-border text-badge-fg px-2 py-0.5 rounded-full text-[11px]">
+                  <span className="font-semibold bg-badge-bg border border-badge-border text-badge-fg px-3 py-px rounded-full text-[13px] min-w-[2.2em] text-center tabular-nums">
                     {pendingApprovalCount}
                   </span>
                 </Link>
@@ -224,7 +224,7 @@ export function DashboardPage() {
                   className="flex items-center justify-between bg-bg rounded-lg px-3 py-2 hover:bg-border/40 transition-colors"
                 >
                   <span>업무 알림</span>
-                  <span className="font-medium bg-badge-bg border border-badge-border text-badge-fg px-2 py-0.5 rounded-full text-[11px]">
+                  <span className="font-semibold bg-badge-bg border border-badge-border text-badge-fg px-3 py-px rounded-full text-[13px] min-w-[2.2em] text-center tabular-nums">
                     {unreadNotificationCount ?? "-"}
                   </span>
                 </Link>
