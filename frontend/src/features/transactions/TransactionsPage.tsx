@@ -6,6 +6,7 @@ import { apiDelete, apiGet, downloadFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { HometaxImportModal } from "./HometaxImportModal";
+import { ReportDetailModal, type ReportCardKind } from "./ReportDetailModal";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
@@ -49,11 +50,19 @@ export function TransactionsPage() {
 
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [showHometax, setShowHometax] = useState(false);
+  const [cardDetail, setCardDetail] = useState<ReportCardKind | null>(null);
   const [report, setReport] = useState<VatReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   const visible = transactions === null ? null : transactions.filter((t) => statusTab === "all" || (statusTab === "settled") === t.settled);
+  // 결제 상태 탭에 건수를 보여주기 위한 집계 (현재 매출/매입 탭 기준)
+  const statusCounts = {
+    all: transactions?.length ?? 0,
+    unsettled: transactions?.filter((t) => !t.settled).length ?? 0,
+    settled: transactions?.filter((t) => t.settled).length ?? 0,
+  };
+  const visibleTotal = (visible ?? []).reduce((sum, t) => sum + t.total_amount, 0);
 
   function loadTransactions() {
     logDebug("Transactions", `목록 조회: ${startDate} ~ ${endDate}, type=${tab}`);
@@ -178,7 +187,7 @@ export function TransactionsPage() {
           {(
             [
               ["all", "전체"],
-              ["unsettled", "외상"],
+              ["unsettled", "미결제"],
               ["settled", "결제완료"],
             ] as const
           ).map(([key, label]) => (
@@ -189,7 +198,7 @@ export function TransactionsPage() {
                 statusTab === key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
               }`}
             >
-              {label}
+              {label} <span className="text-[11px] tabular-nums text-text-muted">{statusCounts[key]}</span>
             </button>
           ))}
         </div>
@@ -220,23 +229,23 @@ export function TransactionsPage() {
 
       {report && (
         <section className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-surface border border-border rounded-2xl p-5">
+          <button type="button" onClick={() => setCardDetail("sales")} title="상세 내역 보기" className="text-left bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors">
             <p className="text-sm text-text-muted">매출 (공급가액 / 부가세)</p>
             <p className="text-lg font-semibold mt-1">{formatCurrency(report.sales_supply)}</p>
             <p className="text-xs text-text-muted mt-0.5">부가세 {formatCurrency(report.sales_vat)}</p>
-          </div>
-          <div className="bg-surface border border-border rounded-2xl p-5">
+          </button>
+          <button type="button" onClick={() => setCardDetail("purchase")} title="상세 내역 보기" className="text-left bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors">
             <p className="text-sm text-text-muted">매입 (공급가액 / 부가세)</p>
             <p className="text-lg font-semibold mt-1">{formatCurrency(report.purchase_supply)}</p>
             <p className="text-xs text-text-muted mt-0.5">부가세 {formatCurrency(report.purchase_vat)}</p>
-          </div>
-          <div className="bg-surface border border-border rounded-2xl p-5">
+          </button>
+          <button type="button" onClick={() => setCardDetail("vat")} title="상세 내역 보기" className="text-left bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors">
             <p className="text-sm text-text-muted">{report.payable_vat >= 0 ? "납부세액" : "환급세액"}</p>
             <p className={`text-lg font-semibold mt-1 ${report.payable_vat >= 0 ? "text-notify" : "text-success"}`}>
               {formatCurrency(Math.abs(report.payable_vat))}
             </p>
             <p className="text-xs text-text-muted mt-0.5">매출부가세 - 매입부가세</p>
-          </div>
+          </button>
         </section>
       )}
 
@@ -289,6 +298,15 @@ export function TransactionsPage() {
           <Receipt className="mx-auto mb-2 text-text-muted" size={24} />
           <p className="text-sm text-text-muted">해당 기간의 거래 내역이 없습니다.</p>
         </div>
+      )}
+
+      {visible !== null && visible.length > 0 && (
+        <p className="flex justify-between text-sm mb-2 px-1">
+          <span className="text-text-muted">
+            {tab === "all" ? "전체" : TX_TYPE_LABELS[tab]} · {statusTab === "all" ? "결제 구분 전체" : statusTab === "unsettled" ? "미결제" : "결제완료"} {visible.length}건
+          </span>
+          <b className="tabular-nums">합계 {formatCurrency(visibleTotal)}</b>
+        </p>
       )}
 
       {visible !== null && visible.length > 0 && (
@@ -355,6 +373,8 @@ export function TransactionsPage() {
           </table>
         </div>
       )}
+
+      {cardDetail && report && <ReportDetailModal kind={cardDetail} report={report} onClose={() => setCardDetail(null)} />}
 
       {showHometax && (
         <HometaxImportModal
