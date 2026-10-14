@@ -57,7 +57,7 @@ function FileButton({ exists, label, onClick }: { exists: boolean; label: string
       type="button"
       onClick={onClick}
       title={`${label} 보기`}
-      className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary-hover rounded-full px-2.5 py-1 hover:bg-primary/10"
+      className="inline-flex items-center gap-1 text-xs text-[#4B6199] hover:text-[#3A4F7A] rounded-full px-2.5 py-1 hover:bg-primary/[0.08]"
     >
       <FileText size={13} />
       보기
@@ -226,16 +226,16 @@ export function ClientsPage() {
         </p>
         <div className="bg-surface rounded-[20px] shadow-sm overflow-x-auto">
           {/* 열 사이 세로선: 데이터 열 경계에만 연하게 (첫 열 앞, 삭제 버튼 열 앞은 제외) */}
-          <table className="w-full min-w-[960px] table-fixed text-sm border-collapse [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-primary/20 [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
+          <table className="w-full min-w-[960px] table-fixed text-sm border-collapse [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-primary/[0.12] [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
             <thead>
-              <tr className="text-left text-xs bg-primary/[0.12]">
-                <th className="py-3.5 pl-7 pr-4 font-semibold text-primary w-[22%]">업체명</th>
-                <th className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap w-[13%]">사업자번호</th>
-                <th className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap w-[13%]">유선번호</th>
-                <th className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap w-[15%]">담당자</th>
-                <th className="py-3.5 px-4 font-semibold text-primary whitespace-nowrap w-[14%]">담당자 연락처</th>
-                <th className="py-3.5 px-3 font-semibold text-primary text-center whitespace-nowrap w-[8%]">사업자등록증</th>
-                <th className="py-3.5 px-3 font-semibold text-primary text-center whitespace-nowrap w-[8%]">통장사본</th>
+              <tr className="text-left text-xs bg-primary/[0.06]">
+                <th className="py-3.5 pl-7 pr-4 font-semibold text-[#3A4F7A] w-[22%]">업체명</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[13%]">사업자번호</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[13%]">유선번호</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[15%]">담당자</th>
+                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[14%]">담당자 연락처</th>
+                <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[8%]">사업자등록증</th>
+                <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[8%]">통장사본</th>
                 <th className="w-12"></th>
               </tr>
             </thead>
