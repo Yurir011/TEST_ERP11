@@ -225,8 +225,8 @@ export function ClientsPage() {
           <span className="text-xs text-text-muted">{query ? `검색어 '${query}' 적용 중` : "가나다순"}</span>
         </p>
         <div className="bg-surface rounded-[20px] shadow-sm overflow-x-auto">
-          {/* 열 사이 세로선: 데이터 열 경계에만 연하게 (첫 열 앞, 삭제 버튼 열 앞은 제외) */}
-          <table className="w-full min-w-[960px] table-fixed text-sm border-collapse [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-primary/[0.12] [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
+          {/* 열 사이 세로선: 모든 열 경계에 연하게 (첫 열 앞만 제외) */}
+          <table className="w-full min-w-[960px] table-fixed text-sm border-collapse [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-primary/[0.12] [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
             <thead>
               <tr className="text-left text-xs bg-primary/[0.06]">
                 <th className="py-3.5 pl-7 pr-4 font-semibold text-[#3A4F7A] w-[22%]">업체명</th>
@@ -236,7 +236,7 @@ export function ClientsPage() {
                 <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] whitespace-nowrap w-[14%]">담당자 연락처</th>
                 <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[8%]">사업자등록증</th>
                 <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[8%]">통장사본</th>
-                <th className="w-12"></th>
+                <th className="py-3.5 px-2 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-14">{canDeleteClient(user) ? "삭제" : ""}</th>
               </tr>
             </thead>
             <tbody>
@@ -287,7 +287,7 @@ export function ClientsPage() {
                         onClick={() => handleOpenFile(client.id, "bankbook-image")}
                       />
                     </td>
-                    <td className="py-3.5 px-2" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                       {canDeleteClient(user) && (
                         <button
                           onClick={(e) => handleDelete(e, client)}
