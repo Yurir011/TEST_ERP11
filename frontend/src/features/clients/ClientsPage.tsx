@@ -225,7 +225,8 @@ export function ClientsPage() {
           <span className="text-xs text-text-muted">{query ? `검색어 '${query}' 적용 중` : "가나다순"}</span>
         </p>
         <div className="bg-surface rounded-[20px] shadow-sm overflow-x-auto">
-          <table className="w-full min-w-[960px] table-fixed text-sm border-collapse">
+          {/* 열 사이 세로선: 데이터 열 경계에만 연하게 (첫 열 앞, 삭제 버튼 열 앞은 제외) */}
+          <table className="w-full min-w-[960px] table-fixed text-sm border-collapse [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-primary/20 [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
             <thead>
               <tr className="text-left text-xs bg-primary/[0.12]">
                 <th className="py-3.5 pl-7 pr-4 font-semibold text-primary w-[22%]">업체명</th>
