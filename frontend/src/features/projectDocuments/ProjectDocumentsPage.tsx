@@ -40,11 +40,6 @@ import {
 } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
-const TAX_PURPOSE_STYLES: Record<TaxInvoicePurpose, string> = {
-  청구: SOFT_BADGE.blue,
-  영수: SOFT_BADGE.green,
-};
-
 type DocTab = ProjectDocType | "all" | "proposal";
 
 const NEW_DOC_ACTIONS: { type: ProjectDocType; icon: typeof FileText; colorClass: string }[] = [
@@ -830,18 +825,24 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
 
       {visibleDocs !== null && visibleDocs.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm">
+          {/* 표 스타일: 연한 세로선 + 줄무늬 + 톤다운 파랑 머리글 (첫 열 앞만 제외). 짧은 열은 내용 폭에 맞춘다. */}
+          <table className="w-full text-sm [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-primary/[0.12] [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
             <thead>
-              <tr className="text-left text-text-muted border-b border-border">
-                {lockedDocType === "tax_invoice" && <th className="py-2.5 px-4 font-medium">구분</th>}
-                <th className="py-2.5 px-4 font-medium">{lockedDocType === "tax_invoice" ? "청구/영수" : "구분"}</th>
-                <th className="py-2.5 px-4 font-medium">상태</th>
-                <th className="py-2.5 px-4 font-medium">날짜</th>
-                <th className="py-2.5 px-4 font-medium">프로젝트</th>
-                <th className="py-2.5 px-4 font-medium">거래처명</th>
-                <th className="py-2.5 px-4 font-medium">담당자</th>
-                <th className="py-2.5 px-4 font-medium">내용</th>
-                <th className="py-2.5 px-4 font-medium text-right">합계</th>
+              <tr className="text-center bg-primary/[0.06] border-b border-border">
+                {lockedDocType === "tax_invoice" && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">구분</th>}
+                {lockedDocType !== "tax_invoice" && (
+                  <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">구분</th>
+                )}
+                <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">상태</th>
+                {lockedDocType === "tax_invoice" && (
+                  <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">팝빌</th>
+                )}
+                <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">날짜</th>
+                <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center">프로젝트</th>
+                <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center">거래처명</th>
+                <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">담당자</th>
+                <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center">내용</th>
+                <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">합계</th>
                 <th className="w-px whitespace-nowrap"></th>
               </tr>
             </thead>
@@ -853,36 +854,32 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                   <tr
                     key={doc.id}
                     onClick={() => setDetailDoc(doc)}
-                    className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
+                    className="cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
                   >
                     {lockedDocType === "tax_invoice" && (
-                      <td className="py-2.5 px-4">
-                        <span
-                          className={`text-xs px-2 py-1 font-medium ${
-                            doc.direction === "purchase" ? SOFT_BADGE.orange : SOFT_BADGE.purple
-                          }`}
-                        >
-                          {doc.direction === "purchase" ? "매입" : "매출"}
-                        </span>
-                        {doc.is_paper && (
-                          <span className={`ml-1 text-[11px] px-[7px] py-[3px] font-medium ${SOFT_BADGE.gray}`}>
-                            종이
+                      <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                        {/* 종이 세금계산서는 항상 매입이므로 "매입" 배지 없이 "종이"만 표시한다. */}
+                        {doc.is_paper ? (
+                          <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.gray}`}>종이</span>
+                        ) : (
+                          <span
+                            className={`text-xs px-2 py-1 font-medium ${
+                              doc.direction === "purchase" ? SOFT_BADGE.orange : SOFT_BADGE.purple
+                            }`}
+                          >
+                            {doc.direction === "purchase" ? "매입" : "매출"}
                           </span>
                         )}
                       </td>
                     )}
-                    <td className="py-2.5 px-4">
-                      {lockedDocType === "tax_invoice" ? (
-                        <span className={`text-xs px-2 py-1 font-medium ${TAX_PURPOSE_STYLES[doc.purpose_type]}`}>
-                          {doc.purpose_type}용
-                        </span>
-                      ) : (
+                    {lockedDocType !== "tax_invoice" && (
+                      <td className="py-2.5 px-4 text-center whitespace-nowrap">
                         <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.blue}`}>
                           {PROJECT_DOC_TYPE_LABELS[doc.doc_type]}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-4">
+                      </td>
+                    )}
+                    <td className="py-2.5 px-4 text-center whitespace-nowrap">
                       <span
                         className={`text-xs px-2 py-1 font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
                         title={doc.status === "rejected" ? doc.reject_reason ?? undefined : undefined}
@@ -892,24 +889,35 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                       {doc.delete_requested && (
                         <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>
                       )}
-                      {doc.doc_type === "tax_invoice" && doc.popbill_issued && (
-                        <span
-                          className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.green}`}
-                          title={`국세청 승인번호 ${doc.popbill_nts_confirm_num}`}
-                        >
-                          팝빌 발행됨
-                        </span>
-                      )}
                     </td>
-                    <td className="py-2.5 px-4">
+                    {lockedDocType === "tax_invoice" && (
+                      <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                        {/* 팝빌 발행 대상은 매출 세금계산서뿐이다. 발행됨 / 승인되어 발행 대기 / 그 외(-) 로 나눈다. */}
+                        {doc.popbill_issued ? (
+                          <span
+                            className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.green}`}
+                            title={`국세청 승인번호 ${doc.popbill_nts_confirm_num}`}
+                          >
+                            발행
+                          </span>
+                        ) : doc.direction !== "purchase" && doc.status === "approved" && !doc.delete_requested ? (
+                          <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`} title="승인되었으나 아직 팝빌로 발행하지 않았습니다.">
+                            대기
+                          </span>
+                        ) : (
+                          <span className="text-text-muted/50">-</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="py-2.5 px-4 text-center whitespace-nowrap">
                       {doc.issue_date}
                       {doc.doc_no && <p className="text-xs text-text-muted mt-0.5">No. {doc.doc_no}</p>}
                     </td>
-                    <td className="py-2.5 px-4">{doc.project_name}</td>
-                    <td className="py-2.5 px-4">{doc.client_name}</td>
-                    <td className="py-2.5 px-4">{doc.manager_name ?? "-"}</td>
-                    <td className="py-2.5 px-4">{itemsSummary(doc)}</td>
-                    <td className="py-2.5 px-4 text-right font-medium">{formatDocAmount(doc, itemsTotal(doc))}</td>
+                    <td className="py-2.5 px-4 text-center">{doc.project_name}</td>
+                    <td className="py-2.5 px-4 text-center">{doc.client_name}</td>
+                    <td className="py-2.5 px-4 text-center whitespace-nowrap">{doc.manager_name ?? "-"}</td>
+                    <td className="py-2.5 px-4 text-center">{itemsSummary(doc)}</td>
+                    <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap">{formatDocAmount(doc, itemsTotal(doc))}</td>
                     <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         {doc.status === "rejected" && doc.created_by === user?.id && (
