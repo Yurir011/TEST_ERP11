@@ -19,11 +19,29 @@ export function ApprovalStampTable({
   steps,
   currentStep,
   docStatus,
+  finalDecision = false,
 }: {
   steps: StampStep[];
   currentStep: number;
   docStatus: string;
+  /** 전결(결재선 없이 기안자 본인 결재로 즉시 승인)된 문서이면 결재란에 "전결" 도장을 보여준다. */
+  finalDecision?: boolean;
 }) {
+  if (steps.length === 0 && finalDecision && docStatus === "approved") {
+    return (
+      <div className="mb-4">
+        <div className="border border-border rounded-xl overflow-hidden flex items-stretch">
+          <div className="bg-bg text-[11px] font-semibold text-text-muted px-4 flex items-center border-r border-border">결재</div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <span className="inline-flex items-center justify-center w-11 h-11 rounded-full border-2 border-danger/70 text-danger text-xs font-bold -rotate-6">
+              전결
+            </span>
+            <p className="text-xs text-text-muted">결재선 없이 기안자 본인 결재로 즉시 승인된 문서입니다.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (steps.length === 0) return null;
   const doneCount = steps.filter((s) => s.status === "approved").length;
 

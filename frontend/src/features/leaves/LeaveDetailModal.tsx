@@ -46,7 +46,7 @@ export function LeaveDetailModal({
           )}
         </div>
 
-        <ApprovalStampTable steps={leave.steps} currentStep={leave.current_step} docStatus={leave.status} />
+        <ApprovalStampTable steps={leave.steps} currentStep={leave.current_step} docStatus={leave.status} finalDecision={leave.is_final_decision} />
 
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
           <div>

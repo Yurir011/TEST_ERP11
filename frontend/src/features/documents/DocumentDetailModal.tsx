@@ -50,7 +50,7 @@ export function DocumentDetailModal({
           )}
         </div>
 
-        <ApprovalStampTable steps={doc.steps} currentStep={doc.current_step} docStatus={doc.status} />
+        <ApprovalStampTable steps={doc.steps} currentStep={doc.current_step} docStatus={doc.status} finalDecision={doc.is_final_decision} />
 
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
           <div>

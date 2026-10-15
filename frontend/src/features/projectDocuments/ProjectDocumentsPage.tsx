@@ -955,6 +955,9 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                         >
                           {PROPOSAL_STATUS_LABELS[p.status]}
                         </span>
+                        {p.is_final_decision && p.status === "approved" && (
+                          <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
+                        )}
                         {p.delete_requested && <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>}
                       </td>
                       <td className="py-2.5 px-4 text-center whitespace-nowrap">
@@ -1028,6 +1031,9 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                       >
                         {PROJECT_DOC_STATUS_LABELS[doc.status]}
                       </span>
+                      {doc.is_final_decision && doc.status === "approved" && (
+                        <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
+                      )}
                       {doc.delete_requested && (
                         <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>
                       )}

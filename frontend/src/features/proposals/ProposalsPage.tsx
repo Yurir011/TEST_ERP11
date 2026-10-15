@@ -5,6 +5,7 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import { ApiError, apiGet, apiPut, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { useOpenTarget } from "../../lib/useOpenTarget";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { ProposalDetailModal } from "./ProposalDetailModal";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal } from "./types";
 
@@ -210,6 +211,9 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
                       <span className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}>
                         {PROPOSAL_STATUS_LABELS[p.status]}
                       </span>
+                      {p.is_final_decision && p.status === "approved" && (
+                        <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
+                      )}
                       {p.delete_requested && (
                         <span className="ml-1.5 text-xs px-2 py-1 font-medium text-danger bg-danger/10 rounded-md">삭제 결재 중</span>
                       )}

@@ -195,7 +195,7 @@ export function ProposalDetailModal({
           </div>
         )}
 
-        <ApprovalStampTable steps={proposal.steps} currentStep={proposal.current_step} docStatus={proposal.status} />
+        <ApprovalStampTable steps={proposal.steps} currentStep={proposal.current_step} docStatus={proposal.status} finalDecision={proposal.is_final_decision} />
 
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
           <div>

@@ -105,7 +105,7 @@ export function ProjectDocumentDetailModal({
           <p className="text-xs text-danger bg-red-50 rounded-lg px-3 py-2 mb-4">반려 사유: {doc.reject_reason}</p>
         )}
 
-        <ApprovalStampTable steps={doc.steps} currentStep={doc.current_step} docStatus={doc.status} />
+        <ApprovalStampTable steps={doc.steps} currentStep={doc.current_step} docStatus={doc.status} finalDecision={doc.is_final_decision} />
 
         {doc.manager_name && <p className="text-xs text-text-muted mb-2">담당자: {doc.manager_name}</p>}
         {doc.remark && <p className="text-xs text-text-muted mb-2 whitespace-pre-wrap">REMARK: {doc.remark}</p>}
