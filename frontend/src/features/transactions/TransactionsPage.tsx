@@ -7,6 +7,8 @@ import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { HometaxImportModal } from "./HometaxImportModal";
 import { ReportDetailModal, type ReportCardKind } from "./ReportDetailModal";
+import { TransactionDetailModal } from "./TransactionDetailModal";
+import { TransactionSettleModal } from "./TransactionSettleModal";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
@@ -51,6 +53,8 @@ export function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [showHometax, setShowHometax] = useState(false);
   const [cardDetail, setCardDetail] = useState<ReportCardKind | null>(null);
+  const [detailTx, setDetailTx] = useState<Transaction | null>(null); // 세부 내용을 보고 있는 매입매출
+  const [settleTx, setSettleTx] = useState<Transaction | null>(null); // 수금/지급 처리 중인 매입매출
   const [report, setReport] = useState<VatReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -327,7 +331,14 @@ export function TransactionsPage() {
             </thead>
             <tbody>
               {visible.map((tx) => (
-                <tr key={tx.id} className="border-b border-border last:border-0">
+                <tr
+                  key={tx.id}
+                  onClick={() => {
+                    logDebug("Transactions", `상세 열기: tx_id=${tx.id}`);
+                    setDetailTx(tx);
+                  }}
+                  className="border-b border-border last:border-0 cursor-pointer hover:bg-primary/10 transition-colors"
+                >
                   <td className="py-2.5 px-4">
                     <span className={`text-xs px-2 py-1 font-medium ${TX_TYPE_STYLES[tx.type]}`}>
                       {TX_TYPE_LABELS[tx.type]}
@@ -351,7 +362,7 @@ export function TransactionsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 px-2 whitespace-nowrap">
+                  <td className="py-2.5 px-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <Link
                       to={`/transactions/${tx.id}/edit`}
                       aria-label="수정"
@@ -372,6 +383,29 @@ export function TransactionsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {detailTx && (
+        <TransactionDetailModal
+          tx={detailTx}
+          onClose={() => setDetailTx(null)}
+          onSettle={() => {
+            setSettleTx(detailTx);
+          }}
+        />
+      )}
+
+      {settleTx && (
+        <TransactionSettleModal
+          tx={settleTx}
+          onClose={() => setSettleTx(null)}
+          onSuccess={() => {
+            setSettleTx(null);
+            setDetailTx(null);
+            loadTransactions();
+            loadReport();
+          }}
+        />
       )}
 
       {cardDetail && report && <ReportDetailModal kind={cardDetail} report={report} onClose={() => setCardDetail(null)} />}

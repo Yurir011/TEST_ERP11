@@ -1,4 +1,7 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, require_admin
@@ -52,7 +55,9 @@ def _get_project_or_404(project_id: int, db: Session) -> Project:
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
     status_filter: ProjectStatus | None = Query(default=None, alias="status"),
-    q: str | None = Query(default=None, description="프로젝트명 검색어"),
+    q: str | None = Query(default=None, description="프로젝트명/거래처명/메모/폐기 사유 검색어"),
+    date_from: date | None = Query(default=None, description="이 날짜 이후까지 이어지는 프로젝트 (프로젝트 기간과 하루라도 겹치면 포함)"),
+    date_to: date | None = Query(default=None, description="이 날짜 이전에 시작하는 프로젝트 (프로젝트 기간과 하루라도 겹치면 포함)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -60,7 +65,19 @@ def list_projects(
     if status_filter is not None:
         query = query.filter(Project.status == status_filter)
     if q:
-        query = query.filter(Project.name.ilike(f"%{q}%"))
+        like = f"%{q.strip()}%"
+        query = query.outerjoin(Client, Project.client_id == Client.id).filter(
+            or_(Project.name.ilike(like), Project.memo.ilike(like), Project.discard_reason.ilike(like), Client.name.ilike(like))
+        )
+    # 기간 검색: 프로젝트 일정(시작일~종료일)과 검색 기간이 하루라도 겹치면 포함한다.
+    # 시작일만 있으면 그 날부터 끝없이 이어지는 것으로, 종료일만 있으면 처음부터 그 날까지인 것으로 보고, 일정이 전혀 없는 프로젝트는 제외한다.
+    if date_from is not None or date_to is not None:
+        query = query.filter(or_(Project.start_date.isnot(None), Project.end_date.isnot(None)))
+        if date_to is not None:
+            query = query.filter(or_(Project.start_date.is_(None), Project.start_date <= date_to))
+        if date_from is not None:
+            query = query.filter(or_(Project.end_date.is_(None), Project.end_date >= date_from))
+        logger.debug(f"[Projects] 기간 검색: {date_from} ~ {date_to}")
     projects = query.order_by(Project.created_at.desc()).all()
     return [_to_out(p) for p in projects]
 

@@ -40,7 +40,7 @@ def create_todo(payload: TodoCreate, db: Session = Depends(get_db), current_user
         description="메모에서 자동 등록된 일정입니다.",
         start_date=today,
         end_date=today,
-        color="gray",
+        color="grayblue",  # 일정 팔레트에 있는 색만 써야 화면이 깨지지 않는다
         created_by=current_user.id,
     )
     db.add(event)

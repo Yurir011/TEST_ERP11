@@ -90,16 +90,16 @@ export function UsersPage() {
 
       {users !== null && (
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm border-collapse [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-primary/[0.12] [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
             <thead>
-              <tr className="text-left text-text-muted border-b border-border">
-                <th className="py-2.5 px-4 font-medium">사번</th>
-                <th className="py-2.5 px-4 font-medium">이름</th>
-                <th className="py-2.5 px-4 font-medium">이메일</th>
-                <th className="py-2.5 px-4 font-medium">직급</th>
-                <th className="py-2.5 px-4 font-medium">직책</th>
-                <th className="py-2.5 px-4 font-medium">상태</th>
-                <th className="py-2.5 px-4 font-medium w-64"></th>
+              <tr className="text-center bg-primary/[0.06] border-b border-border">
+                <th className="py-3 px-4 font-semibold text-[#3A4F7A] text-center">사번</th>
+                <th className="py-3 px-4 font-semibold text-[#3A4F7A] text-center">이름</th>
+                <th className="py-3 px-4 font-semibold text-[#3A4F7A] text-center">이메일</th>
+                <th className="py-3 px-4 font-semibold text-[#3A4F7A] text-center">직급</th>
+                <th className="py-3 px-4 font-semibold text-[#3A4F7A] text-center">직책</th>
+                <th className="py-3 px-4 font-semibold text-[#3A4F7A] text-center">상태</th>
+                <th className="py-3 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap"></th>
               </tr>
             </thead>
             <tbody>
@@ -109,12 +109,12 @@ export function UsersPage() {
                   onClick={() => setSelectedUser(u)}
                   className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60 transition-colors"
                 >
-                  <td className="py-2.5 px-4">{u.employee_no}</td>
-                  <td className="py-2.5 px-4 font-medium">{u.name}</td>
-                  <td className="py-2.5 px-4 text-text-muted">{u.email}</td>
-                  <td className="py-2.5 px-4">{GRADE_LABELS[u.grade]}</td>
-                  <td className="py-2.5 px-4">{u.title ? TITLE_LABELS[u.title] : "-"}</td>
-                  <td className="py-2.5 px-4">
+                  <td className="py-2.5 px-4 text-center">{u.employee_no}</td>
+                  <td className="py-2.5 px-4 font-medium text-center">{u.name}</td>
+                  <td className="py-2.5 px-4 text-text-muted text-center">{u.email}</td>
+                  <td className="py-2.5 px-4 text-center">{GRADE_LABELS[u.grade]}</td>
+                  <td className="py-2.5 px-4 text-center">{u.title ? TITLE_LABELS[u.title] : "-"}</td>
+                  <td className="py-2.5 px-4 text-center">
                     <span
                       className={`text-xs px-2 py-1 font-medium ${
                         u.is_active ? SOFT_BADGE.green : SOFT_BADGE.red
@@ -123,11 +123,11 @@ export function UsersPage() {
                       {u.is_active ? "활성" : "비활성"}
                     </span>
                   </td>
-                  <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-2 justify-end">
+                  <td className="py-2.5 px-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2 justify-end flex-nowrap">
                       <Link
                         to={`/settings/users/${u.id}/edit`}
-                        className="text-xs text-text-muted hover:text-text border border-border rounded-lg px-2.5 py-1.5"
+                        className="text-xs text-text-muted hover:text-text border border-border rounded-lg px-2.5 py-1.5 whitespace-nowrap shrink-0"
                       >
                         수정
                       </Link>
@@ -137,14 +137,14 @@ export function UsersPage() {
                           setNewPassword("");
                           setActionError(null);
                         }}
-                        className="flex items-center gap-1 text-xs text-text-muted hover:text-text border border-border rounded-lg px-2.5 py-1.5"
+                        className="flex items-center gap-1 text-xs text-text-muted hover:text-text border border-border rounded-lg px-2.5 py-1.5 whitespace-nowrap shrink-0"
                       >
                         <KeyRound size={12} />
                         비밀번호
                       </button>
                       <button
                         onClick={() => handleToggleActive(u)}
-                        className={`flex items-center gap-1 text-xs border rounded-lg px-2.5 py-1.5 ${
+                        className={`flex items-center gap-1 text-xs border rounded-lg px-2.5 py-1.5 whitespace-nowrap shrink-0 ${
                           u.is_active
                             ? "text-danger border-danger/30 hover:bg-red-50"
                             : "text-success border-success/30 hover:bg-tile-green"

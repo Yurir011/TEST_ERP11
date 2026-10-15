@@ -146,6 +146,7 @@ export function PaymentsPage() {
 
   function handleSettleSuccess() {
     setSettleTarget(null);
+    loadPeriodTx(false);
     loadClients();
     loadUnsettledTx();
     loadPayments();
@@ -178,19 +179,23 @@ export function PaymentsPage() {
   const activePeriodKey: "all" | "this" | "last" | "month" =
     periodMode === "all" ? "all" : periodMode === "this" && isThisMonth ? "this" : periodMode === "last" && isLastMonth ? "last" : "month";
 
-  useEffect(() => {
+  function loadPeriodTx(showLoading: boolean) {
     if (outstandingPeriod === "all") {
       setPeriodTx(null);
       return;
     }
     logDebug("Payments", `미수/미지급 월별 조회: ${periodYm.year}-${periodYm.month}`);
-    setPeriodTx(null);
+    if (showLoading) setPeriodTx(null);
     apiGet<Transaction[]>(`/api/transactions?settled=false&year=${periodYm.year}&month=${periodYm.month}`)
       .then(setPeriodTx)
       .catch((err) => {
         logError("Payments", "미수/미지급 월별 조회 실패", err);
         setPeriodTx([]);
       });
+  }
+
+  useEffect(() => {
+    loadPeriodTx(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outstandingPeriod, year, month]);
 
@@ -413,21 +418,7 @@ export function PaymentsPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
-                tab === t.key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
+      <div className="flex items-center justify-end mb-3">
         <div className={`flex items-center gap-2 ${usingCustomRange ? "opacity-40 pointer-events-none" : ""}`}>
           <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded-lg hover:bg-surface text-text-muted">
             <ChevronLeft size={16} />
@@ -450,61 +441,21 @@ export function PaymentsPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-5">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="분류/내용/메모/거래처로 검색"
-            className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-surface"
-          />
-        </div>
-        <label className="text-xs text-text-muted">기간</label>
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface"
-        />
-        <span className="text-text-muted text-sm">~</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface"
-        />
-        {(keyword || usingCustomRange) && (
-          <button
-            onClick={clearFilters}
-            className="flex items-center gap-1 text-xs text-text-muted hover:text-text px-2 py-1.5"
-          >
-            <X size={13} />
-            검색 초기화
-          </button>
-        )}
-        {usingCustomRange && (
-          <span className="text-xs text-tile-blue-fg bg-tile-blue px-2 py-1 rounded-full">
-            기간 검색 중 (월별 보기 대신 적용)
-          </span>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 mb-3">
-        <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit">
+      {/* 왼쪽: 미결제 금액 기간(전체/이번달/지난달), 오른쪽: 기간 검색. 한 줄로 두고 항목이 줄바꿈되지 않게 한다. */}
+      <div className="flex items-center justify-between gap-4 mb-2">
+        <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit shrink-0">
           {(
             [
               ["all", "전체"],
               ["this", "이번달"],
               ["last", "지난달"],
-              ["month", "월별"],
             ] as const
           ).map(([key, label]) => (
             <button
               key={key}
               type="button"
               onClick={() => selectOutstandingPeriod(key)}
-              className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
+              className={`px-4 py-1.5 rounded-md text-sm whitespace-nowrap transition-colors ${
                 activePeriodKey === key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
               }`}
             >
@@ -512,16 +463,56 @@ export function PaymentsPage() {
             </button>
           ))}
         </div>
-        <p className="text-xs text-text-muted">
-          {outstandingPeriod === "all" ? "지금까지 쌓인 모든 미결제 금액" : `${periodYm.year}년 ${periodYm.month}월에 발생한 미결제 금액 (월별은 위의 월 선택을 따릅니다)`}
-        </p>
+
+        <div className="flex items-center justify-end gap-2 min-w-0">
+          <div className="relative w-60 min-w-[140px] shrink">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="분류/내용/메모/거래처로 검색"
+              className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-surface"
+            />
+          </div>
+          <label className="text-xs text-text-muted whitespace-nowrap shrink-0">기간</label>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface shrink-0"
+          />
+          <span className="text-text-muted text-sm shrink-0">~</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface shrink-0"
+          />
+          {(keyword || usingCustomRange) && (
+            <button
+              onClick={clearFilters}
+              title="검색 초기화"
+              aria-label="검색 초기화"
+              className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface shrink-0"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
       </div>
+      <p className="text-xs text-text-muted mb-3">
+        {usingCustomRange
+          ? "기간 검색 중이라 입출금 목록은 입력한 기간으로 조회됩니다."
+          : outstandingPeriod === "all"
+            ? "지금까지 쌓인 모든 미결제 금액"
+            : `${periodYm.year}년 ${periodYm.month}월에 발생한 미결제 금액 (위의 월 선택을 따릅니다)`}
+      </p>
 
       <section className="grid grid-cols-3 gap-4 mb-6">
         {(
           [
-            { kind: "receivable", title: "미수금", empty: "미수금", rows: receivableRows, total: receivableTotal, action: "수금 처리", style: "hover:bg-primary hover:border-primary hover:text-white", totalClass: "text-success" },
-            { kind: "payable", title: "미지급금", empty: "미지급금", rows: payableRows, total: payableTotal, action: "지급 처리", style: "hover:bg-danger hover:border-danger hover:text-white", totalClass: "text-notify" },
+            { kind: "receivable", title: "미수금", empty: "미수금", rows: receivableRows, total: receivableTotal, action: "수금 처리", style: "text-primary border-primary/30 hover:bg-tile-blue", totalClass: "text-success" },
+            { kind: "payable", title: "미지급금", empty: "미지급금", rows: payableRows, total: payableTotal, action: "지급 처리", style: "text-danger border-danger/30 hover:bg-red-50", totalClass: "text-notify" },
           ] as const
         ).map((card) => (
           <div key={card.kind} className="bg-surface border border-border rounded-2xl p-5">
@@ -554,7 +545,7 @@ export function PaymentsPage() {
                     </button>
                     <button
                       onClick={() => setSettleTarget({ kind: card.kind, client: c })}
-                      className={`text-[11px] font-medium border border-border bg-surface text-text rounded-full px-2.5 py-1 shrink-0 transition-colors ${card.style}`}
+                      className={`text-[11px] font-medium border bg-surface rounded-full px-2.5 py-1 shrink-0 transition-colors ${card.style}`}
                     >
                       {card.action}
                     </button>
@@ -599,6 +590,20 @@ export function PaymentsPage() {
         </div>
       </section>
 
+      <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit mb-4">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
+              tab === t.key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
       {payments !== null && payments.length === 0 && (
@@ -616,14 +621,14 @@ export function PaymentsPage() {
           <table className="w-full text-sm [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-text/[0.07] [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
             <thead>
               <tr className="text-center text-text-muted border-b border-border">
-                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">구분</th>
-                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">날짜</th>
-                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">분류</th>
+                <th className="py-2.5 px-6 font-medium w-px whitespace-nowrap">구분</th>
+                <th className="py-2.5 px-8 font-medium w-px whitespace-nowrap">날짜</th>
+                <th className="py-2.5 px-8 font-medium w-px whitespace-nowrap">분류</th>
                 <th className="py-2.5 px-4 font-medium">내용</th>
-                <th className="py-2.5 px-4 font-medium">거래처</th>
-                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">수단</th>
-                <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">증빙발행</th>
-                <th className="py-2.5 px-4 font-medium text-right w-px whitespace-nowrap">금액</th>
+                <th className="py-2.5 px-8 font-medium w-px whitespace-nowrap">거래처</th>
+                <th className="py-2.5 px-6 font-medium w-px whitespace-nowrap">수단</th>
+                <th className="py-2.5 px-6 font-medium w-px whitespace-nowrap">증빙발행</th>
+                <th className="py-2.5 px-8 font-medium text-right w-px whitespace-nowrap border-r border-text/[0.07]">금액</th>
                 <th className="w-24"></th>
               </tr>
             </thead>
@@ -634,12 +639,12 @@ export function PaymentsPage() {
                   onClick={() => setSelectedPayment(p)}
                   className="cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
                 >
-                  <td className="text-center py-2.5 px-4 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-6 whitespace-nowrap">
                     <span className={`text-xs px-2 py-1 font-medium ${PAYMENT_TYPE_STYLES[p.type]}`}>
                       {PAYMENT_TYPE_LABELS[p.type]}
                     </span>
                   </td>
-                  <td className="text-center py-2.5 px-4 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-8 whitespace-nowrap">
                     {p.payment_date}
                     {p.occurred_date && (
                       <span className="block text-xs text-text-muted">
@@ -647,14 +652,14 @@ export function PaymentsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="text-center py-2.5 px-4 whitespace-nowrap">{p.category}</td>
+                  <td className="text-center py-2.5 px-8 whitespace-nowrap">{p.category}</td>
                   <td className="text-center py-2.5 px-4">{p.description}</td>
-                  <td className="text-center py-2.5 px-4">{p.client_name ?? <span className="text-text-muted">-</span>}</td>
-                  <td className="text-center py-2.5 px-4 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-8 whitespace-nowrap">{p.client_name ?? <span className="text-text-muted">-</span>}</td>
+                  <td className="text-center py-2.5 px-6 whitespace-nowrap">
                     {paymentMethodDetailLabel(p)}
                     {p.card_pending && <span className={`ml-1.5 text-xs px-2 py-0.5 font-medium ${SOFT_BADGE.orange}`}>결제예정</span>}
                   </td>
-                  <td className="text-center py-2.5 px-4 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-6 whitespace-nowrap">
                     {p.proof_type ? (
                       <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>
                         {p.proof_type === "other" && p.proof_type_detail ? p.proof_type_detail : PROOF_TYPE_LABELS[p.proof_type]}
@@ -665,7 +670,7 @@ export function PaymentsPage() {
                       <span className="text-xs text-text-muted">-</span>
                     )}
                   </td>
-                  <td className="text-center py-2.5 px-4 text-right font-medium whitespace-nowrap">{formatCurrency(p.amount)}</td>
+                  <td className="py-2.5 px-8 text-right font-medium whitespace-nowrap border-r border-text/[0.07]">{formatCurrency(p.amount)}</td>
                   <td className="py-2.5 px-2">
                     <div className="flex items-center justify-end gap-1">
                       {p.has_receipt && (
@@ -757,6 +762,13 @@ export function PaymentsPage() {
           kind={settleTarget.kind}
           client={settleTarget.client}
           occurredLabel={occurredLabel(settleTarget.kind, settleTarget.client.id)}
+          transactions={
+            outstandingPeriod === "month"
+              ? (periodTx ?? []).filter(
+                  (t) => t.client_id === settleTarget.client.id && t.type === (settleTarget.kind === "receivable" ? "sales" : "purchase")
+                )
+              : undefined
+          }
           onClose={() => setSettleTarget(null)}
           onSuccess={handleSettleSuccess}
         />

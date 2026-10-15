@@ -1,4 +1,4 @@
-import { FolderKanban, Plus, Search } from "lucide-react";
+import { FolderKanban, Plus, Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -32,13 +32,18 @@ export function ProjectsPage() {
   const [allProjects, setAllProjects] = useState<Project[] | null>(null);
   const [tab, setTab] = useState<ProjectStatus | "all">("all");
   const [query, setQuery] = useState("");
+  // 기간 검색: 프로젝트 일정(시작일~종료일)과 하루라도 겹치는 프로젝트만 보여준다.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   function loadProjects(status: ProjectStatus | "all", q: string) {
-    logDebug("Projects", `목록 조회: status=${status}, q=${q}`);
+    logDebug("Projects", `목록 조회: status=${status}, q=${q}, 기간=${dateFrom || "-"}~${dateTo || "-"}`);
     const params = new URLSearchParams();
     if (status !== "all") params.set("status", status);
     if (q) params.set("q", q);
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
     const path = params.toString() ? `/api/projects?${params.toString()}` : "/api/projects";
     apiGet<Project[]>(path)
       // "전체" 탭에서는 폐기된 프로젝트를 숨기고, "폐기" 탭에서만 보여준다.
@@ -53,7 +58,7 @@ export function ProjectsPage() {
     const timer = setTimeout(() => loadProjects(tab, query), 250);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, query]);
+  }, [tab, query, dateFrom, dateTo]);
 
   useEffect(() => {
     logDebug("Projects", "프로젝트 진행 현황(단계별 보드) 조회 시작");
@@ -87,13 +92,13 @@ export function ProjectsPage() {
         )}
       </section>
 
-      <div className="flex items-center gap-3 mb-5">
-        <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit">
+      <div className="flex items-center justify-between gap-4 mb-5">
+        <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit shrink-0">
           {TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
+              className={`px-4 py-1.5 rounded-md text-sm whitespace-nowrap transition-colors ${
                 tab === t.key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
               }`}
             >
@@ -102,16 +107,55 @@ export function ProjectsPage() {
           ))}
         </div>
 
-        <div className="relative flex-1 max-w-xs">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+        <div className="flex items-center justify-end gap-2 min-w-0">
+          <div className="relative w-64 min-w-[140px] shrink">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="프로젝트명/거래처/메모로 검색"
+              className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-surface"
+            />
+          </div>
+          <label className="text-xs text-text-muted whitespace-nowrap shrink-0" title="프로젝트 일정과 하루라도 겹치는 프로젝트를 찾습니다">
+            기간
+          </label>
           <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="프로젝트명 검색"
-            className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-surface"
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface shrink-0"
           />
+          <span className="text-text-muted text-sm shrink-0">~</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface shrink-0"
+          />
+          {(query || dateFrom || dateTo) && (
+            <button
+              onClick={() => {
+                setQuery("");
+                setDateFrom("");
+                setDateTo("");
+              }}
+              title="검색 초기화"
+              aria-label="검색 초기화"
+              className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface shrink-0"
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
       </div>
+      {(dateFrom || dateTo) && (
+        <p className="text-xs text-text-muted mb-4 -mt-3 text-right">
+          일정(시작일~종료일)이 등록된 프로젝트 중 입력한 기간과 하루라도 겹치는 프로젝트만 표시됩니다.
+        </p>
+      )}
 
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
       {projects === null && !error && <p className="text-sm text-text-muted">불러오는 중...</p>}
@@ -119,7 +163,7 @@ export function ProjectsPage() {
       {projects !== null && projects.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <FolderKanban className="mx-auto mb-2 text-text-muted" size={24} />
-          <p className="text-sm text-text-muted">{query ? "검색 결과가 없습니다." : "해당하는 프로젝트가 없습니다."}</p>
+          <p className="text-sm text-text-muted">{query || dateFrom || dateTo ? "검색 결과가 없습니다." : "해당하는 프로젝트가 없습니다."}</p>
         </div>
       )}
 

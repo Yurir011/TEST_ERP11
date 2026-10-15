@@ -9,7 +9,7 @@ import { formatTime } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "../attendance/types";
 import { toISODate } from "../schedule/dateUtils";
-import { EVENT_COLOR_STYLES, type ScheduleEvent } from "../schedule/types";
+import { eventColorStyle, type ScheduleEvent } from "../schedule/types";
 import { useApprovalQueue } from "./approvalQueue";
 import { MobileCard } from "./MobileLayout";
 import { setForcePc } from "./mobileMode";
@@ -175,7 +175,7 @@ export function MobileHome() {
             <ul className="space-y-1.5">
               {events.slice(0, 4).map((ev) => (
                 <li key={ev.id} className="flex items-center gap-2 text-sm">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: EVENT_COLOR_STYLES[ev.color].fg }} />
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: eventColorStyle(ev.color).fg }} />
                   <span className={`truncate ${ev.is_completed ? "line-through text-text-muted" : ""}`}>{ev.title}</span>
                 </li>
               ))}

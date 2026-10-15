@@ -36,6 +36,11 @@ export const EVENT_COLOR_STYLES: Record<EventColor, EventColorStyle> = {
   grayteal: { bg: "#D4E0DE", fg: "#1F3D37" },
 };
 
+// 팔레트에 없는 색 값(예전 데이터 등)이 들어 있어도 화면이 깨지지 않도록 기본 색으로 대체한다.
+export function eventColorStyle(color: string): EventColorStyle {
+  return EVENT_COLOR_STYLES[color as EventColor] ?? EVENT_COLOR_STYLES.grayblue;
+}
+
 export interface ScheduleEvent {
   id: number;
   title: string;

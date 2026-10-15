@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { Client } from "../clients/types";
+import type { Transaction } from "../transactions/types";
 import { ApiError, apiPost } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
@@ -22,12 +23,19 @@ interface SettleModalProps {
   kind: "receivable" | "payable";
   client: Client;
   occurredLabel?: string | null;
+  // 월별 보기에서 처리할 때 넘겨받는 그 달의 미결제 매입매출. 있으면 이 내역들을 건별로 결제완료 처리하고, 없으면 거래처 잔액만 줄인다.
+  transactions?: Transaction[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export function SettleModal({ kind, client, occurredLabel, onClose, onSuccess }: SettleModalProps) {
-  const outstanding = kind === "receivable" ? client.receivable_amount : client.payable_amount;
+export function SettleModal({ kind, client, occurredLabel, transactions, onClose, onSuccess }: SettleModalProps) {
+  const byTransactions = transactions !== undefined && transactions.length > 0;
+  const outstanding = byTransactions
+    ? transactions.reduce((sum, t) => sum + t.total_amount, 0)
+    : kind === "receivable"
+      ? client.receivable_amount
+      : client.payable_amount;
   const title = kind === "receivable" ? "수금 완료 처리" : "지급 완료 처리";
   const actionLabel = kind === "receivable" ? "수금 완료" : "지급 완료";
 
@@ -60,7 +68,29 @@ export function SettleModal({ kind, client, occurredLabel, onClose, onSuccess }:
 
     setIsSubmitting(true);
     try {
-      logDebug("Payments", `${actionLabel} 처리 시도: client_id=${client.id}, amount=${amountNum}`);
+      logDebug("Payments", `${actionLabel} 처리 시도: client_id=${client.id}, amount=${amountNum}, 건별=${byTransactions}`);
+      if (byTransactions) {
+        // 선택한 달에 발생한 미결제 매입매출을 각각 결제완료로 바꾼다 (건마다 입출금 내역이 하나씩 기록된다).
+        for (const t of transactions!) {
+          await apiPost<Payment>("/api/payments", {
+            type: kind === "receivable" ? "deposit" : "withdrawal",
+            payment_date: paymentDate,
+            category: kind === "receivable" ? "외상매출금" : "미지급금",
+            description: `${t.item_name} ${kind === "receivable" ? "수금" : "지급"}`,
+            amount: t.total_amount,
+            method,
+            client_id: client.id,
+            memo: memo || null,
+            proof_type: null,
+            proof_type_detail: null,
+            card_type: method === "corporate_card" ? cardType : null,
+            bank_type: method === "bank_transfer" ? bankType : null,
+            transaction_id: t.id,
+          });
+        }
+        onSuccess();
+        return;
+      }
       await apiPost<Payment>("/api/payments", {
         type: kind === "receivable" ? "deposit" : "withdrawal",
         payment_date: paymentDate,
@@ -97,12 +127,18 @@ export function SettleModal({ kind, client, occurredLabel, onClose, onSuccess }:
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-text-muted mb-1.5">금액</label>
-            <NumberInput
-              required
-              value={amount}
-              onChange={setAmount}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-            />
+            {byTransactions ? (
+              <p className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-bg tabular-nums">
+                {formatCurrency(outstanding)} <span className="text-xs text-text-muted">· 미결제 {transactions!.length}건을 함께 처리</span>
+              </p>
+            ) : (
+              <NumberInput
+                required
+                value={amount}
+                onChange={setAmount}
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              />
+            )}
           </div>
           <div>
             <label className="block text-xs text-text-muted mb-1.5">날짜</label>

@@ -5,7 +5,7 @@ import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { getMonthGridDays, isSameDay, isSameMonth, toISODate, WEEKDAY_LABELS } from "../schedule/dateUtils";
 import { getHolidayMap } from "../schedule/holidays";
-import { EVENT_COLOR_STYLES, type ScheduleEvent } from "../schedule/types";
+import { eventColorStyle, type ScheduleEvent } from "../schedule/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
 
 export function MobileSchedulePage() {
@@ -165,7 +165,7 @@ export function MobileSchedulePage() {
                     </span>
                     <span className="flex gap-0.5 h-1.5 mt-0.5">
                       {dayList.slice(0, 3).map((ev) => (
-                        <span key={ev.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: EVENT_COLOR_STYLES[ev.color].fg }} />
+                        <span key={ev.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: eventColorStyle(ev.color).fg }} />
                       ))}
                     </span>
                   </button>
@@ -231,7 +231,7 @@ export function MobileSchedulePage() {
                   >
                     {ev.is_completed && <Check size={14} />}
                   </button>
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: EVENT_COLOR_STYLES[ev.color].fg }} />
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: eventColorStyle(ev.color).fg }} />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm ${ev.is_completed ? "line-through text-text-muted" : ""}`}>
                       {ev.is_lunar && "[음] "}

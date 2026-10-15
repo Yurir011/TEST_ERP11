@@ -89,10 +89,10 @@ export function OutstandingDetailModal({ kind, client, period, onClose, onSettle
               logDebug("Payments", `${label} 상세에서 ${settleLabel} 클릭: client_id=${client.id}`);
               onSettle();
             }}
-            className={`text-xs font-medium border border-border bg-surface text-text rounded-full px-3.5 py-1.5 transition-colors ${
+            className={`text-xs font-medium border bg-surface rounded-full px-3.5 py-1.5 transition-colors ${
               kind === "receivable"
-                ? "hover:bg-primary hover:border-primary hover:text-white"
-                : "hover:bg-danger hover:border-danger hover:text-white"
+                ? "text-primary border-primary/30 hover:bg-tile-blue"
+                : "text-danger border-danger/30 hover:bg-red-50"
             }`}
           >
             {settleLabel}
