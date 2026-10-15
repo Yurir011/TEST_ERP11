@@ -76,10 +76,86 @@ def _fit_to_page_width(ws) -> None:
     ws.page_setup.orientation = "portrait"
     ws.page_setup.scale = None
     ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0  # 높이는 자동 (폭 기준으로만 맞춘다)
+    ws.page_setup.fitToHeight = 1  # 줄바꿈으로 내용이 길어져도 A4 한 장 안에 배율로 맞춘다 (용지/폭은 그대로)
     ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
     ws.print_options.horizontalCentered = True
     logger.debug(f"[ProjectDocumentTemplate] 인쇄 영역 지정: A1:{get_column_letter(last_col)}{last_row}, 폭 1장에 맞춤")
+
+
+def _text_units(text: str) -> float:
+    """엑셀 열 너비 단위로 본 글자 길이. 한글 등 넓은 글자는 2, 영문/숫자는 1로 센다."""
+    return sum(2.0 if ord(ch) > 0x2E80 else 1.0 for ch in text)
+
+
+def _merged_width(ws, ref: str) -> float:
+    """셀이 병합된 범위에 속하면 그 범위 전체 열 너비 합을, 아니면 그 열 하나의 너비를 돌려준다 (엑셀 열 너비 단위)."""
+    cell = ws[ref]
+    min_col = max_col = cell.column
+    for rng in ws.merged_cells.ranges:
+        if cell.coordinate in rng:
+            min_col, max_col = rng.min_col, rng.max_col
+            break
+    default_width = ws.sheet_format.defaultColWidth or 8.43
+    total = 0.0
+    for col in range(min_col, max_col + 1):
+        dim = ws.column_dimensions.get(get_column_letter(col))
+        total += dim.width if dim is not None and dim.width else default_width
+    return total
+
+
+def _wrap_rows(ws, rows: range, columns: tuple[str, ...]) -> None:
+    """품목 행의 내용/비고 칸을 자동 줄바꿈으로 바꾸고, 줄 수에 맞춰 행 높이를 늘린다.
+    병합된 칸은 엑셀이 높이를 자동으로 맞춰 주지 않으므로 글자 수로 직접 계산한다. 용지/폭은 건드리지 않는다."""
+    for row in rows:
+        max_lines = 1
+        font_size = 10.0
+        for col in columns:
+            cell = ws[f"{col}{row}"]
+            a = cell.alignment
+            cell.alignment = Alignment(
+                horizontal=a.horizontal, vertical="center", wrap_text=True, shrink_to_fit=False, indent=a.indent
+            )
+            text = str(cell.value) if cell.value is not None else ""
+            if not text:
+                continue
+            font_size = float(cell.font.sz or 10)
+            usable = max(_merged_width(ws, f"{col}{row}") - 1.5, 4.0)  # 좌우 여백만큼 덜어 계산
+            lines = 0
+            for part in text.split("\n"):
+                lines += max(1, -(-int(_text_units(part) * 10) // int(usable * 10)))  # 올림 나눗셈
+            max_lines = max(max_lines, lines)
+        base = ws.row_dimensions[row].height or 20.25
+        ws.row_dimensions[row].height = max(base, max_lines * font_size * 1.45 + 5)
+
+
+def _wrap_block(ws, ref: str, text_rows: range) -> None:
+    """여러 행에 걸쳐 병합된 설명 칸(REMARK 등)을 자동 줄바꿈하고, 글이 칸보다 길면 마지막 행 높이를 늘린다."""
+    cell = ws[ref]
+    a = cell.alignment
+    cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True, shrink_to_fit=False, indent=a.indent)
+    text = str(cell.value) if cell.value is not None else ""
+    if not text:
+        return
+    font_size = float(cell.font.sz or 10)
+    usable = max(_merged_width(ws, ref) - 2.0, 4.0)
+    lines = sum(max(1, -(-int(_text_units(part) * 10) // int(usable * 10))) for part in text.split("\n"))
+    needed = lines * font_size * 1.45 + 6
+    available = sum((ws.row_dimensions[r].height or 20.25) for r in text_rows)
+    if needed > available:
+        last = text_rows[-1]
+        ws.row_dimensions[last].height = (ws.row_dimensions[last].height or 20.25) + (needed - available)
+
+
+def _shrink_cells(ws, refs) -> None:
+    """칸 폭보다 긴 글자는 줄바꿈 없이 글자 크기를 줄여서 칸 안에 맞춘다 (세금계산서처럼 양식 칸 크기가 고정인 서류용)."""
+    for ref in refs:
+        cell = ws[ref]
+        if type(cell).__name__ == "MergedCell":
+            continue  # 병합된 칸의 오른쪽 셀은 서식을 바꿀 수 없다
+        a = cell.alignment
+        cell.alignment = Alignment(
+            horizontal=a.horizontal, vertical=a.vertical or "center", wrap_text=False, shrink_to_fit=True, indent=a.indent
+        )
 
 
 @dataclass(frozen=True)
@@ -248,6 +324,12 @@ def _fill_tax_invoice_template(doc: ProjectDocument) -> str:
     ws["F16" if paid else "O16"].number_format = "#,##0"
     ws["P15"] = f"이 금액을 ( {doc.purpose_type} ) 함"
 
+    # 칸 크기가 고정인 양식이라 줄바꿈 대신 글자 크기를 줄여서 칸 안에 맞춘다 (용지는 A5 가로 그대로).
+    shrink_refs = [*_SUPPLIER_CELLS.values(), *_RECIPIENT_CELLS.values()]
+    for row in TAX_INVOICE_ITEM_ROWS:
+        shrink_refs += [f"D{row}", f"I{row}"]
+    _shrink_cells(ws, shrink_refs)
+
     # 양식 맨 아래의 "공급자 정보만 기재되어 있습니다" 안내 문구는 채워진 문서에는 필요 없어 지우고, 출력 범위에서도 뺀다.
     ws["A18"] = None
     ws.print_area = "A1:S16"
@@ -343,6 +425,9 @@ def _fill_purchase_order_template(doc: ProjectDocument) -> str:
     c.alignment = Alignment(horizontal=c.alignment.horizontal, vertical=c.alignment.vertical, shrink_to_fit=True)
 
     ws[PO_REMARK_CELL] = doc.remark or None
+    _wrap_rows(ws, range(PO_ITEM_START_ROW, PO_ITEM_END_ROW + 1), ("B", "H"))
+    _wrap_block(ws, PO_REMARK_CELL, range(31, 35))
+    _shrink_cells(ws, (PO_CLIENT_CELL, PO_MANAGER_CELL))
     _fit_to_page_width(ws)
 
     os.makedirs(settings.project_documents_dir, exist_ok=True)
@@ -421,6 +506,10 @@ def fill_project_document_template(doc: ProjectDocument) -> str:
         )
         _set_horizontal(cell, "right")
     ws[layout.total_words_cell] = CURRENCY_SUFFIX_WORD[doc.currency]
+    # 내용/비고가 길면 줄이 자동으로 바뀌고 행 높이가 늘어난다.
+    _wrap_rows(ws, range(layout.item_start_row, layout.item_end_row + 1), ("B", "I"))
+    # 거래처/담당자처럼 짧은 칸에 긴 글자가 들어오면 칸 안에서 글자 크기를 줄인다.
+    _shrink_cells(ws, (layout.client_cell, layout.manager_cell))
     # "일금 ___ 원정" 칸(C열)은 한글 숫자 서식이라 금액이 크면 '###'으로 깨진다. 칸에 맞춰 글자를 줄여 항상 보이게 한다.
     words = ws[f"C{ws[layout.top_total_cell].row}"]
     words.alignment = Alignment(horizontal=words.alignment.horizontal, vertical=words.alignment.vertical, shrink_to_fit=True)

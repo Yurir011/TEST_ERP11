@@ -191,6 +191,14 @@ export function ProjectDocumentFormPage() {
     }
   }
 
+  // 품목 금액 = 수량 x 단가 (원 단위 반올림), 부가세 10%. 서버가 문서를 만들 때 쓰는 계산과 같다.
+  const symbol = DOC_CURRENCY_SYMBOLS[currency];
+  const formatMoney = (n: number) => `${symbol}${n.toLocaleString()}`;
+  const itemAmount = (it: ProjectDocumentItemFormValues) => Math.round((Number(it.quantity) || 0) * (Number(it.unit_price) || 0));
+  const subtotalAmount = items.reduce((sum, it) => sum + itemAmount(it), 0);
+  const vatAmount = Math.round(subtotalAmount * 0.1);
+  const totalAmount = subtotalAmount + vatAmount;
+
   function addItem() {
     setItems((prev) => (prev.length >= MAX_PROJECT_DOC_ITEMS ? prev : [...prev, { ...EMPTY_PROJECT_DOC_ITEM }]));
   }
@@ -714,9 +722,28 @@ export function ProjectDocumentFormPage() {
                       className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
                     />
                   </div>
+                  <div className="col-span-2 flex items-center justify-between text-xs pt-1">
+                    <span className="text-text-muted">금액 (수량 × 단가)</span>
+                    <span className="font-medium tabular-nums">{formatMoney(itemAmount(item))}</span>
+                  </div>
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-border bg-bg px-4 py-3 space-y-1.5 text-sm" aria-label="총금액">
+            <div className="flex items-center justify-between">
+              <span className="text-text-muted">공급가액</span>
+              <span className="tabular-nums">{formatMoney(subtotalAmount)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-text-muted">부가세 (10%)</span>
+              <span className="tabular-nums">{formatMoney(vatAmount)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
+              <span className="font-semibold">총금액 (합계)</span>
+              <span className="text-base font-semibold tabular-nums text-primary">{formatMoney(totalAmount)}</span>
+            </div>
           </div>
         </div>
 

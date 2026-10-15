@@ -183,19 +183,31 @@ def generate_proposal_pdf(proposal: Proposal) -> bytes:
     )
 
     # 내용 칸은 내용이 짧아도 최소 12줄 높이를 확보한다 (내용이 더 길면 내용에 맞춰 늘어난다).
+    # 용지는 항상 A4이고 폭은 그대로 두며, 내용이 길면 줄이 자동으로 바뀌고 한 장을 넘으면 다음 장으로 이어진다.
+    # (한 칸에 통째로 넣으면 한 장보다 긴 내용이 들어갈 수 없어서, 줄 단위로 행을 나눠 표가 페이지 사이에서 갈라지게 한다.)
     content_padding_v = 14
-    content_paragraph = Paragraph(_multiline(proposal.content), content_style)
-    _, content_height = content_paragraph.wrap(pdf.width - 24, pdf.height)
+    line_paragraphs = [Paragraph(escape(line) if line.strip() else "&nbsp;", content_style) for line in proposal.content.split("\n")]
+    content_heights = [p.wrap(pdf.width - 24, pdf.height)[1] for p in line_paragraphs]
     min_content_height = CONTENT_MIN_LINES * content_style.leading + content_padding_v * 2
-    content_row_height = max(content_height + content_padding_v * 2, min_content_height)
-    content_box = Table([[content_paragraph]], colWidths=[pdf.width], rowHeights=[content_row_height])
+    rows = [[p] for p in line_paragraphs]
+    row_heights = list(content_heights)
+    shortage = min_content_height - (sum(content_heights) + content_padding_v * 2)
+    if shortage > 0:
+        rows.append([Paragraph("&nbsp;", content_style)])  # 내용이 짧아도 최소 12줄 높이를 확보한다
+        row_heights.append(shortage + content_style.leading)
+    # 첫 행/마지막 행은 위/아래 여백(content_padding_v)만큼 높이를 더해, 글자가 다음 행과 겹치지 않게 한다.
+    row_heights[0] += content_padding_v
+    row_heights[-1] += content_padding_v
+    content_box = Table(rows, colWidths=[pdf.width], rowHeights=row_heights, splitByRow=1)
     content_box.setStyle(
         TableStyle(
             [
                 ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#111111")),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("TOPPADDING", (0, 0), (-1, -1), content_padding_v),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), content_padding_v),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, 0), content_padding_v),
+                ("BOTTOMPADDING", (0, -1), (-1, -1), content_padding_v),
                 ("LEFTPADDING", (0, 0), (-1, -1), 12),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 12),
             ]
