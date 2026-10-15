@@ -590,7 +590,7 @@ export function PaymentsPage() {
           {/* 표 스타일: 가로선 없이 연한 세로선 + 줄무늬 (첫 열 앞, 버튼 열 앞은 선 제외) */}
           <table className="w-full text-sm [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-text/[0.07] [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
             <thead>
-              <tr className="text-left text-text-muted border-b border-border">
+              <tr className="text-center text-text-muted border-b border-border">
                 <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">구분</th>
                 <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">날짜</th>
                 <th className="py-2.5 px-4 font-medium w-px whitespace-nowrap">분류</th>
@@ -609,12 +609,12 @@ export function PaymentsPage() {
                   onClick={() => setSelectedPayment(p)}
                   className="cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
                 >
-                  <td className="py-2.5 px-4 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-4 whitespace-nowrap">
                     <span className={`text-xs px-2 py-1 font-medium ${PAYMENT_TYPE_STYLES[p.type]}`}>
                       {PAYMENT_TYPE_LABELS[p.type]}
                     </span>
                   </td>
-                  <td className="py-2.5 px-4 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-4 whitespace-nowrap">
                     {p.payment_date}
                     {p.occurred_date && (
                       <span className="block text-xs text-text-muted">
@@ -622,14 +622,14 @@ export function PaymentsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 px-4 whitespace-nowrap">{p.category}</td>
-                  <td className="py-2.5 px-4">{p.description}</td>
-                  <td className="py-2.5 px-4">{p.client_name ?? <span className="text-text-muted">-</span>}</td>
-                  <td className="py-2.5 px-4 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-4 whitespace-nowrap">{p.category}</td>
+                  <td className="text-center py-2.5 px-4">{p.description}</td>
+                  <td className="text-center py-2.5 px-4">{p.client_name ?? <span className="text-text-muted">-</span>}</td>
+                  <td className="text-center py-2.5 px-4 whitespace-nowrap">
                     {paymentMethodDetailLabel(p)}
                     {p.card_pending && <span className={`ml-1.5 text-xs px-2 py-0.5 font-medium ${SOFT_BADGE.orange}`}>결제예정</span>}
                   </td>
-                  <td className="py-2.5 px-4 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-4 whitespace-nowrap">
                     {p.proof_type ? (
                       <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>
                         {p.proof_type === "other" && p.proof_type_detail ? p.proof_type_detail : PROOF_TYPE_LABELS[p.proof_type]}
@@ -640,7 +640,7 @@ export function PaymentsPage() {
                       <span className="text-xs text-text-muted">-</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap">{formatCurrency(p.amount)}</td>
+                  <td className="text-center py-2.5 px-4 text-right font-medium whitespace-nowrap">{formatCurrency(p.amount)}</td>
                   <td className="py-2.5 px-2">
                     <div className="flex items-center justify-end gap-1">
                       {p.has_receipt && (
