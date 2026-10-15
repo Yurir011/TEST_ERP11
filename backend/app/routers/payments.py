@@ -111,10 +111,13 @@ def _build_payment_query(
     date_from: date | None,
     date_to: date | None,
     q: str | None,
+    card_pending: bool | None = None,
 ):
     query = db.query(Payment).options(joinedload(Payment.client), joinedload(Payment.creator))
     if type_filter is not None:
         query = query.filter(Payment.type == type_filter)
+    if card_pending is not None:
+        query = query.filter(Payment.card_pending.is_(card_pending))
 
     # 기간(date_from/date_to) 지정이 있으면 그걸 우선하고, 없을 때만 기존 연/월 필터를 적용한다.
     if date_from is not None or date_to is not None:
@@ -150,11 +153,12 @@ def list_payments(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     q: str | None = Query(default=None, description="분류/내용/메모/거래처명 검색어"),
+    card_pending: bool | None = Query(default=None, description="true이면 카드 결제일 전(결제예정) 사용내역만"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
     generate_recurring_payments(db)  # 도래한 정기 자동이체를 먼저 기록한다
-    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q).all()
+    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q, card_pending).all()
     occurred = _occurred_dates(db, [p.id for p in payments])
     return [_to_out(p, occurred.get(p.id)) for p in payments]
 

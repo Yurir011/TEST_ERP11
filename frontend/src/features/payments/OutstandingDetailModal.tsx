@@ -17,7 +17,7 @@ interface OutstandingDetailModalProps {
 // 미수금(매출)/미지급금(매입) 잔액을 이루는 미결제 매입매출 내역을 보여준다.
 export function OutstandingDetailModal({ kind, client, period, onClose, onSettle }:OutstandingDetailModalProps) {
   const label = kind === "receivable" ? "미수금" : "미지급금";
-  const settleLabel = kind === "receivable" ? "수금완료" : "지급완료";
+  const settleLabel = kind === "receivable" ? "수금 처리" : "지급 처리";
   const txType =kind === "receivable" ? "sales" : "purchase";
   const outstanding = kind === "receivable" ? client.receivable_amount : client.payable_amount;
 
@@ -89,11 +89,11 @@ export function OutstandingDetailModal({ kind, client, period, onClose, onSettle
               logDebug("Payments", `${label} 상세에서 ${settleLabel} 클릭: client_id=${client.id}`);
               onSettle();
             }}
-            className={
+            className={`text-xs font-medium border border-border bg-surface text-text rounded-full px-3.5 py-1.5 transition-colors ${
               kind === "receivable"
-                ? "text-sm text-primary border border-primary/30 rounded-lg px-4 py-2 hover:bg-tile-blue"
-                : "text-sm text-danger border border-danger/30 rounded-lg px-4 py-2 hover:bg-red-50"
-            }
+                ? "hover:bg-primary hover:border-primary hover:text-white"
+                : "hover:bg-danger hover:border-danger hover:text-white"
+            }`}
           >
             {settleLabel}
           </button>
