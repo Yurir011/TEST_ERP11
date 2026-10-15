@@ -10,7 +10,7 @@ from app.logging_config import get_logger
 from app.models.schedule import ScheduleEvent
 from app.models.todo import TodoItem
 from app.models.user import User
-from app.schemas.todo import TodoCreate, TodoOut
+from app.schemas.todo import TodoColorUpdate, TodoCreate, TodoOut
 
 router = APIRouter(prefix="/api/todos", tags=["todos"])
 logger = get_logger("Todos")
@@ -34,10 +34,10 @@ def create_todo(payload: TodoCreate, db: Session = Depends(get_db), current_user
     logger.debug(f"[Todos] 추가: user_id={current_user.id}")
     today = date.today()
 
-    # 오늘의 할일에 추가하면 일정관리 캘린더에도 같은 날짜로 함께 기록한다.
+    # 메모에 추가하면 일정관리 캘린더에도 같은 날짜로 함께 기록한다.
     event = ScheduleEvent(
         title=payload.content,
-        description="오늘의 할일에서 자동 등록된 일정입니다.",
+        description="메모에서 자동 등록된 일정입니다.",
         start_date=today,
         end_date=today,
         color="gray",
@@ -71,6 +71,20 @@ def toggle_todo(todo_id: int, db: Session = Depends(get_db), current_user: User 
 
     db.commit()
     db.refresh(todo)
+    return todo
+
+
+@router.put("/{todo_id}/color", response_model=TodoOut)
+def update_todo_color(
+    todo_id: int, payload: TodoColorUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    todo = db.query(TodoItem).filter(TodoItem.id == todo_id, TodoItem.user_id == current_user.id).first()
+    if todo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="메모를 찾을 수 없습니다.")
+    todo.color = payload.color
+    db.commit()
+    db.refresh(todo)
+    logger.debug(f"[Todos] 글씨 색 변경: todo_id={todo.id}, color={todo.color}")
     return todo
 
 

@@ -19,6 +19,8 @@ class TodoItem(Base):
     content: Mapped[str] = mapped_column(String(300))
     is_done: Mapped[bool] = mapped_column(Boolean, default=False)
     # 완료 처리된 날짜. 이 날짜가 오늘이 아니면 목록 조회 시 제외되어 "다음날 자동 숨김"을 구현한다.
+    # 메모별 글씨 색(#RRGGBB). None이면 사용자가 정한 기본 글씨 색을 따른다.
+    color: Mapped[str | None] = mapped_column(String(9), nullable=True)
     completed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     # 할 일 추가 시 오늘 날짜로 자동 생성되는 일정관리 이벤트와 연결 (토글/삭제 시 함께 동기화하기 위함)
     schedule_event_id: Mapped[int | None] = mapped_column(
