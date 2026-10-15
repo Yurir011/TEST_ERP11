@@ -25,7 +25,7 @@ import {
   type SalesDocument,
 } from "./types";
 
-const STATUS_OPTIONS: ProjectStatus[] = ["estimate", "in_progress", "completed"];
+const STATUS_OPTIONS: ProjectStatus[] = ["estimate", "in_progress", "completed", "discarded"];
 
 // ── 주차 기반 진행 타임라인 계산용 헬퍼 ──
 const TIMELINE_LABEL_WIDTH = "6rem";
@@ -577,6 +577,8 @@ function DocColumn({
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
+  const [showDiscardForm, setShowDiscardForm] = useState(false);
+  const [discardReason, setDiscardReason] = useState("");
   const [documents, setDocuments] = useState<SalesDocument[] | null>(null);
   const [projectDocs, setProjectDocs] = useState<ProjectDocument[] | null>(null);
   const [stages, setStages] = useState<ProgressStage[]>([]);
@@ -612,13 +614,25 @@ export function ProjectDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  async function handleStatusChange(status: ProjectStatus) {
+  async function handleStatusChange(status: ProjectStatus, reason?: string) {
+    logDebug("ProjectDetail", `상태 변경 시도: project_id=${id}, status=${status}`);
     try {
-      const updated = await apiPut<Project>(`/api/projects/${id}/status`, { status });
+      const updated = await apiPut<Project>(`/api/projects/${id}/status`, { status, reason: reason ?? null });
       setProject(updated);
+      setShowDiscardForm(false);
     } catch (err) {
       logError("ProjectDetail", "상태 변경 실패", err);
     }
+  }
+
+  function handleStatusButton(s: ProjectStatus) {
+    if (s === "discarded") {
+      // 폐기는 사유를 입력받는 칸을 먼저 열고, "폐기 처리"를 눌러야 적용한다.
+      setDiscardReason(project?.discard_reason ?? "");
+      setShowDiscardForm((v) => !v);
+      return;
+    }
+    handleStatusChange(s);
   }
 
   async function handleDownload(doc: SalesDocument) {
@@ -652,12 +666,15 @@ export function ProjectDetailPage() {
                 <h1 className="text-xl font-semibold">{project.name}</h1>
                 <p className="text-sm text-text-muted mt-1">거래처: {project.client_name}</p>
                 {project.memo && <p className="text-sm text-text-muted mt-2">{project.memo}</p>}
+                {project.status === "discarded" && (
+                  <p className="text-sm text-text-muted mt-2">폐기 사유: {project.discard_reason || "입력된 사유 없음"}</p>
+                )}
               </div>
               <div className="flex gap-1.5 shrink-0">
                 {STATUS_OPTIONS.map((s) => (
                   <button
                     key={s}
-                    onClick={() => handleStatusChange(s)}
+                    onClick={() => handleStatusButton(s)}
                     className={`text-xs px-3 py-1.5 rounded-full font-medium transition-opacity ${
                       PROJECT_STATUS_STYLES[s]
                     } ${project.status === s ? "" : "opacity-40 hover:opacity-70"}`}
@@ -667,6 +684,25 @@ export function ProjectDetailPage() {
                 ))}
               </div>
             </div>
+            {showDiscardForm && (
+              <div className="mt-4 pt-4 border-t border-border flex items-center gap-2">
+                <input
+                  value={discardReason}
+                  onChange={(e) => setDiscardReason(e.target.value)}
+                  placeholder="폐기 사유 (선택) 예: 가격 불일치, 고객 취소, 경쟁사 선정"
+                  className="flex-1 min-w-0 rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+                />
+                <button
+                  onClick={() => handleStatusChange("discarded", discardReason)}
+                  className="text-sm font-medium bg-primary hover:bg-primary-hover text-white rounded-lg px-4 py-2 transition-colors shrink-0"
+                >
+                  폐기 처리
+                </button>
+                <button onClick={() => setShowDiscardForm(false)} className="text-sm text-text-muted hover:text-text px-2 py-2 shrink-0">
+                  취소
+                </button>
+              </div>
+            )}
           </div>
 
           <ScheduleProgressCard project={project} stages={stages} onUpdated={setProject} />
@@ -676,9 +712,9 @@ export function ProjectDetailPage() {
           <PurchaseProgressCard projectId={project.id} />
 
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-text-muted">견적서 · 거래명세서</h2>
+            <h2 className="text-sm font-medium text-text-muted">견적서 · 거래명세서 · 발주서</h2>
             <div className="flex items-center gap-2">
-              {(["quotation", "statement", "set"] as const).map((type) => (
+              {(["purchase_order", "quotation", "statement", "set"] as const).map((type) => (
                 <Link
                   key={type}
                   to={`/projects/${project.id}/documents/new?type=${type}`}

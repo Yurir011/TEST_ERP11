@@ -69,7 +69,8 @@ export function DashboardPage() {
 
     logDebug("Dashboard", "프로젝트 현황 조회 시작");
     apiGet<Project[]>("/api/projects?status=estimate")
-      .then((projects) => setPendingEstimateCount(projects.length))
+      // 종합 진행률이 10% 이상이면 이미 진행 중인 것으로 보고 미결 견적에서 뺀다.
+      .then((projects) => setPendingEstimateCount(projects.filter((p) => p.progress_percent < 10).length))
       .catch((err) => logError("Dashboard", "미결 견적 조회 실패", err));
 
     logDebug("Dashboard", "프로젝트 진행 현황(단계별 보드) 조회 시작");

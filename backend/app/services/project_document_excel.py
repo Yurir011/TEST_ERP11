@@ -19,6 +19,7 @@ DOC_TITLES = {
     ProjectDocType.quotation: "견적서",
     ProjectDocType.statement: "거래명세서",
     ProjectDocType.tax_invoice: "세금계산서",
+    ProjectDocType.purchase_order: "발주서",
 }
 
 ITEM_HEADERS = ["내용", "수량", "단가", "금액", "비고"]

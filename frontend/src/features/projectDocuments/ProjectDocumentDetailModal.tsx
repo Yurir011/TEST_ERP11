@@ -106,6 +106,7 @@ export function ProjectDocumentDetailModal({
         <ApprovalStampTable steps={doc.steps} currentStep={doc.current_step} docStatus={doc.status} />
 
         {doc.manager_name && <p className="text-xs text-text-muted mb-2">담당자: {doc.manager_name}</p>}
+        {doc.remark && <p className="text-xs text-text-muted mb-2 whitespace-pre-wrap">REMARK: {doc.remark}</p>}
 
         <div className="bg-bg rounded-xl overflow-hidden mb-4">
           <table className="w-full text-xs">

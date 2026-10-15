@@ -34,7 +34,7 @@ export function ProjectOverviewCard({ projects }: { projects: Project[] }) {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const active = projects.filter((p) => p.status !== "completed");
+  const active = projects.filter((p) => p.status !== "completed" && p.status !== "discarded");
   const avgProgress =
     active.length === 0 ? 100 : Math.round(active.reduce((sum, p) => sum + p.progress_percent, 0) / active.length);
   const dashOffset = RING_CIRCUMFERENCE * (1 - avgProgress / 100);

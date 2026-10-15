@@ -15,6 +15,7 @@ const BAR_COLOR: Record<ProjectStatus, string> = {
   estimate: "bg-tile-orange-fg",
   in_progress: "bg-tile-blue-fg",
   completed: "bg-tile-green-fg",
+  discarded: "bg-text-faint",
 };
 
 const TABS: { key: ProjectStatus | "all"; label: string }[] = [
@@ -22,6 +23,7 @@ const TABS: { key: ProjectStatus | "all"; label: string }[] = [
   { key: "estimate", label: "견적" },
   { key: "in_progress", label: "진행" },
   { key: "completed", label: "완료" },
+  { key: "discarded", label: "폐기" },
 ];
 
 export function ProjectsPage() {
@@ -39,7 +41,8 @@ export function ProjectsPage() {
     if (q) params.set("q", q);
     const path = params.toString() ? `/api/projects?${params.toString()}` : "/api/projects";
     apiGet<Project[]>(path)
-      .then(setProjects)
+      // "전체" 탭에서는 폐기된 프로젝트를 숨기고, "폐기" 탭에서만 보여준다.
+      .then((list) => setProjects(status === "all" ? list.filter((p) => p.status !== "discarded") : list))
       .catch((err) => {
         logError("Projects", "목록 조회 실패", err);
         setError("프로젝트 목록을 불러오지 못했습니다.");

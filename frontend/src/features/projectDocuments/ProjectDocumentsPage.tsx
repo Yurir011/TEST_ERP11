@@ -9,6 +9,7 @@ import {
   Printer,
   Receipt,
   Sheet,
+  ShoppingCart,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -22,6 +23,8 @@ import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { ProposalsPage } from "../proposals/ProposalsPage";
+import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
+import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal } from "../proposals/types";
 import { HometaxImportModal } from "../transactions/HometaxImportModal";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import { useOpenTarget } from "../../lib/useOpenTarget";
@@ -43,6 +46,7 @@ import { SOFT_BADGE } from "../../components/ui/softBadge";
 type DocTab = ProjectDocType | "all" | "proposal";
 
 const NEW_DOC_ACTIONS: { type: ProjectDocType; icon: typeof FileText; colorClass: string }[] = [
+  { type: "purchase_order", icon: ShoppingCart, colorClass: "text-tile-orange-fg" },
   { type: "quotation", icon: FileText, colorClass: "text-tile-blue-fg" },
   { type: "statement", icon: FileSpreadsheet, colorClass: "text-tile-green-fg" },
   { type: "tax_invoice", icon: Receipt, colorClass: "text-tile-purple-fg" },
@@ -51,6 +55,7 @@ const NEW_DOC_ACTIONS: { type: ProjectDocType; icon: typeof FileText; colorClass
 const TABS: { key: DocTab; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "proposal", label: "품의서" },
+  { key: "purchase_order", label: "발주서" },
   { key: "quotation", label: "견적서" },
   { key: "statement", label: "거래명세서" },
   { key: "tax_invoice", label: "세금계산서" },
@@ -209,6 +214,9 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   } | null>(null);
   const [deleteRequestDoc, setDeleteRequestDoc] = useState<ProjectDocument | null>(null);
   const [detailDoc, setDetailDoc] = useState<ProjectDocument | null>(null);
+  // "전체" 탭에서는 품의서도 같은 목록에 함께 보여준다.
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [proposalDetail, setProposalDetail] = useState<Proposal | null>(null);
   const openTargetId = useOpenTarget();
   const openedTargetRef = useRef(false);
   const listTopRef = useRef<HTMLDivElement>(null);
@@ -255,6 +263,17 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       });
   }
 
+  function loadProposals() {
+    if (lockedDocType || tab !== "all") {
+      setProposals([]);
+      return;
+    }
+    logDebug("ProjectDocuments", "전체 목록용 품의서 조회 시작");
+    apiGet<Proposal[]>("/api/proposals")
+      .then(setProposals)
+      .catch((err) => logError("ProjectDocuments", "품의서 목록 조회 실패", err));
+  }
+
   function loadPendingForMe() {
     apiGet<ProjectDocument[]>("/api/project-documents?status=pending&approver_mine=true")
       .then((list) =>
@@ -267,6 +286,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
 
   useEffect(() => {
     loadDocs();
+    loadProposals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -276,6 +296,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
 
   function reloadAll() {
     loadDocs();
+    loadProposals();
     loadPendingForMe();
   }
 
@@ -532,9 +553,62 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     }
   }
 
+  async function handleProposalApprove(p: Proposal) {
+    if (!window.confirm(`"${p.title}" 품의서를 결재 승인하시겠습니까?`)) return;
+    logDebug("ProjectDocuments", `품의서 결재 승인 시도: id=${p.id}`);
+    setBusyId(p.id);
+    try {
+      await apiPut(`/api/proposals/${p.id}/approve`);
+      setProposalDetail(null);
+      reloadAll();
+      window.alert("결재 승인되었습니다.");
+    } catch (err) {
+      logError("ProjectDocuments", "품의서 결재 승인 실패", err);
+      setError(err instanceof ApiError ? err.message : "결재 승인 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleProposalReject(p: Proposal) {
+    const reason = window.prompt("반려 사유를 입력해주세요.");
+    if (!reason || !reason.trim()) return;
+    logDebug("ProjectDocuments", `품의서 결재 반려 시도: id=${p.id}`);
+    setBusyId(p.id);
+    try {
+      await apiPut(`/api/proposals/${p.id}/reject`, { reason: reason.trim() });
+      setProposalDetail(null);
+      reloadAll();
+    } catch (err) {
+      logError("ProjectDocuments", "품의서 결재 반려 실패", err);
+      setError(err instanceof ApiError ? err.message : "결재 반려 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleProposalDownload(p: Proposal) {
+    setBusyId(p.id);
+    try {
+      await downloadFile(`/api/proposals/${p.id}/pdf`, `품의서_${p.issue_date}.pdf`);
+    } catch (err) {
+      logError("ProjectDocuments", "품의서 PDF 다운로드 실패", err);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleProposalPrint(p: Proposal) {
+    try {
+      await openFile(`/api/proposals/${p.id}/pdf`);
+    } catch (err) {
+      logError("ProjectDocuments", "품의서 PDF 출력 열기 실패", err);
+    }
+  }
+
   const isApproved = (doc: ProjectDocument) => doc.status === "approved" && doc.has_pdf;
   const newDocCardCount = visibleActions.length + (lockedDocType ? 0 : 1);
-  const newDocGridCols = newDocCardCount >= 3 ? "grid-cols-3" : newDocCardCount === 2 ? "grid-cols-2" : "grid-cols-1";
+  const newDocGridCols = newDocCardCount >= 4 ? "grid-cols-4" : newDocCardCount === 3 ? "grid-cols-3" : newDocCardCount === 2 ? "grid-cols-2" : "grid-cols-1";
 
   // 세금계산서 목록은 청구/영수 구분, 상태, 자유 검색으로 다방면 조회가 가능해야 한다.
   const q = searchQuery.trim().toLowerCase();
@@ -575,6 +649,19 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           }
           return true;
         });
+
+  // 표에 그릴 행: 전체 탭이면 문서와 품의서를 발행일 최신순으로 섞고, 그 외 탭은 문서만 그대로 쓴다.
+  type ListRow = { kind: "doc"; doc: ProjectDocument } | { kind: "proposal"; proposal: Proposal };
+  const mergedRows: ListRow[] | null =
+    visibleDocs === null
+      ? null
+      : (() => {
+          const rows: ListRow[] = visibleDocs.map((doc): ListRow => ({ kind: "doc", doc }));
+          if (lockedDocType || tab !== "all") return rows;
+          const all: ListRow[] = [...rows, ...proposals.map((proposal): ListRow => ({ kind: "proposal", proposal }))];
+          const dateOf = (r: ListRow) => (r.kind === "doc" ? r.doc.issue_date : r.proposal.issue_date);
+          return all.sort((a, b) => dateOf(b).localeCompare(dateOf(a)));
+        })();
 
   // 검색 결과 합계: 원화(KRW) 문서만 합산한다 (외화는 섞으면 왜곡되므로 건수만 안내).
   const visibleKrwTotal = (visibleDocs ?? []).filter((d) => d.currency === "KRW").reduce((sum, d) => sum + itemsTotal(d), 0);
@@ -814,7 +901,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
         </div>
       )}
 
-      {visibleDocs !== null && visibleDocs.length === 0 && (
+      {mergedRows !== null && mergedRows.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <FileText className="mx-auto mb-2 text-text-muted" size={24} />
           <p className="text-sm text-text-muted">
@@ -823,7 +910,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
         </div>
       )}
 
-      {visibleDocs !== null && visibleDocs.length > 0 && (
+      {mergedRows !== null && mergedRows.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
           {/* 표 스타일: 연한 세로선 + 줄무늬 + 톤다운 파랑 머리글 (첫 열 앞만 제외). 짧은 열은 내용 폭에 맞춘다. */}
           <table className="w-full text-sm [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-primary/[0.12] [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
@@ -847,7 +934,60 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
               </tr>
             </thead>
             <tbody>
-              {visibleDocs.map((doc) => {
+              {mergedRows.map((row) => {
+                if (row.kind === "proposal") {
+                  const p = row.proposal;
+                  const pApproved = p.status === "approved" && p.has_pdf;
+                  return (
+                    <tr
+                      key={`p${p.id}`}
+                      onClick={() => setProposalDetail(p)}
+                      className="cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
+                    >
+                      <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                        <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>{p.kind ? `${p.kind}품의서` : "품의서"}</span>
+                      </td>
+                      <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                        <span
+                          className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}
+                          title={p.status === "rejected" ? p.reject_reason ?? undefined : undefined}
+                        >
+                          {PROPOSAL_STATUS_LABELS[p.status]}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                        {p.issue_date}
+                        <p className="text-xs text-text-muted mt-0.5">No. {p.doc_no}</p>
+                      </td>
+                      <td className="py-2.5 px-4 text-center text-text-muted">-</td>
+                      <td className="py-2.5 px-4 text-center text-text-muted">-</td>
+                      <td className="py-2.5 px-4 text-center whitespace-nowrap">{p.creator_name}</td>
+                      <td className="py-2.5 px-4 text-center">{p.title}</td>
+                      <td className="py-2.5 px-4 text-right text-text-muted whitespace-nowrap">-</td>
+                      <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleProposalDownload(p)}
+                            disabled={!pApproved || busyId === p.id}
+                            title={pApproved ? "저장 (PDF)" : "결재 승인 후 이용 가능합니다."}
+                            className="p-1.5 text-text-muted hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <Download size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleProposalPrint(p)}
+                            disabled={!pApproved}
+                            title={pApproved ? "출력" : "결재 승인 후 이용 가능합니다."}
+                            className="p-1.5 text-text-muted hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <Printer size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+                const doc = row.doc;
                 const approved = isApproved(doc);
                 const disabledTitle = "결재 승인 후 이용 가능합니다.";
                 return (
@@ -1012,6 +1152,22 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           isSubmitting={busyId === popbillInfoTarget.doc.id}
           onConfirm={(info) => issuePopbill(popbillInfoTarget.doc, info)}
           onCancel={() => setPopbillInfoTarget(null)}
+        />
+      )}
+
+      {proposalDetail && (
+        <ProposalDetailModal
+          proposal={proposalDetail}
+          isBusy={busyId === proposalDetail.id}
+          onClose={() => setProposalDetail(null)}
+          onApprove={handleProposalApprove}
+          onReject={handleProposalReject}
+          onDownload={handleProposalDownload}
+          onPrint={handleProposalPrint}
+          onAttachmentsChanged={(updated) => {
+            setProposalDetail(updated);
+            setProposals((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+          }}
         />
       )}
 

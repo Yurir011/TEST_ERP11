@@ -87,6 +87,7 @@ class ProjectDocumentCreate(BaseModel):
     purpose_type: TaxInvoicePurpose = TaxInvoicePurpose.billing
     client_name: str
     manager_name: str | None = None
+    remark: str | None = None  # 발주서 REMARK 칸
     items: list[ProjectDocumentItemIn] = Field(default_factory=list)
     is_final_decision: bool = False
     end_title: JobTitle | None = None
@@ -147,6 +148,7 @@ class ProjectDocumentUpdate(BaseModel):
     purpose_type: TaxInvoicePurpose = TaxInvoicePurpose.billing
     client_name: str
     manager_name: str | None = None
+    remark: str | None = None  # 발주서 REMARK 칸
     items: list[ProjectDocumentItemIn] = Field(default_factory=list)
 
     @field_validator("items")
@@ -191,6 +193,7 @@ class ProjectDocumentOut(BaseModel):
     purpose_type: TaxInvoicePurpose
     client_name: str
     manager_name: str | None
+    remark: str | None
     items: list[ProjectDocumentItemOut]
     has_pdf: bool
     has_excel: bool

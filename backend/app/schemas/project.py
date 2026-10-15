@@ -15,6 +15,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectStatusUpdate(BaseModel):
     status: ProjectStatus
+    reason: str | None = None  # 폐기 사유 (상태가 discarded일 때만 저장)
 
 
 class ProjectScheduleUpdate(BaseModel):
@@ -47,6 +48,7 @@ class ProjectOut(BaseModel):
     client_name: str
     status: ProjectStatus
     memo: str | None
+    discard_reason: str | None
     start_date: date | None
     end_date: date | None
     progress_percent: int

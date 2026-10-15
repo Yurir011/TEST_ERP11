@@ -53,7 +53,7 @@ from app.services.tax_invoice_list_excel import generate_tax_invoice_list_excel
 from app.services.tax_invoice_ocr import recognize_tax_invoice
 from popbill import PopbillException
 
-TEMPLATED_DOC_TYPES = (ProjectDocType.quotation, ProjectDocType.statement, ProjectDocType.tax_invoice)
+TEMPLATED_DOC_TYPES = (ProjectDocType.quotation, ProjectDocType.statement, ProjectDocType.tax_invoice, ProjectDocType.purchase_order)
 
 router = APIRouter(prefix="/api/project-documents", tags=["project-documents"])
 logger = get_logger("ProjectDocuments")
@@ -63,6 +63,7 @@ DOC_TYPE_LABELS_KO = {
     ProjectDocType.quotation: "견적서",
     ProjectDocType.statement: "거래명세서",
     ProjectDocType.tax_invoice: "세금계산서",
+    ProjectDocType.purchase_order: "발주서",
 }
 
 def _doc_link(doc_type: ProjectDocType, doc_id: int) -> str:
@@ -102,6 +103,7 @@ def _to_out(doc: ProjectDocument, steps: list[ApprovalStep]) -> ProjectDocumentO
         purpose_type=doc.purpose_type,
         client_name=doc.client_name,
         manager_name=doc.manager_name,
+        remark=doc.remark,
         items=doc.items,
         has_pdf=bool(doc.file_path),
         set_id=doc.set_id,
@@ -315,6 +317,7 @@ def _new_document(
         purpose_type=payload.purpose_type.value,
         client_name=payload.client_name,
         manager_name=payload.manager_name,
+        remark=(payload.remark or "").strip() or None if doc_type == ProjectDocType.purchase_order else None,
         created_by=current_user.id,
         direction=payload.direction if doc_type == ProjectDocType.tax_invoice else None,
         approval_no=payload.approval_no if doc_type == ProjectDocType.tax_invoice else None,
@@ -691,6 +694,8 @@ def update_project_document(
     doc.purpose_type = payload.purpose_type.value
     doc.client_name = payload.client_name
     doc.manager_name = payload.manager_name
+    if doc.doc_type == ProjectDocType.purchase_order:
+        doc.remark = (payload.remark or "").strip() or None
     doc.items = [
         ProjectDocumentItem(content=i.content, quantity=i.quantity, unit_price=i.unit_price, note=i.note, sort_order=idx)
         for idx, i in enumerate(payload.items)

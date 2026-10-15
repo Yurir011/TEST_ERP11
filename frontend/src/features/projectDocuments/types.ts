@@ -1,12 +1,13 @@
 import type { ApprovalStep } from "../../components/approval/types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
-export type ProjectDocType = "quotation" | "statement" | "tax_invoice";
+export type ProjectDocType = "quotation" | "statement" | "tax_invoice" | "purchase_order";
 
 export const PROJECT_DOC_TYPE_LABELS: Record<ProjectDocType, string> = {
   quotation: "견적서",
   statement: "거래명세서",
   tax_invoice: "세금계산서",
+  purchase_order: "발주서",
 };
 
 export type ProjectDocumentStatus = "draft" | "pending" | "approved" | "rejected";
@@ -71,6 +72,7 @@ export interface ProjectDocument {
   purpose_type: TaxInvoicePurpose;
   client_name: string;
   manager_name: string | null;
+  remark: string | null; // 발주서 REMARK 칸 (수신견적서 번호, 납품처 등)
   items: ProjectDocumentItem[];
   has_pdf: boolean;
   set_id: number | null;

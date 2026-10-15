@@ -241,10 +241,93 @@ def _fill_tax_invoice_template(doc: ProjectDocument) -> str:
     return out_path
 
 
+PURCHASE_ORDER_TEMPLATE = "발주서.xlsx"
+# 발주서 양식의 칸 위치 (A=번호, B~C=내용(병합), D=수량, E=단가, F~G=합계(병합), H=비고). 회사 정보/직인/로고는 양식에 박혀 있어 채우지 않는다.
+PO_DATE_CELL, PO_CLIENT_CELL, PO_MANAGER_CELL = "G2", "G3", "G4"
+PO_TOP_TOTAL_CELL, PO_TOTAL_WORDS_CELL = "F12", "E12"
+PO_TOP_WORDS_CELL = "C12"  # "일금 ___" 한글 금액 칸
+PO_ITEM_START_ROW, PO_ITEM_END_ROW = 14, 27
+PO_SUBTOTAL_CELL, PO_VAT_CELL, PO_TOTAL_CELL = "F28", "F29", "F30"
+PO_REMARK_CELL = "B31"
+PO_END_MARK = " 이 하 여 백"
+
+
+def _fill_purchase_order_template(doc: ProjectDocument) -> str:
+    """발주서: 양식(Doc/발주서.xlsx)의 건별 입력 칸(날짜/거래처/담당자/품목/REMARK)만 채우고 나머지는 양식 그대로 둔다."""
+    template_path = TEMPLATE_DIR / PURCHASE_ORDER_TEMPLATE
+    logger.debug(f"[ProjectDocumentTemplate] 발주서 양식 채우기 시작: doc_id={doc.id}, template={template_path}")
+    wb = openpyxl.load_workbook(template_path)
+    ws = wb.active
+
+    d = doc.issue_date
+    ws[PO_DATE_CELL] = f"DATE : {d.year}년 {d.month:02d}월 {d.day:02d}일"
+    ws[PO_CLIENT_CELL] = f"거래처명 : {doc.client_name}"
+    ws[PO_MANAGER_CELL] = f"담당자 : {doc.manager_name}" if doc.manager_name else "담당자 :"
+
+    money_format = TOTAL_MONEY_FORMATS[doc.currency]
+    items = list(doc.items)
+    capacity = PO_ITEM_END_ROW - PO_ITEM_START_ROW + 1
+    if len(items) > capacity:
+        logger.debug(f"[ProjectDocumentTemplate] 발주서 양식 항목 칸({PO_ITEM_END_ROW}행)을 초과해 나머지는 생략: doc_id={doc.id}")
+        items = items[:capacity]
+
+    # 양식에 예시로 적혀 있는 품목/"이 하 여 백"을 모두 지우고 시작한다 (병합 칸의 오른쪽 셀은 건드리지 않는다).
+    for row in range(PO_ITEM_START_ROW, PO_ITEM_END_ROW + 1):
+        for col in "ABDEFH":
+            ws[f"{col}{row}"] = None
+
+    subtotal = 0
+    for offset, item in enumerate(items):
+        row = PO_ITEM_START_ROW + offset
+        amount = calc_amount(item.quantity, item.unit_price)
+        subtotal += amount
+        ws[f"A{row}"] = offset + 1
+        ws[f"B{row}"] = item.content
+        ws[f"D{row}"] = item.quantity
+        ws[f"E{row}"] = item.unit_price
+        ws[f"F{row}"] = amount
+        if item.note:
+            ws[f"H{row}"] = item.note
+    for row in range(PO_ITEM_START_ROW, PO_ITEM_END_ROW + 1):
+        _apply_money_format(ws[f"E{row}"], money_format)
+        _apply_money_format(ws[f"F{row}"], money_format)
+        _set_horizontal(ws[f"B{row}"], "center")
+        _set_horizontal(ws[f"H{row}"], "center")
+        _set_horizontal(ws[f"F{row}"], "right")
+        # 단가 칸은 양식 폭이 좁아(약 7자) 큰 금액은 글자를 줄여서 넣는다.
+        e = ws[f"E{row}"]
+        e.alignment = Alignment(horizontal="right", vertical=e.alignment.vertical, shrink_to_fit=True)
+    end_row = PO_ITEM_START_ROW + len(items)
+    if end_row <= PO_ITEM_END_ROW:
+        ws[f"B{end_row}"] = PO_END_MARK
+
+    vat = round(subtotal * 0.1)
+    ws[PO_SUBTOTAL_CELL] = subtotal
+    ws[PO_VAT_CELL] = vat
+    ws[PO_TOTAL_CELL] = subtotal + vat
+    for ref in (PO_SUBTOTAL_CELL, PO_VAT_CELL, PO_TOTAL_CELL, PO_TOP_TOTAL_CELL):
+        _apply_money_format(ws[ref], money_format, size=ws[PO_SUBTOTAL_CELL].font.sz if ref == PO_TOTAL_CELL else None)
+        _set_horizontal(ws[ref], "right")
+    ws[PO_TOTAL_WORDS_CELL] = CURRENCY_SUFFIX_WORD[doc.currency]
+    # "일금 ___ 원정" 칸은 한글 숫자 서식이라 금액이 크면 '###'으로 깨진다. 칸에 맞춰 글자를 줄여 항상 보이게 한다.
+    c = ws[PO_TOP_WORDS_CELL]
+    c.alignment = Alignment(horizontal=c.alignment.horizontal, vertical=c.alignment.vertical, shrink_to_fit=True)
+
+    ws[PO_REMARK_CELL] = doc.remark or None
+
+    os.makedirs(settings.project_documents_dir, exist_ok=True)
+    out_path = os.path.join(settings.project_documents_dir, f"{doc.id}_{doc.doc_type.value}.xlsx")
+    wb.save(out_path)
+    logger.debug(f"[ProjectDocumentTemplate] 발주서 양식 채우기 완료: doc_id={doc.id}, items={len(items)}, file={out_path}")
+    return out_path
+
+
 def fill_project_document_template(doc: ProjectDocument) -> str:
     """양식 원본을 열어 빈 칸을 채우고 storage에 저장한 뒤, 저장 경로를 반환한다."""
     if doc.doc_type == ProjectDocType.tax_invoice:
         return _fill_tax_invoice_template(doc)
+    if doc.doc_type == ProjectDocType.purchase_order:
+        return _fill_purchase_order_template(doc)
     layout = LAYOUTS[doc.doc_type]
 
     template_path = TEMPLATE_DIR / layout.template_filename

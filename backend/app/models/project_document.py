@@ -30,6 +30,7 @@ class ProjectDocType(str, enum.Enum):
     quotation = "quotation"  # 견적서
     statement = "statement"  # 거래명세서
     tax_invoice = "tax_invoice"  # 세금계산서 (홈택스/팝빌 연동 전까지는 큰 틀만)
+    purchase_order = "purchase_order"  # 발주서 (우리가 거래처에 발주. 결재 후 PDF/엑셀 발급)
 
 
 class ProjectDocumentStatus(str, enum.Enum):
@@ -81,6 +82,7 @@ class ProjectDocument(Base):
     purpose_type: Mapped[str] = mapped_column(String(10), default=TaxInvoicePurpose.billing.value)  # 청구/영수 (세금계산서만 사용)
     client_name: Mapped[str] = mapped_column(String(200))  # 거래처명
     manager_name: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 담당자
+    remark: Mapped[str | None] = mapped_column(Text, nullable=True)  # 발주서 하단 REMARK 칸 (수신견적서 번호, 납품처 등). 발주서만 사용
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 자동 생성된 PDF 파일 경로
     excel_path: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 승인 시 함께 생성되는 엑셀 파일 경로
     status: Mapped[ProjectDocumentStatus] = mapped_column(

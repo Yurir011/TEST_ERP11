@@ -16,6 +16,7 @@ DOC_TITLES = {
     ProjectDocType.quotation: "견 적 서",
     ProjectDocType.statement: "거 래 명 세 서",
     ProjectDocType.tax_invoice: "세 금 계 산 서",
+    ProjectDocType.purchase_order: "발 주 서",
 }
 
 

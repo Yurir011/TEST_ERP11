@@ -26,6 +26,7 @@ def _to_out(project: Project) -> ProjectOut:
         client_id=project.client_id,
         client_name=project.client.name,
         status=project.status,
+        discard_reason=project.discard_reason,
         memo=project.memo,
         start_date=project.start_date,
         end_date=project.end_date,
@@ -103,9 +104,11 @@ def update_project_status(
 ):
     project = _get_project_or_404(project_id, db)
     project.status = payload.status
+    # 폐기 사유는 폐기 상태일 때만 보관하고, 다른 상태로 되돌리면 지운다.
+    project.discard_reason = ((payload.reason or "").strip() or None) if payload.status == ProjectStatus.discarded else None
     db.commit()
     db.refresh(project)
-    logger.debug(f"[Projects] 상태 변경: id={project_id}, status={payload.status}, by={current_user.id}")
+    logger.debug(f"[Projects] 상태 변경: id={project_id}, status={payload.status}, reason={project.discard_reason}, by={current_user.id}")
     return _to_out(project)
 
 
@@ -137,6 +140,10 @@ def update_project_progress(
 ):
     project = _get_project_or_404(project_id, db)
     project.progress_percent = payload.progress_percent
+    # 종합 진행률이 기록(10% 이상)되면 견적 단계 프로젝트는 자동으로 "진행"으로 바꾼다. 이미 진행/완료인 프로젝트는 건드리지 않는다.
+    if payload.progress_percent >= 10 and project.status == ProjectStatus.estimate:
+        project.status = ProjectStatus.in_progress
+        logger.debug(f"[Projects] 진행율 기록으로 상태 자동 변경: id={project_id}, 견적 -> 진행")
     db.commit()
     db.refresh(project)
     logger.debug(f"[Projects] 진행율 변경: id={project_id}, progress_percent={payload.progress_percent}, by={current_user.id}")

@@ -1,6 +1,6 @@
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
-export type ProjectStatus = "estimate" | "in_progress" | "completed";
+export type ProjectStatus = "estimate" | "in_progress" | "completed" | "discarded";
 
 export interface Project {
   id: number;
@@ -9,6 +9,7 @@ export interface Project {
   client_name: string;
   status: ProjectStatus;
   memo: string | null;
+  discard_reason: string | null; // 폐기 사유 (상태가 폐기일 때만)
   start_date: string | null;
   end_date: string | null;
   progress_percent: number;
@@ -21,12 +22,14 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   estimate: "견적",
   in_progress: "진행",
   completed: "완료",
+  discarded: "폐기",
 };
 
 export const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = {
   estimate: SOFT_BADGE.orange,
   in_progress: SOFT_BADGE.blue,
   completed: SOFT_BADGE.green,
+  discarded: SOFT_BADGE.gray,
 };
 
 export type SalesDocType = "estimate" | "statement";

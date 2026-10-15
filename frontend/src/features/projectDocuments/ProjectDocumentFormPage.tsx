@@ -36,7 +36,7 @@ function todayISO() {
 }
 
 function isProjectDocType(value: string | null): value is ProjectDocType {
-  return value === "quotation" || value === "statement" || value === "tax_invoice";
+  return value === "quotation" || value === "statement" || value === "tax_invoice" || value === "purchase_order";
 }
 
 export function ProjectDocumentFormPage() {
@@ -66,6 +66,7 @@ export function ProjectDocumentFormPage() {
   // 입력한 거래처명과 같은 등록 거래처가 있으면 사업자번호를 입력칸 아래에 함께 보여준다.
   const matchedClient = clients.find((c) => c.name === clientName.trim());
   const [managerName, setManagerName] = useState("");
+  const [remark, setRemark] = useState(""); // 발주서 REMARK 칸
   const [currency, setCurrency] = useState<DocCurrency>("KRW");
   const [purposeType, setPurposeType] = useState<TaxInvoicePurpose>("청구");
   const [items, setItems] = useState<ProjectDocumentItemFormValues[]>([{ ...EMPTY_PROJECT_DOC_ITEM }]);
@@ -118,6 +119,7 @@ export function ProjectDocumentFormPage() {
         setIssueDate(target.issue_date);
         setClientName(target.client_name);
         setManagerName(target.manager_name ?? "");
+        setRemark(target.remark ?? "");
         setCurrency(target.currency);
         setPurposeType(target.purpose_type);
         setIsPaper(target.is_paper);
@@ -139,7 +141,7 @@ export function ProjectDocumentFormPage() {
 
   useEffect(() => {
     apiGet<Project[]>("/api/projects")
-      .then((list) => setProjects(list.filter((p) => p.status !== "completed" || String(p.id) === routeProjectId)))
+      .then((list) => setProjects(list.filter((p) => (p.status !== "completed" && p.status !== "discarded") || String(p.id) === routeProjectId)))
       .catch((err) => logError("ProjectDocumentForm", "프로젝트 목록 조회 실패", err));
 
     logDebug("ProjectDocumentForm", "거래처 목록 조회 시작 (거래처명 자동완성)");
@@ -287,6 +289,7 @@ export function ProjectDocumentFormPage() {
           purpose_type: purposeType,
           client_name: clientName,
           manager_name: managerName || null,
+          remark: docType === "purchase_order" ? remark.trim() || null : null,
           items: items.map((it) => ({
             content: it.content,
             quantity: Number(it.quantity) || 0,
@@ -313,6 +316,7 @@ export function ProjectDocumentFormPage() {
         purpose_type: purposeType,
         client_name: clientName,
         manager_name: managerName || null,
+        remark: docType === "purchase_order" ? remark.trim() || null : null,
         items: items.map((it) => ({
           content: it.content,
           quantity: Number(it.quantity) || 0,
@@ -572,6 +576,19 @@ export function ProjectDocumentFormPage() {
             className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
           />
         </div>
+
+        {docType === "purchase_order" && (
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">REMARK (발주서 하단 비고)</label>
+            <textarea
+              value={remark}
+              onChange={(e) => setRemark(e.target.value)}
+              rows={3}
+              placeholder="예: 수신견적서: REF No. ID20240102-A02 , 납품처 : 본사 주소지"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg resize-none"
+            />
+          </div>
+        )}
 
         {docType === "tax_invoice" && (
           <div>
