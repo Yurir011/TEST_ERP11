@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.core.approval import validate_chain_approvers
+from app.models.user import JobTitle, is_admin_role
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
@@ -25,6 +26,7 @@ from app.models.user import User
 from app.schemas.proposal import (
     ProposalAttachmentOut,
     ProposalCreate,
+    ProposalDeleteRequestIn,
     ProposalLinkAttachmentIn,
     ProposalOut,
     ProposalStepOut,
@@ -98,6 +100,7 @@ def _to_out(p: Proposal) -> ProposalOut:
         attachments=[ProposalAttachmentOut.model_validate(a) for a in p.attachments],
         has_pdf=bool(p.file_path),
         reject_reason=p.reject_reason,
+        delete_requested=bool(p.delete_requested),
         created_at=p.created_at,
     )
 
@@ -155,6 +158,42 @@ def _advance_self_approvals(db: Session, p: Proposal, current_user: User) -> Non
             )
         else:
             p.current_step = step.step_order + 1
+
+
+def _delete_label(p: Proposal) -> str:
+    return f"품의서 삭제({p.title})"
+
+
+def _delete_proposal_now(db: Session, p: Proposal) -> None:
+    """품의서와 첨부파일, PDF를 실제로 지운다 (commit은 호출자가)."""
+    for attachment in p.attachments:
+        if attachment.file_path and os.path.exists(attachment.file_path):
+            os.remove(attachment.file_path)
+    if p.file_path and os.path.exists(p.file_path):
+        os.remove(p.file_path)
+    db.delete(p)
+    logger.debug(f"[Proposals] 품의서 삭제 완료: id={p.id}")
+
+
+def _restore_after_delete_rejected(p: Proposal) -> None:
+    """삭제 결재가 반려되면 삭제 요청 전의 승인 상태(결재선 포함)로 되돌린다."""
+    snap = p.delete_prev_steps or {}
+    p.steps = [
+        ProposalApprovalStep(
+            step_order=st["step_order"],
+            title=JobTitle(st["title"]),
+            approver_id=st["approver_id"],
+            status=ProposalStepStatus(st["status"]),
+            decided_at=datetime.fromisoformat(st["decided_at"]) if st.get("decided_at") else None,
+        )
+        for st in snap.get("steps", [])
+    ]
+    p.status = ProposalStatus.approved
+    p.current_step = snap.get("current_step", 1)
+    p.is_final_decision = snap.get("is_final_decision", False)
+    p.reject_reason = None
+    p.delete_requested = False
+    p.delete_prev_steps = None
 
 
 @router.get("", response_model=list[ProposalOut])
@@ -243,6 +282,17 @@ def approve_proposal(proposal_id: int, db: Session = Depends(get_db), current_us
     step.status = ProposalStepStatus.approved
     step.decided_at = datetime.now(timezone.utc)
 
+    if step.step_order == len(p.steps) and p.delete_requested:
+        # 삭제 결재가 최종 승인됨: 요청자에게 알리고 품의서를 삭제한다.
+        out = _to_out(p).model_copy(update={"status": ProposalStatus.approved})
+        create_decision_notification(
+            db, target_name=p.creator.name, target_user_id=p.created_by, doc_label=_delete_label(p), approved=True
+        )
+        _delete_proposal_now(db, p)
+        db.commit()
+        logger.debug(f"[Proposals] 삭제 결재 최종 승인 → 삭제 완료: id={proposal_id}, by={current_user.id}")
+        return out
+
     if step.step_order == len(p.steps):
         p.status = ProposalStatus.approved
         create_decision_notification(
@@ -260,7 +310,7 @@ def approve_proposal(proposal_id: int, db: Session = Depends(get_db), current_us
             db,
             target_user_id=next_step.approver_id,
             requester_name=p.creator.name,
-            doc_label=f"품의서({p.title})",
+            doc_label=_delete_label(p) if p.delete_requested else f"품의서({p.title})",
             link=f"/project-documents?tab=proposal&open={p.id}",
         )
         logger.debug(
@@ -287,6 +337,21 @@ def reject_proposal(
     if step.approver_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="배정된 결재권자만 반려할 수 있습니다.")
 
+    if p.delete_requested:
+        # 삭제 결재 반려: 품의서는 삭제 요청 전의 승인 상태(결재선 포함)로 되돌아간다.
+        create_decision_notification(
+            db, target_name=p.creator.name, target_user_id=p.created_by, doc_label=_delete_label(p), approved=False,
+            detail=f"반려 사유: {payload.reason}", link=f"/project-documents?tab=proposal&open={p.id}",
+        )
+        _restore_after_delete_rejected(p)
+        db.commit()
+        p = _get_or_404(db, p.id)
+        _regenerate_pdf(p)
+        db.commit()
+        db.refresh(p)
+        logger.debug(f"[Proposals] 삭제 결재 반려 → 승인 상태 복원: id={proposal_id}, by={current_user.id}, reason={payload.reason}")
+        return _to_out(p)
+
     step.status = ProposalStepStatus.rejected
     step.decided_at = datetime.now(timezone.utc)
     p.status = ProposalStatus.rejected
@@ -307,6 +372,136 @@ def reject_proposal(
     db.commit()
     db.refresh(p)
     logger.debug(f"[Proposals] 결재 반려: id={proposal_id}, by={current_user.id}, reason={payload.reason}")
+    return _to_out(p)
+
+
+@router.put("/{proposal_id}", response_model=ProposalOut)
+def update_proposal(
+    proposal_id: int, payload: ProposalCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """품의서를 수정하고 결재를 다시 요청한다. 반려된 품의서와 승인된 품의서를 작성자가 수정할 수 있으며,
+    저장하면 이전 결재 내역은 초기화되고 새로 지정한 결재선으로 처음부터 다시 결재를 받는다."""
+    p = _get_or_404(db, proposal_id)
+    if p.created_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 수정할 수 있습니다.")
+    if p.delete_requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="삭제 결재가 진행 중인 품의서는 수정할 수 없습니다.")
+    if p.status == ProposalStatus.pending:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 대기 중인 품의서는 수정할 수 없습니다.")
+
+    # 결재선 검증은 내용을 바꾸기 전에 한다 (잘못된 요청이면 품의서가 바뀌지 않도록).
+    chain = approvers = None
+    if not payload.is_final_decision:
+        chain, approvers = validate_chain_approvers(db, payload.end_title, payload.approver_ids)
+
+    was_approved = p.status == ProposalStatus.approved
+    p.kind = payload.kind or None
+    p.title = payload.title
+    p.topic = payload.topic
+    p.content = payload.content
+    if payload.issue_date:
+        p.issue_date = payload.issue_date
+    p.is_final_decision = payload.is_final_decision
+    p.reject_reason = None
+    p.current_step = 1
+    logger.debug(f"[Proposals] 수정: id={proposal_id}, was_approved={was_approved}, by={current_user.id}")
+
+    if payload.is_final_decision:
+        p.steps = []
+        p.status = ProposalStatus.approved
+        db.flush()
+        create_decision_notification(
+            db, target_name=current_user.name, target_user_id=current_user.id, doc_label=f"품의서({p.title})", approved=True,
+            link=f"/project-documents?tab=proposal&open={p.id}",
+        )
+    else:
+        p.steps = [
+            ProposalApprovalStep(step_order=idx + 1, title=step_title, approver_id=approver.id)
+            for idx, (step_title, approver) in enumerate(zip(chain, approvers))
+        ]
+        p.status = ProposalStatus.pending
+        db.flush()
+        _advance_self_approvals(db, p, current_user)
+    db.commit()
+
+    p = _get_or_404(db, p.id)
+    _regenerate_pdf(p)
+    db.commit()
+    db.refresh(p)
+    return _to_out(p)
+
+
+@router.post("/{proposal_id}/request-delete", response_model=ProposalOut)
+def request_delete_proposal(
+    proposal_id: int, payload: ProposalDeleteRequestIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """승인된 품의서의 삭제를 결재 요청한다. 결재가 최종 승인되면 삭제되고, 반려되면 그대로 유지된다."""
+    p = _get_or_404(db, proposal_id)
+    if p.created_by != current_user.id and not is_admin_role(current_user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자 또는 관리자만 삭제 결재를 요청할 수 있습니다.")
+    if p.status != ProposalStatus.approved or p.delete_requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 품의서만 삭제 결재를 요청할 수 있습니다.")
+
+    chain = approvers = None
+    if not payload.is_final_decision:
+        chain, approvers = validate_chain_approvers(db, payload.end_title, payload.approver_ids)
+
+    p.delete_prev_steps = {
+        "steps": [
+            {
+                "step_order": st.step_order,
+                "title": st.title.value,
+                "approver_id": st.approver_id,
+                "status": st.status.value,
+                "decided_at": st.decided_at.isoformat() if st.decided_at else None,
+            }
+            for st in p.steps
+        ],
+        "current_step": p.current_step,
+        "is_final_decision": p.is_final_decision,
+    }
+    p.delete_requested = True
+    logger.debug(f"[Proposals] 삭제 결재 요청: id={proposal_id}, by={current_user.id}, final={payload.is_final_decision}")
+
+    if payload.is_final_decision:
+        fully_approved = True
+    else:
+        p.steps = [
+            ProposalApprovalStep(step_order=idx + 1, title=step_title, approver_id=approver.id)
+            for idx, (step_title, approver) in enumerate(zip(chain, approvers))
+        ]
+        p.status = ProposalStatus.pending
+        p.current_step = 1
+        db.flush()
+        # 요청자 본인이 연속된 단계의 결재권자이면 그 단계들은 즉시 승인 처리한다.
+        fully_approved = False
+        for step in p.steps:
+            if step.approver_id != current_user.id:
+                break
+            step.status = ProposalStepStatus.approved
+            step.decided_at = datetime.now(timezone.utc)
+            if step.step_order == len(p.steps):
+                fully_approved = True
+            else:
+                p.current_step = step.step_order + 1
+
+    if fully_approved:
+        out = _to_out(p).model_copy(update={"status": ProposalStatus.approved})
+        _delete_proposal_now(db, p)
+        db.commit()
+        logger.debug(f"[Proposals] 삭제 결재 전결/자기결재로 즉시 삭제: id={proposal_id}")
+        return out
+
+    step = _current_step(p)
+    create_request_notification(
+        db, target_user_id=step.approver_id, requester_name=p.creator.name, doc_label=_delete_label(p),
+        link=f"/project-documents?tab=proposal&open={p.id}",
+    )
+    db.commit()
+    p = _get_or_404(db, p.id)
+    _regenerate_pdf(p)
+    db.commit()
+    db.refresh(p)
     return _to_out(p)
 
 
@@ -440,7 +635,9 @@ def delete_proposal(proposal_id: int, db: Session = Depends(get_db), current_use
     if p.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 삭제할 수 있습니다.")
     if p.status == ProposalStatus.approved:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제할 수 없습니다.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 품의서는 삭제 결재를 요청해야 삭제할 수 있습니다.")
+    if p.delete_requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="삭제 결재가 진행 중인 품의서입니다.")
     for attachment in p.attachments:
         if attachment.file_path and os.path.exists(attachment.file_path):
             os.remove(attachment.file_path)

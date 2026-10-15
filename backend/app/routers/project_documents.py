@@ -659,16 +659,14 @@ def update_project_document(
     if doc.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 수정할 수 있습니다.")
 
-    # 승인된 세금계산서는 팝빌로 발행하기 전까지만 수정할 수 있고, 수정하면 결재를 다시 받아야 한다.
+    # 승인된 문서는 수정할 수 있지만 반드시 결재를 다시 받아야 한다 (세금계산서는 팝빌로 발행하기 전까지만).
     editing_approved = doc.status == ProjectDocumentStatus.approved
     if editing_approved:
-        if doc.doc_type != ProjectDocType.tax_invoice:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서만 수정할 수 있습니다.")
         if doc.popbill_issued_at is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="팝빌로 발행된 세금계산서는 수정할 수 없습니다.")
         # 대금 결제(입금/출금)가 끝난 뒤에도 수정할 수 있다. 재승인 시 매입매출 내역이 새 내용으로 갱신된다.
         if not payload.request_approval:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서를 수정하려면 결재를 다시 요청해야 합니다.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서를 수정하려면 결재를 다시 요청해야 합니다.")
     elif doc.status not in (ProjectDocumentStatus.draft, ProjectDocumentStatus.rejected):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="작성 중이거나 반려된 문서만 수정할 수 있습니다.")
     if doc.set_id is not None:
@@ -752,7 +750,7 @@ def request_approval(
 
 
 def _delete_label(doc: ProjectDocument) -> str:
-    return f"세금계산서 삭제({doc.client_name})"
+    return f"{DOC_TYPE_LABELS_KO[doc.doc_type]} 삭제({doc.client_name})"
 
 
 def _delete_document_now(db: Session, doc: ProjectDocument) -> None:
@@ -815,14 +813,12 @@ def _restore_after_delete_rejected(db: Session, doc: ProjectDocument) -> None:
 def request_delete_document(
     doc_id: int, payload: ApprovalRequestIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    """승인된 세금계산서의 삭제를 결재 요청한다. 결재가 최종 승인되면 삭제되고, 반려되면 그대로 유지된다."""
+    """승인된 문서(견적서/거래명세서/발주서/세금계산서)의 삭제를 결재 요청한다. 결재가 최종 승인되면 삭제되고, 반려되면 그대로 유지된다."""
     doc = _get_doc_or_404(db, doc_id)
-    if doc.doc_type != ProjectDocType.tax_invoice:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서만 삭제 결재를 요청할 수 있습니다.")
     if doc.created_by != current_user.id and not is_admin_role(current_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자 또는 관리자만 삭제 결재를 요청할 수 있습니다.")
     if doc.status != ProjectDocumentStatus.approved or doc.delete_requested:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서만 삭제 결재를 요청할 수 있습니다.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서만 삭제 결재를 요청할 수 있습니다.")
 
     # 결재선 검증은 이전 상태를 건드리기 전에 한다 (잘못된 요청이면 문서가 바뀌지 않도록).
     chain = approvers = None
@@ -1141,15 +1137,13 @@ def delete_project_document(doc_id: int, db: Session = Depends(get_db), current_
     if doc.delete_requested:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="삭제 결재가 진행 중인 문서입니다.")
     if doc.status == ProjectDocumentStatus.approved:
-        if doc.doc_type == ProjectDocType.tax_invoice:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 세금계산서는 삭제 결재를 요청해야 삭제할 수 있습니다.")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제할 수 없습니다.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제 결재를 요청해야 삭제할 수 있습니다.")
     # 묶음(견적서+거래명세서)이면 함께 삭제한다.
     targets = [doc]
     if doc.set_id is not None:
         targets = db.query(ProjectDocument).filter(ProjectDocument.set_id == doc.set_id).all()
         if any(t.status == ProjectDocumentStatus.approved for t in targets):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제할 수 없습니다.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 문서는 삭제 결재를 요청해야 삭제할 수 있습니다.")
     for target in targets:
         for image in target.images:
             if os.path.exists(image.file_path):

@@ -52,12 +52,14 @@ export function ProjectDocumentDetailModal({
   const canDecide = doc.status === "pending" && currentStep?.approver_id === user?.id;
   const approved = doc.status === "approved" && doc.has_pdf;
   const disabledTitle = "결재 승인 후 이용 가능합니다.";
-  // 세금계산서는 팝빌로 발행하기 전까지 작성자가 수정할 수 있다 (승인된 문서는 수정 후 결재를 다시 받아야 한다).
-  // 견적서/거래명세서는 반려(또는 작성 중)된 문서를 작성자가 수정한 뒤 결재를 다시 요청할 수 있다 (함께 작성한 문서 쌍은 제외).
+  // 작성자는 결재 대기 중이 아니고 삭제 결재가 진행 중이 아니면 수정할 수 있다. 승인된 문서는 수정 후 결재를 다시 받아야 한다.
+  // 세금계산서는 팝빌로 발행한 뒤에는 수정할 수 없고, 견적서와 거래명세서를 함께 작성한 문서 쌍은 수정할 수 없다 (삭제 후 다시 작성).
   const canEdit =
-    doc.doc_type === "tax_invoice"
-      ? doc.created_by === user?.id && !doc.popbill_issued && doc.status !== "pending" && !doc.delete_requested
-      : doc.created_by === user?.id && doc.set_id === null && (doc.status === "rejected" || doc.status === "draft") && !doc.delete_requested;
+    doc.created_by === user?.id &&
+    doc.status !== "pending" &&
+    !doc.delete_requested &&
+    !doc.popbill_issued &&
+    (doc.doc_type === "tax_invoice" || doc.set_id === null);
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
@@ -137,7 +139,7 @@ export function ProjectDocumentDetailModal({
 
         {doc.delete_requested && (
           <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-4">
-            이 세금계산서는 삭제 결재가 진행 중입니다. 최종 승인되면 문서와 연결된 매입매출·입출금 내역이 함께 삭제되고, 반려되면 기존 승인 상태로 유지됩니다.
+            이 문서는 삭제 결재가 진행 중입니다. 최종 승인되면 삭제되고, 반려되면 기존 승인 상태로 유지됩니다.
           </p>
         )}
 

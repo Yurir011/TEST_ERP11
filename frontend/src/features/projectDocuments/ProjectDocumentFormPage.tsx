@@ -397,7 +397,7 @@ export function ProjectDocumentFormPage() {
         {isEdit && docType !== "tax_invoice" && (
           <div className="flex items-start gap-2 bg-tile-orange text-tile-orange-fg rounded-xl px-4 py-3 text-xs">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <p>반려된 {PROJECT_DOC_TYPE_LABELS[docType]}를 수정한 뒤 결재를 다시 요청합니다. 저장하면 이전 결재 내역은 초기화되고 선택한 결재권자에게 새로 요청됩니다.</p>
+            <p>{PROJECT_DOC_TYPE_LABELS[docType]}를 수정한 뒤 결재를 다시 요청합니다. 승인된 문서도 수정할 수 있으며 반드시 결재를 다시 받아야 합니다. 저장하면 이전 결재 내역은 초기화되고 선택한 결재권자에게 새로 요청됩니다.</p>
           </div>
         )}
 

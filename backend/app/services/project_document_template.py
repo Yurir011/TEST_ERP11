@@ -7,6 +7,8 @@ from pathlib import Path
 
 import openpyxl
 from openpyxl.styles import Alignment, Font
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.properties import PageSetupProperties
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -51,6 +53,33 @@ def _set_horizontal(cell, horizontal: str) -> None:
         shrink_to_fit=a.shrink_to_fit,
         indent=a.indent,
     )
+
+
+def _fit_to_page_width(ws) -> None:
+    """양식을 A4 세로 한 장의 좌우 폭에 맞춰 출력하도록 지정한다. 폭을 기준으로 배율을 줄이고 남는 부분은 여백으로 둔다.
+    프린터/Excel 설정이 달라도 오른쪽이 잘리거나 다음 장으로 넘어가지 않도록, 내용(글자/테두리/이미지)이 있는 범위만 인쇄 영역으로 잡는다."""
+    last_row = last_col = 1
+    for row in ws.iter_rows():
+        for c in row:
+            b = c.border
+            if c.value is not None or b.left.style or b.right.style or b.top.style or b.bottom.style:
+                last_row, last_col = max(last_row, c.row), max(last_col, c.column)
+    for rng in ws.merged_cells.ranges:
+        last_row, last_col = max(last_row, rng.max_row), max(last_col, rng.max_col)
+    # 직인/로고 이미지가 내용 영역 바깥 열까지 걸쳐 있으면 그 열까지 인쇄 영역에 포함한다. (양식 이미지는 시작/끝 셀이 지정된 방식이다)
+    for img in ws._images:
+        end = getattr(img.anchor, "to", None)
+        if end is not None:
+            last_col = max(last_col, end.col + 1)
+    ws.print_area = f"A1:{get_column_letter(last_col)}{last_row}"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.scale = None
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0  # 높이는 자동 (폭 기준으로만 맞춘다)
+    ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    ws.print_options.horizontalCentered = True
+    logger.debug(f"[ProjectDocumentTemplate] 인쇄 영역 지정: A1:{get_column_letter(last_col)}{last_row}, 폭 1장에 맞춤")
 
 
 @dataclass(frozen=True)
@@ -314,6 +343,7 @@ def _fill_purchase_order_template(doc: ProjectDocument) -> str:
     c.alignment = Alignment(horizontal=c.alignment.horizontal, vertical=c.alignment.vertical, shrink_to_fit=True)
 
     ws[PO_REMARK_CELL] = doc.remark or None
+    _fit_to_page_width(ws)
 
     os.makedirs(settings.project_documents_dir, exist_ok=True)
     out_path = os.path.join(settings.project_documents_dir, f"{doc.id}_{doc.doc_type.value}.xlsx")
@@ -391,6 +421,10 @@ def fill_project_document_template(doc: ProjectDocument) -> str:
         )
         _set_horizontal(cell, "right")
     ws[layout.total_words_cell] = CURRENCY_SUFFIX_WORD[doc.currency]
+    # "일금 ___ 원정" 칸(C열)은 한글 숫자 서식이라 금액이 크면 '###'으로 깨진다. 칸에 맞춰 글자를 줄여 항상 보이게 한다.
+    words = ws[f"C{ws[layout.top_total_cell].row}"]
+    words.alignment = Alignment(horizontal=words.alignment.horizontal, vertical=words.alignment.vertical, shrink_to_fit=True)
+    _fit_to_page_width(ws)
 
     os.makedirs(settings.project_documents_dir, exist_ok=True)
     out_path = os.path.join(settings.project_documents_dir, f"{doc.id}_{doc.doc_type.value}.xlsx")

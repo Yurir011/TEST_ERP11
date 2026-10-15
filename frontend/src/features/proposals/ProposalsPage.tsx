@@ -210,6 +210,9 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
                       <span className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}>
                         {PROPOSAL_STATUS_LABELS[p.status]}
                       </span>
+                      {p.delete_requested && (
+                        <span className="ml-1.5 text-xs px-2 py-1 font-medium text-danger bg-danger/10 rounded-md">삭제 결재 중</span>
+                      )}
                     </td>
                     <td className="py-2.5 px-4">
                       {p.is_final_decision
@@ -235,6 +238,7 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
           onReject={handleReject}
           onDownload={handleDownload}
           onPrint={handlePrint}
+          onDeleted={reloadAll}
           onAttachmentsChanged={(updated) => {
             setDetail(updated);
             setProposals((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? prev);

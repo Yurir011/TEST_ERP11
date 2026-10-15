@@ -2,9 +2,9 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import false, func
 
 from app.database import Base
 from app.models.user import JobTitle
@@ -52,6 +52,10 @@ class Proposal(Base):
     current_step: Mapped[int] = mapped_column(Integer, default=1)  # 현재 결재 대기 중인 단계 (1부터 시작)
     is_final_decision: Mapped[bool] = mapped_column(Boolean, default=False)  # 전결 여부 (결재선 없이 기안자 본인 결재로 즉시 완료, steps는 비어있음)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 승인된 품의서의 삭제 결재가 진행 중인지 여부. 삭제 결재 동안 문서는 결재 대기(pending) 상태가 되고,
+    # 최종 승인되면 삭제되며, 반려되면 delete_prev_steps에 저장해 둔 이전 승인 상태(결재선 포함)로 되돌아간다.
+    delete_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    delete_prev_steps: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -1,11 +1,11 @@
 import { Link as LinkIcon, Paperclip, X } from "lucide-react";
-import { useState, type ChangeEvent, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCheckbox";
 import { useAuth } from "../../context/AuthContext";
-import { ApiError, apiPost, apiUpload } from "../../lib/api";
+import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { Proposal } from "./types";
 
@@ -21,6 +21,10 @@ function todayLabel() {
 export function ProposalFormPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  // ?edit=품의서ID 이면 기존 품의서를 수정한다. 반려/승인된 품의서를 고친 뒤 저장하면 결재를 처음부터 다시 받는다.
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get("edit");
+  const isEdit = editId !== null;
 
   const [issueDate, setIssueDate] = useState(todayLabel());
   const [kind, setKind] = useState("");
@@ -36,6 +40,33 @@ export function ProposalFormPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isEdit) return;
+    logDebug("Proposals", `수정 불러오기: id=${editId}`);
+    apiGet<Proposal[]>("/api/proposals")
+      .then((list) => {
+        const target = list.find((p) => String(p.id) === editId);
+        if (!target) {
+          setError("수정할 품의서를 찾을 수 없습니다.");
+          return;
+        }
+        if (target.status === "pending" || target.delete_requested || target.created_by !== user?.id) {
+          setError("결재 대기 중이거나 삭제 결재가 진행 중인 품의서, 또는 다른 사람이 작성한 품의서는 수정할 수 없습니다.");
+          return;
+        }
+        setIssueDate(target.issue_date);
+        setKind(target.kind ?? "");
+        setTitle(target.title);
+        setTopic(target.topic);
+        setContent(target.content);
+      })
+      .catch((err) => {
+        logError("Proposals", "수정 불러오기 실패", err);
+        setError("수정할 품의서를 불러오지 못했습니다.");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, editId, user?.id]);
 
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -66,7 +97,7 @@ export function ProposalFormPage() {
     logDebug("Proposals", `품의서 등록 시도: title=${title}, end_title=${endTitle}, is_final_decision=${isFinalDecision}`);
     setIsSubmitting(true);
     try {
-      const created = await apiPost<Proposal>("/api/proposals", {
+      const body = {
         issue_date: issueDate || todayLabel(),
         kind: kind.trim() || null,
         title,
@@ -75,7 +106,10 @@ export function ProposalFormPage() {
         is_final_decision: isFinalDecision,
         end_title: isFinalDecision ? null : endTitle,
         approver_ids: isFinalDecision ? [] : approverIds.map(Number),
-      });
+      };
+      const created = isEdit
+        ? await apiPut<Proposal>(`/api/proposals/${editId}`, body)
+        : await apiPost<Proposal>("/api/proposals", body);
 
       for (const attachment of attachments) {
         try {
@@ -92,7 +126,7 @@ export function ProposalFormPage() {
         }
       }
 
-      window.alert("결재 요청이 완료되었습니다.");
+      window.alert(isEdit ? "수정 후 결재 요청이 완료되었습니다." : "결재 요청이 완료되었습니다.");
       navigate("/project-documents", { replace: true });
     } catch (err) {
       logError("Proposals", "품의서 등록 실패", err);
@@ -103,7 +137,10 @@ export function ProposalFormPage() {
   }
 
   return (
-    <MainLayout title="품의서 작성" description="결재 승인이 완료되면 PDF가 자동으로 생성됩니다.">
+    <MainLayout
+      title={isEdit ? "품의서 수정" : "품의서 작성"}
+      description={isEdit ? "수정한 뒤 결재를 처음부터 다시 받아야 합니다." : "결재 승인이 완료되면 PDF가 자동으로 생성됩니다."}
+    >
       <form onSubmit={handleSubmit} className="max-w-2xl space-y-5">
         <div className="bg-surface border border-border rounded-2xl p-5 grid grid-cols-2 gap-4 text-sm">
           <div>

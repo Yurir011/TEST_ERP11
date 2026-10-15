@@ -62,5 +62,6 @@ export interface Proposal {
   attachments: ProposalAttachment[];
   has_pdf: boolean;
   reject_reason: string | null;
+  delete_requested: boolean; // 승인된 품의서의 삭제 결재가 진행 중
   created_at: string;
 }

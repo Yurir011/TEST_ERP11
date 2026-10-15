@@ -1,9 +1,12 @@
-import { Check, Download, ExternalLink, Paperclip, Printer, Link as LinkIcon, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, Paperclip, Pencil, Printer, Link as LinkIcon, Trash2, X } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
 import { useAuth } from "../../context/AuthContext";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
-import { logError } from "../../lib/logger";
+import { isAdminRole } from "../../lib/auth";
+import { logDebug, logError } from "../../lib/logger";
+import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal, type ProposalAttachment } from "./types";
 
 function docTitle(p: Proposal): string {
@@ -19,6 +22,7 @@ export function ProposalDetailModal({
   onDownload,
   onPrint,
   onAttachmentsChanged,
+  onDeleted,
 }: {
   proposal: Proposal;
   isBusy: boolean;
@@ -28,11 +32,68 @@ export function ProposalDetailModal({
   onDownload: (proposal: Proposal) => void;
   onPrint: (proposal: Proposal) => void;
   onAttachmentsChanged: (proposal: Proposal) => void;
+  onDeleted: () => void; // 삭제되었거나 삭제 결재를 요청한 뒤 목록을 새로 고친다
 }) {
   const { user } = useAuth();
   const currentStep = proposal.steps.find((s) => s.step_order === proposal.current_step);
   const canDecide = proposal.status === "pending" && currentStep?.approver_id === user?.id;
   const canManageAttachments = proposal.created_by === user?.id;
+  const navigate = useNavigate();
+  const isMine = proposal.created_by === user?.id;
+  // 반려/승인된 품의서는 작성자가 수정할 수 있다 (승인된 품의서는 수정 후 결재를 다시 받아야 한다).
+  const canEdit = isMine && proposal.status !== "pending" && !proposal.delete_requested;
+  // 승인된 품의서는 삭제 결재를 거쳐야 삭제된다. 그 외에는 작성자가 바로 삭제할 수 있다.
+  const canDelete = !proposal.delete_requested && (isMine || (proposal.status === "approved" && isAdminRole(user?.role)));
+  const [showDeletePicker, setShowDeletePicker] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  function handleEdit() {
+    logDebug("Proposals", `수정 진입: id=${proposal.id}, status=${proposal.status}`);
+    navigate(`/proposals/new?edit=${proposal.id}`);
+  }
+
+  async function handleDeleteClick() {
+    setActionError(null);
+    if (proposal.status === "approved") {
+      if (!window.confirm("승인된 품의서는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?")) return;
+      setShowDeletePicker(true);
+      return;
+    }
+    if (!window.confirm("이 품의서를 삭제할까요?")) return;
+    setDeleteBusy(true);
+    try {
+      await apiDelete(`/api/proposals/${proposal.id}`);
+      logDebug("Proposals", `삭제 완료: id=${proposal.id}`);
+      onDeleted();
+    } catch (err) {
+      logError("Proposals", "삭제 실패", err);
+      setActionError(err instanceof ApiError ? err.message : "삭제 중 오류가 발생했습니다.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  async function handleRequestDelete(endTitle: string | null, approverIds: number[], isFinalDecision: boolean) {
+    setDeleteBusy(true);
+    try {
+      await apiPost(`/api/proposals/${proposal.id}/request-delete`, {
+        end_title: endTitle,
+        approver_ids: approverIds,
+        is_final_decision: isFinalDecision,
+      });
+      logDebug("Proposals", `삭제 결재 요청 성공: id=${proposal.id}`);
+      setShowDeletePicker(false);
+      window.alert(isFinalDecision ? "삭제되었습니다." : "삭제 결재 요청이 완료되었습니다. 최종 승인되면 삭제됩니다.");
+      onDeleted();
+    } catch (err) {
+      logError("Proposals", "삭제 결재 요청 실패", err);
+      setShowDeletePicker(false);
+      setActionError(err instanceof ApiError ? err.message : "삭제 결재 요청 중 오류가 발생했습니다.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
 
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
@@ -224,8 +285,36 @@ export function ProposalDetailModal({
         {proposal.status === "rejected" && proposal.reject_reason && (
           <p className="text-xs text-danger mb-4">반려 사유: {proposal.reject_reason}</p>
         )}
+        {proposal.delete_requested && (
+          <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-4">
+            이 품의서는 삭제 결재가 진행 중입니다. 최종 승인되면 삭제되고, 반려되면 기존 승인 상태로 유지됩니다.
+          </p>
+        )}
+        {actionError && <p className="text-xs text-danger mb-3">{actionError}</p>}
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {canEdit && (
+            <button
+              onClick={handleEdit}
+              disabled={isBusy || deleteBusy}
+              title={proposal.status === "approved" ? "수정하면 결재를 다시 받아야 합니다." : "수정한 뒤 결재를 다시 요청합니다."}
+              className="flex items-center gap-1 text-xs text-text-muted border border-border rounded-lg px-3 py-1.5 hover:bg-bg disabled:opacity-50"
+            >
+              <Pencil size={14} />
+              수정{proposal.status === "approved" ? " (재결재 필요)" : " 후 재요청"}
+            </button>
+          )}
+          {canDelete && (
+            <button
+              onClick={handleDeleteClick}
+              disabled={isBusy || deleteBusy}
+              title={proposal.status === "approved" ? "삭제 결재 요청" : "삭제"}
+              className="flex items-center gap-1 text-xs text-danger border border-danger/30 rounded-lg px-3 py-1.5 hover:bg-danger/10 disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+              {proposal.status === "approved" ? "삭제 결재 요청" : "삭제"}
+            </button>
+          )}
           {canDecide && (
             <>
               <button
@@ -267,6 +356,13 @@ export function ProposalDetailModal({
           )}
         </div>
       </div>
+      {showDeletePicker && (
+        <ApproverPickerModal
+          isSubmitting={deleteBusy}
+          onConfirm={(endTitle, approverIds, isFinal) => handleRequestDelete(endTitle, approverIds, isFinal)}
+          onCancel={() => setShowDeletePicker(false)}
+        />
+      )}
     </div>
   );
 }

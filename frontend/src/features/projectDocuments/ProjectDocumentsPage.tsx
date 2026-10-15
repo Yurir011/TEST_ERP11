@@ -311,7 +311,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     }
   }
 
-  // 승인된 세금계산서는 바로 삭제할 수 없고, 결재선을 지정해 삭제 결재를 요청한다. 최종 승인되면 삭제된다.
+  // 승인된 문서는 바로 삭제할 수 없고, 결재선을 지정해 삭제 결재를 요청한다. 최종 승인되면 삭제된다.
   function handleDeleteClick(doc: ProjectDocument) {
     if (doc.status !== "approved") {
       handleDelete(doc.id);
@@ -320,9 +320,10 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     const issuedNote = doc.popbill_issued
       ? "\n\n※ 팝빌로 이미 발행(국세청 전송)된 세금계산서입니다. 여기서 삭제해도 국세청 발행은 취소되지 않으며, 취소는 수정세금계산서를 별도로 발행해야 합니다."
       : "";
+    const ledgerNote = doc.doc_type === "tax_invoice" ? "\n최종 승인되면 연결된 매입매출 내역과 입출금 내역도 함께 삭제됩니다." : "";
     if (
       !window.confirm(
-        `승인된 세금계산서는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?\n최종 승인되면 연결된 매입매출 내역과 입출금 내역도 함께 삭제됩니다.${issuedNote}`
+        `승인된 ${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?${ledgerNote}${issuedNote}`
       )
     ) {
       return;
@@ -355,7 +356,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
 
   async function handleApprove(doc: ProjectDocument) {
     const approveMessage = doc.delete_requested
-      ? `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}"의 삭제 요청을 승인하시겠습니까? 최종 승인되면 문서와 연결된 매입매출 내역이 삭제됩니다.`
+      ? `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}"의 삭제 요청을 승인하시겠습니까? 최종 승인되면 문서가 삭제됩니다.`
       : `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}" 문서를 결재 승인하시겠습니까? 승인 후 PDF에 직인이 찍힙니다.`;
     if (!window.confirm(approveMessage)) return;
     logDebug("ProjectDocuments", `결재 승인 시도: id=${doc.id}`);
@@ -954,6 +955,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                         >
                           {PROPOSAL_STATUS_LABELS[p.status]}
                         </span>
+                        {p.delete_requested && <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>}
                       </td>
                       <td className="py-2.5 px-4 text-center whitespace-nowrap">
                         {p.issue_date}
@@ -1102,16 +1104,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
                         </button>
                         <button
                           onClick={() => handleDeleteClick(doc)}
-                          disabled={doc.delete_requested || (doc.status === "approved" && doc.doc_type !== "tax_invoice")}
-                          title={
-                            doc.delete_requested
-                              ? "삭제 결재가 진행 중입니다."
-                              : doc.status === "approved"
-                                ? doc.doc_type === "tax_invoice"
-                                  ? "삭제 결재 요청"
-                                  : "승인된 문서는 삭제할 수 없습니다."
-                                : "삭제"
-                          }
+                          disabled={doc.delete_requested}
+                          title={doc.delete_requested ? "삭제 결재가 진행 중입니다." : doc.status === "approved" ? "삭제 결재 요청" : "삭제"}
                           className="p-1.5 text-text-muted hover:text-danger disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                           <Trash2 size={14} />
@@ -1164,6 +1158,10 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
           onReject={handleProposalReject}
           onDownload={handleProposalDownload}
           onPrint={handleProposalPrint}
+          onDeleted={() => {
+            setProposalDetail(null);
+            reloadAll();
+          }}
           onAttachmentsChanged={(updated) => {
             setProposalDetail(updated);
             setProposals((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));

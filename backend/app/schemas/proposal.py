@@ -24,6 +24,14 @@ class ProposalCreate(BaseModel):
         return v
 
 
+class ProposalDeleteRequestIn(BaseModel):
+    """승인된 품의서의 삭제 결재를 요청할 때 사용 (결재선은 새로 지정한다)."""
+
+    is_final_decision: bool = False
+    end_title: JobTitle | None = None
+    approver_ids: list[int] = Field(default_factory=list)
+
+
 class RejectIn(BaseModel):
     reason: str
 
@@ -75,4 +83,5 @@ class ProposalOut(BaseModel):
     attachments: list[ProposalAttachmentOut]
     has_pdf: bool
     reject_reason: str | None
+    delete_requested: bool = False
     created_at: datetime
