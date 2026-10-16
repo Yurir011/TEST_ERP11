@@ -2,11 +2,11 @@
 from sqlalchemy import text
 
 from app.models.user import JobTitle
-from app.routers import proposals as proposals_router
+from app.services import proposal_files
 
 
 def test_new_proposal_steps_are_stored_in_shared_table_only(client, db, make_user, auth_headers, monkeypatch):
-    monkeypatch.setattr(proposals_router, "_regenerate_pdf", lambda p: None)
+    monkeypatch.setattr(proposal_files, "regenerate_pdf", lambda p: None)
     writer, head = make_user(), make_user(title=JobTitle.dept_head)
     res = client.post(
         "/api/proposals",

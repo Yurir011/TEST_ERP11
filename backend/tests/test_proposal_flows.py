@@ -8,12 +8,12 @@ from sqlalchemy import text
 
 from app.models.proposal import Proposal
 from app.models.user import JobTitle, UserRole
-from app.routers import proposals as proposals_router
+from app.services import proposal_files
 
 
 @pytest.fixture(autouse=True)
 def _no_pdf(monkeypatch):
-    monkeypatch.setattr(proposals_router, "_regenerate_pdf", lambda p: None)
+    monkeypatch.setattr(proposal_files, "regenerate_pdf", lambda p: None)
 
 
 # ── API 경로 목록 (proposals.py 분할 전후 같아야 한다) ─────────────────

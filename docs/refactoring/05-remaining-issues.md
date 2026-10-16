@@ -29,8 +29,8 @@
 
 | # | 내용 | 비고 |
 |---|---|---|
-| S1 | **품의서만 별도 결재 단계 테이블**(`ProposalApprovalStep`)을 쓴다. 통합하려면 스키마·데이터 이전 필요 | **[승인]** |
-| S2 | `proposals.py`(647줄) 분할 — `project_documents`와 같은 방식(안전망 테스트 → 이동) 가능 | 품의서 결재 테스트부터 필요 |
+| S1 | ~~품의서만 별도 결재 단계 테이블~~ → **해결(2026-10-16)**: 공용 `approval_steps`로 통합, 개발 DB 적용 완료(09 문서). 남은 일: 옛 테이블 삭제(리비전 0006) | 삭제는 **[승인]** |
+| S2 | ~~`proposals.py`(647줄) 분할~~ → **해결(2026-10-16)**: `routers/proposals/` 패키지(listing·crud·approval·files) + `services/proposal_files.py` | |
 | S3 | `payments.py`(543줄), `transactions.py`(396줄), `leaves.py`(383줄) 라우터의 서비스 계층 분리 | 결제 정산은 이미 분리함 |
 | S4 | 프론트엔드 폼 페이지 분해: `ProjectDocumentFormPage`(780줄), `ClientFormPage`(709줄), `PaymentFormPage`(579줄) | 화면 테스트가 없어 수동 점검 병행 |
 | S5 | 린트 경고 10개: 이펙트 안 setState 9곳(화면별 정리 필요), `AuthContext`의 훅·Provider 한 파일 1곳(관례라 유지 가능) | 동작 영향 가능성 있어 화면별로 |

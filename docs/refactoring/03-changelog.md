@@ -32,7 +32,8 @@
 | P5 | 감사 로그 5단계: 개발 DB 백업 후 `audit_logs` 테이블 적용 | `c2550c4`(문서) |
 | P5 | 거래처 잔액 변경 이력 화면(타임라인) + API, 거래처 메뉴 권한으로 조회 | `fbeb11e` |
 | P5 | 설정 › 변경 이력 화면(대표 전용) + 조회 API 검색 보강 | `77cd2ab` |
-| P3 | 품의서 결재 단계를 공용 테이블로 통합 1~3단계(안전망·리비전 0004/0005·코드 교체) | `63fa0cb`, 이번 커밋 |
+| P3 | 품의서 결재 단계를 공용 테이블로 통합 1~4단계(안전망·리비전 0004/0005·코드 교체·개발 DB 적용) | `63fa0cb`, `1e3b8dd`, `1d1dd13` |
+| S2 | `proposals.py` 분할(라우터 패키지 + PDF 생성 서비스) | `24fadd0`, 이번 커밋 |
 
 사용자에게 보이는 **동작이 바뀐 것**은 모두 승인을 받았다: ① 부가세·품목 금액 반올림(사사오입), ② 오늘 날짜 기본값(로컬 시간), ③ 로그인 실패 반복 시 일시 잠금, ④ 업로드 파일 내용 검사와 크기 제한, ⑤ 잔액보다 큰 잔액 정산 거절, ⑥ 거래처 상세의 "변경 이력" 버튼(새 화면), ⑦ 설정 › 변경 이력 화면(새 화면). 나머지는 구조 정리이며 API 경로·화면·DB 스키마는 바뀌지 않았다. DB 컬럼 추가(`paid_amount` 등)는 리팩토링 이전의 부분 결제 기능 작업에서 이뤄졌다.
 
@@ -344,3 +345,21 @@
 - 신규: `alembic/versions/0004_proposal_target_type.py`, `0005_move_proposal_steps.py`, 테스트 3개 파일(`test_proposal_flows.py`, `test_migration_proposal_steps.py`, `test_proposal_steps_storage.py`)
 - 변경: `models/approval_step.py`(`proposal` 대상 종류), `models/proposal.py`(`steps` 관계를 공용 테이블로, 옛 모델은 보존용), `routers/proposals.py`, `routers/notifications.py`, `services/proposal_pdf.py`, `schemas/proposal.py`
 - 4단계(개발 DB 적용)도 같은 날 승인 후 완료: 백업 → 0005 까지 업그레이드 → 9행 일치 확인(09 문서 10장).
+
+## S2. `proposals.py` 분할 — 2026-10-16
+
+`project_documents` 분할과 같은 방법: 안전망 → 그대로 이동 → 비교.
+
+| 새 파일 | 담당 |
+|---|---|
+| `routers/proposals/__init__.py` | 하위 라우터를 합쳐 `router` 로 내보냄(`main.py` 는 그대로) |
+| `routers/proposals/_common.py` | 첨부 허용 형식, 조회 옵션, 문서 번호, 응답 변환, 자기결재 진행, 삭제 결재 보조 |
+| `routers/proposals/listing.py` | 목록 |
+| `routers/proposals/crud.py` | 작성, 수정, 삭제 |
+| `routers/proposals/approval.py` | 승인·반려, 삭제 결재 요청 |
+| `routers/proposals/files.py` | PDF 다운로드, 첨부 추가·다운로드·삭제 |
+| `services/proposal_files.py` | PDF 생성(`_regenerate_pdf` → `regenerate_pdf`) |
+
+- 함수 본문은 손대지 않았다. 유일한 변경은 PDF 생성 호출이 `proposal_files.regenerate_pdf(p)`로 바뀐 것(테스트에서 대체할 수 있도록 `project_document_files`와 같은 방식).
+- 테스트: 분할 전에 API 경로 목록(12개, operationId 포함) 고정 테스트를 추가했다. 테스트의 PDF 생성 대체 대상만 새 위치로 바꿨다.
+- 함께 고친 테스트: `test_audit_api_has_no_write_endpoints`가 `app.routes`를 읽었는데, 이 버전의 FastAPI 는 포함된 라우터의 경로를 거기 펼쳐 보여 주지 않아 **항상 통과**하고 있었다. OpenAPI 명세로 확인하도록 고쳤다(감사 로그 API 는 실제로 GET 만 있음).
