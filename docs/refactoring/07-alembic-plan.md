@@ -1,7 +1,7 @@
 # 07. DB 마이그레이션 체계(Alembic) 도입 계획
 
 > 작성일: 2026-10-16 · 관련: [01-analysis.md](01-analysis.md) D1, [05-remaining-issues.md](05-remaining-issues.md) O6
-> 상태: **1~4단계 완료(2026-10-16)**. 개발 DB 는 아직 바꾸지 않았다(읽기만 함). 5·6단계는 아래 8장 결과를 보고 승인받는다.
+> 상태: **전 단계 완료(2026-10-16)**. 1~4단계 결과는 8장, 5~7단계 결과는 9장.
 
 ## 1. 왜 필요한가
 
@@ -104,7 +104,7 @@ Alembic 자동 생성은 **enum에 값을 추가한 것을 알아채지 못한�
 
 | 종류 | 건수 | 내용 | 원인 |
 |---|---|---|---|
-| 서버 기본값 | 18 | `clients.receivable_amount`, `project_documents.status` 등 18개 컬럼에 DB 기본값(`DEFAULT 0`, `'draft'` 등)이 있는데 모델에는 없다 | 예전 1회성 스크립트가 컬럼을 추가하며 `DEFAULT` 를 붙였다. 앱은 값을 항상 직접 넣으므로 동작 영향 없음 |
+| 서버 기본값 | 19 | `clients.receivable_amount`, `project_documents.status` 등 19개 컬럼에 DB 기본값(`DEFAULT 0`, `'draft'` 등)이 있는데 모델에는 없다 | 예전 1회성 스크립트가 컬럼을 추가하며 `DEFAULT` 를 붙였다. 앱은 값을 항상 직접 넣으므로 동작 영향 없음 |
 | NULL 허용 | 1 | `document_issues.status` 가 DB 에서는 NULL 허용, 모델은 NOT NULL. **현재 NULL 인 행 0건** | 스크립트가 NOT NULL 을 빠뜨림 |
 | 인덱스 | 1 | `schedule_events.recurrence_group_id` 인덱스가 DB 에 없음 | 스크립트가 인덱스를 만들지 않음 |
 
@@ -114,8 +114,21 @@ Alembic 자동 생성은 **enum에 값을 추가한 것을 알아채지 못한�
 
 1. 개발 DB 를 `pg_dump` 로 백업
 2. `alembic stamp 0001_baseline` (개발 DB 에 `alembic_version` 표 1개 추가)
-3. `alembic upgrade head` → `0002` 실행: 위 18개 기본값 제거, `document_issues.status` NOT NULL 지정, 빠진 인덱스 생성. 모든 문장을 `IF EXISTS / IF NOT EXISTS` 형태로 써서 **새 DB(기준점에서 만든 DB)에서는 아무 일도 하지 않는다**
+3. `alembic upgrade head` → `0002` 실행: 위 19개 기본값 제거, `document_issues.status` NOT NULL 지정, 빠진 인덱스 생성. 모든 문장을 `IF EXISTS / IF NOT EXISTS` 형태로 써서 **새 DB(기준점에서 만든 DB)에서는 아무 일도 하지 않는다**
 4. 다시 비교해 차이 0건 확인
 5. 서버 시작 절차 변경(6단계): `create_all`·자동 스크립트 3개 실행을 없애고, 리비전이 최신인지 확인만 한다. `start.bat` 에 `alembic upgrade head` 추가
 
 데이터는 바뀌지 않는다(구조 메타데이터만 바뀌고, NOT NULL 대상 컬럼에 NULL 행이 없음을 확인함).
+
+## 9. 5~7단계 결과 (2026-10-16, 사용자 승인)
+
+| 단계 | 결과 |
+|---|---|
+| 5-1 백업 | `pg_dump`로 개발 DB 전체 백업: `backend/storage/backups/erp_db_20261016_145349_before_alembic.dump`(121KB, 테이블 데이터 27개 확인). storage 폴더라 git 에는 포함되지 않음 |
+| 5-2 정리 리비전 | `0002_align_legacy_db.py`: 예전 스크립트가 붙인 DB 기본값 **19개** 제거, `document_issues.status` NOT NULL(NULL 행이 있으면 바꾸지 않고 멈춤), 빠진 인덱스 생성. 이미 같은 상태면 아무 일도 하지 않아 새 DB 에서는 변화 없음 |
+| 5-3 개발 DB | `alembic stamp 0001_baseline` → `alembic upgrade head` → 현재 `0002_align_legacy_db (head)`, `alembic check` 차이 **0건**. 주요 테이블 행 수 그대로(거래처 18, 매입매출 36, 입출금 23, 사용자 8, 문서 37, 결재 단계 44) |
+| 6 서버 시작 | `main.py`에서 `create_all`과 자동 스크립트 3개 실행 제거. 신규 `core/db_revision.py`가 리비전이 최신인지 확인(운영: 시작 거부, 개발: 경고). DB 연결 실패와 정기 이체 기록 실패의 오류 처리를 분리 |
+| 6 start.bat | 서버를 띄우기 전에 `alembic upgrade head` 실행, 실패하면 서버를 띄우지 않고 멈춤 |
+| 7 기존 스크립트 | 마이그레이션 스크립트 50개를 `scripts/legacy_migrations/`로 이동(`__init__.py` 없음 → import 불가), README 작성. 관리용 스크립트 4개(`create_admin`, `create_site_admin`, `process_stamp`, `reconcile_client_balances`)는 그대로 |
+
+되돌리는 방법: 문제가 생기면 위 백업으로 `pg_restore --clean -d erp_db <백업파일>` 하고 이 변경 커밋을 되돌린다.

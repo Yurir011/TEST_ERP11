@@ -45,6 +45,7 @@
 cd backend
 python -m venv venv
 ./venv/Scripts/python.exe -m pip install -r requirements.txt
+./venv/Scripts/python.exe -m alembic upgrade head   # DB 구조를 최신으로 (처음 한 번, 그리고 코드 업데이트 후마다)
 ./venv/Scripts/python.exe -m uvicorn app.main:app --port 8000
 
 # 프론트엔드
@@ -116,3 +117,18 @@ cd backend
 
 - [`CLAUDE.md`](./CLAUDE.md) — 20단계 구축 계획 및 진행 상황 체크리스트
 - [`docs/refactoring/`](./docs/refactoring/) — 리팩토링 분석, 계획, 수정 내역, 검증 결과
+
+## DB 구조 변경 (Alembic)
+
+DB 구조(테이블·컬럼)는 Alembic 리비전(`backend/alembic/versions/`)으로 관리한다. **서버는 시작할 때 DB 구조를 바꾸지 않고**, 최신인지 확인만 한다(운영 환경에서 최신이 아니면 시작하지 않음). `start.bat`는 서버를 띄우기 전에 `alembic upgrade head`를 실행한다.
+
+```bash
+cd backend
+./venv/Scripts/python.exe -m alembic current                                   # 현재 DB 리비전
+./venv/Scripts/python.exe -m alembic upgrade head                              # 최신으로 올리기 (운영 DB 는 먼저 pg_dump 백업)
+./venv/Scripts/python.exe -m alembic revision --autogenerate -m "설명"          # 모델을 바꾼 뒤 리비전 만들기 → 파일을 읽고 확인 후 함께 커밋
+```
+
+- 모델만 바꾸고 리비전을 만들지 않으면 테스트(`tests/test_alembic_schema.py`)가 실패한다.
+- PostgreSQL enum 에 값을 추가한 것은 자동으로 잡히지 않는다. 리비전에 `ALTER TYPE ... ADD VALUE`를 직접 적는다.
+- 예전 1회성 스크립트는 `backend/app/scripts/legacy_migrations/`에 이력으로만 남아 있고 실행하지 않는다.

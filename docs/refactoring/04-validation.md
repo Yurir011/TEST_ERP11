@@ -2,11 +2,11 @@
 
 > 단계가 끝날 때마다 추가한다. 실행하지 못한 검증은 실행했다고 쓰지 않고 이유를 적는다.
 
-## 최종 종합 결과 (2026-10-16, Alembic 1~4단계 반영 기준)
+## 최종 종합 결과 (2026-10-16, Alembic 도입 완료 기준)
 
 | 검증 | 명령 | 결과 | 시작 시점 |
 |---|---|---|---|
-| 백엔드 테스트 | `backend/venv/Scripts/python.exe -m pytest` | **184 passed** (약 59초, 테스트 DB 를 Alembic 으로 생성) | 0건 |
+| 백엔드 테스트 | `backend/venv/Scripts/python.exe -m pytest` | **187 passed** (약 56초, 테스트 DB 를 Alembic 으로 생성) | 0건 |
 | 프론트엔드 테스트 | `npm test` (vitest) | **36 passed** (6개 파일) | 0건 |
 | 타입 검사 | `npx tsc -b --noEmit` | 오류 0 | 오류 0 |
 | 린트 | `npx oxlint` | 오류 0 / 경고 **10** | 경고 16 |
@@ -272,3 +272,15 @@
 | 빈 임시 DB: `alembic check` | "No new upgrade operations detected" (모델과 일치) |
 | `pytest` (테스트 DB 를 리비전으로 생성) | **184 passed**, 경고 0 |
 | 개발 DB 비교(읽기 전용) | 차이 20건(기본값 18, NULL 허용 1, 인덱스 1), `document_issues.status` NULL 행 0건 |
+
+## P6. Alembic 5~7단계 — 2026-10-16
+
+| 검증 | 결과 |
+|---|---|
+| 백업 파일 검증(`pg_restore -l`) | 목록 291항목, 테이블 데이터 27개 |
+| 개발 DB `alembic current` / `alembic check` | `0002_align_legacy_db (head)` / 차이 0건 |
+| 개발 DB 행 수(정리 후) | 거래처 18, 매입매출 36, 입출금 23, 사용자 8, 문서 37, 결재 단계 44 |
+| `pytest` | **187 passed** |
+| 백엔드 import | 정상 |
+
+- 실행하지 못한 검증: `start.bat`를 더블클릭해 실제로 `alembic upgrade head` → 서버 시작까지 이어지는지(배치 파일은 직접 실행하지 않았다). 한 번 실행해 콘솔에 "Running upgrade" 없이(이미 최신) 서버가 뜨는지 확인을 권장한다.

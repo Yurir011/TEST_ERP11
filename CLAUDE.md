@@ -31,6 +31,7 @@
 ```
 # 백엔드 (FastAPI)
 cd backend
+./venv/Scripts/python.exe -m alembic upgrade head   # DB 구조 최신화 (서버는 시작 시 구조를 바꾸지 않는다)
 ./venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000
 
 # 프론트엔드 (React + Vite)

@@ -4,11 +4,9 @@ from sqlalchemy import text
 
 from app import models  # noqa: F401  (테이블 메타데이터 등록을 위해 import)
 from app.config import settings
+from app.core.db_revision import check_db_revision
 from app.core.startup_checks import enforce_security_settings
-from app.scripts.migrate_card_pending import main as migrate_card_pending
-from app.scripts.migrate_transaction_paid_amount import main as migrate_transaction_paid_amount
-from app.scripts.migrate_transaction_settlement import main as migrate_transaction_settlement
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal, engine
 from app.logging_config import get_logger, setup_logging
 from app.services.recurring_payment import generate_recurring_payments
 from app.routers import (
@@ -75,18 +73,20 @@ def on_startup():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.debug("[Main] DB 연결 확인 성공")
-        Base.metadata.create_all(bind=engine)
-        logger.debug("[Main] 테이블 생성/확인 완료")
-        # 기존 DB에는 새 컬럼이 없으므로 서버 시작 때 한 번 확인해 추가한다 (이미 있으면 아무것도 하지 않는다).
-        migrate_transaction_settlement()
-        migrate_transaction_paid_amount()
-        migrate_card_pending()
+    except Exception as exc:
+        logger.error(f"[Main] DB 연결 실패: {exc}")
+        return
+
+    # DB 구조는 서버가 바꾸지 않는다 (alembic upgrade head 로 미리 맞춘다). 최신이 아니면 운영에서는 시작을 막는다.
+    check_db_revision(engine, settings, logger)
+
+    try:
         # 도래한 정기 자동이체를 입출금 내역으로 기록한다 (서버가 꺼져 있던 기간분도 함께 채운다).
         with SessionLocal() as db:
             created = generate_recurring_payments(db)
             logger.debug(f"[Main] 정기 자동이체 기록: {created}건")
     except Exception as exc:
-        logger.error(f"[Main] DB 연결 실패: {exc}")
+        logger.error(f"[Main] 정기 자동이체 기록 실패: {exc}")
 
 
 @app.get("/api/health")

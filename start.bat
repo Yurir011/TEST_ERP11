@@ -7,6 +7,19 @@ echo ============================================
 echo   Starting ERP System...
 echo ============================================
 
+echo [0/3] Updating database schema (alembic upgrade head)...
+pushd "%ROOT%backend"
+venv\Scripts\python.exe -m alembic upgrade head
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Database schema update failed. The servers were not started.
+    echo         Check the message above. See backend\alembic\README for how to fix it.
+    popd
+    pause
+    exit /b 1
+)
+popd
+
 echo [1/3] Starting backend (FastAPI) on port 8000...
 start "ERP - Backend" cmd /k "cd /d "%ROOT%backend" && venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
