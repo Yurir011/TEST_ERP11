@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { Project, ProjectStatus } from "./types";
+import { todayISO } from "../../lib/date";
 
 const MAX_PER_COLUMN = 4;
 const RING_R = 15;
@@ -52,7 +53,7 @@ interface ProjectStageBoardProps {
 }
 
 export function ProjectStageBoard({ projects }: ProjectStageBoardProps) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   if (projects.length === 0) {
     return (

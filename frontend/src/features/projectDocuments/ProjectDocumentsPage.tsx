@@ -42,6 +42,7 @@ import {
   type TaxInvoicePurpose,
 } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { toLocalISODate } from "../../lib/date";
 
 type DocTab = ProjectDocType | "all" | "proposal";
 
@@ -630,7 +631,7 @@ export function ProjectDocumentsPage({
   const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`;
 
   // 검색창 자동완성 목록: 최근 1년 안에 발행일이 있는 문서의 프로젝트명 (중복 제거, 가나다순).
-  const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+  const oneYearAgo = toLocalISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
   const recentProjectNames = Array.from(
     new Set((docs ?? []).filter((d) => d.issue_date >= oneYearAgo && d.project_name).map((d) => d.project_name))
   ).sort((x, y) => x.localeCompare(y, "ko"));

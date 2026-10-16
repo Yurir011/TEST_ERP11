@@ -4,10 +4,7 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import { MENU_PERMISSION_OPTIONS, type CurrentUser, type JobGrade, type JobTitle, type MenuPermissionKey } from "../../lib/auth";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logError } from "../../lib/logger";
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayISO } from "../../lib/date";
 
 const GRADE_OPTIONS: { value: JobGrade; label: string }[] = [
   { value: "staff", label: "사원" },

@@ -9,10 +9,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type TaxInvoiceCandidate, type Transaction, type TransactionType } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayISO } from "../../lib/date";
 
 function TaxInvoicePicker({ onPick, onClose }: { onPick: (c: TaxInvoiceCandidate) => void; onClose: () => void }) {
   const [q, setQ] = useState("");

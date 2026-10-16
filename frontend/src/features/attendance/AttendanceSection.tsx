@@ -5,16 +5,13 @@ import { ApiError, apiGet } from "../../lib/api";
 import { formatDuration, formatTime } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "./types";
+import { toMonthValue } from "../../lib/date";
 
 const MAX_HISTORY_MONTHS = 36;
 
 function addMonths(year: number, month: number, delta: number) {
   const zeroIndexed = year * 12 + (month - 1) + delta;
   return { year: Math.floor(zeroIndexed / 12), month: (zeroIndexed % 12) + 1 };
-}
-
-function toMonthValue(year: number, month: number) {
-  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 function todayLabel(record: AttendanceRecord | null) {

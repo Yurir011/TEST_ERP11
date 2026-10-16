@@ -26,10 +26,7 @@ import {
 } from "./types";
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import { NumberInput } from "../../components/ui/NumberInput";
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayISO } from "../../lib/date";
 
 function TransactionPicker({ onPick, onClose }: { onPick: (c: PaymentTransactionCandidate) => void; onClose: () => void }) {
   const [q, setQ] = useState("");

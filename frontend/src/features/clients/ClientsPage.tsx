@@ -6,6 +6,7 @@ import { apiGet, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { NewClientButton } from "./NewClientButton";
 import type { Client } from "./types";
+import { todayISO } from "../../lib/date";
 
 // 거래처 수가 많아졌을 때 찾기 쉽도록 초성 구간별로 묶어서 보여준다 (모든 자음으로 나누지 않고 비슷한 자음끼리 묶음).
 const CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
@@ -98,7 +99,7 @@ export function ClientsPage() {
     setIsExporting(true);
     try {
       const path = query ? `/api/clients/export/excel?q=${encodeURIComponent(query)}` : "/api/clients/export/excel";
-      await downloadFile(path, `거래처목록_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      await downloadFile(path, `거래처목록_${todayISO()}.xlsx`);
     } catch (err) {
       logError("Clients", "목록 엑셀 다운로드 실패", err);
       setError("목록을 다운로드하지 못했습니다.");

@@ -74,3 +74,12 @@
 
 - 린트 경고 16개 → **10개**. 남은 것: `set-state-in-effect` 9개(P4에서 화면별 처리), `AuthContext`의 `only-export-components` 1개(훅과 Provider를 한 파일에 두는 일반적인 패턴이라 유지).
 - 마이그레이션 스크립트는 삭제하지 않았다.
+
+## P2(일부). 오늘 날짜 기본값을 로컬 시간 기준으로 수정 (버그 수정, 사용자 승인) — 2026-10-16
+
+- 문제: `new Date().toISOString().slice(0, 10)`는 UTC 기준이라 **한국 시간 00:00~09:00에는 전날 날짜**가 나왔다(등록 화면 기본 날짜, 조회 기간 등).
+- 수정: 신규 `frontend/src/lib/date.ts`에 `toLocalISODate()`, `todayISO()`, `toMonthValue()`를 두고 흩어져 있던 복사본을 모두 교체했다.
+  - `todayISO` 로컬 정의 7곳 삭제(PaymentFormPage, SettleModal, ProjectDocumentFormPage, UserFormPage, TransactionFormPage, TransactionSettleModal, TransactionsPage)
+  - `toMonthValue` 로컬 정의 4곳 삭제(AttendanceSection, LeavesPage, PaymentsPage, TransactionsPage)
+  - 인라인 `toISOString().slice(0, 10)` 6곳 교체(ClientsPage, ProjectOverviewCard, ProjectsPage, ProjectStageBoard, ProjectDocumentsPage, TransactionsPage의 `monthsAgoISO`)
+- 효과: 00:00~09:00에 등록 화면을 열어도 오늘 날짜가 기본으로 들어간다. 그 외 시간대의 동작은 같다.

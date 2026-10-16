@@ -12,10 +12,7 @@ import {
   type PaymentMethod,
 } from "../payments/types";
 import { remainingAmount, type Transaction } from "./types";
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayISO } from "../../lib/date";
 
 interface TransactionSettleModalProps {
   tx: Transaction;

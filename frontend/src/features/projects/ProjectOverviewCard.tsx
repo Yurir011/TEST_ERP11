@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { Project } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { todayISO } from "../../lib/date";
 
 const RING_R = 42;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
@@ -32,7 +33,7 @@ export function ProjectOverviewCard({ projects }: { projects: Project[] }) {
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   const active = projects.filter((p) => p.status !== "completed" && p.status !== "discarded");
   const avgProgress =

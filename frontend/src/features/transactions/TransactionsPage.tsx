@@ -11,6 +11,7 @@ import { TransactionDetailModal } from "./TransactionDetailModal";
 import { TransactionSettleModal } from "./TransactionSettleModal";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { todayISO, toLocalISODate, toMonthValue } from "../../lib/date";
 
 const TABS: { key: TransactionType | "all"; label: string }[] = [
   { key: "all", label: "전체" },
@@ -25,18 +26,10 @@ const PERIOD_PRESETS = [
   { months: 12, label: "12개월" },
 ];
 
-function toMonthValue(year: number, month: number) {
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function monthsAgoISO(months: number) {
   const d = new Date();
   d.setMonth(d.getMonth() - months);
-  return d.toISOString().slice(0, 10);
+  return toLocalISODate(d);
 }
 
 export function TransactionsPage() {

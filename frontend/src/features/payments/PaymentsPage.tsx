@@ -41,6 +41,7 @@ import {
   type PaymentType,
 } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { toMonthValue } from "../../lib/date";
 
 // 구분 탭. 카드는 결제수단이 법인카드인 내역(결제예정 포함)만 모아 보며, 카드 출금은 출금 탭에도 함께 나온다.
 type PaymentTab = PaymentType | "card" | "all";
@@ -56,10 +57,6 @@ function fitFontClass(length: number): string {
   if (length <= 13) return "text-sm";
   if (length <= 16) return "text-xs";
   return "text-[11px]";
-}
-
-function toMonthValue(year: number, month: number) {
-  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 function voucherFilename(p: Payment, ext: string) {

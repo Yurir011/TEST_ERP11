@@ -14,10 +14,7 @@ import {
   type PaymentMethod,
 } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayISO } from "../../lib/date";
 
 interface SettleModalProps {
   kind: "receivable" | "payable";

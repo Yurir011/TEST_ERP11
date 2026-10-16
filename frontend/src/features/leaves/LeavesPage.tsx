@@ -9,10 +9,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { openTargetDomId, useOpenTarget, useScrollToOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { LeaveDetailModal } from "./LeaveDetailModal";
 import type { LeaveBalance, LeaveRecord } from "./types";
-
-function toMonthValue(year: number, month: number) {
-  return `${year}-${String(month).padStart(2, "0")}`;
-}
+import { toMonthValue } from "../../lib/date";
 
 interface LeavesPageProps extends OpenOverlayProps {
   embedded?: boolean;

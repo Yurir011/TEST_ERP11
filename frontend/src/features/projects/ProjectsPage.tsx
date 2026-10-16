@@ -6,6 +6,7 @@ import { apiGet } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { ProjectStageBoard } from "./ProjectStageBoard";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES, type Project, type ProjectStatus } from "./types";
+import { todayISO } from "../../lib/date";
 
 function isOverdue(p: Project, today: string): boolean {
   return p.status === "in_progress" && !!p.end_date && p.end_date < today;
@@ -67,7 +68,7 @@ export function ProjectsPage() {
       .catch((err) => logError("Projects", "프로젝트 진행 현황 조회 실패", err));
   }, []);
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   return (
     <MainLayout
@@ -180,7 +181,7 @@ export function ProjectsPage() {
             </thead>
             <tbody>
               {projects.map((p) => {
-                const overdue = isOverdue(p, todayISO);
+                const overdue = isOverdue(p, today);
                 return (
                   <tr
                     key={p.id}

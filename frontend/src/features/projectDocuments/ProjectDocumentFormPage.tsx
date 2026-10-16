@@ -26,14 +26,11 @@ import {
   type TaxInvoicePurpose,
 } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
+import { todayISO } from "../../lib/date";
 
 const OTHER_PROJECT = "other";
 const CURRENCY_OPTIONS: DocCurrency[] = ["KRW", "USD", "JPY"];
 const PURPOSE_OPTIONS: TaxInvoicePurpose[] = ["청구", "영수"];
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function isProjectDocType(value: string | null): value is ProjectDocType {
   return value === "quotation" || value === "statement" || value === "tax_invoice" || value === "purchase_order";
