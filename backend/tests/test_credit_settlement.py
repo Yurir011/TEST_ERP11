@@ -240,11 +240,26 @@ def test_cannot_lower_total_below_paid_amount(client, h, make_client):
     assert res.status_code == 400
 
 
-def test_delete_transaction_after_partial_payment_removes_only_remaining(client, h, make_client, db):
+@pytest.mark.parametrize("amount", [400_000, 1_100_000], ids=["partial", "full"])
+def test_cannot_delete_transaction_with_linked_payments(client, h, make_client, db, amount):
+    """R5: 결제한 입출금이 남은 매입매출은 지울 수 없다. 예전에는 지워졌고, 그 뒤 입출금을 지우면
+    연결 없는 잔액 정산으로 취급되어 미수금이 되살아났다(부분 400,000 / 전액 1,100,000 이 남음)."""
     c = make_client()
     tx = _create_tx(client, h, c.id)
-    _pay(client, h, client_id=c.id, tx_id=tx["id"], amount=400_000)
-    client.delete(f"/api/transactions/{tx['id']}", headers=h)
+    pay = _pay(client, h, client_id=c.id, tx_id=tx["id"], amount=amount).json()
+    db.refresh(c)
+    before = c.receivable_amount
+
+    res = client.delete(f"/api/transactions/{tx['id']}", headers=h)
+    assert res.status_code == 400
+    assert "입출금 내역 1건" in res.json()["detail"]
+    db.refresh(c)
+    assert c.receivable_amount == before  # 아무것도 바뀌지 않는다
+    assert db.get(Transaction, tx["id"]) is not None
+
+    # 안내대로 입출금을 먼저 지우면 외상으로 돌아오고, 그다음 거래를 지우면 잔액이 0 이 된다
+    assert client.delete(f"/api/payments/{pay['id']}", headers=h).status_code == 204
+    assert client.delete(f"/api/transactions/{tx['id']}", headers=h).status_code == 204
     db.refresh(c)
     assert c.receivable_amount == 0
 

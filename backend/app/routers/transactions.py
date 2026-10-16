@@ -342,6 +342,19 @@ def delete_transaction(tx_id: int, db: Session = Depends(get_db), current_user: 
     tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
     if tx is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래 내역을 찾을 수 없습니다.")
+    # 이 건을 결제한 입출금(전액·부분)이 남아 있으면 지우지 않는다. 먼저 지우면 그 입출금이 연결 없는 잔액 정산으로 남아,
+    # 나중에 입출금을 지울 때 거래처 잔액이 되살아나 실제보다 커진다. 입출금을 먼저 지우면 이 건은 외상으로 돌아온다.
+    linked_payments = (
+        db.query(Payment)
+        .filter((Payment.partial_transaction_id == tx.id) | (Payment.id == tx.settled_payment_id))
+        .count()
+    )
+    if linked_payments:
+        logger.debug(f"[Transactions] 삭제 거절(연결된 입출금 {linked_payments}건): id={tx_id}, by={current_user.id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"이 거래를 결제한 입출금 내역 {linked_payments}건이 있어 삭제할 수 없습니다. 입출금관리에서 먼저 삭제해주세요.",
+        )
     credit_remove(db, tx)
     db.delete(tx)
     db.commit()

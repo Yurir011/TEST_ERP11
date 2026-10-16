@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Pencil, Plus, Rec
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { apiDelete, apiGet, downloadFile } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, downloadFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { HometaxImportModal } from "./HometaxImportModal";
@@ -131,6 +131,8 @@ export function TransactionsPage() {
       loadReport();
     } catch (err) {
       logError("Transactions", "삭제 실패", err);
+      // 결제한 입출금이 남아 있는 거래 등 서버가 삭제를 거절한 사유를 보여준다
+      window.alert(err instanceof ApiError ? err.message : "삭제 중 오류가 발생했습니다.");
     }
   }
 

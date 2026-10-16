@@ -239,6 +239,35 @@ def test_delete_request_final_approval_removes_document_and_ledger(client, db, s
     assert _ledger_txs(db, doc["id"]) == []  # 연결된 매입매출도 함께 삭제
 
 
+def test_delete_with_partial_payment_removes_partial_payments_too(client, db, staff, auth_headers, make_client):
+    """R5: 부분 결제된 세금계산서를 삭제 결재로 지우면 부분 결제 입출금도 함께 지워야 한다.
+    남겨 두면 연결 없는 잔액 정산으로 취급되어, 나중에 그 입출금을 지울 때 미수금이 되살아난다."""
+    from app.models.client import Client
+    from app.models.payment import Payment
+
+    c = make_client(name="테스트 거래처")  # 문서의 거래처명과 같은 이름 → 매입매출이 이 거래처로 기록된다
+    writer_h, ceo_h = auth_headers(staff["writer"]), auth_headers(staff["ceo"])
+    doc = _create(client, writer_h, doc_type="tax_invoice", approver_ids=[staff["dept_head"].id])
+    _approve(client, auth_headers(staff["dept_head"]), doc["id"])
+    tx = _ledger_txs(db, doc["id"])[0]
+    assert tx.client_id == c.id
+    pay = client.post(
+        "/api/payments",
+        headers=ceo_h,
+        json={"type": "deposit", "payment_date": "2026-10-16", "category": "외상매출금", "description": "일부 수금",
+              "amount": 400_000, "method": "bank_transfer", "bank_type": "ibk", "client_id": c.id, "transaction_id": tx.id},
+    )
+    assert pay.status_code == 201, pay.text
+    db.refresh(c)
+    assert c.receivable_amount == 700_000
+
+    _request_delete(client, writer_h, doc["id"], [staff["dept_head"].id])
+    _approve(client, auth_headers(staff["dept_head"]), doc["id"])  # 삭제 결재 최종 승인
+    db.expire_all()
+    assert db.get(Payment, pay.json()["id"]) is None  # 부분 결제 입출금도 함께 삭제
+    assert db.get(Client, c.id).receivable_amount == 0
+
+
 def test_delete_request_rejection_restores_approved_state(client, db, staff, auth_headers):
     writer_h = auth_headers(staff["writer"])
     doc = _create(client, writer_h, approver_ids=[staff["dept_head"].id])

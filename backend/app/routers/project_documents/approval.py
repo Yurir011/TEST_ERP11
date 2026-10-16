@@ -122,16 +122,23 @@ def _delete_document_now(db: Session, doc: ProjectDocument) -> None:
         db.flush()
         if tx is not None:
             credit_remove(db, tx)
-            payment = db.get(Payment, tx.settled_payment_id) if tx.settled_payment_id is not None else None
+            # 이 건을 결제한 입출금: 전액 결제 1건 + 부분 결제(일부 수금/지급) 여러 건.
+            # 부분 결제를 남겨 두면 연결 없는 잔액 정산으로 취급되어, 나중에 지울 때 거래처 잔액이 되살아난다(R5).
+            payments = (
+                db.query(Payment)
+                .filter((Payment.partial_transaction_id == tx.id) | (Payment.id == tx.settled_payment_id))
+                .all()
+            )
             db.delete(tx)
             logger.debug(f"[ProjectDocuments] 삭제: 연결된 매입매출 내역 삭제 tx_id={tx.id}, doc_id={doc.id}")
-            if payment is not None:
-                # 대금 결제가 끝난 건이면 연결된 입출금 내역(과 첨부 영수증)도 함께 삭제한다.
+            if payments:
+                # 대금 결제(전액·부분)가 있던 건이면 연결된 입출금 내역(과 첨부 영수증)도 함께 삭제한다.
                 db.flush()
-                if payment.receipt_path and os.path.exists(payment.receipt_path):
-                    os.remove(payment.receipt_path)
-                db.delete(payment)
-                logger.debug(f"[ProjectDocuments] 삭제: 연결된 입출금 내역 삭제 payment_id={payment.id}, doc_id={doc.id}")
+                for payment in payments:
+                    if payment.receipt_path and os.path.exists(payment.receipt_path):
+                        os.remove(payment.receipt_path)
+                    db.delete(payment)
+                    logger.debug(f"[ProjectDocuments] 삭제: 연결된 입출금 내역 삭제 payment_id={payment.id}, doc_id={doc.id}")
     for image in doc.images:
         if os.path.exists(image.file_path):
             os.remove(image.file_path)
