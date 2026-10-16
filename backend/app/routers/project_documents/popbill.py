@@ -78,6 +78,12 @@ def issue_popbill_tax_invoice(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
     except PopbillException as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"팝빌 오류 [{err.code}] {err.message}")
+    except OSError as err:  # 연결 실패·응답 시간 초과 (TimeoutError 포함)
+        logger.error(f"[ProjectDocuments] 팝빌 발행 중 통신 오류: doc_id={doc_id}, error={err!r}")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="팝빌 서버와 통신하지 못했습니다. 발행 요청이 이미 처리됐을 수 있으니, 다시 발행하기 전에 팝빌 홈페이지에서 발행 여부를 확인해주세요.",
+        )
 
     doc.popbill_mgt_key = result["mgt_key"]
     doc.popbill_nts_confirm_num = result["nts_confirm_num"]
@@ -96,6 +102,9 @@ def get_popbill_view_url(doc_id: int, db: Session = Depends(get_db), current_use
         url = popbill_service.get_view_url(doc)
     except PopbillException as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"팝빌 오류 [{err.code}] {err.message}")
+    except OSError as err:
+        logger.error(f"[ProjectDocuments] 팝빌 문서 보기 URL 통신 오류: doc_id={doc_id}, error={err!r}")
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="팝빌 서버와 통신하지 못했습니다. 잠시 후 다시 시도해주세요.")
     logger.debug(f"[ProjectDocuments] 팝빌 문서 보기 URL 조회: doc_id={doc_id}, by={current_user.id}")
     return {"url": url}
 
@@ -109,5 +118,8 @@ def get_popbill_pdf_url(doc_id: int, db: Session = Depends(get_db), current_user
         url = popbill_service.get_pdf_url(doc)
     except PopbillException as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"팝빌 오류 [{err.code}] {err.message}")
+    except OSError as err:
+        logger.error(f"[ProjectDocuments] 팝빌 PDF URL 통신 오류: doc_id={doc_id}, error={err!r}")
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="팝빌 서버와 통신하지 못했습니다. 잠시 후 다시 시도해주세요.")
     logger.debug(f"[ProjectDocuments] 팝빌 PDF URL 조회: doc_id={doc_id}, by={current_user.id}")
     return {"url": url}

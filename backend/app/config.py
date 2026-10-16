@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     popbill_corp_num: str = ""
     popbill_user_id: str = ""
     popbill_is_test: bool = True
+    # 팝빌·링크허브 서버 응답을 기다리는 최대 시간(초). SDK 기본값은 무제한이라 장애 시 요청이 끝나지 않는다.
+    popbill_timeout_seconds: float = 30
 
     model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parent.parent / ".env", env_file_encoding="utf-8")
 

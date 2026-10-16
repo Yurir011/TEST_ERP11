@@ -1,15 +1,47 @@
 """팝빌 전자세금계산서 연동. 결재 승인된 세금계산서(ProjectDocument)를 실제로 국세청에 발행한다.
 PopBill/README.md 에 있는 로컬 테스트 도구(PopBill/app.py)에서 검증한 연동 방식을 그대로 따른다."""
-from decimal import ROUND_HALF_UP, Decimal
+import http.client
+from decimal import Decimal
 
+import linkhub.linkhub
+import popbill.base
 from popbill import PopbillException, Taxinvoice, TaxinvoiceDetail, TaxinvoiceService
 
 from app.config import settings
 from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.project_document import ProjectDocument, calc_amount, format_price
+from app.services.money import vat_amount
 
 logger = get_logger("PopbillService")
+
+
+class _HttpClientWithTimeout:
+    """팝빌 SDK(popbill)와 인증 토큰 SDK(linkhub)가 쓰는 http.client 대신 넣는 얇은 대체물.
+
+    두 SDK 는 타임아웃 없이 연결을 만들어, 팝빌 서버가 응답하지 않으면 요청이 끝없이 기다린다(서버 작업 스레드가 묶인다).
+    두 모듈 안에서만 연결 생성에 기본 타임아웃을 넣고, 전역 http.client 와 다른 연결에는 영향을 주지 않는다.
+    """
+
+    def __init__(self, timeout: float):
+        self.timeout = timeout
+
+    def HTTPSConnection(self, *args, **kwargs):  # noqa: N802 - SDK 가 부르는 이름 그대로
+        kwargs.setdefault("timeout", self.timeout)
+        return http.client.HTTPSConnection(*args, **kwargs)
+
+    def HTTPConnection(self, *args, **kwargs):  # noqa: N802
+        kwargs.setdefault("timeout", self.timeout)
+        return http.client.HTTPConnection(*args, **kwargs)
+
+
+def install_timeouts(timeout: float) -> None:
+    popbill.base.httpclient = _HttpClientWithTimeout(timeout)
+    linkhub.linkhub.httpclient = _HttpClientWithTimeout(timeout)
+    logger.debug(f"[PopbillService] 팝빌 연결 타임아웃 설정: {timeout}초")
+
+
+install_timeouts(settings.popbill_timeout_seconds)
 
 
 class PopbillConfigError(Exception):
@@ -41,10 +73,6 @@ def get_service() -> TaxinvoiceService:
 
 def _mgt_key(doc: ProjectDocument) -> str:
     return f"BENCH{doc.id:010d}"
-
-
-def _round_tax(supply: int) -> int:
-    return int((Decimal(supply) / 10).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 # 세금계산서 발행 시 공급받는자(거래처)에 반드시 있어야 하는 정보: (필드명, 화면 라벨)
@@ -104,7 +132,7 @@ def build_taxinvoice(doc: ProjectDocument, client: Client, issuer_email: str | N
     detail_list: list[TaxinvoiceDetail] = []
     for idx, item in enumerate(doc.items, start=1):
         supply = calc_amount(item.quantity, item.unit_price)
-        tax = _round_tax(supply)
+        tax = vat_amount(supply)
         supply_total += supply
         detail_list.append(
             TaxinvoiceDetail(
@@ -117,7 +145,7 @@ def build_taxinvoice(doc: ProjectDocument, client: Client, issuer_email: str | N
                 tax=str(tax),
             )
         )
-    tax_total = _round_tax(supply_total)
+    tax_total = vat_amount(supply_total)
 
     invoice = Taxinvoice(
         issueType="정발행",
