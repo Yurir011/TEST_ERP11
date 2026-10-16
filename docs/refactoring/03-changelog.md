@@ -191,3 +191,17 @@
 - 모듈 의존 방향: `crud → approval`(작성 시 결재 요청 적용), `approval → _common`. 하위 모듈끼리 순환 import 없음.
 - 이동 전후 함수 39개 AST와 데코레이터가 동일함을 다시 확인했다. 06 분할안 1~8단계 완료.
 - 최종 구성(줄 수): `approval` 360, `crud` 248, `_common` 125, `images` 137, `popbill` 113, `listing` 97, `files` 46, `__init__` 23 (원래 1,155줄 한 파일).
+
+## P5(일부). 보안·설정: JWT 비밀키 기본값 방지, 로그 레벨 — 2026-10-16 (사용자 승인)
+
+| 변경 | 내용 |
+|---|---|
+| 운영 환경 시작 점검 | 신규 `core/startup_checks.py`. `ENVIRONMENT=production`일 때 JWT 비밀키가 기본값(`dev-only-change-me` 등)이거나 32자 미만이면 **서버가 시작되지 않는다**(`RuntimeError`). 개발 환경(기본)에서는 경고 로그만 남기고 계속 진행한다. |
+| 실행 환경 설정 | `config.py`에 `environment`(기본 `development`) 추가. `main.py` 시작 시 점검 호출(DB 연결 `try` 밖에 두어 오류가 삼켜지지 않게 함). |
+| 로그 레벨 기본값 | 코드 기본값 `DEBUG` → `INFO`. 개발 PC는 `.env`의 `LOG_LEVEL=DEBUG`로 그대로 디버그 로그를 본다. |
+| **로그 레벨 설정 버그 수정** | 기존 `logging_config.py`는 `os.getenv("LOG_LEVEL")`을 읽었는데 `.env` 파일은 환경변수로 로드되지 않아 **`.env`의 `LOG_LEVEL`이 무시되고 항상 DEBUG**였다. 이제 설정(`settings.log_level`)을 읽어 `.env`와 환경변수 둘 다 반영된다. 운영에서 `LOG_LEVEL`로 로그량을 줄일 수 있게 되었다. |
+| 문서·예시 | `.env.example`에 `ENVIRONMENT`, `LOG_LEVEL`, 비밀키 생성 방법 추가 |
+
+- 현재 개발 `.env`의 비밀키는 64자라 점검을 통과한다(값은 확인만 하고 출력하지 않음).
+- 테스트 추가: `tests/test_startup_checks.py` 8건(기본값, 짧은 키, 운영 차단, 대소문자 무시, 운영 정상 시작, 개발 경고).
+- **운영 서버 배포 시 해야 할 일**: `.env`에 `ENVIRONMENT=production`, 32자 이상의 임의 `JWT_SECRET_KEY`, 필요 시 `LOG_LEVEL=INFO`(또는 WARNING)를 지정한다. 비밀키를 바꾸면 기존 로그인 토큰은 무효가 되어 전원이 다시 로그인한다.

@@ -1,15 +1,16 @@
 """
 공통 로깅 설정.
 CLAUDE.md 규칙: 모든 실행 프로그램은 [모듈명] 형식의 디버그 메시지를 남긴다.
-운영 환경에서는 LOG_LEVEL 환경변수로 레벨을 조정한다 (기본값 DEBUG).
+레벨은 설정(LOG_LEVEL, backend/.env 또는 환경변수)으로 조정하며 기본값은 INFO 이다. 개발 PC 는 .env 에 LOG_LEVEL=DEBUG 를 둔다.
 """
 import logging
-import os
 import sys
+
+from app.config import settings
 
 
 def setup_logging() -> None:
-    log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
+    log_level = settings.log_level.upper()
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")

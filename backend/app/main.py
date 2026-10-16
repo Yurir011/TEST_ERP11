@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 from app import models  # noqa: F401  (테이블 메타데이터 등록을 위해 import)
 from app.config import settings
+from app.core.startup_checks import enforce_security_settings
 from app.scripts.migrate_card_pending import main as migrate_card_pending
 from app.scripts.migrate_transaction_paid_amount import main as migrate_transaction_paid_amount
 from app.scripts.migrate_transaction_settlement import main as migrate_transaction_settlement
@@ -66,7 +67,8 @@ app.include_router(todos.router)
 
 @app.on_event("startup")
 def on_startup():
-    logger.debug(f"[Main] 서버 시작: app_name={settings.app_name}, log_level={settings.log_level}")
+    logger.debug(f"[Main] 서버 시작: app_name={settings.app_name}, environment={settings.environment}, log_level={settings.log_level}")
+    enforce_security_settings(settings, logger)  # 운영 환경에서 안전하지 않은 설정이면 여기서 시작을 막는다 (아래 try 밖)
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))

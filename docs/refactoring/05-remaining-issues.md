@@ -26,7 +26,7 @@
 
 ## 보안·운영 (승인 후 진행)
 
-JWT 비밀키 기본값 방지, `LOG_LEVEL` 기본값, 로그인 제한, CORS, 업로드 내용 검사, 감사 로그, 마이그레이션 체계(Alembic)는 [02-plan.md](02-plan.md) P5·P6 참고.
+JWT 비밀키 기본값 방지와 `LOG_LEVEL` 기본값은 완료(03-changelog P5). 남은 항목: 로그인 제한, CORS 정리, 업로드 내용 검사, 감사 로그, 마이그레이션 체계(Alembic)는 [02-plan.md](02-plan.md) P5·P6 참고.
 
 ## 미검증
 

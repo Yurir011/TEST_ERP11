@@ -5,7 +5,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "BENCH ERP"
-    log_level: str = "DEBUG"
+    # 실행 환경. 운영 서버에서는 .env 에 ENVIRONMENT=production 을 지정한다. production 에서는 보안 설정이 안전하지 않으면 서버가 시작되지 않는다.
+    environment: str = "development"
+    # 기본은 INFO. 개발 PC 에서는 .env 에 LOG_LEVEL=DEBUG 를 지정해 디버그 메시지를 본다.
+    log_level: str = "INFO"
     database_url: str = "postgresql+psycopg2://erp_user:erp_password@localhost:5432/erp_db"
     cors_origins: list[str] = ["http://localhost:5173", "http://192.168.0.10:5173"]
 

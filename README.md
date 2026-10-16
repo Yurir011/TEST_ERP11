@@ -55,6 +55,8 @@ npm run dev
 
 `backend/.env`가 없다면 `backend/.env.example`을 복사해서 값을 채운다 (DB 접속정보, JWT 시크릿, 회사정보 등).
 
+**운영 서버 설정**: `.env`에 `ENVIRONMENT=production`과 32자 이상의 임의 `JWT_SECRET_KEY`를 지정한다. 비밀키가 기본값이거나 짧으면 운영 모드에서는 서버가 시작되지 않는다. 로그량은 `LOG_LEVEL`(기본 INFO)로 조정하고, 개발 PC에서는 `LOG_LEVEL=DEBUG`로 둔다.
+
 ### 같은 사무실 네트워크의 다른 PC에서 테스트하기
 `start.bat`으로 서버를 켠 PC와 같은 공유기(네트워크)에 연결돼 있다면, 별도 서버 없이 그 PC의 IP로 접속해서 테스트할 수 있다.
 
