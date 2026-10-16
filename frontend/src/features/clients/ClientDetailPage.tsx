@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { apiDelete, apiGet, openFile } from "../../lib/api";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { logError } from "../../lib/logger";
+import { BalanceHistoryModal, type BalanceKind } from "./BalanceHistoryModal";
 import { NewClientButton } from "./NewClientButton";
 import type { Client } from "./types";
 
@@ -27,6 +28,7 @@ export function ClientDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showBankInfo, setShowBankInfo] = useState(false);
+  const [historyKind, setHistoryKind] = useState<BalanceKind | null>(null); // 잔액 변경 이력 모달
 
   useEffect(() => {
     apiGet<Client>(`/api/clients/${id}`)
@@ -90,11 +92,21 @@ export function ClientDetailPage() {
 
           <div className="grid grid-cols-2 gap-4 mt-5">
             <div className="bg-bg rounded-xl p-4">
-              <p className="text-xs text-text-muted">미수금</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-text-muted">미수금</p>
+                <button type="button" onClick={() => setHistoryKind("receivable")} className="text-[11px] text-text-muted hover:text-primary underline-offset-2 hover:underline">
+                  변경 이력
+                </button>
+              </div>
               <p className="text-lg font-semibold mt-1 text-notify">{formatCurrency(client.receivable_amount)}</p>
             </div>
             <div className="bg-bg rounded-xl p-4">
-              <p className="text-xs text-text-muted">미지급금</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-text-muted">미지급금</p>
+                <button type="button" onClick={() => setHistoryKind("payable")} className="text-[11px] text-text-muted hover:text-primary underline-offset-2 hover:underline">
+                  변경 이력
+                </button>
+              </div>
               <p className="text-lg font-semibold mt-1 text-primary">{formatCurrency(client.payable_amount)}</p>
             </div>
           </div>
@@ -186,6 +198,15 @@ export function ClientDetailPage() {
             )}
           </div>
         </div>
+      )}
+      {client && historyKind && (
+        <BalanceHistoryModal
+          clientId={client.id}
+          clientName={client.name}
+          initialKind={historyKind}
+          currentBalance={{ receivable: client.receivable_amount, payable: client.payable_amount }}
+          onClose={() => setHistoryKind(null)}
+        />
       )}
     </MainLayout>
   );

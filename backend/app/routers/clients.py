@@ -12,6 +12,7 @@ from app.logging_config import get_logger
 from app.models.client import Client, ClientContact
 from app.models.user import User
 from app.schemas.client import BankbookOcrOut, BusinessRegOcrOut, ClientCreate, ClientOut
+from app.services.balance_history import BalanceHistoryEntry, build_balance_history
 from app.services.bankbook_ocr import recognize_bankbook
 from app.services.business_reg_ocr import recognize_business_registration
 from app.services.client_list_excel import generate_client_list_excel
@@ -140,6 +141,22 @@ def ocr_bankbook(file: UploadFile = File(...), current_user: User = Depends(requ
     return BankbookOcrOut(
         bank_name=fields.bank_name, bank_account=fields.bank_account, holder=fields.holder, raw_text=fields.raw_text
     )
+
+
+@router.get("/{client_id}/balance-history", response_model=list[BalanceHistoryEntry])
+def get_balance_history(
+    client_id: int,
+    kind: str = Query(default="receivable", pattern="^(receivable|payable)$", description="receivable=미수금, payable=미지급금"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_menu_access("clients")),
+):
+    """거래처 미수금/미지급금이 언제, 누구의, 어떤 처리로 바뀌었는지 (최신순). 감사 로그에서 만든다.
+    거래처 메뉴 권한이 있으면 볼 수 있다 (전체 감사 로그는 대표만)."""
+    if db.query(Client.id).filter(Client.id == client_id).first() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="거래처를 찾을 수 없습니다.")
+    entries = build_balance_history(db, client_id, kind)
+    logger.debug(f"[Clients] 잔액 변경 이력 조회: client_id={client_id}, kind={kind}, count={len(entries)}, by={current_user.id}")
+    return entries
 
 
 @router.get("/{client_id}", response_model=ClientOut)
