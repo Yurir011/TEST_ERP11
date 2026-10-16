@@ -93,6 +93,48 @@ def apply_transaction_payment(db: Session, payment: Payment, tx: Transaction, pa
     logger.debug(f"[Settlement] 매입매출 결제완료 처리: tx_id={tx.id}, payment_id={payment.id}, date={payment.payment_date}")
 
 
+def resettle_on_update(
+    db: Session,
+    payment: Payment,
+    linked_tx: Transaction | None,
+    *,
+    new_type: PaymentType,
+    new_category: str,
+    new_client_id: int | None,
+    new_amount: int,
+) -> None:
+    """결제를 수정할 때 거래처 잔액 정산을 다시 맞춘다: 기존 정산을 되돌리고 새 내용으로 다시 반영한다.
+
+    매입매출과 연결된 결제(전액·부분)는 그 매입매출이 잔액을 관리하므로 건너뛴다.
+    새 금액이 잔액 이내인지는 잔액을 바꾸기 전에 먼저 검사한다(같은 거래처·같은 잔액이면 되돌려질 기존 금액까지 감안).
+    새 거래처가 없으면 400. payment 의 필드 값은 바꾸지 않는다(호출한 쪽이 갱신).
+    """
+    # 기존 내역이 정산(미수금 수금/미지급금 지급) 처리였다면, 거래처 잔액에 반영했던 금액을 먼저 되돌린다.
+    # (매입매출 내역과 연결된 결제는 그 내역이 잔액을 관리하므로 건너뛴다.)
+    is_partial_row = payment.partial_transaction_id is not None  # 부분 결제의 거래처 잔액은 매입매출 쪽에서 관리한다.
+    old_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(payment.type, payment.category)
+    new_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(new_type, new_category)
+
+    # 잔액을 바꾸기 전에 새 금액이 잔액 이내인지 먼저 검사한다 (같은 거래처·같은 잔액이면 기존 금액이 되돌려지는 것까지 감안).
+    if new_settlement_field is not None and new_client_id is not None:
+        target = db.query(Client).filter(Client.id == new_client_id).first()
+        if target is not None:
+            returning = payment.amount if (payment.client_id == target.id and old_settlement_field == new_settlement_field) else 0
+            ensure_within_balance(target, new_settlement_field, new_amount, returning=returning)
+
+    if payment.client is not None and old_settlement_field is not None:
+        revert_balance_settlement(payment.client, old_settlement_field, payment.amount)
+
+    client = None
+    if new_client_id is not None:
+        client = db.query(Client).filter(Client.id == new_client_id).first()
+        if client is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
+
+    if client is not None and new_settlement_field is not None:
+        apply_balance_settlement(client, new_settlement_field, new_amount)
+
+
 def undo_payment_effects(db: Session, payment: Payment) -> None:
     """결제를 삭제하기 전에 그 결제가 만들었던 장부 변화(거래처 잔액·매입매출 상태)를 되돌린다.
 

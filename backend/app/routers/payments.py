@@ -1,10 +1,10 @@
 import os
+from dataclasses import asdict
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import extract, or_
-from sqlalchemy import func as sa_func
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
@@ -21,13 +21,14 @@ from app.services.settlement import (
     apply_transaction_payment,
     ensure_within_balance,
     is_partial_payment,
-    revert_balance_settlement,
+    resettle_on_update,
     settlement_field,
     undo_payment_effects,
 )
 from app.services.transaction_credit import remaining_amount
 from app.models.user import User
-from app.services import card_billing
+from app.services import card_pending as card_pending_service
+from app.services.payment_query import build_payment_query, monthly_total, occurred_dates
 from app.services.recurring_payment import generate_recurring_payments
 from app.schemas.payment import (
     CardPendingSummaryOut,
@@ -49,18 +50,6 @@ router = APIRouter(prefix="/api/payments", tags=["payments"])
 logger = get_logger("Payments")
 
 ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp"}
-
-def _occurred_dates(db: Session, payment_ids: list[int]) -> dict[int, date]:
-    """입출금 id -> 그 입출금으로 결제완료된 매입매출의 거래일(미수금/미지급금 발생일)."""
-    if not payment_ids:
-        return {}
-    rows = (
-        db.query(Transaction.settled_payment_id, Transaction.transaction_date)
-        .filter(Transaction.settled_payment_id.in_(payment_ids))
-        .all()
-    )
-    return {pid: d for pid, d in rows}
-
 
 def _to_out(p: Payment, occurred_date: date | None = None) -> PaymentOut:
     return PaymentOut(
@@ -86,54 +75,6 @@ def _to_out(p: Payment, occurred_date: date | None = None) -> PaymentOut:
     )
 
 
-def _build_payment_query(
-    db: Session,
-    type_filter: PaymentType | None,
-    year: int | None,
-    month: int | None,
-    date_from: date | None,
-    date_to: date | None,
-    q: str | None,
-    card_pending: bool | None = None,
-    method: PaymentMethod | None = None,
-    card_type: CardType | None = None,
-):
-    query = db.query(Payment).options(joinedload(Payment.client), joinedload(Payment.creator))
-    if type_filter is not None:
-        query = query.filter(Payment.type == type_filter)
-    if method is not None:
-        query = query.filter(Payment.method == method)
-    if card_type is not None:
-        query = query.filter(Payment.card_type == card_type)
-    if card_pending is not None:
-        query = query.filter(Payment.card_pending.is_(card_pending))
-
-    # 기간(date_from/date_to) 지정이 있으면 그걸 우선하고, 없을 때만 기존 연/월 필터를 적용한다.
-    if date_from is not None or date_to is not None:
-        if date_from is not None:
-            query = query.filter(Payment.payment_date >= date_from)
-        if date_to is not None:
-            query = query.filter(Payment.payment_date <= date_to)
-    else:
-        if year is not None:
-            query = query.filter(extract("year", Payment.payment_date) == year)
-        if month is not None:
-            query = query.filter(extract("month", Payment.payment_date) == month)
-
-    if q:
-        keyword = f"%{q}%"
-        query = query.outerjoin(Client, Payment.client_id == Client.id).filter(
-            or_(
-                Payment.category.ilike(keyword),
-                Payment.description.ilike(keyword),
-                Payment.memo.ilike(keyword),
-                Client.name.ilike(keyword),
-            )
-        )
-
-    return query.order_by(Payment.payment_date.desc(), Payment.id.desc())
-
-
 @router.get("", response_model=list[PaymentOut])
 def list_payments(
     type_filter: PaymentType | None = Query(default=None, alias="type"),
@@ -148,8 +89,8 @@ def list_payments(
     current_user: User = Depends(require_payments_access),
 ):
     generate_recurring_payments(db)  # 도래한 정기 자동이체를 먼저 기록한다
-    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q, card_pending, method).all()
-    occurred = _occurred_dates(db, [p.id for p in payments])
+    payments = build_payment_query(db, type_filter, year, month, date_from, date_to, q, card_pending, method).all()
+    occurred = occurred_dates(db, [p.id for p in payments])
     return [_to_out(p, occurred.get(p.id)) for p in payments]
 
 
@@ -167,7 +108,7 @@ def export_payments_excel(
     current_user: User = Depends(require_payments_access),
 ):
     generate_recurring_payments(db)
-    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q, method=method, card_type=card_type).all()
+    payments = build_payment_query(db, type_filter, year, month, date_from, date_to, q, method=method, card_type=card_type).all()
     logger.debug(
         f"[Payments] 목록 엑셀 내보내기: count={len(payments)}, date_from={date_from}, date_to={date_to}, "
         f"q={q}, by={current_user.id}"
@@ -187,22 +128,8 @@ def get_monthly_report(
     current_user: User = Depends(require_payments_access),
 ):
     generate_recurring_payments(db)
-
-    def total(payment_type: PaymentType) -> int:
-        value = (
-            db.query(sa_func.coalesce(sa_func.sum(Payment.amount), 0))
-            .filter(
-                Payment.type == payment_type,
-                Payment.card_pending.is_(False),  # 카드 결제일 전(결제예정) 사용내역은 집계에서 제외
-                extract("year", Payment.payment_date) == year,
-                extract("month", Payment.payment_date) == month,
-            )
-            .scalar()
-        )
-        return int(value)
-
-    deposit = total(PaymentType.deposit)
-    withdrawal = total(PaymentType.withdrawal)
+    deposit = monthly_total(db, PaymentType.deposit, year, month)
+    withdrawal = monthly_total(db, PaymentType.withdrawal, year, month)
     return PaymentReportOut(year=year, month=month, total_deposit=deposit, total_withdrawal=withdrawal, net=deposit - withdrawal)
 
 
@@ -210,33 +137,7 @@ def get_monthly_report(
 def get_card_pending_summary(db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)):
     """카드 결제일에 일괄 확정하기 전인 법인카드 사용내역을 카드별로 요약한다. 다음 결제일에 청구되는 건만 건수/금액에 포함한다."""
     today = date.today()
-    result = []
-    for card_type in CardType:
-        base = db.query(Payment).filter(Payment.card_pending.is_(True), Payment.card_type == card_type)
-        oldest = base.with_entities(sa_func.min(Payment.payment_date)).scalar()
-        settle_date = card_billing.default_settle_date(card_type, oldest, today)
-        usage_from, usage_to = card_billing.usage_month_of(settle_date)
-
-        def agg(*conds):
-            count, total = base.filter(*conds).with_entities(sa_func.count(Payment.id), sa_func.coalesce(sa_func.sum(Payment.amount), 0)).one()
-            return int(count), int(total)
-
-        count, total = agg(Payment.payment_date <= usage_to)
-        later_count, later_amount = agg(Payment.payment_date > usage_to)
-        result.append(
-            CardPendingSummaryOut(
-                card_type=card_type,
-                count=count,
-                total_amount=total,
-                oldest_used_date=oldest,
-                newest_used_date=base.filter(Payment.payment_date <= usage_to).with_entities(sa_func.max(Payment.payment_date)).scalar(),
-                default_settle_date=settle_date,
-                usage_from=usage_from,
-                usage_to=usage_to,
-                later_count=later_count,
-                later_amount=later_amount,
-            )
-        )
+    result = [CardPendingSummaryOut(**asdict(card_pending_service.summarize(db, card_type, today))) for card_type in CardType]
     logger.debug(f"[Payments] 카드 결제예정 요약 조회: by={current_user.id}, {[(r.card_type.value, r.default_settle_date.isoformat(), r.count, r.total_amount) for r in result]}")
     return result
 
@@ -247,24 +148,13 @@ def settle_card_payments(
 ):
     """카드 결제일에 해당 카드의 결제예정 사용내역 중 그 결제일이 청구하는 사용기간(전월 1일~말일) 이전 건을 한 번에 출금 확정한다.
     입출금 날짜는 결제일로 바뀐다."""
-    _, usage_to = card_billing.usage_month_of(payload.settle_date)
-    pending = (
-        db.query(Payment)
-        .filter(Payment.card_pending.is_(True), Payment.card_type == payload.card_type, Payment.payment_date <= usage_to)
-        .all()
-    )
-    total = 0
-    for p in pending:
-        p.card_used_date = p.card_used_date or p.payment_date
-        p.payment_date = payload.settle_date
-        p.card_pending = False
-        total += p.amount
+    count, total, usage_to = card_pending_service.settle(db, payload.card_type, payload.settle_date)
     db.commit()
     logger.debug(
         f"[Payments] 카드 결제일 일괄처리: card={payload.card_type.value}, settle_date={payload.settle_date}, usage_to={usage_to}, "
-        f"count={len(pending)}, total={total}, by={current_user.id}"
+        f"count={count}, total={total}, by={current_user.id}"
     )
-    return CardSettleOut(settled_count=len(pending), total_amount=total)
+    return CardSettleOut(settled_count=count, total_amount=total)
 
 
 @router.get("/linkable-transactions", response_model=list[PaymentTransactionCandidateOut])
@@ -325,7 +215,7 @@ def create_payment(
         apply_balance_settlement(client, balance_field, payload.amount)
 
     # 법인카드 출금은 카드 결제일에 일괄 확정할 때까지 결제예정으로 둔다 (외상 매입매출 결제 건은 즉시 확정).
-    is_card_pending = payload.type == PaymentType.withdrawal and payload.method == PaymentMethod.corporate_card and linked_tx is None
+    is_card_pending = card_pending_service.starts_pending(payload.type, payload.method, linked_tx)
     payment = Payment(
         type=payload.type,
         payment_date=payload.payment_date,
@@ -366,27 +256,7 @@ def import_card_statement(
     except CsvParseError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
-    imported = 0
-    errors: list[str] = []
-    for i, row in enumerate(rows, start=1):
-        try:
-            payment = Payment(
-                type=PaymentType.withdrawal,
-                payment_date=row["payment_date"],
-                category="법인카드",
-                description=row["description"],
-                amount=row["amount"],
-                method=PaymentMethod.corporate_card,
-                card_type=card_type,
-                card_pending=True,
-                card_used_date=row["payment_date"],
-                created_by=current_user.id,
-            )
-            db.add(payment)
-            imported += 1
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"{i}행: {exc}")
-
+    imported, errors = card_pending_service.add_statement_rows(db, rows, card_type, current_user.id)
     db.commit()
     logger.debug(f"[Payments] CSV 가져오기 완료: imported={imported}, errors={len(errors)}")
     return CsvImportResult(imported=imported, skipped=len(errors), errors=errors)
@@ -489,30 +359,15 @@ def update_payment(
             detail="매입매출의 일부로 수금/지급한 내역은 금액을 수정할 수 없습니다. 삭제한 뒤 다시 등록해주세요.",
         )
 
-    # 기존 내역이 정산(미수금 수금/미지급금 지급) 처리였다면, 거래처 잔액에 반영했던 금액을 먼저 되돌린다.
-    # (매입매출 내역과 연결된 결제는 그 내역이 잔액을 관리하므로 건너뛴다.)
-    is_partial_row = payment.partial_transaction_id is not None  # 부분 결제의 거래처 잔액은 매입매출 쪽에서 관리한다.
-    old_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(payment.type, payment.category)
-    new_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(payload.type, payload.category)
-
-    # 잔액을 바꾸기 전에 새 금액이 잔액 이내인지 먼저 검사한다 (같은 거래처·같은 잔액이면 기존 금액이 되돌려지는 것까지 감안).
-    if new_settlement_field is not None and payload.client_id is not None:
-        target = db.query(Client).filter(Client.id == payload.client_id).first()
-        if target is not None:
-            returning = payment.amount if (payment.client_id == target.id and old_settlement_field == new_settlement_field) else 0
-            ensure_within_balance(target, new_settlement_field, payload.amount, returning=returning)
-
-    if payment.client is not None and old_settlement_field is not None:
-        revert_balance_settlement(payment.client, old_settlement_field, payment.amount)
-
-    client = None
-    if payload.client_id is not None:
-        client = db.query(Client).filter(Client.id == payload.client_id).first()
-        if client is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
-
-    if client is not None and new_settlement_field is not None:
-        apply_balance_settlement(client, new_settlement_field, payload.amount)
+    resettle_on_update(
+        db,
+        payment,
+        linked_tx,
+        new_type=payload.type,
+        new_category=payload.category,
+        new_client_id=payload.client_id,
+        new_amount=payload.amount,
+    )
     if linked_tx is not None:
         linked_tx.settled_date = payload.payment_date
 
@@ -528,13 +383,7 @@ def update_payment(
     payment.proof_type_detail = payload.proof_type_detail
     payment.card_type = payload.card_type
     payment.bank_type = payload.bank_type
-    if payment.card_pending:
-        # 아직 결제 전인 카드 사용내역: 카드 출금으로 남아 있으면 사용일만 갱신하고, 다른 결제수단으로 바꾸면 결제예정을 푼다.
-        if payload.type == PaymentType.withdrawal and payload.method == PaymentMethod.corporate_card:
-            payment.card_used_date = payload.payment_date
-        else:
-            payment.card_pending = False
-            payment.card_used_date = None
+    card_pending_service.update_pending_on_edit(payment, payload.type, payload.method, payload.payment_date)
     db.commit()
     db.refresh(payment)
     logger.debug(f"[Payments] 수정: id={payment_id}, by={current_user.id}")
