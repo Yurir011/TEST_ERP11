@@ -528,27 +528,28 @@ export function PaymentsPage() {
             ) : (
               <ul className="space-y-2">
                 {card.rows.map(({ client: c, amount }) => (
-                  <li key={c.id} className="flex items-center justify-between gap-2 bg-bg rounded-xl px-4 py-3">
+                  <li key={c.id} className="bg-bg rounded-xl px-4 py-3">
+                    {/* 두 줄: 윗줄 = 거래처명 ←→ 금액, 아랫줄 = 발생일 ←→ 처리 버튼 */}
                     <button
                       type="button"
                       onClick={() => setDetailTarget({ kind: card.kind, client: c })}
-                      className="text-left flex-1 min-w-0 hover:opacity-70"
+                      className="flex items-center justify-between gap-2 w-full text-left hover:opacity-70"
                       title="상세 내역 보기"
                     >
-                      <p className="text-sm font-medium truncate">{c.name}</p>
-                      <p className="text-xs text-text-muted mt-0.5">{formatCurrency(amount)}</p>
-                      {occurredLabel(card.kind, c.id) && (
-                        <p className="text-xs text-text-muted mt-0.5">
-                          {card.title} 발생일 {occurredLabel(card.kind, c.id)}
-                        </p>
-                      )}
+                      <span className="text-sm font-medium truncate min-w-0">{c.name}</span>
+                      <span className="text-sm font-semibold tabular-nums shrink-0">{formatCurrency(amount)}</span>
                     </button>
-                    <button
-                      onClick={() => setSettleTarget({ kind: card.kind, client: c })}
-                      className={`text-[11px] font-medium border bg-surface rounded-full px-2.5 py-1 shrink-0 transition-colors ${card.style}`}
-                    >
-                      {card.action}
-                    </button>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <span className="text-xs text-text-muted min-w-0">
+                        {occurredLabel(card.kind, c.id) && `${card.title} 발생일 ${occurredLabel(card.kind, c.id)}`}
+                      </span>
+                      <button
+                        onClick={() => setSettleTarget({ kind: card.kind, client: c })}
+                        className={`text-[11px] font-medium border bg-surface rounded-full px-2.5 py-1 shrink-0 transition-colors ${card.style}`}
+                      >
+                        {card.action}
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
