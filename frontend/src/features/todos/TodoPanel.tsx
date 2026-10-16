@@ -13,7 +13,23 @@ import type { Todo } from "./types";
 // 포스트잇(줄 쳐진 노란 메모지) 스타일. 글씨체/크기/진하기/색은 사용자가 고르고 이 브라우저에 기억한다.
 const STYLE_STORAGE_KEY = "todo_style";
 const OLD_INK_STORAGE_KEY = "todo_ink_color"; // 예전 버전(색만 저장)과의 호환용
-const INK_COLORS: { value: string; label: string }[] = [
+function hslToHex(h: number, s: number, l: number): string {
+  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+  const channel = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const v = l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(v * 255).toString(16).padStart(2, "0");
+  };
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
+}
+
+// 직접 선택용 색상표: 12가지 색상 × 5단계 명도 + 회색 계열 한 줄 (12열 격자)
+const CUSTOM_SWATCHES: string[] = [
+  ...[25, 38, 50, 65, 80].flatMap((l) => Array.from({ length: 12 }, (_, i) => hslToHex(i * 30, 75, l))),
+  ...Array.from({ length: 12 }, (_, i) => hslToHex(0, 0, Math.round((i / 11) * 100))),
+];
+
+const INK_COLORS:{ value: string; label: string }[] = [
   { value: "#3B3A33", label: "먹색" },
   { value: "#1E4FD8", label: "파랑" },
   { value: "#C62828", label: "빨강" },
@@ -69,9 +85,16 @@ export function TodoPanel() {
   const [content, setContent] = useState("");
   const [style, setStyle] = useState<TodoStyle>(loadStyle);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCustomInk, setShowCustomInk] = useState(false); // 전체 글씨 색의 직접 선택 색상표
   const [colorEditId, setColorEditId] = useState<number | null>(null); // 글씨 색을 고르는 중인 메모
+  const [customPickId, setCustomPickId] = useState<number | null>(null); // 직접 선택 색상표를 펼친 메모
   const { ink, size } = style;
   const fontCss = fontOf(style.font).css;
+
+  function closeSettings() {
+    setShowSettings(false);
+    setShowCustomInk(false);
+  }
 
   function changeStyle(patch: Partial<TodoStyle>) {
     const next = { ...style, ...patch };
@@ -119,7 +142,10 @@ export function TodoPanel() {
     logDebug("Todos", `메모 글씨 색 변경: id=${todo.id}, color=${color}`);
     try {
       await apiPut(`/api/todos/${todo.id}/color`, { color });
-      if (!keepOpen) setColorEditId(null); // 색을 고르면 팔레트를 바로 닫는다
+      if (!keepOpen) {
+        setColorEditId(null); // 색을 고르면 팔레트를 바로 닫는다
+        setCustomPickId(null);
+      }
       loadTodos();
     } catch (err) {
       logError("Todos", "메모 글씨 색 변경 실패", err);
@@ -232,6 +258,7 @@ export function TodoPanel() {
                 aria-label={c.label}
                 title={c.label}
                 onClick={() => changeStyle({ ink: c.value })}
+                onDoubleClick={() => closeSettings()} // 더블클릭하면 색을 적용하고 설정창을 닫는다
                 className={`w-5 h-5 rounded-full flex items-center justify-center text-white ${
                   ink === c.value ? "ring-2 ring-offset-1 ring-offset-[#FFF6B8] ring-black/40" : ""
                 }`}
@@ -240,19 +267,31 @@ export function TodoPanel() {
                 {ink === c.value && <Check size={11} strokeWidth={3} />}
               </button>
             ))}
-            <label
+            <button
+              type="button"
               title="직접 선택"
-              className="w-5 h-5 rounded-full border border-dashed border-black/40 flex items-center justify-center overflow-hidden cursor-pointer relative"
+              aria-expanded={showCustomInk}
+              onClick={() => setShowCustomInk((v) => !v)}
+              className="w-5 h-5 rounded-full border border-dashed border-black/40 flex items-center justify-center cursor-pointer"
             >
               <span className="text-[11px] leading-none">+</span>
-              <input
-                type="color"
-                value={ink}
-                onChange={(e) => changeStyle({ ink: e.target.value })}
-                aria-label="글씨 색 직접 선택"
-                className="absolute inset-0 opacity-0 cursor-pointer"
-              />
-            </label>
+            </button>
+            {showCustomInk && (
+              <div className="basis-full grid grid-cols-12 gap-0.5 py-1" aria-label="직접 선택 색상표">
+                {CUSTOM_SWATCHES.map((hex) => (
+                  <button
+                    key={hex}
+                    type="button"
+                    title={`${hex} (더블클릭하면 적용 후 닫힘)`}
+                    aria-label={hex}
+                    onClick={() => changeStyle({ ink: hex })}
+                    onDoubleClick={() => closeSettings()}
+                    className={`aspect-square rounded-sm border border-black/10 ${ink.toLowerCase() === hex ? "ring-2 ring-black/50" : ""}`}
+                    style={{ background: hex }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -329,24 +368,39 @@ export function TodoPanel() {
                       {rowInk === c.value && <Check size={9} strokeWidth={3} />}
                     </button>
                   ))}
-                  <label
+                  <button
+                    type="button"
                     title="직접 선택"
-                    className="w-4 h-4 rounded-full border border-dashed border-black/40 flex items-center justify-center overflow-hidden cursor-pointer relative"
+                    aria-expanded={customPickId === todo.id}
+                    onClick={() => setCustomPickId(customPickId === todo.id ? null : todo.id)}
+                    className="w-4 h-4 rounded-full border border-dashed border-black/40 flex items-center justify-center cursor-pointer"
                   >
                     <span className="text-[10px] leading-none">+</span>
-                    <input
-                      type="color"
-                      value={rowInk}
-                      onChange={(e) => handleColor(todo, e.target.value, true)} // 색상판을 움직이는 동안은 유지하고, 닫히면(blur) 팔레트도 닫는다
-                      onBlur={() => setColorEditId(null)}
-                      aria-label="메모 글씨 색 직접 선택"
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                    />
-                  </label>
+                  </button>
                   {todo.color && (
                     <button type="button" onClick={() => handleColor(todo, null)} className="text-[12px] underline opacity-70 hover:opacity-100">
                       기본색
                     </button>
+                  )}
+                  {customPickId === todo.id && (
+                    <div className="basis-full grid grid-cols-12 gap-0.5 py-1" aria-label="직접 선택 색상표">
+                      {CUSTOM_SWATCHES.map((hex) => (
+                        <button
+                          key={hex}
+                          type="button"
+                          title={`${hex} (더블클릭하면 적용 후 닫힘)`}
+                          aria-label={hex}
+                          onClick={() => handleColor(todo, hex, true)}
+                          onDoubleClick={() => {
+                            // 더블클릭하면 색을 적용하고 선택창을 닫는다.
+                            setCustomPickId(null);
+                            handleColor(todo, hex);
+                          }}
+                          className={`aspect-square rounded-sm border border-black/10 ${rowInk.toLowerCase() === hex ? "ring-2 ring-black/50" : ""}`}
+                          style={{ background: hex }}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
