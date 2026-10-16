@@ -343,4 +343,4 @@
 
 - 신규: `alembic/versions/0004_proposal_target_type.py`, `0005_move_proposal_steps.py`, 테스트 3개 파일(`test_proposal_flows.py`, `test_migration_proposal_steps.py`, `test_proposal_steps_storage.py`)
 - 변경: `models/approval_step.py`(`proposal` 대상 종류), `models/proposal.py`(`steps` 관계를 공용 테이블로, 옛 모델은 보존용), `routers/proposals.py`, `routers/notifications.py`, `services/proposal_pdf.py`, `schemas/proposal.py`
-- 개발 DB 는 아직 바꾸지 않았다(4단계 대기).
+- 4단계(개발 DB 적용)도 같은 날 승인 후 완료: 백업 → 0005 까지 업그레이드 → 9행 일치 확인(09 문서 10장).
