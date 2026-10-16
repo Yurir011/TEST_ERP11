@@ -114,3 +114,18 @@
 - 적용: `LeavesPage`, `DocumentsPage`, `ProposalsPage`, `ProjectDocumentsPage`(문서용 + 품의서용 2세트). 총 6쌍(12개) 핸들러, 약 130줄이 훅 호출로 줄었다.
 - 확인창·안내창 문구, 처리 순서(새로고침 → 안내창 → 완료 콜백), 오류 표시 여부는 **기존 그대로** 유지했다. 달라진 점은 승인/반려 시도 로그가 모든 화면에서 남는 것뿐이다.
 - 사용하지 않게 된 import(`apiPut`, `ApiError`)를 정리했다.
+
+## P4-2. 입출금관리 페이지 분해 — 2026-10-16
+
+`PaymentsPage.tsx`를 886줄 → **610줄**로 줄였다. **화면과 동작은 그대로**이고 코드를 파일로 옮기기만 했다.
+
+| 신규 파일 | 내용 |
+|---|---|
+| `payments/outstanding.ts` | 미수금/미지급금 행 계산(`buildOutstandingRows`), 발생일·일부 수금일 라벨 — 화면 상태와 분리한 **순수 함수** |
+| `payments/OutstandingCards.tsx` | 상단 요약 카드 3개(미수금·미지급금·카드 결제예정) |
+| `payments/CardFilterBoxes.tsx` | 카드 탭의 카드 종류별 요약 상자 |
+| `payments/PaymentsTable.tsx` | 입출금 내역 표(고정 칸 너비, 폰트 크기 맞춤, 행 동작) |
+
+- 페이지에는 데이터 조회, 필터 상태, 모달 열기/닫기만 남았다.
+- 컴포넌트는 필요한 값과 콜백만 props 로 받는다(전역 상태 없음).
+- 순수 함수는 이후 프론트엔드 테스트 러너(vitest)를 도입하면 바로 테스트할 수 있다.
