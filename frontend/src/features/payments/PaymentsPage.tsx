@@ -53,8 +53,8 @@ const TABS: { key: PaymentTab; label: string }[] = [
 
 // 너비가 고정된 칸에서 글자가 길면 폰트 크기를 줄여 한 줄에 맞춘다 (글자 수 기준).
 function fitFontClass(length: number): string {
-  if (length <= 9) return "text-sm";
-  if (length <= 12) return "text-xs";
+  if (length <= 13) return "text-sm";
+  if (length <= 16) return "text-xs";
   return "text-[11px]";
 }
 
@@ -706,8 +706,8 @@ export function PaymentsPage() {
               <col className="w-[8.5rem]" />
               <col className="w-[6.5rem]" />
               <col />
-              <col className="w-[9rem]" />
-              <col className="w-[9rem]" />
+              <col className="w-[12rem]" />
+              <col className="w-[12rem]" />
               <col className="w-[6rem]" />
               <col className="w-[7.5rem]" />
               <col className="w-24" />
