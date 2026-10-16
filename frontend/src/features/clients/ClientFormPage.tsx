@@ -1,10 +1,21 @@
-import { Eye, FileScan, Landmark, Paperclip, Plus, Trash2 } from "lucide-react";
+import { Eye, FileScan, Landmark, Paperclip } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { NewClientButton } from "./NewClientButton";
+import { ClientContactsEditor } from "./ClientContactsEditor";
+import {
+  FIELDS_BOTTOM,
+  FIELDS_TOP,
+  NUMBER_FIELDS,
+  bizRegOcrUpdates,
+  formatBizRegNo,
+  normalizeClientName,
+  toFormValues,
+  toPayload,
+} from "./clientForm";
 import type { BankbookOcrResult, BusinessRegOcrResult } from "./types";
 import {
   EMPTY_CLIENT_CONTACT,
@@ -14,83 +25,6 @@ import {
   type ClientFormValues,
 } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
-
-const NUMBER_FIELDS = new Set<keyof ClientFormValues>(["receivable_amount", "payable_amount"]);
-
-// 사업자등록번호는 어디든 3자리-2자리-5자리 형식이므로, 숫자만 남긴 뒤 하이픈을 자동으로 붙여준다.
-function formatBizRegNo(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 10);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
-}
-
-const FIELDS_TOP: { key: keyof ClientFormValues; label: string; required?: boolean }[] = [
-  { key: "name", label: "상호", required: true },
-  { key: "biz_reg_no", label: "사업자등록번호" },
-  { key: "ceo_name", label: "대표자명" },
-  { key: "phone", label: "전화번호(유선)" },
-  { key: "biz_type", label: "업태" },
-  { key: "biz_class", label: "종목" },
-  { key: "email", label: "이메일" },
-];
-
-const FIELDS_BOTTOM: { key: keyof ClientFormValues; label: string; span2?: boolean }[] = [
-  { key: "address", label: "주소", span2: true },
-  { key: "receivable_amount", label: "미수금 (원)" },
-  { key: "payable_amount", label: "미지급금 (원)" },
-];
-
-function toFormValues(client: Client): ClientFormValues {
-  return {
-    name: client.name,
-    biz_reg_no: formatBizRegNo(client.biz_reg_no ?? ""),
-    ceo_name: client.ceo_name ?? "",
-    biz_type: client.biz_type ?? "",
-    biz_class: client.biz_class ?? "",
-    phone: client.phone ?? "",
-    email: client.email ?? "",
-    bank_name: client.bank_name ?? "",
-    bank_account: client.bank_account ?? "",
-    address: client.address ?? "",
-    receivable_amount: String(client.receivable_amount),
-    payable_amount: String(client.payable_amount),
-    memo: client.memo ?? "",
-    contacts: client.contacts.map((c) => ({
-      name: c.name,
-      title: c.title ?? "",
-      landline_phone: c.landline_phone ?? "",
-      mobile_phone: c.mobile_phone ?? "",
-      email: c.email ?? "",
-      memo: c.memo ?? "",
-    })),
-  };
-}
-
-function toPayload(values: ClientFormValues) {
-  const entries = Object.entries(values)
-    .filter(([k]) => k !== "contacts")
-    .map(([k, v]) => {
-      const key = k as keyof ClientFormValues;
-      if (NUMBER_FIELDS.has(key)) {
-        return [k, Number(v) || 0];
-      }
-      return [k, (v as string).trim() === "" ? null : (v as string).trim()];
-    });
-
-  const contacts = values.contacts
-    .filter((c) => c.name.trim() !== "")
-    .map((c) => ({
-      name: c.name.trim(),
-      title: c.title.trim() === "" ? null : c.title.trim(),
-      landline_phone: c.landline_phone.trim() === "" ? null : c.landline_phone.trim(),
-      mobile_phone: c.mobile_phone.trim() === "" ? null : c.mobile_phone.trim(),
-      email: c.email.trim() === "" ? null : c.email.trim(),
-      memo: c.memo.trim() === "" ? null : c.memo.trim(),
-    }));
-
-  return { ...Object.fromEntries(entries), contacts };
-}
 
 export function ClientFormPage() {
   const { id } = useParams<{ id: string }>();
@@ -177,15 +111,7 @@ export function ClientFormPage() {
       logDebug("ClientForm", `사업자등록증 인식 시도: ${file.name}`);
       const result = await apiUpload<BusinessRegOcrResult>("/api/clients/ocr/business-registration", file);
       setOcrRawText(result.raw_text || null);
-      const updates: [keyof ClientFormValues, string | null][] = [
-        ["name", result.name],
-        ["biz_reg_no", result.biz_reg_no ? formatBizRegNo(result.biz_reg_no) : null],
-        ["ceo_name", result.ceo_name],
-        ["address", result.address],
-        ["biz_type", result.biz_type],
-        ["biz_class", result.biz_class],
-      ];
-      const filled = updates.filter(([, v]) => v);
+      const filled = bizRegOcrUpdates(result);
       setValues((prev) => {
         const next = { ...prev };
         for (const [key, v] of filled) {
@@ -293,12 +219,11 @@ export function ClientFormPage() {
 
   /** 같은 이름의 거래처가 이미 있으면 저장 전에 한 번 더 확인한다. 띄어쓰기/법인 형태(주식회사, (주))가 달라도 같은 이름으로 본다. */
   async function confirmDuplicateName(): Promise<boolean> {
-    const normalize = (name: string) => name.replace(/\s|\(주\)|\(유\)|주식회사|유한회사/g, "").toLowerCase();
-    const target = normalize(values.name);
+    const target = normalizeClientName(values.name);
     if (!target) return true;
     try {
       const clients = await apiGet<Client[]>("/api/clients");
-      const duplicates = clients.filter((c) => String(c.id) !== id && normalize(c.name) === target);
+      const duplicates = clients.filter((c) => String(c.id) !== id && normalizeClientName(c.name) === target);
       if (duplicates.length === 0) return true;
       logDebug("ClientForm", `이름 중복 확인: name=${values.name}, duplicates=${duplicates.length}`);
       const list = duplicates.map((c) => `- ${c.name}${c.biz_reg_no ? ` (${c.biz_reg_no})` : ""}`).join("\n");
@@ -589,90 +514,7 @@ export function ClientFormPage() {
             ))}
           </div>
 
-          <div className="mt-5 pt-5 border-t border-border">
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs text-text-muted">담당자</label>
-              <button
-                type="button"
-                onClick={addContact}
-                className="flex items-center gap-1 text-xs text-primary hover:opacity-80"
-              >
-                <Plus size={14} />
-                담당자 추가
-              </button>
-            </div>
-
-            {values.contacts.length === 0 && (
-              <p className="text-xs text-text-muted">등록된 담당자가 없습니다. "담당자 추가"를 눌러 등록하세요.</p>
-            )}
-
-            <div className="space-y-3">
-              {values.contacts.map((contact, index) => (
-                <div key={index} className="bg-bg rounded-xl p-3 grid grid-cols-2 gap-2 relative">
-                  <button
-                    type="button"
-                    onClick={() => removeContact(index)}
-                    className="absolute top-2 right-2 text-text-muted hover:text-danger"
-                    title="담당자 삭제"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                  <div>
-                    <label className="block text-[11px] text-text-muted mb-1">담당자/직책</label>
-                    <div className="flex gap-1.5">
-                      <input
-                        value={contact.name}
-                        onChange={(e) => updateContact(index, "name", e.target.value)}
-                        placeholder="이름"
-                        className="w-1/2 rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                      />
-                      <input
-                        value={contact.title}
-                        onChange={(e) => updateContact(index, "title", e.target.value)}
-                        placeholder="직책"
-                        className="w-1/2 rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-text-muted mb-1">유선전화 / 휴대폰</label>
-                    <div className="flex gap-1.5">
-                      <input
-                        value={contact.landline_phone}
-                        onChange={(e) => updateContact(index, "landline_phone", e.target.value)}
-                        placeholder="유선전화"
-                        className="w-1/2 rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                      />
-                      <input
-                        value={contact.mobile_phone}
-                        onChange={(e) => updateContact(index, "mobile_phone", e.target.value)}
-                        placeholder="휴대폰"
-                        className="w-1/2 rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                      />
-                    </div>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-[11px] text-text-muted mb-1">이메일</label>
-                    <input
-                      value={contact.email}
-                      onChange={(e) => updateContact(index, "email", e.target.value)}
-                      className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-[11px] text-text-muted mb-1">메모</label>
-                    <textarea
-                      rows={2}
-                      value={contact.memo}
-                      onChange={(e) => updateContact(index, "memo", e.target.value)}
-                      placeholder="이 담당자에 대한 메모"
-                      className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface resize-y"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <ClientContactsEditor contacts={values.contacts} onAdd={addContact} onRemove={removeContact} onUpdate={updateContact} />
 
           <div className="mt-4">
             <label className="block text-xs text-text-muted mb-1.5">메모</label>
