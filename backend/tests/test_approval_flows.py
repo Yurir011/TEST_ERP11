@@ -8,13 +8,13 @@ import pytest
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus
 from app.models.user import JobTitle, UserRole
 from app.routers import documents as documents_router
-from app.routers import project_documents as project_documents_router
+from app.services import project_document_files as doc_files
 
 
 @pytest.fixture(autouse=True)
 def _no_file_generation(monkeypatch):
     monkeypatch.setattr(documents_router, "_issue_pdf", lambda record, user: None)
-    monkeypatch.setattr(project_documents_router, "_regenerate_documents", lambda db, doc: None)
+    monkeypatch.setattr(doc_files, "regenerate_documents", lambda db, doc: None)
 
 
 @pytest.fixture()

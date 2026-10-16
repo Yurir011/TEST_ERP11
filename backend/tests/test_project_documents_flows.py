@@ -10,12 +10,12 @@ from app.main import app
 from app.models.project_document import ProjectDocument
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import JobTitle, UserRole
-from app.routers import project_documents as pd_router
+from app.services import project_document_files as doc_files
 
 
 @pytest.fixture(autouse=True)
 def _no_file_generation(monkeypatch):
-    monkeypatch.setattr(pd_router, "_regenerate_documents", lambda db, doc: None)
+    monkeypatch.setattr(doc_files, "regenerate_documents", lambda db, doc: None)
 
 
 @pytest.fixture()

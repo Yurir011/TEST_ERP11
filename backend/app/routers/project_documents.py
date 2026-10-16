@@ -21,7 +21,7 @@ from app.core.approval import (
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
-from app.services.transaction_credit import credit_add, credit_remove
+from app.services.transaction_credit import credit_remove
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.client import Client
 from app.models.project import Project
@@ -31,9 +31,8 @@ from app.models.project_document import (
     ProjectDocumentImage,
     ProjectDocumentItem,
     ProjectDocumentStatus,
-    calc_amount,
 )
-from app.models.payment import Payment, PaymentType
+from app.models.payment import Payment
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import JobTitle, User, has_menu_permission, is_admin_role
 from app.schemas.approval import to_approval_step_out
@@ -52,17 +51,13 @@ from app.schemas.project_document import (
     RejectIn,
 )
 from app.services.approval_notice import create_decision_notification, create_request_notification
-from app.services.excel_to_pdf import convert_xlsx_to_pdf
 from app.services import popbill_service
-from app.services.project_document_excel import generate_project_document_excel
-from app.services.project_document_pdf import generate_project_document_pdf
-from app.services.project_document_template import fill_project_document_template, next_doc_no
+from app.services import project_document_files as doc_files
+from app.services.tax_invoice_ledger import is_sales_invoice, record_tax_invoice_transaction
+from app.services.project_document_template import next_doc_no
 from app.services.tax_invoice_list_excel import generate_tax_invoice_list_excel
 from app.services.tax_invoice_ocr import recognize_tax_invoice
-from app.services.money import vat_amount
 from popbill import PopbillException
-
-TEMPLATED_DOC_TYPES = (ProjectDocType.quotation, ProjectDocType.statement, ProjectDocType.tax_invoice, ProjectDocType.purchase_order)
 
 router = APIRouter(prefix="/api/project-documents", tags=["project-documents"])
 logger = get_logger("ProjectDocuments")
@@ -156,79 +151,6 @@ def _get_doc_or_404(db: Session, doc_id: int) -> ProjectDocument:
     return doc
 
 
-def _is_sales(doc: ProjectDocument) -> bool:
-    """세금계산서가 매출(우리가 발행)인지 여부. 받은 세금계산서 등록으로 direction이 정해진 문서는 그 값을,
-    그 외(직접 작성)는 작성목적(청구→매출, 영수→매입)으로 판단한다."""
-    if doc.direction:
-        return doc.direction == "sales"
-    return doc.purpose_type == "청구"
-
-
-def _record_tax_invoice_transaction(db: Session, doc: ProjectDocument, current_user: User) -> None:
-    """세금계산서가 결재 승인되면 팝빌 발행 여부와 무관하게 즉시 매입매출관리에 자동 기록한다.
-    청구 목적은 매출, 영수 목적은 매입으로 집계한다. doc.project는 호출 전에 반드시 로드되어 있어야 한다."""
-    if doc.doc_type != ProjectDocType.tax_invoice:
-        return
-
-    subtotal = sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
-    vat = vat_amount(subtotal)
-    tx_type = TransactionType.sales if _is_sales(doc) else TransactionType.purchase
-
-    existing = db.get(Transaction, doc.ledger_transaction_id) if doc.ledger_transaction_id is not None else None
-    if doc.ledger_transaction_id is not None:
-        # 승인된 세금계산서를 수정해 다시 승인받은 경우: 이미 기록된 매입매출 내역을 새 내용으로 고친다.
-        # 대금 결제(입금/출금)가 끝난 내역도 결제 상태와 연결된 입출금은 그대로 두고 금액/거래처 등만 고친다.
-        if existing is None:
-            doc.ledger_transaction_id = None
-        else:
-            credit_remove(db, existing)
-            existing.type = tx_type
-            existing.transaction_date = doc.issue_date
-            existing.client_id = doc.effective_client.id if doc.effective_client else None
-            existing.counterparty = doc.client_name
-            existing.supply_amount = subtotal
-            existing.vat_amount = vat
-            existing.total_amount = subtotal + vat
-            credit_add(db, existing)
-            logger.debug(
-                f"[ProjectDocuments] 수정된 세금계산서 재승인 → 매입매출 내역 갱신: doc_id={doc.id}, tx_id={existing.id}, "
-                f"settled={existing.settled}, amount={existing.total_amount}"
-            )
-            # 대금 결제가 끝난 건이면 연결된 입출금 내역(금액/거래처/입금·출금 구분)도 같은 내용으로 맞춘다. 결제일/방법/메모는 그대로 둔다.
-            payment = db.get(Payment, existing.settled_payment_id) if existing.settled_payment_id is not None else None
-            if payment is not None:
-                payment.amount = existing.total_amount
-                payment.client_id = existing.client_id
-                payment.type = PaymentType.deposit if tx_type == TransactionType.sales else PaymentType.withdrawal
-                logger.debug(
-                    f"[ProjectDocuments] 수정된 세금계산서 재승인 → 입출금 내역 갱신: doc_id={doc.id}, payment_id={payment.id}, "
-                    f"amount={payment.amount}, type={payment.type.value}"
-                )
-            return
-    tx = Transaction(
-        type=tx_type,
-        transaction_date=doc.issue_date,
-        client_id=doc.effective_client.id if doc.effective_client else None,
-        counterparty=doc.client_name,
-        item_name=f"세금계산서 ({doc.doc_no or doc.id})",
-        supply_amount=subtotal,
-        vat_amount=vat,
-        total_amount=subtotal + vat,
-        tax_invoice_no=doc.doc_no or doc.approval_no,
-        memo=f"[자동연동] 세금계산서 승인(project_document_id={doc.id})에서 자동 생성됨",
-        settled=False,  # 세금계산서는 항상 외상으로 기록하고, 실제 입금/출금은 입출금관리에서 처리한다.
-        created_by=current_user.id,
-    )
-    db.add(tx)
-    db.flush()
-    credit_add(db, tx)
-    doc.ledger_transaction_id = tx.id
-    logger.debug(
-        f"[ProjectDocuments] 세금계산서 매입매출 자동 기록: doc_id={doc.id}, tx_id={tx.id}, "
-        f"type={tx_type.value}, amount={tx.total_amount}"
-    )
-
-
 def _apply_approval_request(
     db: Session,
     doc: ProjectDocument,
@@ -250,7 +172,7 @@ def _apply_approval_request(
         doc.current_step = 1
         doc.approver_id = current_user.id
         doc.reviewed_at = datetime.now(timezone.utc)
-        _record_tax_invoice_transaction(db, doc, current_user)
+        record_tax_invoice_transaction(db, doc, current_user)
         if notify:
             create_decision_notification(
                 db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
@@ -266,7 +188,7 @@ def _apply_approval_request(
         doc.current_step = len(steps)
         doc.approver_id = steps[-1].approver_id
         doc.reviewed_at = datetime.now(timezone.utc)
-        _record_tax_invoice_transaction(db, doc, current_user)
+        record_tax_invoice_transaction(db, doc, current_user)
         if notify:
             create_decision_notification(
                 db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
@@ -366,49 +288,6 @@ def _set_siblings(db: Session, doc: ProjectDocument) -> list[ProjectDocument]:
     )
 
 
-def _regenerate_pdf(db: Session, doc: ProjectDocument) -> None:
-    pdf_bytes = generate_project_document_pdf(doc, doc.project, doc.effective_client)
-    os.makedirs(settings.project_documents_dir, exist_ok=True)
-    file_path = os.path.join(settings.project_documents_dir, f"{doc.id}_{doc.doc_type.value}.pdf")
-    with open(file_path, "wb") as f:
-        f.write(pdf_bytes)
-    doc.file_path = file_path
-    logger.debug(f"[ProjectDocuments] PDF 생성: doc_id={doc.id}, status={doc.status}, file={file_path}")
-
-
-def _regenerate_excel(db: Session, doc: ProjectDocument) -> None:
-    """승인 완료된 문서만 회계 처리용 엑셀을 함께 생성한다."""
-    if doc.status != ProjectDocumentStatus.approved:
-        return
-    excel_bytes = generate_project_document_excel(doc, doc.project, doc.effective_client)
-    os.makedirs(settings.project_documents_dir, exist_ok=True)
-    file_path = os.path.join(settings.project_documents_dir, f"{doc.id}_{doc.doc_type.value}.xlsx")
-    with open(file_path, "wb") as f:
-        f.write(excel_bytes)
-    doc.excel_path = file_path
-    logger.debug(f"[ProjectDocuments] 엑셀 생성: doc_id={doc.id}, file={file_path}")
-
-
-def _regenerate_from_template(doc: ProjectDocument) -> None:
-    """견적서/거래명세서: 실제 양식 파일의 빈 칸을 채운 엑셀을 만들고, 그 엑셀을 그대로 PDF로 내보낸다."""
-    xlsx_path = fill_project_document_template(doc)
-    doc.excel_path = xlsx_path
-    pdf_path = os.path.join(settings.project_documents_dir, f"{doc.id}_{doc.doc_type.value}.pdf")
-    convert_xlsx_to_pdf(xlsx_path, pdf_path)
-    doc.file_path = pdf_path
-    logger.debug(f"[ProjectDocuments] 양식 기반 엑셀/PDF 생성 완료: doc_id={doc.id}, excel={xlsx_path}, pdf={pdf_path}")
-
-
-def _regenerate_documents(db: Session, doc: ProjectDocument) -> None:
-    """문서 종류에 맞춰 엑셀/PDF를 다시 만든다. 견적서/거래명세서는 실제 양식을 채우고,
-    세금계산서는 기존 방식(빈 워크북에서 직접 그리기)을 그대로 사용한다."""
-    if doc.doc_type in TEMPLATED_DOC_TYPES:
-        _regenerate_from_template(doc)
-    else:
-        _regenerate_pdf(db, doc)
-        _regenerate_excel(db, doc)
-
-
 @router.get("", response_model=list[ProjectDocumentOut])
 def list_project_documents(
     doc_type: ProjectDocType | None = Query(default=None),
@@ -456,8 +335,8 @@ def export_tax_invoices_excel(
         query = query.filter(ProjectDocument.status == status_filter)
     docs = query.order_by(ProjectDocument.issue_date.desc(), ProjectDocument.id.desc()).all()
 
-    billing_docs = [d for d in docs if _is_sales(d)]
-    receipt_docs = [d for d in docs if not _is_sales(d)]
+    billing_docs = [d for d in docs if is_sales_invoice(d)]
+    receipt_docs = [d for d in docs if not is_sales_invoice(d)]
 
     # 개요 탭의 매입 합계: 매입매출관리(Transactions)에 기록된 매입 거래 중 세금계산서번호가 입력된 건만 집계한다.
     purchase_query = db.query(
@@ -620,7 +499,7 @@ def create_project_document(
     db.commit()
 
     doc = _get_doc_or_404(db, doc.id)
-    _regenerate_documents(db, doc)
+    doc_files.regenerate_documents(db, doc)
     db.commit()
     db.refresh(doc)
     return _to_out(doc, steps)
@@ -652,7 +531,7 @@ def create_project_document_set(
     outs = []
     for doc, steps in ((quotation, steps_q), (statement, steps_s)):
         doc = _get_doc_or_404(db, doc.id)
-        _regenerate_documents(db, doc)
+        doc_files.regenerate_documents(db, doc)
         db.commit()
         db.refresh(doc)
         outs.append(_to_out(doc, steps))
@@ -722,7 +601,7 @@ def update_project_document(
         steps = _apply_approval_request(db, doc, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user)
         db.commit()
         doc = _get_doc_or_404(db, doc.id)
-    _regenerate_documents(db, doc)
+    doc_files.regenerate_documents(db, doc)
     db.commit()
     db.refresh(doc)
     logger.debug(
@@ -749,10 +628,10 @@ def request_approval(
 
     for target in siblings:
         refreshed = _get_doc_or_404(db, target.id)
-        _regenerate_documents(db, refreshed)
+        doc_files.regenerate_documents(db, refreshed)
         db.commit()
     doc = _get_doc_or_404(db, doc.id)
-    _regenerate_documents(db, doc)
+    doc_files.regenerate_documents(db, doc)
     db.commit()
     db.refresh(doc)
     return _to_out(doc, steps)
@@ -879,7 +758,7 @@ def request_delete_document(
     )
     db.commit()
     doc = _get_doc_or_404(db, doc_id)
-    _regenerate_documents(db, doc)
+    doc_files.regenerate_documents(db, doc)
     db.commit()
     db.refresh(doc)
     return _to_out(doc, steps)
@@ -897,7 +776,7 @@ def _approve_one(db: Session, doc: ProjectDocument, current_user: User, notify: 
     if next_step is None:
         doc.status = ProjectDocumentStatus.approved
         doc.reviewed_at = datetime.now(timezone.utc)
-        _record_tax_invoice_transaction(db, doc, current_user)
+        record_tax_invoice_transaction(db, doc, current_user)
         if notify:
             create_decision_notification(
                 db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
@@ -942,7 +821,7 @@ def approve_project_document(doc_id: int, db: Session = Depends(get_db), current
 
     for target in [doc, *siblings]:
         refreshed = _get_doc_or_404(db, target.id)
-        _regenerate_documents(db, refreshed)
+        doc_files.regenerate_documents(db, refreshed)
         db.commit()
     doc = _get_doc_or_404(db, doc.id)
     logger.debug(f"[ProjectDocuments] 결재 승인 완료: id={doc_id}, by={current_user.id}")
@@ -987,7 +866,7 @@ def reject_project_document(
         _restore_after_delete_rejected(db, doc)
         db.commit()
         doc = _get_doc_or_404(db, doc_id)
-        _regenerate_documents(db, doc)
+        doc_files.regenerate_documents(db, doc)
         db.commit()
         logger.debug(f"[ProjectDocuments] 삭제 결재 반려 → 승인 상태 복원: id={doc_id}, by={current_user.id}, reason={payload.reason}")
         return _to_out(doc, get_steps(db, _TARGET, doc.id))
@@ -1002,7 +881,7 @@ def reject_project_document(
 
     for target in [doc, *siblings]:
         refreshed = _get_doc_or_404(db, target.id)
-        _regenerate_documents(db, refreshed)
+        doc_files.regenerate_documents(db, refreshed)
         db.commit()
     doc = _get_doc_or_404(db, doc.id)
     logger.debug(f"[ProjectDocuments] 결재 반려: id={doc_id}, by={current_user.id}, reason={payload.reason}")
