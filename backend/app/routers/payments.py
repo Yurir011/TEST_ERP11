@@ -16,7 +16,15 @@ from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.payment import CardType, Payment, PaymentMethod, PaymentType
 from app.models.transaction import Transaction, TransactionType
-from app.services.transaction_credit import credit_add, credit_reduce, credit_remove, credit_restore, remaining_amount
+from app.services.settlement import (
+    apply_balance_settlement,
+    apply_transaction_payment,
+    is_partial_payment,
+    revert_balance_settlement,
+    settlement_field,
+    undo_payment_effects,
+)
+from app.services.transaction_credit import remaining_amount
 from app.models.user import User
 from app.services import card_billing
 from app.services.recurring_payment import generate_recurring_payments
@@ -39,33 +47,6 @@ router = APIRouter(prefix="/api/payments", tags=["payments"])
 logger = get_logger("Payments")
 
 ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp"}
-
-# 미수금(외상매출금) 수금 / 미지급금 지급 정산 처리 시, 거래처의 잔액을 자동으로 갱신하기 위한 매핑.
-# 이 분류/구분 조합에 해당하는 결제만 거래처 잔액에 영향을 준다 (그 외 일반 입출금은 잔액에 영향 없음).
-SETTLEMENT_RECEIVABLE_CATEGORY = "외상매출금"
-SETTLEMENT_PAYABLE_CATEGORIES = ("외상매입금", "미지급금")
-
-
-def _settlement_field(payment_type: PaymentType, category: str) -> str | None:
-    if payment_type == PaymentType.deposit and category == SETTLEMENT_RECEIVABLE_CATEGORY:
-        return "receivable_amount"
-    if payment_type == PaymentType.withdrawal and category in SETTLEMENT_PAYABLE_CATEGORIES:
-        return "payable_amount"
-    return None
-
-
-def _apply_settlement(client: Client, field: str, amount: int) -> None:
-    current = getattr(client, field)
-    new_value = max(0, current - amount)
-    logger.debug(f"[Payments] 거래처 {field} 자동 차감: client_id={client.id}, {current} -> {new_value}")
-    setattr(client, field, new_value)
-
-
-def _revert_settlement(client: Client, field: str, amount: int) -> None:
-    current = getattr(client, field)
-    logger.debug(f"[Payments] 거래처 {field} 자동 복원: client_id={client.id}, {current} -> {current + amount}")
-    setattr(client, field, current + amount)
-
 
 def _occurred_dates(db: Session, payment_ids: list[int]) -> dict[int, date]:
     """입출금 id -> 그 입출금으로 결제완료된 매입매출의 거래일(미수금/미지급금 발생일)."""
@@ -333,12 +314,12 @@ def create_payment(
     logger.debug(f"[Payments] 등록: type={payload.type}, amount={payload.amount}, tx={payload.transaction_id}, by={current_user.id}")
 
     # 연결한 매입매출의 미결제 금액보다 적게 수금/지급하면 전액 결제가 아니라 부분 결제로 기록한다.
-    is_partial = linked_tx is not None and 0 < payload.amount < remaining_amount(linked_tx)
+    is_partial = is_partial_payment(linked_tx, payload.amount)
 
-    # 매입매출 내역을 불러온 결제는 그 내역의 결제완료 처리에서 거래처 잔액을 줄이므로, 분류 기반 자동 정산은 건너뛴다.
-    settlement_field = None if linked_tx is not None else _settlement_field(payload.type, payload.category)
-    if client is not None and settlement_field is not None:
-        _apply_settlement(client, settlement_field, payload.amount)
+    # 매입매출 내역을 불러온 결제는 그 내역의 결제 처리에서 거래처 잔액을 줄이므로, 분류 기반 자동 정산은 건너뛴다.
+    balance_field = None if linked_tx is not None else settlement_field(payload.type, payload.category)
+    if client is not None and balance_field is not None:
+        apply_balance_settlement(client, balance_field, payload.amount)
 
     # 법인카드 출금은 카드 결제일에 일괄 확정할 때까지 결제예정으로 둔다 (외상 매입매출 결제 건은 즉시 확정).
     is_card_pending = payload.type == PaymentType.withdrawal and payload.method == PaymentMethod.corporate_card and linked_tx is None
@@ -361,21 +342,8 @@ def create_payment(
         created_by=current_user.id,
     )
     db.add(payment)
-    if is_partial:
-        db.flush()
-        linked_tx.paid_amount = (linked_tx.paid_amount or 0) + payload.amount
-        credit_reduce(db, linked_tx, payload.amount)
-        logger.debug(
-            f"[Payments] 매입매출 부분 결제: tx_id={linked_tx.id}, payment_id={payment.id}, amount={payload.amount}, "
-            f"paid={linked_tx.paid_amount}/{linked_tx.total_amount}"
-        )
-    elif linked_tx is not None:
-        db.flush()
-        credit_remove(db, linked_tx)  # 외상 상태일 때 거래처 미수금/미지급금에 반영했던 금액을 되돌린다 (settled 변경 전에 호출).
-        linked_tx.settled = True
-        linked_tx.settled_date = payload.payment_date
-        linked_tx.settled_payment_id = payment.id
-        logger.debug(f"[Payments] 매입매출 결제완료 처리: tx_id={linked_tx.id}, payment_id={payment.id}, date={payload.payment_date}")
+    if linked_tx is not None:
+        apply_transaction_payment(db, payment, linked_tx, partial=is_partial)
     db.commit()
     db.refresh(payment)
     return _to_out(payment, linked_tx.transaction_date if linked_tx is not None else None)
@@ -519,10 +487,10 @@ def update_payment(
 
     # 기존 내역이 정산(미수금 수금/미지급금 지급) 처리였다면, 거래처 잔액에 반영했던 금액을 먼저 되돌린다.
     # (매입매출 내역과 연결된 결제는 그 내역이 잔액을 관리하므로 건너뛴다.)
-    is_partial_payment = payment.partial_transaction_id is not None  # 부분 결제의 거래처 잔액은 매입매출 쪽에서 관리한다.
-    old_settlement_field = None if (linked_tx is not None or is_partial_payment) else _settlement_field(payment.type, payment.category)
+    is_partial_row = payment.partial_transaction_id is not None  # 부분 결제의 거래처 잔액은 매입매출 쪽에서 관리한다.
+    old_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(payment.type, payment.category)
     if payment.client is not None and old_settlement_field is not None:
-        _revert_settlement(payment.client, old_settlement_field, payment.amount)
+        revert_balance_settlement(payment.client, old_settlement_field, payment.amount)
 
     client = None
     if payload.client_id is not None:
@@ -530,9 +498,9 @@ def update_payment(
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
-    new_settlement_field = None if (linked_tx is not None or is_partial_payment) else _settlement_field(payload.type, payload.category)
+    new_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(payload.type, payload.category)
     if client is not None and new_settlement_field is not None:
-        _apply_settlement(client, new_settlement_field, payload.amount)
+        apply_balance_settlement(client, new_settlement_field, payload.amount)
     if linked_tx is not None:
         linked_tx.settled_date = payload.payment_date
 
@@ -567,31 +535,7 @@ def delete_payment(payment_id: int, db: Session = Depends(get_db), current_user:
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
 
-    linked_tx = db.query(Transaction).filter(Transaction.settled_payment_id == payment.id).first()
-    partial_tx = (
-        db.query(Transaction).filter(Transaction.id == payment.partial_transaction_id).first()
-        if payment.partial_transaction_id is not None
-        else None
-    )
-    if partial_tx is not None:
-        if partial_tx.settled:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="이미 전액 결제완료된 매입매출의 분할 수금/지급 내역입니다. 마지막에 결제한 내역부터 삭제해주세요.",
-            )
-        partial_tx.paid_amount = max(0, (partial_tx.paid_amount or 0) - payment.amount)
-        credit_restore(db, partial_tx, payment.amount)
-        logger.debug(f"[Payments] 부분 결제 삭제로 미결제 금액 복원: tx_id={partial_tx.id}, amount={payment.amount}")
-    elif linked_tx is not None:
-        linked_tx.settled = False
-        linked_tx.settled_date = None
-        linked_tx.settled_payment_id = None
-        credit_add(db, linked_tx)
-        logger.debug(f"[Payments] 입출금 삭제로 매입매출을 외상으로 복원: tx_id={linked_tx.id}")
-    else:
-        settlement_field = _settlement_field(payment.type, payment.category)
-        if payment.client is not None and settlement_field is not None:
-            _revert_settlement(payment.client, settlement_field, payment.amount)
+    undo_payment_effects(db, payment)
 
     db.delete(payment)
     db.commit()

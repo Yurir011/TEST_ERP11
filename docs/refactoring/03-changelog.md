@@ -83,3 +83,17 @@
   - `toMonthValue` 로컬 정의 4곳 삭제(AttendanceSection, LeavesPage, PaymentsPage, TransactionsPage)
   - 인라인 `toISOString().slice(0, 10)` 6곳 교체(ClientsPage, ProjectOverviewCard, ProjectsPage, ProjectStageBoard, ProjectDocumentsPage, TransactionsPage의 `monthsAgoISO`)
 - 효과: 00:00~09:00에 등록 화면을 열어도 오늘 날짜가 기본으로 들어간다. 그 외 시간대의 동작은 같다.
+
+## P3-1. 결제·정산 로직을 서비스로 분리 — 2026-10-16
+
+- 신규 `backend/app/services/settlement.py`: "결제 하나가 거래처 잔액과 매입매출 상태에 만드는 변화"를 한곳에 모음.
+  - `settlement_field`, `apply_balance_settlement`, `revert_balance_settlement`: 거래처 잔액만 줄이는 정산(기존 `payments.py`의 `_settlement_field` 등을 이동)
+  - `is_partial_payment`, `apply_transaction_payment`: 매입매출 건 결제(전액·부분)
+  - `undo_payment_effects`: 결제 삭제 시 되돌리기
+  - 상수 `SETTLEMENT_RECEIVABLE_CATEGORY`, `SETTLEMENT_PAYABLE_CATEGORIES`도 이동
+- `backend/app/routers/payments.py`: 위 로직을 서비스 호출로 교체(`create_payment`, `update_payment`, `delete_payment`). 파일 길이 599줄 → 약 540줄, 라우터는 HTTP 입출력과 조회에 집중.
+- API 경로·요청/응답 형식·오류 메시지는 변경 없음.
+- 테스트 추가: `tests/test_settlement_service.py` 15건(정산 대상 판정 표, 부분 결제 판정 경계값, 잔액 가감).
+
+### 진행 중 확인된 사항
+- 리팩토링 중 `remaining_amount` import 누락 실수가 있었고, **기존 통합 테스트가 즉시 잡아냈다**(`test_linkable_transactions_show_remaining_amount` 실패). 수정 후 전부 통과. 안전망이 의도대로 작동함을 확인했다.
