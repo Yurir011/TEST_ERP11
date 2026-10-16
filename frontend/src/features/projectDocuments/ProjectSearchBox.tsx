@@ -22,9 +22,13 @@ export function ProjectSearchBox({
     [projectNames, q]
   );
 
-  useEffect(() => {
+  // 입력값이 바뀌거나 목록을 열고 닫으면 키보드 선택 위치를 처음으로 되돌린다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
+  const resetKey = `${open}|${value}`;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey);
     setActive(-1);
-  }, [value, open]);
+  }
 
   useEffect(() => {
     function onDown(e: MouseEvent) {

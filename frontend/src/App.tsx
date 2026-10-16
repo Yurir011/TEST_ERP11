@@ -11,7 +11,7 @@ import { MobileNotificationsPage } from "./features/mobile/MobileNotificationsPa
 import { MobileSchedulePage } from "./features/mobile/MobileSchedulePage";
 import { shouldUseMobile } from "./features/mobile/mobileMode";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
-import { useAuth } from "./context/AuthContext";
+import { useAuth } from "./context/useAuth";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SiteAdminDashboardPage } from "./features/dashboard/SiteAdminDashboardPage";
 import { LoginPage } from "./features/auth/LoginPage";

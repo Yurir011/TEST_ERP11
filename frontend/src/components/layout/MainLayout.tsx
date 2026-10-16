@@ -1,6 +1,6 @@
 import { LogOut } from "lucide-react";
 import type { ReactNode } from "react";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { AttendanceToggle } from "../../features/attendance/AttendanceToggle";
 import { TITLE_LABELS } from "../../lib/auth";
 import { Sidebar } from "./Sidebar";

@@ -4,7 +4,7 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload, downloadFile } from "../../lib/api";

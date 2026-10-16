@@ -1,6 +1,6 @@
 import { Check, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { getMonthGridDays, isSameDay, isSameMonth, toISODate, WEEKDAY_LABELS } from "../schedule/dateUtils";

@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiGet, apiPost, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { ProposalsPage } from "../proposals/ProposalsPage";

@@ -2,7 +2,7 @@ import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { apiDelete, apiGet } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { formatDate } from "../../lib/format";

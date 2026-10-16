@@ -1,6 +1,6 @@
 import { Check, X } from "lucide-react";
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { formatDate } from "../../lib/format";
 import type { LeaveRecord } from "./types";

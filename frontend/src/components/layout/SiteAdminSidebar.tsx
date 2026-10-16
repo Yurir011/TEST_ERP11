@@ -1,6 +1,6 @@
 import { CalendarDays, LayoutGrid, LogOut, Megaphone, Settings } from "lucide-react";
 import { NavLink } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { Logo } from "../ui/Logo";
 
 const menuItems = [

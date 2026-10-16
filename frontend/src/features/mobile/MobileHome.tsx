@@ -2,7 +2,7 @@ import { Bell, Building2, CalendarCheck, CalendarDays, Clock, FileCheck, Megapho
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import { hasMenuPermission } from "../../lib/auth";
 import { formatTime } from "../../lib/format";

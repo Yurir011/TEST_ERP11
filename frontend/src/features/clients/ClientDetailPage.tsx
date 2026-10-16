@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { canDeleteClient } from "../../lib/auth";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { apiDelete, apiGet, openFile } from "../../lib/api";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { logError } from "../../lib/logger";

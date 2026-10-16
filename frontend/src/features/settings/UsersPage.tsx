@@ -2,7 +2,7 @@ import { History, KeyRound, Plus, UserX, UserCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import type { CurrentUser, JobGrade, JobTitle } from "../../lib/auth";
 import { apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";

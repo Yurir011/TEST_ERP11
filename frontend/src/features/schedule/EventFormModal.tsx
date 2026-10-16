@@ -1,5 +1,5 @@
 import { Trash2, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { parseISODate, toISODate, WEEKDAY_LABELS } from "./dateUtils";
 import {
   generateLunarYearlyOccurrences,
@@ -61,19 +61,13 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
   const lunarDayCount = getLunarMonthDayCount(lunarYear, lunarMonth, lunarLeap) ?? 30;
   const computedSolar = calendarType === "lunar" ? lunarToSolar(lunarYear, lunarMonth, lunarDay, lunarLeap) : null;
 
-  useEffect(() => {
-    if (!canBeLeap && lunarLeap) setLunarLeap(false);
-  }, [canBeLeap, lunarLeap]);
-
-  useEffect(() => {
-    if (lunarDay > lunarDayCount) setLunarDay(lunarDayCount);
-  }, [lunarDay, lunarDayCount]);
-
-  useEffect(() => {
-    if (calendarType === "lunar" && (recurrenceFreq === "daily" || recurrenceFreq === "weekly")) {
-      setRecurrenceFreq("none");
-    }
-  }, [calendarType, recurrenceFreq]);
+  // 고른 값끼리 맞지 않으면 렌더 중에 바로 맞춘다 (효과로 한 번 더 그리지 않는다):
+  // 윤달이 없는 달이면 윤달 해제, 그 달의 날수를 넘는 날은 마지막 날로, 음력 일정은 매일·매주 반복 불가.
+  if (!canBeLeap && lunarLeap) setLunarLeap(false);
+  if (lunarDay > lunarDayCount) setLunarDay(lunarDayCount);
+  if (calendarType === "lunar" && (recurrenceFreq === "daily" || recurrenceFreq === "weekly")) {
+    setRecurrenceFreq("none");
+  }
 
   const availableFreqs = calendarType === "lunar" ? LUNAR_ONLY_FREQS : SOLAR_ONLY_FREQS;
 

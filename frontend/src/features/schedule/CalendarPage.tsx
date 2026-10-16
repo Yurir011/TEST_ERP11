@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";

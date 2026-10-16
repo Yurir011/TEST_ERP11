@@ -2,7 +2,7 @@ import { Bell, CheckCheck, ChevronDown, Megaphone, Plus, Stamp, Users } from "lu
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { apiGet, apiPut } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { formatDate } from "../../lib/format";

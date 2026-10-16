@@ -1,5 +1,5 @@
 import { Check, FileSignature, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet, downloadFile, openFile } from "../../lib/api";
@@ -31,18 +31,17 @@ export function ProposalsPage({
   const [busyId, setBusyId] = useState<number | null>(null);
   const [detail, setDetail] = useState<Proposal | null>(null);
   const openTargetId = useOpenTarget(openId);
-  const openedTargetRef = useRef(false);
+  const [openedTarget, setOpenedTarget] = useState(false);
 
-  // 업무 알림(?open=품의서ID)으로 들어오면 해당 품의서 상세를 바로 연다. 승인/반려 이후에도 동일하게 열린다.
-  useEffect(() => {
-    if (openTargetId === null || openedTargetRef.current || proposals === null) return;
+  // 업무 알림(?open=품의서ID)으로 들어오면 목록을 받은 뒤 해당 품의서 상세를 한 번 연다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
+  if (openTargetId !== null && !openedTarget && proposals !== null) {
     const target = proposals.find((p) => p.id === openTargetId) ?? pendingForMe.find((p) => p.id === openTargetId);
     if (target) {
-      openedTargetRef.current = true;
+      setOpenedTarget(true);
       logDebug("Proposals", `알림에서 품의서 상세 열기: id=${openTargetId}`);
       setDetail(target);
     }
-  }, [openTargetId, proposals, pendingForMe]);
+  }
 
   function loadProposals() {
     logDebug("Proposals", "목록 조회 시작");

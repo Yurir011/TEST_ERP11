@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { TodoPanel } from "../../features/todos/TodoPanel";
 import { apiGet } from "../../lib/api";
 import { hasMenuPermission, type MenuPermissionKey } from "../../lib/auth";

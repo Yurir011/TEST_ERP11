@@ -155,11 +155,13 @@ export function TransactionFormPage() {
       .catch((err) => logError("TransactionForm", "거래처 목록 불러오기 실패", err));
   }, []);
 
-  useEffect(() => {
-    if (vatManuallyEdited) return;
-    const supply = Number(supplyAmount) || 0;
-    setVatAmount(String(calcVat(supply)));
-  }, [supplyAmount, vatManuallyEdited]);
+  // 부가세를 직접 고치기 전까지는 공급가액이 바뀔 때마다 10%로 자동 계산한다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
+  const vatKey = `${supplyAmount}|${vatManuallyEdited}`;
+  const [prevVatKey, setPrevVatKey] = useState(vatKey);
+  if (vatKey !== prevVatKey) {
+    setPrevVatKey(vatKey);
+    if (!vatManuallyEdited) setVatAmount(String(calcVat(Number(supplyAmount) || 0)));
+  }
 
   function changeParty(name: string) {
     setPartyQuery(name);

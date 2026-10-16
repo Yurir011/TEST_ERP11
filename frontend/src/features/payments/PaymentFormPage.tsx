@@ -76,18 +76,20 @@ export function PaymentFormPage() {
       .catch((err) => logError("PaymentForm", "거래처 목록 불러오기 실패", err));
   }, []);
 
-  useEffect(() => {
-    if (method !== "bank_transfer" && method !== "cash") {
+  /** 결제수단을 바꾸면 그 수단에서 쓰지 않는 선택(증빙, 계좌 종류, 카드 종류)을 비운다. */
+  function changeMethod(next: PaymentMethod) {
+    setMethod(next);
+    if (next !== "bank_transfer" && next !== "cash") {
       setProofType(null);
       setProofTypeDetail("");
     }
-    if (method !== "bank_transfer") {
+    if (next !== "bank_transfer") {
       setBankType(null);
     }
-    if (method !== "corporate_card") {
+    if (next !== "corporate_card") {
       setCardType(null);
     }
-  }, [method]);
+  }
 
   const categoryItems = PAYMENT_CATEGORY_ITEMS[category];
   // 항목 목록이 없는 분류(기타 포함)는 "항목" 칸에 직접 입력한다. 항목 목록이 있는 분류에서 "기타"를 고른 경우는
@@ -150,7 +152,7 @@ export function PaymentFormPage() {
     changeCategory(c.type === "deposit" ? "외상매출금" : "외상매입금");
     setManualItem(`${c.item_name} ${c.type === "deposit" ? "입금" : "지급"}`.slice(0, 300));
     setAmount(String(c.total_amount));
-    setMethod("bank_transfer");
+    changeMethod("bank_transfer");
     setProofType("tax_invoice");
     setMemo(`매입매출 불러오기 (내역 #${c.id}${c.tax_invoice_no ? `, ${c.tax_invoice_no}` : ""})`);
     setPartyQuery(c.client_name);
@@ -272,7 +274,7 @@ export function PaymentFormPage() {
             <label className="block text-xs text-text-muted mb-1.5">결제수단</label>
             <select
               value={method}
-              onChange={(e) => setMethod(e.target.value as PaymentMethod)}
+              onChange={(e) => changeMethod(e.target.value as PaymentMethod)}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             >
               {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (

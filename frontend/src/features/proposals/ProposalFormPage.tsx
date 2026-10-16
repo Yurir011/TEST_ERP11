@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCheckbox";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { Proposal } from "./types";

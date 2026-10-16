@@ -2,7 +2,7 @@ import { Check, Download, ExternalLink, Paperclip, Pencil, Printer, Link as Link
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
