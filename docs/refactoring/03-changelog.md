@@ -138,3 +138,19 @@
   - `lib/format.test.ts`: `formatCurrency`
   - `features/transactions/types.test.ts`: `remainingAmount`(부분 결제 남은 금액, 음수 방지)
   - `features/payments/outstanding.test.ts`: 미수금·미지급금 행 계산(전체/월별, 금액 0원 건, 잔액·건 불일치, **전체 ≥ 월별**), 최초 발생일, 최근 일부 수금일
+
+## P4-4. 문서관리 페이지 분해 — 2026-10-16
+
+`ProjectDocumentsPage.tsx`를 1,223줄 → **857줄**로 줄였다. **화면과 동작은 그대로**이고 JSX는 원문 그대로 옮겼다.
+
+| 신규 파일 | 내용 |
+|---|---|
+| `projectDocuments/documentHelpers.ts` | 품목 합계·요약, 파일명, 세금계산서 통계 집계(`computeTaxInvoiceStats`), 세금계산서 조회 조건 적용(`filterTaxInvoices`), 목록 행 타입, 승인 완료 판정 — 화면과 분리한 **순수 함수** |
+| `projectDocuments/TaxInvoiceStatsCard.tsx` | "세금계산서 통계" 카드 |
+| `projectDocuments/PendingApprovalBox.tsx` | 상단 "내 결재함 - 승인 대기 중인 문서" 상자 |
+| `projectDocuments/ProjectDocumentsTable.tsx` | 문서·품의서 통합 목록 표 |
+
+- 필터 로직은 페이지 안의 긴 인라인 조건식에서 `filterTaxInvoices(docs, 조건)` 호출로 바뀌었다. 조건식은 그대로 옮겼다.
+- 월 계산 함수가 `now`를 인자로 받게 해서(기본값은 현재 시각) 시점을 고정한 테스트가 가능하다.
+- 테스트 추가(vitest, 10건): `documentHelpers.test.ts` — 품목 합계 반올림, 요약 문구, 통계(외화 제외·전월 대비·1월의 전월=작년 12월), 필터(매출/매입, 종이/전자, 발행 여부, 이번 달/지난달, 직접 기간, 자유 검색).
+- 남은 큰 덩어리: 세금계산서 필터 바(약 110줄)와 각종 핸들러(다운로드·팝빌 등)는 이번에 옮기지 않았다.
