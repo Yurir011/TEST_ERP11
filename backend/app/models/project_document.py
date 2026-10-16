@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
+from app.services.money import line_amount
 
 if TYPE_CHECKING:
     from app.models.client import Client
@@ -18,7 +19,7 @@ MAX_ITEMS = 8
 
 def calc_amount(quantity: int, unit_price: float) -> int:
     """품목 금액 = 수량 x 단가 (원 단위 반올림). 단가는 소수(예: 454,545.5)일 수 있어 품목별로 반올림한 값을 공급가액으로 쓴다."""
-    return round(quantity * unit_price)
+    return line_amount(quantity, unit_price)
 
 
 def format_price(value: float) -> str:

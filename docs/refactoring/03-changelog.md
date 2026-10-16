@@ -37,3 +37,24 @@
 
 ### 이번 단계에서 하지 않은 것
 - 프론트엔드 테스트 러너(vitest)는 도입하지 않았다. 프론트엔드 순수 함수가 정리되는 P2에서 필요 시 다시 제안한다.
+
+## P2(일부). 부가세·품목 금액 계산 통합과 사사오입 적용 — 2026-10-16
+
+두 개의 커밋으로 나눠 진행했다.
+
+### 1) 계산 위치 통합 (동작 변경 없음) — 커밋 `72edfb7`
+- 신규 `backend/app/services/money.py`: 부가세 계산 함수 `vat_amount()`를 한 곳에 둠.
+- 7개 파일 13곳의 `round(x * 0.1)`을 `vat_amount(x)`로 교체(`routers/project_documents.py`, `routers/sales_documents.py`, `routers/transactions.py`, `services/project_document_excel.py`, `services/project_document_pdf.py`, `services/project_document_template.py`, `services/tax_invoice_list_excel.py`).
+- 검증: 변경 전 테스트 74건이 그대로 통과(결과 동일).
+
+### 2) 반올림 방식을 사사오입으로 변경 (사용자 승인) — 별도 커밋
+- `money.py`에 `round_half_up()`, `line_amount()` 추가. 부동소수 오차를 피하려고 `Decimal`로 계산한다.
+- `vat_amount()`와 품목 금액 `calc_amount()`(`models/project_document.py`)가 사사오입을 쓴다.
+- 효과: 공급가액 25원 → 부가세 3원(이전 2원), 45원 → 5원(이전 4원). 품목 금액 3 × 454,545.5 → 1,363,637원(이전 1,363,636원).
+- **화면과 PDF 불일치 해소**: 프론트엔드는 원래 `Math.round`(사사오입)로 부가세를 보여주고 있어서, 끝자리가 5인 공급가액에서는 화면 금액과 PDF·장부 금액이 1원 달랐다. 이제 같은 규칙이다.
+- 테스트: `tests/test_money.py`를 사사오입 기준으로 갱신(14건 → 27건으로 보강).
+
+### 영향 및 주의
+- 이미 **저장된 장부(매입매출) 금액은 바뀌지 않는다.** 저장된 값은 그대로이고 새로 계산하는 문서부터 새 규칙이 적용된다.
+- 이미 발행된 문서를 **PDF/엑셀로 다시 내려받으면** 합계가 계산식을 다시 실행하므로 끝자리가 5인 경우 1원 차이가 날 수 있다.
+- 일부 코드(`sales_documents.py`)는 품목별 반올림 없이 합계를 곱하는 별도 방식을 쓰고 있어 그대로 두었다(이 파일의 계산 방식 통일은 별도 검토 항목).

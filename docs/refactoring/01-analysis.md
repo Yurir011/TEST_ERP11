@@ -78,7 +78,7 @@
 
 | # | 발견 | 근거 | 심각도 |
 |---|---|---|---|
-| A1 | **부가세(10%) 계산이 5곳에 중복**되어 있고 모두 파이썬 `round()`를 쓴다. `round()`는 0.5를 짝수로 반올림(은행가 반올림)해서 `round(2.5)=2`가 된다. 한국 세무 관행(사사오입)과 다를 수 있고, 중복되어 있어 한 곳만 바뀌면 문서 금액과 장부 금액이 어긋난다. | `project_documents.py:165`, `sales_documents.py:134`, `transactions.py:244`, `project_document_excel.py:85`, `project_document_pdf.py:108` | 높음 |
+| A1 | **부가세(10%) 계산이 7개 파일 13곳에 중복**되어 있고 모두 파이썬 `round()`를 쓴다. `round()`는 0.5를 짝수로 반올림(은행가 반올림)해서 `round(2.5)=2`가 된다. 한국 세무 관행(사사오입)과 다를 수 있고, 중복되어 있어 한 곳만 바뀌면 문서 금액과 장부 금액이 어긋난다. | `project_documents.py`, `sales_documents.py`, `transactions.py`, `project_document_excel.py`, `project_document_pdf.py`, `project_document_template.py`(5곳), `tax_invoice_list_excel.py`(2곳). 화면(프론트엔드)은 `Math.round`로 사사오입이라, 공급가액 끝자리에 따라 화면 금액과 PDF 금액이 달랐다 | 높음 |
 | A2 | 외상 잔액(`services/transaction_credit.py`)과 부분 결제 로직이 **읽고-바꾸고-쓰는 방식**이라 동시에 두 요청이 오면 잔액이 어긋날 수 있다(행 잠금 없음). 5인 규모에서 확률은 낮지만 결재 버튼 더블클릭 같은 경우는 가능하다. | `transaction_credit.py`, `payments.py` | 중간 |
 | A3 | 견적 단가가 `float`(`Numeric(18,2, asdecimal=False)`)이고 수량 곱셈도 float이다. 금액 반올림 오차 가능성이 있다. | `models/project_document.py:19,174` | 중간 |
 | A4 | 최근 추가한 부분 수금/지급(`paid_amount`)과 잔액 계산에 **자동 테스트가 없다**. | — | 높음 |
