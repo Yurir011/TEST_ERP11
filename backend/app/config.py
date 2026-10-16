@@ -10,7 +10,9 @@ class Settings(BaseSettings):
     # 기본은 INFO. 개발 PC 에서는 .env 에 LOG_LEVEL=DEBUG 를 지정해 디버그 메시지를 본다.
     log_level: str = "INFO"
     database_url: str = "postgresql+psycopg2://erp_user:erp_password@localhost:5432/erp_db"
-    cors_origins: list[str] = ["http://localhost:5173", "http://192.168.0.10:5173"]
+    # 다른 주소(Origin)에서 브라우저가 API 를 직접 부를 때만 필요한 허용 목록. 화면은 Vite 프록시/Nginx 를 거쳐 같은 주소로
+    # API 를 부르므로 보통은 바꿀 필요가 없다. 추가가 필요하면 .env 에 CORS_ORIGINS=["http://주소:포트"] 형식(JSON 배열)으로 지정한다.
+    cors_origins: list[str] = ["http://localhost:5173"]
 
     jwt_secret_key: str = "dev-only-change-me"
     jwt_algorithm: str = "HS256"

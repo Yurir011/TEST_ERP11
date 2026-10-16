@@ -62,7 +62,7 @@ npm run dev
 
 - 서버 PC의 IP 확인: PowerShell에서 `ipconfig` → "IPv4 주소" 확인
 - 다른 PC 브라우저에서 `http://<서버 PC의 IP>:5173` 접속 (예: `http://192.168.0.10:5173`)
-- 서버 PC의 IP가 바뀌면 `backend/app/config.py`의 `cors_origins`도 함께 갱신해야 한다
+- 화면은 Vite 프록시를 거쳐 같은 주소로 API를 부르므로 서버 PC의 IP가 바뀌어도 CORS 설정은 바꿀 필요가 없다. 다른 주소에서 API(8000 포트)를 직접 부를 때만 `backend/.env`의 `CORS_ORIGINS`에 주소를 추가한다
 - Windows 방화벽에서 5173, 8000 포트 인바운드 허용이 필요하다 (사설 네트워크 기준)
 
 - 프론트엔드: http://localhost:5173

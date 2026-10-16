@@ -37,12 +37,14 @@ logger = get_logger("Main")
 
 app = FastAPI(title=settings.app_name)
 
+# CORS: 허용 주소는 설정(CORS_ORIGINS)으로만 정하고, 실제로 쓰는 메서드·헤더만 연다.
+# 인증은 쿠키가 아니라 Authorization 헤더(Bearer 토큰)로 하므로 allow_credentials 는 필요 없다.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(auth.router)
