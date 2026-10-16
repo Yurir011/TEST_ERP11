@@ -129,3 +129,12 @@
 - 페이지에는 데이터 조회, 필터 상태, 모달 열기/닫기만 남았다.
 - 컴포넌트는 필요한 값과 콜백만 props 로 받는다(전역 상태 없음).
 - 순수 함수는 이후 프론트엔드 테스트 러너(vitest)를 도입하면 바로 테스트할 수 있다.
+
+## P4-3. 프론트엔드 테스트 러너(vitest) 도입 — 2026-10-16 (사용자 승인)
+
+- 개발 전용 의존성 `vitest`(5.0.5) 추가, `npm test` 스크립트, `vite.config.ts`에 node 환경 테스트 설정(`src/**/*.test.ts`). 화면 번들에는 포함되지 않는다.
+- 순수 함수 테스트 16건:
+  - `lib/date.test.ts`: 자정 직후에도 로컬 날짜 유지, 월·일 두 자리, `toMonthValue`
+  - `lib/format.test.ts`: `formatCurrency`
+  - `features/transactions/types.test.ts`: `remainingAmount`(부분 결제 남은 금액, 음수 방지)
+  - `features/payments/outstanding.test.ts`: 미수금·미지급금 행 계산(전체/월별, 금액 0원 건, 잔액·건 불일치, **전체 ≥ 월별**), 최초 발생일, 최근 일부 수금일
