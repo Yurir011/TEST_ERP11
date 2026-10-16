@@ -10,6 +10,7 @@ import { logError } from "../../lib/logger";
 import { BalanceHistoryModal, type BalanceKind } from "./BalanceHistoryModal";
 import { NewClientButton } from "./NewClientButton";
 import type { Client } from "./types";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
@@ -21,6 +22,7 @@ function Field({ label, value }: { label: string; value: string | null }) {
 }
 
 export function ClientDetailPage() {
+  const { confirm } = useDialog();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -40,7 +42,7 @@ export function ClientDetailPage() {
   }, [id]);
 
   async function handleDelete() {
-    if (!window.confirm("이 거래처를 삭제할까요?")) return;
+    if (!(await confirm("이 거래처를 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
     setIsDeleting(true);
     try {
       await apiDelete(`/api/clients/${id}`);

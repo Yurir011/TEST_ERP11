@@ -8,6 +8,7 @@ import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { Proposal } from "./types";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 const DEPARTMENT_NAME = "연구개발팀";
 
@@ -19,6 +20,7 @@ function todayLabel() {
 }
 
 export function ProposalFormPage() {
+  const { notify } = useDialog();
   const { user } = useAuth();
   const navigate = useNavigate();
   // ?edit=품의서ID 이면 기존 품의서를 수정한다. 반려/승인된 품의서를 고친 뒤 저장하면 결재를 처음부터 다시 받는다.
@@ -126,7 +128,7 @@ export function ProposalFormPage() {
         }
       }
 
-      window.alert(isEdit ? "수정 후 결재 요청이 완료되었습니다." : "결재 요청이 완료되었습니다.");
+      notify(isEdit ? "수정 후 결재 요청이 완료되었습니다." : "결재 요청이 완료되었습니다.");
       navigate("/project-documents", { replace: true });
     } catch (err) {
       logError("Proposals", "품의서 등록 실패", err);

@@ -8,8 +8,10 @@ import { isAdminRole } from "../../lib/auth";
 import { formatDate } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { Notice } from "./types";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 export function NoticeDetailPage() {
+  const { confirm } = useDialog();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -28,7 +30,7 @@ export function NoticeDetailPage() {
   }, [id]);
 
   async function handleDelete() {
-    if (!window.confirm("이 공지사항을 삭제할까요?")) return;
+    if (!(await confirm("이 공지사항을 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
     setIsDeleting(true);
     try {
       await apiDelete(`/api/notices/${id}`);

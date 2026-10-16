@@ -12,6 +12,7 @@ import { TransactionSettleModal } from "./TransactionSettleModal";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { todayISO, toLocalISODate, toMonthValue } from "../../lib/date";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 const TABS: { key: TransactionType | "all"; label: string }[] = [
   { key: "all", label: "전체" },
@@ -33,6 +34,7 @@ function monthsAgoISO(months: number) {
 }
 
 export function TransactionsPage() {
+  const { confirm, notifyError } = useDialog();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -124,7 +126,7 @@ export function TransactionsPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm("이 거래 내역을 삭제할까요?")) return;
+    if (!(await confirm("이 거래 내역을 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
     try {
       await apiDelete(`/api/transactions/${id}`);
       loadTransactions();
@@ -132,7 +134,7 @@ export function TransactionsPage() {
     } catch (err) {
       logError("Transactions", "삭제 실패", err);
       // 결제한 입출금이 남아 있는 거래 등 서버가 삭제를 거절한 사유를 보여준다
-      window.alert(err instanceof ApiError ? err.message : "삭제 중 오류가 발생했습니다.");
+      notifyError(err instanceof ApiError ? err.message : "삭제 중 오류가 발생했습니다.");
     }
   }
 

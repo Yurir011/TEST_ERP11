@@ -5,6 +5,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { useApprovalQueue, type ApprovalItem } from "./approvalQueue";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 function shortDate(iso: string) {
   const d = new Date(iso);
@@ -19,6 +20,7 @@ function previewPath(item: ApprovalItem): string | null {
 }
 
 export function MobileApprovalsPage() {
+  const { confirm } = useDialog();
   const { items, reload } = useApprovalQueue();
   const [rejectingKey, setRejectingKey] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -26,7 +28,7 @@ export function MobileApprovalsPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function handleApprove(item: ApprovalItem) {
-    if (!window.confirm(`${item.kindLabel} "${item.title}"을(를) 승인할까요?`)) return;
+    if (!(await confirm(`${item.kindLabel} "${item.title}"을(를) 승인할까요?`, { okLabel: "승인" }))) return;
     setError(null);
     setBusyKey(item.key);
     try {

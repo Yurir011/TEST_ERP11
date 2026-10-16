@@ -6,6 +6,7 @@ import { PercentPickerPopover } from "./PercentPickerPopover";
 import { PROGRESS_ROW_STYLES } from "./progressRowStyles";
 import { MAX_PROGRESS_STAGES, type Project, type ProgressStage } from "./types";
 import { TIMELINE_LABEL_WIDTH, diffDays, parseDate, stageWeekRange, todayFraction } from "./timeline";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 // "진행상황" — 주차 그리드에 정렬된 구간 바(무채색 트랙 + 진행율만큼 컬러 채움). 클릭으로 진행율 기록, 연필로 기간 수정.
 export function ProgressSectionCard({
@@ -15,6 +16,7 @@ export function ProgressSectionCard({
   project: Project;
   onStagesChange: (stages: ProgressStage[]) => void;
 }) {
+  const { confirm } = useDialog();
   const [stages, setStagesState] = useState<ProgressStage[] | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function ProgressSectionCard({
   }
 
   async function handleDelete(stage: ProgressStage) {
-    if (!window.confirm(`"${stage.name}" 항목을 삭제하시겠습니까?`)) return;
+    if (!(await confirm(`"${stage.name}" 항목을 삭제하시겠습니까?`, { okLabel: "삭제", danger: true }))) return;
     logDebug("ProjectProgress", `진행 상황 단계 삭제 시도: id=${stage.id}`);
     try {
       await apiDelete(`/api/projects/${project.id}/progress-stages/${stage.id}`);

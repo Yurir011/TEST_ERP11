@@ -1,5 +1,6 @@
 import { ApiError, apiPut } from "./api";
 import { logDebug, logError } from "./logger";
+import { useDialog } from "../components/ui/dialog/useDialog";
 
 type DecisionKind = "approve" | "reject";
 
@@ -26,6 +27,7 @@ interface ApprovalActionOptions<T> {
  * 연차·증명서·품의서·프로젝트 문서 화면이 같은 흐름을 쓴다.
  */
 export function useApprovalActions<T>(options: ApprovalActionOptions<T>) {
+  const { confirm, prompt, notify } = useDialog();
   const { module, getId, basePath, confirmApprove, setBusyId, onDone, onAfter, onError } = options;
 
   function fail(kind: DecisionKind, err: unknown) {
@@ -36,14 +38,14 @@ export function useApprovalActions<T>(options: ApprovalActionOptions<T>) {
 
   async function approve(item: T) {
     const confirmMessage = confirmApprove?.(item);
-    if (confirmMessage && !window.confirm(confirmMessage)) return;
+    if (confirmMessage && !(await confirm(confirmMessage, { okLabel: "승인" }))) return;
     const id = getId(item);
     logDebug(module, `결재 승인 시도: id=${id}`);
     setBusyId(id);
     try {
       await apiPut(`${basePath(id)}/approve`);
       onDone("approve");
-      window.alert("결재 승인되었습니다.");
+      notify("결재 승인되었습니다.");
       onAfter?.("approve");
     } catch (err) {
       fail("approve", err);
@@ -53,7 +55,7 @@ export function useApprovalActions<T>(options: ApprovalActionOptions<T>) {
   }
 
   async function reject(item: T) {
-    const reason = window.prompt("반려 사유를 입력해주세요.");
+    const reason = await prompt("반려 사유를 입력해주세요.", { okLabel: "반려", danger: true });
     if (!reason || !reason.trim()) return;
     const id = getId(item);
     logDebug(module, `결재 반려 시도: id=${id}`);

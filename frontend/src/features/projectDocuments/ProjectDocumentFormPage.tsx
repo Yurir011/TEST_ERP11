@@ -28,10 +28,12 @@ import {
   type TaxInvoicePurpose,
 } from "./types";
 import { todayISO } from "../../lib/date";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 const PURPOSE_OPTIONS: TaxInvoicePurpose[] = ["청구", "영수"];
 
 export function ProjectDocumentFormPage() {
+  const { notify } = useDialog();
   const [searchParams] = useSearchParams();
   const typeParam = searchParams.get("type");
   // ?type=set 이면 견적서+거래명세서를 같은 내용으로 한 번에 작성하고, 한 번의 결재로 함께 승인/반려된다.
@@ -278,7 +280,7 @@ export function ProjectDocumentFormPage() {
           approver_ids: approverIds,
           is_final_decision: isFinalDecision,
         });
-        window.alert("수정 후 결재 요청이 완료되었습니다.");
+        notify("수정 후 결재 요청이 완료되었습니다.");
         navigate(docType === "tax_invoice" ? "/tax-invoices" : "/project-documents", { replace: true });
         return;
       }
@@ -320,7 +322,7 @@ export function ProjectDocumentFormPage() {
         }
       }
 
-      window.alert("결재 요청이 완료되었습니다.");
+      notify("결재 요청이 완료되었습니다.");
       navigate(routeProjectId ? `/projects/${routeProjectId}` : docType === "tax_invoice" ? "/tax-invoices" : "/project-documents", { replace: true });
     } catch (err) {
       logError("ProjectDocumentForm", "결재요청 실패", err);

@@ -15,6 +15,7 @@ import {
 } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 interface FormState {
   type: PaymentType;
@@ -64,6 +65,7 @@ function toForm(t: RecurringPayment): FormState {
 const inputClass = "w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg";
 
 export function RecurringPaymentsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const { confirm } = useDialog();
   const [items, setItems] = useState<RecurringPayment[] | null>(null);
   const [editing, setEditing] = useState<{ id: number | null; form: FormState } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +143,7 @@ export function RecurringPaymentsModal({ onClose, onChanged }: { onClose: () => 
   }
 
   async function handleDelete(t: RecurringPayment) {
-    if (!window.confirm(`"${t.description}" 정기 자동이체를 삭제할까요?\n이미 기록된 입출금 내역은 그대로 남습니다.`)) return;
+    if (!(await confirm(`"${t.description}" 정기 자동이체를 삭제할까요?\n이미 기록된 입출금 내역은 그대로 남습니다.`, { okLabel: "삭제", danger: true }))) return;
     try {
       await apiDelete(`/api/recurring-payments/${t.id}`);
       load();

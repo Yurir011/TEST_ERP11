@@ -38,6 +38,7 @@ import {
 } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { toMonthValue } from "../../lib/date";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 // 구분 탭. 카드는 결제수단이 법인카드인 내역(결제예정 포함)만 모아 보며, 카드 출금은 출금 탭에도 함께 나온다.
 type PaymentTab = PaymentType | "card" | "all";
@@ -53,6 +54,7 @@ function voucherFilename(p: Payment, ext: string) {
 }
 
 export function PaymentsPage() {
+  const { confirm } = useDialog();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -277,7 +279,7 @@ export function PaymentsPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm("이 입출금 내역을 삭제할까요?")) return;
+    if (!(await confirm("이 입출금 내역을 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
     try {
       await apiDelete(`/api/payments/${id}`);
       loadPayments();

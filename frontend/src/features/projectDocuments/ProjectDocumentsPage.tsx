@@ -44,6 +44,7 @@ import {
 } from "./types";
 import { toLocalISODate } from "../../lib/date";
 import { useApprovalActions } from "../../lib/useApprovalActions";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 type DocTab = ProjectDocType | "all" | "proposal";
 
@@ -80,6 +81,7 @@ export function ProjectDocumentsPage({
   onDecided,
   onModalClose,
 }: ProjectDocumentsPageProps) {
+  const { confirm, notify, notifyError } = useDialog();
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -194,7 +196,7 @@ export function ProjectDocumentsPage({
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm("이 문서를 삭제할까요?")) return;
+    if (!(await confirm("이 문서를 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
     try {
       await apiDelete(`/api/project-documents/${id}`);
       reloadAll();
@@ -205,7 +207,7 @@ export function ProjectDocumentsPage({
   }
 
   // 승인된 문서는 바로 삭제할 수 없고, 결재선을 지정해 삭제 결재를 요청한다. 최종 승인되면 삭제된다.
-  function handleDeleteClick(doc: ProjectDocument) {
+  async function handleDeleteClick(doc: ProjectDocument) {
     if (doc.status !== "approved") {
       handleDelete(doc.id);
       return;
@@ -215,9 +217,7 @@ export function ProjectDocumentsPage({
       : "";
     const ledgerNote = doc.doc_type === "tax_invoice" ? "\n최종 승인되면 연결된 매입매출 내역과 입출금 내역도 함께 삭제됩니다." : "";
     if (
-      !window.confirm(
-        `승인된 ${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?${ledgerNote}${issuedNote}`
-      )
+      !(await confirm(`승인된 ${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?${ledgerNote}${issuedNote}`, { okLabel: "삭제 결재 요청" }))
     ) {
       return;
     }
@@ -237,7 +237,7 @@ export function ProjectDocumentsPage({
       logDebug("ProjectDocuments", `삭제 결재 요청 성공: doc_id=${deleteRequestDoc.id}`);
       setDeleteRequestDoc(null);
       reloadAll();
-      window.alert(isFinalDecision ? "삭제되었습니다." : "삭제 결재 요청이 완료되었습니다. 최종 승인되면 삭제됩니다.");
+      notify(isFinalDecision ? "삭제되었습니다." : "삭제 결재 요청이 완료되었습니다. 최종 승인되면 삭제됩니다.");
     } catch (err) {
       logError("ProjectDocuments", "삭제 결재 요청 실패", err);
       setDeleteRequestDoc(null);
@@ -344,7 +344,7 @@ export function ProjectDocumentsPage({
       const to = doc.client_contact_email ?? "";
       window.open(`mailto:${to}?subject=${subject}`, "_blank");
       if (!doc.client_contact_email) {
-        window.alert("등록된 거래처 담당자 이메일이 없습니다. 다운로드된 PDF를 직접 첨부해 발송해주세요.");
+        notifyError("등록된 거래처 담당자 이메일이 없습니다. 다운로드된 PDF를 직접 첨부해 발송해주세요.");
       }
     } catch (err) {
       logError("ProjectDocuments", "발송용 다운로드 실패", err);
@@ -367,7 +367,7 @@ export function ProjectDocumentsPage({
       }
     } catch (err) {
       logError("ProjectDocuments", "팝빌 필수정보 점검 실패", err);
-      window.alert(err instanceof ApiError ? err.message : "발행 정보를 확인하는 중 오류가 발생했습니다.");
+      notifyError(err instanceof ApiError ? err.message : "발행 정보를 확인하는 중 오류가 발생했습니다.");
       return;
     } finally {
       setBusyId(null);
@@ -376,7 +376,7 @@ export function ProjectDocumentsPage({
   }
 
   async function issuePopbill(doc: ProjectDocument, info?: PopbillClientInfo) {
-    if (!window.confirm("이 세금계산서를 팝빌로 발행하시겠습니까? 발행 즉시 국세청에 전송되며, 이후에는 취소(수정발행)만 가능합니다.")) {
+    if (!(await confirm("이 세금계산서를 팝빌로 발행하시겠습니까? 발행 즉시 국세청에 전송되며, 이후에는 취소(수정발행)만 가능합니다.", { okLabel: "발행" }))) {
       return;
     }
     logDebug("ProjectDocuments", `팝빌 발행 시도: doc_id=${doc.id}`);
@@ -395,7 +395,7 @@ export function ProjectDocumentsPage({
       reloadAll();
     } catch (err) {
       logError("ProjectDocuments", "팝빌 발행 실패", err);
-      window.alert(err instanceof ApiError ? err.message : "팝빌 발행 중 오류가 발생했습니다.");
+      notifyError(err instanceof ApiError ? err.message : "팝빌 발행 중 오류가 발생했습니다.");
     } finally {
       setBusyId(null);
     }
@@ -408,7 +408,7 @@ export function ProjectDocumentsPage({
       window.open(url, "_blank");
     } catch (err) {
       logError("ProjectDocuments", "팝빌 보기 URL 조회 실패", err);
-      window.alert(err instanceof ApiError ? err.message : "팝빌 문서를 여는 중 오류가 발생했습니다.");
+      notifyError(err instanceof ApiError ? err.message : "팝빌 문서를 여는 중 오류가 발생했습니다.");
     } finally {
       setBusyId(null);
     }
@@ -421,7 +421,7 @@ export function ProjectDocumentsPage({
       window.open(url, "_blank");
     } catch (err) {
       logError("ProjectDocuments", "팝빌 PDF URL 조회 실패", err);
-      window.alert(err instanceof ApiError ? err.message : "팝빌 PDF를 여는 중 오류가 발생했습니다.");
+      notifyError(err instanceof ApiError ? err.message : "팝빌 PDF를 여는 중 오류가 발생했습니다.");
     } finally {
       setBusyId(null);
     }

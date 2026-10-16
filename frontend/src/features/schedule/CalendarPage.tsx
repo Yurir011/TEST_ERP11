@@ -11,10 +11,12 @@ import { EventFormModal } from "./EventFormModal";
 import { MonthView } from "./MonthView";
 import type { CalendarView, ScheduleEvent, ScheduleEventInput } from "./types";
 import { WeekView } from "./WeekView";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 const VIEW_LABELS: Record<CalendarView, string> = { month: "월", week: "주", day: "일" };
 
 export function CalendarPage() {
+  const { confirm } = useDialog();
   const { user } = useAuth();
   const [view, setView] = useState<CalendarView>("month");
   const [anchor, setAnchor] = useState(new Date());
@@ -199,7 +201,7 @@ export function CalendarPage() {
 
   async function handleDelete() {
     if (!modalEvent) return;
-    if (!window.confirm("이 일정을 삭제할까요?")) return;
+    if (!(await confirm("이 일정을 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
     try {
       await apiDelete(`/api/schedule/${modalEvent.id}`);
       closeModal();

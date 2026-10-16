@@ -3,6 +3,7 @@ import { ApiError, apiPost } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { CARD_TYPE_LABELS, type CardPendingSummary, type CardType } from "./types";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 /** 카드 결제일에 해당 카드의 결제예정 사용내역을 한 번에 출금 확정하는 팝업. */
 export function CardSettleModal({
@@ -14,6 +15,7 @@ export function CardSettleModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { confirm, notify } = useDialog();
   const [dates, setDates] = useState<Record<string, string>>(
     Object.fromEntries(summaries.map((s) => [s.card_type, s.default_settle_date]))
   );
@@ -27,9 +29,7 @@ export function CardSettleModal({
       return;
     }
     if (
-      !window.confirm(
-        `${CARD_TYPE_LABELS[s.card_type]}카드 ${settleDate} 이전 사용내역을 ${settleDate} 결제일로 일괄 출금 처리하시겠습니까?`
-      )
+      !(await confirm(`${CARD_TYPE_LABELS[s.card_type]}카드 ${settleDate} 이전 사용내역을 ${settleDate} 결제일로 일괄 출금 처리하시겠습니까?`, { okLabel: "출금 처리" }))
     ) {
       return;
     }
@@ -42,7 +42,7 @@ export function CardSettleModal({
         settle_date: settleDate,
       });
       logDebug("CardSettle", `일괄처리 완료: count=${result.settled_count}, total=${result.total_amount}`);
-      window.alert(`${result.settled_count}건, ${formatCurrency(result.total_amount)}을 ${settleDate} 출금으로 처리했습니다.`);
+      notify(`${result.settled_count}건, ${formatCurrency(result.total_amount)}을 ${settleDate} 출금으로 처리했습니다.`);
       onSuccess();
     } catch (err) {
       logError("CardSettle", "일괄처리 실패", err);

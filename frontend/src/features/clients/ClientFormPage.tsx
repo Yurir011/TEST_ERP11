@@ -25,8 +25,10 @@ import {
   type ClientFormValues,
 } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 export function ClientFormPage() {
+  const { confirm } = useDialog();
   const { id } = useParams<{ id: string }>();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
@@ -227,7 +229,7 @@ export function ClientFormPage() {
       if (duplicates.length === 0) return true;
       logDebug("ClientForm", `이름 중복 확인: name=${values.name}, duplicates=${duplicates.length}`);
       const list = duplicates.map((c) => `- ${c.name}${c.biz_reg_no ? ` (${c.biz_reg_no})` : ""}`).join("\n");
-      return window.confirm(`이미 같은 이름의 거래처가 등록되어 있습니다.\n\n${list}\n\n그래도 ${isEdit ? "저장" : "등록"}하시겠습니까?`);
+      return confirm(`이미 같은 이름의 거래처가 등록되어 있습니다.\n\n${list}\n\n그래도 ${isEdit ? "저장" : "등록"}하시겠습니까?`, { okLabel: isEdit ? "저장" : "등록" });
     } catch (err) {
       // 중복 조회에 실패해도 저장 자체는 막지 않는다.
       logError("ClientForm", "이름 중복 확인 실패", err);

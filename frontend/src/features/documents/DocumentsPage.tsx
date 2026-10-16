@@ -10,12 +10,14 @@ import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { DocumentDetailModal } from "./DocumentDetailModal";
 import { DOC_TYPE_LABELS, type DocumentRecord, type DocumentType } from "./types";
 import { useApprovalActions } from "../../lib/useApprovalActions";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 interface DocumentsPageProps extends OpenOverlayProps {
   embedded?: boolean;
 }
 
 export function DocumentsPage({ embedded = false, openId, modalOnly = false, onDecided, onModalClose }: DocumentsPageProps) {
+  const { notify } = useDialog();
   const [docType, setDocType] = useState<DocumentType>("employment");
   const [purpose, setPurpose] = useState("");
   const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
@@ -94,7 +96,7 @@ export function DocumentsPage({ embedded = false, openId, modalOnly = false, onD
       });
       logDebug("Documents", `발급 신청 완료: id=${created.id}, status=${created.status}`);
       reloadAll();
-      window.alert("결재 요청이 완료되었습니다.");
+      notify("결재 요청이 완료되었습니다.");
       if (created.status === "approved") {
         await handleDownload(created);
       }

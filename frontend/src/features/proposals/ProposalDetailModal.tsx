@@ -8,6 +8,7 @@ import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal, type ProposalAttachment } from "./types";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 function docTitle(p: Proposal): string {
   return p.kind ? `${p.kind}품의서` : "품의서";
@@ -34,6 +35,7 @@ export function ProposalDetailModal({
   onAttachmentsChanged: (proposal: Proposal) => void;
   onDeleted: () => void; // 삭제되었거나 삭제 결재를 요청한 뒤 목록을 새로 고친다
 }) {
+  const { confirm, notify } = useDialog();
   const { user } = useAuth();
   const currentStep = proposal.steps.find((s) => s.step_order === proposal.current_step);
   const canDecide = proposal.status === "pending" && currentStep?.approver_id === user?.id;
@@ -56,11 +58,11 @@ export function ProposalDetailModal({
   async function handleDeleteClick() {
     setActionError(null);
     if (proposal.status === "approved") {
-      if (!window.confirm("승인된 품의서는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?")) return;
+      if (!(await confirm("승인된 품의서는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?", { okLabel: "삭제 결재 요청" }))) return;
       setShowDeletePicker(true);
       return;
     }
-    if (!window.confirm("이 품의서를 삭제할까요?")) return;
+    if (!(await confirm("이 품의서를 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
     setDeleteBusy(true);
     try {
       await apiDelete(`/api/proposals/${proposal.id}`);
@@ -84,7 +86,7 @@ export function ProposalDetailModal({
       });
       logDebug("Proposals", `삭제 결재 요청 성공: id=${proposal.id}`);
       setShowDeletePicker(false);
-      window.alert(isFinalDecision ? "삭제되었습니다." : "삭제 결재 요청이 완료되었습니다. 최종 승인되면 삭제됩니다.");
+      notify(isFinalDecision ? "삭제되었습니다." : "삭제 결재 요청이 완료되었습니다. 최종 승인되면 삭제됩니다.");
       onDeleted();
     } catch (err) {
       logError("Proposals", "삭제 결재 요청 실패", err);

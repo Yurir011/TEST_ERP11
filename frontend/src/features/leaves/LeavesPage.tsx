@@ -11,12 +11,14 @@ import { LeaveDetailModal } from "./LeaveDetailModal";
 import type { LeaveBalance, LeaveRecord } from "./types";
 import { toMonthValue } from "../../lib/date";
 import { useApprovalActions } from "../../lib/useApprovalActions";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 
 interface LeavesPageProps extends OpenOverlayProps {
   embedded?: boolean;
 }
 
 export function LeavesPage({ embedded = false, openId, modalOnly = false, onDecided, onModalClose }: LeavesPageProps) {
+  const { confirm, notify } = useDialog();
   const now = new Date();
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
@@ -127,7 +129,7 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
       loadMyLeaves();
       loadPending();
       logDebug("Leaves", "신청 완료, 목록 새로고침");
-      window.alert("연차 신청이 완료되었습니다.");
+      notify("연차 신청이 완료되었습니다.");
     } catch (err) {
       logError("Leaves", "신청 실패", err);
       setFormError(err instanceof ApiError ? err.message : "신청 중 오류가 발생했습니다.");
@@ -137,7 +139,7 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
   }
 
   async function handleCancel(id: number) {
-    if (!window.confirm("이 연차 신청을 취소할까요?")) return;
+    if (!(await confirm("이 연차 신청을 취소할까요?", { okLabel: "신청 취소", danger: true }))) return;
     try {
       await apiDelete(`/api/leaves/${id}`);
       loadBalance();
