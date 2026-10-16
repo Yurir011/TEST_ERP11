@@ -1,5 +1,5 @@
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
-import { FileDown, ImagePlus, Info, Plus, ScanText, Trash2, X } from "lucide-react";
+import { Info } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -11,9 +11,11 @@ import { ApiError, apiGet, apiPost, apiPut, apiUpload, downloadFile } from "../.
 import { GRADE_LABELS, TITLE_LABELS, hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
+import { DocumentItemsEditor } from "./DocumentItemsEditor";
+import { OTHER_PROJECT, isProjectDocType, projectPayload, scannedCounterparty, toItemFormValues, toItemsPayload } from "./documentForm";
+import { QuotationLoader } from "./QuotationLoader";
+import { TaxInvoicePhotoSection } from "./TaxInvoicePhotoSection";
 import {
-  DOC_CURRENCY_LABELS,
-  DOC_CURRENCY_SYMBOLS,
   EMPTY_PROJECT_DOC_ITEM,
   MAX_PROJECT_DOC_ITEMS,
   PROJECT_DOC_TYPE_LABELS,
@@ -25,16 +27,9 @@ import {
   type TaxInvoiceOcrResult,
   type TaxInvoicePurpose,
 } from "./types";
-import { NumberInput } from "../../components/ui/NumberInput";
 import { todayISO } from "../../lib/date";
 
-const OTHER_PROJECT = "other";
-const CURRENCY_OPTIONS: DocCurrency[] = ["KRW", "USD", "JPY"];
 const PURPOSE_OPTIONS: TaxInvoicePurpose[] = ["청구", "영수"];
-
-function isProjectDocType(value: string | null): value is ProjectDocType {
-  return value === "quotation" || value === "statement" || value === "tax_invoice" || value === "purchase_order";
-}
 
 export function ProjectDocumentFormPage() {
   const [searchParams] = useSearchParams();
@@ -122,14 +117,7 @@ export function ProjectDocumentFormPage() {
         setCurrency(target.currency);
         setPurposeType(target.purpose_type);
         setIsPaper(target.is_paper);
-        setItems(
-          target.items.map((it) => ({
-            content: it.content,
-            quantity: String(it.quantity),
-            unit_price: String(it.unit_price),
-            note: it.note ?? "",
-          }))
-        );
+        setItems(toItemFormValues(target.items));
       })
       .catch((err) => {
         logError("ProjectDocumentForm", "수정 불러오기 실패", err);
@@ -174,14 +162,7 @@ export function ProjectDocumentFormPage() {
     setClientName(quotation.client_name);
     setManagerName(quotation.manager_name ?? "");
     setCurrency(quotation.currency);
-    setItems(
-      quotation.items.map((it) => ({
-        content: it.content,
-        quantity: String(it.quantity),
-        unit_price: String(it.unit_price),
-        note: it.note ?? "",
-      }))
-    );
+    setItems(toItemFormValues(quotation.items));
   }
 
   function handleProjectChange(id: string) {
@@ -191,14 +172,6 @@ export function ProjectDocumentFormPage() {
       setClientName(project.client_name);
     }
   }
-
-  // 품목 금액 = 수량 x 단가 (원 단위 반올림), 부가세 10%. 서버가 문서를 만들 때 쓰는 계산과 같다.
-  const symbol = DOC_CURRENCY_SYMBOLS[currency];
-  const formatMoney = (n: number) => `${symbol}${n.toLocaleString()}`;
-  const itemAmount = (it: ProjectDocumentItemFormValues) => Math.round((Number(it.quantity) || 0) * (Number(it.unit_price) || 0));
-  const subtotalAmount = items.reduce((sum, it) => sum + itemAmount(it), 0);
-  const vatAmount = Math.round(subtotalAmount * 0.1);
-  const totalAmount = subtotalAmount + vatAmount;
 
   function addItem() {
     setItems((prev) => (prev.length >= MAX_PROJECT_DOC_ITEMS ? prev : [...prev, { ...EMPTY_PROJECT_DOC_ITEM }]));
@@ -291,20 +264,14 @@ export function ProjectDocumentFormPage() {
       if (isEdit) {
         await apiPut(`/api/project-documents/${editId}`, {
           update_project: true,
-          project_id: projectId === OTHER_PROJECT ? null : Number(projectId),
-          project_other_name: projectId === OTHER_PROJECT ? projectOtherName.trim() : null,
+          ...projectPayload(projectId, projectOtherName),
           issue_date: issueDate,
           currency,
           purpose_type: purposeType,
           client_name: clientName,
           manager_name: managerName || null,
           remark: docType === "purchase_order" ? remark.trim() || null : null,
-          items: items.map((it) => ({
-            content: it.content,
-            quantity: Number(it.quantity) || 0,
-            unit_price: Number(it.unit_price) || 0,
-            note: it.note || null,
-          })),
+          items: toItemsPayload(items),
           is_paper: isPaper,
           request_approval: true,
           end_title: endTitle,
@@ -317,8 +284,7 @@ export function ProjectDocumentFormPage() {
       }
       const endpoint = isSet ? "/api/project-documents/set" : "/api/project-documents";
       const createdResult = await apiPost<ProjectDocument | ProjectDocument[]>(endpoint, {
-        project_id: projectId === OTHER_PROJECT ? null : Number(projectId),
-        project_other_name: projectId === OTHER_PROJECT ? projectOtherName.trim() : null,
+        ...projectPayload(projectId, projectOtherName),
         doc_type: docType,
         issue_date: issueDate,
         currency,
@@ -326,12 +292,7 @@ export function ProjectDocumentFormPage() {
         client_name: clientName,
         manager_name: managerName || null,
         remark: docType === "purchase_order" ? remark.trim() || null : null,
-        items: items.map((it) => ({
-          content: it.content,
-          quantity: Number(it.quantity) || 0,
-          unit_price: Number(it.unit_price) || 0,
-          note: it.note || null,
-        })),
+        items: toItemsPayload(items),
         end_title: endTitle,
         approver_ids: approverIds,
         is_final_decision: isFinalDecision,
@@ -340,12 +301,7 @@ export function ProjectDocumentFormPage() {
         is_paper: docType === "tax_invoice" ? isPaper : false,
         approval_no: docType === "tax_invoice" ? approvalNo : null,
         // 사진에서 인식한 상대방(우리 회사가 아닌 쪽) 정보 - 거래처관리에 없는 거래처여도 엑셀/PDF 양식을 채우는 데 쓴다.
-        counterparty:
-          docType === "tax_invoice" && scanSummary && direction
-            ? direction === "purchase"
-              ? scanSummary.supplier
-              : scanSummary.recipient
-            : null,
+        counterparty: scannedCounterparty(docType, scanSummary, direction),
       });
 
       const createdDocs = Array.isArray(createdResult) ? createdResult : [createdResult];
@@ -418,64 +374,13 @@ export function ProjectDocumentFormPage() {
         )}
 
         {docType === "tax_invoice" && !isEdit && (
-          <div className="border border-dashed border-border rounded-xl px-4 py-3">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-xs font-medium">
-                <ScanText size={14} />
-                세금계산서 사진 등록 (선택)
-              </span>
-              <label className="flex items-center gap-1 text-xs text-primary hover:opacity-80 cursor-pointer">
-                <ImagePlus size={14} />
-                사진 선택
-                <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={handleInvoiceFilesSelect} className="hidden" />
-              </label>
-            </div>
-            <p className="text-[11px] text-text-muted mt-1">
-              홈택스에서 받은 세금계산서 이미지(jpg, png, webp)를 올리면 첫 번째 사진에서 작성일자·거래처·품목·금액이 자동 입력되고,
-              내용은 청구 / 금액은 미지급으로 처리됩니다. 올린 사진은 문서와 함께 저장됩니다.
-            </p>
-            {isScanning && <p className="text-xs text-primary mt-2">사진에서 내용을 인식하는 중...</p>}
-            {invoiceImages.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {invoiceImages.map((f, idx) => (
-                  <li key={`${f.name}-${idx}`} className="flex items-center justify-between text-xs bg-bg rounded-lg px-2.5 py-1.5">
-                    <span className="truncate">
-                      {f.name}
-                      {idx === 0 && <span className="text-text-muted"> (자동 입력 기준)</span>}
-                    </span>
-                    <button type="button" onClick={() => removeInvoiceImage(idx)} className="text-text-muted hover:text-danger">
-                      <X size={13} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {scanSummary && (
-              <div className="mt-2 text-xs bg-tile-green text-tile-green-fg rounded-lg px-3 py-2 space-y-0.5">
-                <p>
-                  {scanSummary.direction === "purchase"
-                    ? "받은 세금계산서(매입)로 인식했습니다."
-                    : scanSummary.direction === "sales"
-                      ? "발행한 세금계산서(매출)로 인식했습니다."
-                      : "매입/매출을 판별하지 못했습니다."}
-                  {scanSummary.approval_no && <span> · 승인번호 {scanSummary.approval_no}</span>}
-                </p>
-                <p className="opacity-80">
-                  공급자 {scanSummary.supplier.name ?? "-"} ({scanSummary.supplier.reg_no ?? "-"}) → 공급받는자{" "}
-                  {scanSummary.recipient.name ?? "-"} ({scanSummary.recipient.reg_no ?? "-"})
-                </p>
-                {scanSummary.total_amount !== null && (
-                  <p className="opacity-80">합계금액 {scanSummary.total_amount.toLocaleString()}원</p>
-                )}
-                {scanSummary.warnings.map((w) => (
-                  <p key={w} className="text-danger">
-                    ⚠ {w}
-                  </p>
-                ))}
-                <p className="opacity-80">자동 입력된 내용이 사진과 맞는지 아래 입력란에서 확인해주세요.</p>
-              </div>
-            )}
-          </div>
+          <TaxInvoicePhotoSection
+            images={invoiceImages}
+            isScanning={isScanning}
+            scanSummary={scanSummary}
+            onFilesSelect={handleInvoiceFilesSelect}
+            onRemove={removeInvoiceImage}
+          />
         )}
 
         {isSet && (
@@ -488,28 +393,7 @@ export function ProjectDocumentFormPage() {
         )}
 
         {docType === "statement" && !isSet && (
-          <div className="bg-tile-blue text-tile-blue-fg rounded-xl px-4 py-3">
-            <label className="flex items-center gap-1.5 text-xs font-medium mb-1.5">
-              <FileDown size={14} />
-              승인된 견적서 불러오기 (선택)
-            </label>
-            <select
-              value={loadedQuotationId}
-              onChange={(e) => handleLoadQuotation(e.target.value)}
-              className="w-full rounded-lg border border-primary/30 px-3 py-2 text-sm outline-none focus:border-primary bg-surface text-text"
-            >
-              <option value="">불러올 견적서 선택</option>
-              {approvedQuotations.map((q) => (
-                <option key={q.id} value={q.id}>
-                  {q.doc_no ?? `#${q.id}`} · {q.project_name} ({q.client_name}) · {q.issue_date}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] mt-1.5 opacity-80">
-              날짜를 제외한 프로젝트·거래처·담당자·품목이 그대로 자동입력됩니다.
-              {approvedQuotations.length === 0 && " (승인된 견적서가 아직 없습니다)"}
-            </p>
-          </div>
+          <QuotationLoader quotations={approvedQuotations} value={loadedQuotationId} onChange={handleLoadQuotation} />
         )}
 
         <div>
@@ -638,115 +522,14 @@ export function ProjectDocumentFormPage() {
           </div>
         )}
 
-        <div className="pt-2 border-t border-border">
-          <div className="flex items-center justify-between mb-2 mt-3">
-            <label className="block text-xs text-text-muted">
-              품목 ({items.length}/{MAX_PROJECT_DOC_ITEMS})
-            </label>
-            <div className="flex items-center gap-3">
-              {docType !== "tax_invoice" && (
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs text-text-muted">단가 단위</label>
-                  <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value as DocCurrency)}
-                    className="rounded-lg border border-border px-2 py-1 text-xs outline-none focus:border-primary bg-bg"
-                  >
-                    {CURRENCY_OPTIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {DOC_CURRENCY_LABELS[c]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={addItem}
-                disabled={items.length >= MAX_PROJECT_DOC_ITEMS}
-                className="flex items-center gap-1 text-xs text-primary hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Plus size={14} />
-                항목 추가
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {items.map((item, index) => (
-              <div key={index} className="bg-bg rounded-xl p-3 relative">
-                {items.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeItem(index)}
-                    className="absolute top-2 right-2 text-text-muted hover:text-danger"
-                    title="항목 삭제"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-                <p className="text-[11px] text-text-muted mb-2">품목 {index + 1}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="col-span-2">
-                    <label className="block text-[11px] text-text-muted mb-1">내용</label>
-                    <input
-                      required
-                      value={item.content}
-                      onChange={(e) => updateItem(index, "content", e.target.value)}
-                      className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-text-muted mb-1">수량</label>
-                    <NumberInput
-                      required
-                      value={item.quantity}
-                      onChange={(v) => updateItem(index, "quantity", v)}
-                      className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-text-muted mb-1">단가 ({DOC_CURRENCY_SYMBOLS[currency]})</label>
-                    <NumberInput
-                      allowDecimal
-                      required
-                      value={item.unit_price}
-                      onChange={(v) => updateItem(index, "unit_price", v)}
-                      className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-[11px] text-text-muted mb-1">비고</label>
-                    <input
-                      value={item.note}
-                      onChange={(e) => updateItem(index, "note", e.target.value)}
-                      className="w-full rounded-lg border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary bg-surface"
-                    />
-                  </div>
-                  <div className="col-span-2 flex items-center justify-between text-xs pt-1">
-                    <span className="text-text-muted">금액 (수량 × 단가)</span>
-                    <span className="font-medium tabular-nums">{formatMoney(itemAmount(item))}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 rounded-xl border border-border bg-bg px-4 py-3 space-y-1.5 text-sm" aria-label="총금액">
-            <div className="flex items-center justify-between">
-              <span className="text-text-muted">공급가액</span>
-              <span className="tabular-nums">{formatMoney(subtotalAmount)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-muted">부가세 (10%)</span>
-              <span className="tabular-nums">{formatMoney(vatAmount)}</span>
-            </div>
-            <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
-              <span className="font-semibold">총금액 (합계)</span>
-              <span className="text-base font-semibold tabular-nums text-primary">{formatMoney(totalAmount)}</span>
-            </div>
-          </div>
-        </div>
+        <DocumentItemsEditor
+          items={items}
+          currency={currency}
+          onCurrencyChange={docType !== "tax_invoice" ? setCurrency : null}
+          onAdd={addItem}
+          onRemove={removeItem}
+          onUpdate={updateItem}
+        />
 
         {error && <p className="text-xs text-danger">{error}</p>}
 
