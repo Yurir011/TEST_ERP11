@@ -20,6 +20,7 @@ from app.schemas.sales_document import (
 )
 from app.services.sales_document_pdf import DOC_TITLES
 from app.services.sales_document_template import generate_sales_document_pdf_file, sales_pdf_path
+from app.services.money import vat_amount
 
 router = APIRouter(prefix="/api/sales-documents", tags=["sales-documents"])
 logger = get_logger("SalesDocuments")
@@ -131,7 +132,7 @@ def create_sales_document_set(
     logger.debug(f"[SalesDocuments] 세트 생성 시도: project_id={payload.project_id}, by={current_user.id}")
 
     subtotal = sum(item.quantity * item.unit_price for item in payload.items)
-    vat = round(subtotal * 0.1)
+    vat = vat_amount(subtotal)
     total = subtotal + vat
 
     doc_set = DocumentSet(project_id=project.id, created_by=current_user.id)

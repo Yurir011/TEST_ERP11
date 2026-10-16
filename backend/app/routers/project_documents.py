@@ -51,6 +51,7 @@ from app.services.project_document_pdf import generate_project_document_pdf
 from app.services.project_document_template import fill_project_document_template, next_doc_no
 from app.services.tax_invoice_list_excel import generate_tax_invoice_list_excel
 from app.services.tax_invoice_ocr import recognize_tax_invoice
+from app.services.money import vat_amount
 from popbill import PopbillException
 
 TEMPLATED_DOC_TYPES = (ProjectDocType.quotation, ProjectDocType.statement, ProjectDocType.tax_invoice, ProjectDocType.purchase_order)
@@ -162,7 +163,7 @@ def _record_tax_invoice_transaction(db: Session, doc: ProjectDocument, current_u
         return
 
     subtotal = sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
-    vat = round(subtotal * 0.1)
+    vat = vat_amount(subtotal)
     tx_type = TransactionType.sales if _is_sales(doc) else TransactionType.purchase
 
     existing = db.get(Transaction, doc.ledger_transaction_id) if doc.ledger_transaction_id is not None else None

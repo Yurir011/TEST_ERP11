@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.logging_config import get_logger
 from app.models.project_document import DOC_CURRENCY_SYMBOLS, DocCurrency, ProjectDocType, ProjectDocument, calc_amount
+from app.services.money import vat_amount
 
 logger = get_logger("ProjectDocumentTemplate")
 
@@ -283,14 +284,14 @@ def _fill_tax_invoice_template(doc: ProjectDocument) -> str:
     lines: list[tuple[str, float | None, float | None, int, int, str | None]] = []
     for it in items[: rows_capacity - 1] if len(items) > rows_capacity else items:
         amount = calc_amount(it.quantity, it.unit_price)
-        lines.append((it.content, it.quantity, it.unit_price, amount, round(amount * 0.1), it.note))
+        lines.append((it.content, it.quantity, it.unit_price, amount, vat_amount(amount), it.note))
     if len(items) > rows_capacity:
         rest = items[rows_capacity - 1:]
         amount = sum(calc_amount(it.quantity, it.unit_price) for it in rest)
-        lines.append((f"외 {len(rest)}건", None, None, amount, round(amount * 0.1), None))
+        lines.append((f"외 {len(rest)}건", None, None, amount, vat_amount(amount), None))
 
     subtotal = sum(calc_amount(it.quantity, it.unit_price) for it in items)
-    vat = round(subtotal * 0.1)
+    vat = vat_amount(subtotal)
     total = subtotal + vat
 
     ws["A9"] = doc.issue_date.isoformat()
@@ -412,7 +413,7 @@ def _fill_purchase_order_template(doc: ProjectDocument) -> str:
     if end_row <= PO_ITEM_END_ROW:
         ws[f"B{end_row}"] = PO_END_MARK
 
-    vat = round(subtotal * 0.1)
+    vat = vat_amount(subtotal)
     ws[PO_SUBTOTAL_CELL] = subtotal
     ws[PO_VAT_CELL] = vat
     ws[PO_TOTAL_CELL] = subtotal + vat
@@ -493,7 +494,7 @@ def fill_project_document_template(doc: ProjectDocument) -> str:
         _set_horizontal(ws[f"F{row}"], "right")
         _set_horizontal(ws[f"G{row}"], "right")
 
-    vat = round(subtotal * 0.1)
+    vat = vat_amount(subtotal)
     total = subtotal + vat
     ws[f"G{layout.subtotal_row}"] = subtotal
     ws[f"G{layout.vat_row}"] = vat

@@ -28,6 +28,7 @@ from app.services.hometax_apply import apply_plan, build_plan
 from app.services.transaction_credit import credit_add, credit_remove
 from app.services.hometax_import import HometaxParseError, parse_hometax_excel
 from app.services.transaction_list_excel import generate_transaction_list_excel
+from app.services.money import vat_amount
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 logger = get_logger("Transactions")
@@ -241,7 +242,7 @@ def _doc_is_sales(doc: ProjectDocument) -> bool:
 
 def _doc_amounts(doc: ProjectDocument) -> tuple[int, int]:
     supply = sum(calc_amount(i.quantity, i.unit_price) for i in doc.items)
-    return supply, round(supply * 0.1)
+    return supply, vat_amount(supply)
 
 
 @router.get("/linkable-tax-invoices", response_model=list[TaxInvoiceCandidateOut])

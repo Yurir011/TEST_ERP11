@@ -12,6 +12,7 @@ from app.models.client import Client
 from app.models.project import Project
 from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus, calc_amount
 from app.services.certificate_pdf import STAMP_PATH
+from app.services.money import vat_amount
 
 logger = get_logger("ProjectDocumentExcel")
 
@@ -82,7 +83,7 @@ def generate_project_document_excel(doc: ProjectDocument, project: Project | Non
         ws.cell(row=row_idx, column=5, value=item.note or "-")
         row_idx += 1
 
-    vat = round(subtotal * 0.1)
+    vat = vat_amount(subtotal)
     total = subtotal + vat
     totals_rows = [("공급가액", subtotal), ("부가세(10%)", vat), ("합계", total)]
     row_idx += 1

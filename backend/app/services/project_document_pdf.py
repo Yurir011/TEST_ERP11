@@ -11,6 +11,7 @@ from app.models.client import Client
 from app.models.project import Project
 from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus, calc_amount, format_price
 from app.services.certificate_pdf import FONT_BOLD, FONT_REGULAR, SEAL_MARKER, _ensure_fonts_registered, _StampedSignatureLine
+from app.services.money import vat_amount
 
 DOC_TITLES = {
     ProjectDocType.quotation: "견 적 서",
@@ -105,7 +106,7 @@ def generate_project_document_pdf(doc: ProjectDocument, project: Project | None,
         )
     )
 
-    vat = round(subtotal * 0.1)
+    vat = vat_amount(subtotal)
     total = subtotal + vat
 
     totals_table = Table(

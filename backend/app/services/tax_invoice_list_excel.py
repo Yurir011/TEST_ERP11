@@ -5,6 +5,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from app.models.project_document import ProjectDocument, ProjectDocumentStatus, calc_amount
+from app.services.money import vat_amount
 
 HEADERS = ["문서번호", "발행일", "거래처", "담당자", "공급가액", "부가세", "합계", "상태", "팝빌발행", "국세청승인번호"]
 COLUMN_WIDTHS = [16, 12, 20, 14, 14, 12, 14, 10, 10, 22]
@@ -37,7 +38,7 @@ def _write_sheet(ws, docs: list[ProjectDocument]) -> int:
     row_idx = 2
     for doc in docs:
         subtotal = _items_total(doc)
-        vat = round(subtotal * 0.1)
+        vat = vat_amount(subtotal)
         grand_total = subtotal + vat
         total += grand_total
 
@@ -102,7 +103,7 @@ def generate_tax_invoice_list_excel(
     sales_count = len(billing_docs) + len(receipt_docs)
     sales_total = billing_total + receipt_total
     unissued_docs = [d for d in billing_docs + receipt_docs if not d.popbill_issued_at]
-    unissued_total = sum(_items_total(d) + round(_items_total(d) * 0.1) for d in unissued_docs)
+    unissued_total = sum(_items_total(d) + vat_amount(_items_total(d)) for d in unissued_docs)
 
     summary_rows = [
         ("매출 (세금계산서 발행 합계)", sales_count, sales_total),
