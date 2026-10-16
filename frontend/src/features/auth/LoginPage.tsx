@@ -24,6 +24,8 @@ export function LoginPage() {
       logError("LoginPage", "로그인 실패", err);
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      } else if (err instanceof ApiError && err.status === 429) {
+        setError(err.message); // 로그인 실패가 반복되어 잠시 막힘: 서버가 남은 시간을 안내하는 문구를 보낸다
       } else {
         setError("로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
       }

@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 12
 
+    # 로그인 시도 제한: 같은 이메일로 login_max_failures 번 실패하면 login_lockout_seconds 동안 로그인을 막는다 (실패는 login_window_seconds 안의 것만 센다).
+    # 같은 접속 주소(IP)는 여러 사람이 한 PC 를 쓸 수 있어 login_ip_max_failures 로 더 느슨하게 둔다.
+    login_max_failures: int = 5
+    login_ip_max_failures: int = 20
+    login_window_seconds: int = 600
+    login_lockout_seconds: int = 300
+
     # 증명서 발급에 표시할 회사 정보. 설정 화면이 생기기 전까지는 .env로 관리한다.
     company_name: str = "BENCH"
     company_ceo_name: str = ""

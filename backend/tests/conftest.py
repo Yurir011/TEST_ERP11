@@ -72,6 +72,16 @@ def client(db):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_throttle():
+    """로그인 실패 기록은 프로세스 메모리에 있으므로 테스트마다 비운다 (테스트끼리 영향을 주지 않게)."""
+    from app.routers.auth import login_throttle
+
+    login_throttle.reset()
+    yield
+    login_throttle.reset()
+
+
 _user_seq = {"n": 0}
 
 
