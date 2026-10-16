@@ -15,6 +15,7 @@ from app.config import settings
 from app.logging_config import get_logger
 from app.models.project_document import DOC_CURRENCY_SYMBOLS, DocCurrency, ProjectDocType, ProjectDocument, calc_amount
 from app.services.money import vat_amount
+from app.services.tax_invoice_ledger import is_sales_invoice
 
 logger = get_logger("ProjectDocumentTemplate")
 
@@ -256,7 +257,7 @@ def _fill_tax_invoice_template(doc: ProjectDocument) -> str:
         pick(client.biz_class if client else None, "biz_class"),
         pick(client.email if client else None, "email"),
     )
-    is_sales = doc.direction == "sales" if doc.direction else doc.purpose_type == "청구"
+    is_sales = is_sales_invoice(doc)
     supplier, recipient = (ours, theirs) if is_sales else (theirs, ours)
     for key, cell in _SUPPLIER_CELLS.items():
         ws[cell] = supplier[key] or None

@@ -24,14 +24,19 @@ def is_sales_invoice(doc: ProjectDocument) -> bool:
     return doc.purpose_type == "청구"
 
 
+def invoice_amounts(doc: ProjectDocument) -> tuple[int, int]:
+    """세금계산서의 (공급가액, 부가세). 품목별로 반올림한 금액을 합하고, 부가세는 공급가액의 10% (사사오입)."""
+    supply = sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
+    return supply, vat_amount(supply)
+
+
 def record_tax_invoice_transaction(db: Session, doc: ProjectDocument, current_user: User) -> None:
     """세금계산서가 결재 승인되면 팝빌 발행 여부와 무관하게 즉시 매입매출관리에 자동 기록한다.
     청구 목적은 매출, 영수 목적은 매입으로 집계한다. doc.project는 호출 전에 반드시 로드되어 있어야 한다."""
     if doc.doc_type != ProjectDocType.tax_invoice:
         return
 
-    subtotal = sum(calc_amount(item.quantity, item.unit_price) for item in doc.items)
-    vat = vat_amount(subtotal)
+    subtotal, vat = invoice_amounts(doc)
     tx_type = TransactionType.sales if is_sales_invoice(doc) else TransactionType.purchase
 
     existing = db.get(Transaction, doc.ledger_transaction_id) if doc.ledger_transaction_id is not None else None

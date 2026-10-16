@@ -2,7 +2,6 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import extract, func as sa_func
 from sqlalchemy.orm import Session, joinedload, object_session
 
 from app.config import settings
@@ -10,7 +9,7 @@ from app.core.deps import require_menu_access
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
-from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus, calc_amount
+from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus
 from app.models.payment import Payment
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import User, has_menu_permission
@@ -28,36 +27,12 @@ from app.services.hometax_apply import apply_plan, build_plan
 from app.services.transaction_credit import credit_add, credit_remove
 from app.services.hometax_import import HometaxParseError, parse_hometax_excel
 from app.services.transaction_list_excel import generate_transaction_list_excel
-from app.services.money import vat_amount
+from app.services.tax_invoice_ledger import invoice_amounts, is_sales_invoice
+from app.services.transaction_query import build_transaction_query, monthly_sums
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 logger = get_logger("Transactions")
 require_transactions_access = require_menu_access("transactions")
-
-
-def _build_transaction_query(
-    db: Session,
-    type_filter: TransactionType | None,
-    year: int | None,
-    month: int | None,
-    start_date: date | None,
-    end_date: date | None,
-    settled: bool | None = None,
-):
-    query = db.query(Transaction).options(joinedload(Transaction.client))
-    if settled is not None:
-        query = query.filter(Transaction.settled.is_(settled))
-    if type_filter is not None:
-        query = query.filter(Transaction.type == type_filter)
-    if year is not None:
-        query = query.filter(extract("year", Transaction.transaction_date) == year)
-    if month is not None:
-        query = query.filter(extract("month", Transaction.transaction_date) == month)
-    if start_date is not None:
-        query = query.filter(Transaction.transaction_date >= start_date)
-    if end_date is not None:
-        query = query.filter(Transaction.transaction_date <= end_date)
-    return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
 
 
 def _payment_history(tx: Transaction) -> list[TransactionPaymentOut]:
@@ -111,7 +86,7 @@ def list_transactions(
         f"[Transactions] 목록 조회: type={type_filter}, year={year}, month={month}, "
         f"start_date={start_date}, end_date={end_date}, by={current_user.id}"
     )
-    transactions = _build_transaction_query(db, type_filter, year, month, start_date, end_date, settled).all()
+    transactions = build_transaction_query(db, type_filter, year, month, start_date, end_date, settled).all()
     return [_to_out(t) for t in transactions]
 
 
@@ -125,7 +100,7 @@ def export_transactions_excel(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_transactions_access),
 ):
-    transactions = _build_transaction_query(db, type_filter, year, month, start_date, end_date).all()
+    transactions = build_transaction_query(db, type_filter, year, month, start_date, end_date).all()
     logger.debug(
         f"[Transactions] 목록 엑셀 내보내기: count={len(transactions)}, start_date={start_date}, "
         f"end_date={end_date}, by={current_user.id}"
@@ -144,20 +119,8 @@ def get_vat_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_transactions_access),
 ):
-    def sums(tx_type: TransactionType) -> tuple[int, int]:
-        row = (
-            db.query(sa_func.coalesce(sa_func.sum(Transaction.supply_amount), 0), sa_func.coalesce(sa_func.sum(Transaction.vat_amount), 0))
-            .filter(
-                Transaction.type == tx_type,
-                extract("year", Transaction.transaction_date) == year,
-                extract("month", Transaction.transaction_date) == month,
-            )
-            .first()
-        )
-        return int(row[0]), int(row[1])
-
-    sales_supply, sales_vat = sums(TransactionType.sales)
-    purchase_supply, purchase_vat = sums(TransactionType.purchase)
+    sales_supply, sales_vat = monthly_sums(db, TransactionType.sales, year, month)
+    purchase_supply, purchase_vat = monthly_sums(db, TransactionType.purchase, year, month)
 
     logger.debug(f"[Transactions] 부가세 리포트: {year}-{month}, by={current_user.id}")
     return VatReportOut(
@@ -235,16 +198,6 @@ def import_hometax(
     )
 
 
-def _doc_is_sales(doc: ProjectDocument) -> bool:
-    # 문서관리의 세금계산서 매출/매입 판단과 같은 기준 (받은 세금계산서는 direction, 직접 작성은 청구=매출)
-    return doc.direction == "sales" if doc.direction else doc.purpose_type == "청구"
-
-
-def _doc_amounts(doc: ProjectDocument) -> tuple[int, int]:
-    supply = sum(calc_amount(i.quantity, i.unit_price) for i in doc.items)
-    return supply, vat_amount(supply)
-
-
 @router.get("/linkable-tax-invoices", response_model=list[TaxInvoiceCandidateOut])
 def list_linkable_tax_invoices(
     q: str | None = Query(default=None), db: Session = Depends(get_db), current_user: User = Depends(require_transactions_access)
@@ -264,14 +217,14 @@ def list_linkable_tax_invoices(
     docs = query.order_by(ProjectDocument.issue_date.desc(), ProjectDocument.id.desc()).limit(100).all()
     out = []
     for d in docs:
-        supply, vat = _doc_amounts(d)
+        supply, vat = invoice_amounts(d)
         names = [i.content for i in d.items if i.content]
         client = d.effective_client
         out.append(
             TaxInvoiceCandidateOut(
                 id=d.id,
                 issue_date=d.issue_date,
-                type=TransactionType.sales if _doc_is_sales(d) else TransactionType.purchase,
+                type=TransactionType.sales if is_sales_invoice(d) else TransactionType.purchase,
                 client_id=client.id if client else None,
                 client_name=d.client_name,
                 item_name=(names[0] + (f" 외 {len(names) - 1}건" if len(names) > 1 else "")) if names else "세금계산서",

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.models.project_document import calc_amount
-from app.routers.transactions import _doc_amounts
+from app.services.tax_invoice_ledger import invoice_amounts as _doc_amounts  # 매입매출 라우터에서 옮김
 from app.services.money import round_half_up, vat_amount
 
 
