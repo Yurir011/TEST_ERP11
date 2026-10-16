@@ -1,43 +1,68 @@
-import type { ReactNode } from "react";
+import { Suspense, lazy, useEffect, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { MenuPermissionKey } from "./lib/auth";
-import { MobileApprovalsPage } from "./features/mobile/MobileApprovalsPage";
-import { MobileAttendancePage } from "./features/mobile/MobileAttendancePage";
-import { MobileClientsPage } from "./features/mobile/MobileClientsPage";
 import { MobileHome } from "./features/mobile/MobileHome";
-import { MobileLeavesPage } from "./features/mobile/MobileLeavesPage";
-import { MobileNoticesPage } from "./features/mobile/MobileNoticesPage";
-import { MobileNotificationsPage } from "./features/mobile/MobileNotificationsPage";
-import { MobileSchedulePage } from "./features/mobile/MobileSchedulePage";
 import { shouldUseMobile } from "./features/mobile/mobileMode";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { useAuth } from "./context/useAuth";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SiteAdminDashboardPage } from "./features/dashboard/SiteAdminDashboardPage";
 import { LoginPage } from "./features/auth/LoginPage";
-import { NoticesPage } from "./features/notices/NoticesPage";
-import { NoticeDetailPage } from "./features/notices/NoticeDetailPage";
-import { NoticeFormPage } from "./features/notices/NoticeFormPage";
-import { ApprovalHubPage } from "./features/approvalHub/ApprovalHubPage";
-import { LeavesPage } from "./features/leaves/LeavesPage";
-import { DocumentsPage } from "./features/documents/DocumentsPage";
-import { ClientsPage } from "./features/clients/ClientsPage";
-import { ClientDetailPage } from "./features/clients/ClientDetailPage";
-import { ClientFormPage } from "./features/clients/ClientFormPage";
-import { ProjectsPage } from "./features/projects/ProjectsPage";
-import { ProjectFormPage } from "./features/projects/ProjectFormPage";
-import { ProjectDetailPage } from "./features/projects/ProjectDetailPage";
-import { ProjectDocumentsPage } from "./features/projectDocuments/ProjectDocumentsPage";
-import { ProjectDocumentFormPage } from "./features/projectDocuments/ProjectDocumentFormPage";
-import { ProposalFormPage } from "./features/proposals/ProposalFormPage";
-import { TransactionsPage } from "./features/transactions/TransactionsPage";
-import { TransactionFormPage } from "./features/transactions/TransactionFormPage";
-import { PaymentsPage } from "./features/payments/PaymentsPage";
-import { PaymentFormPage } from "./features/payments/PaymentFormPage";
-import { UsersPage } from "./features/settings/UsersPage";
-import { AuditLogsPage } from "./features/settings/AuditLogsPage";
-import { UserFormPage } from "./features/settings/UserFormPage";
-import { CalendarPage } from "./features/schedule/CalendarPage";
+
+// 화면별로 JS 를 나눠 첫 화면(로그인·대시보드)을 가볍게 한다. 나머지 화면은 처음 열 때 받아오고,
+// 로그인 뒤 브라우저가 한가할 때 미리 받아 두어 메뉴를 옮길 때 기다리지 않게 한다.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyComponent = ComponentType<any>;
+const pageLoaders: (() => Promise<unknown>)[] = [];
+function lazyPage<K extends string, C extends AnyComponent>(load: () => Promise<Record<K, C>>, name: K) {
+  pageLoaders.push(load);
+  return lazy(async () => ({ default: (await load())[name] }));
+}
+const MobileApprovalsPage = lazyPage(() => import("./features/mobile/MobileApprovalsPage"), "MobileApprovalsPage");
+const MobileAttendancePage = lazyPage(() => import("./features/mobile/MobileAttendancePage"), "MobileAttendancePage");
+const MobileClientsPage = lazyPage(() => import("./features/mobile/MobileClientsPage"), "MobileClientsPage");
+const MobileLeavesPage = lazyPage(() => import("./features/mobile/MobileLeavesPage"), "MobileLeavesPage");
+const MobileNoticesPage = lazyPage(() => import("./features/mobile/MobileNoticesPage"), "MobileNoticesPage");
+const MobileNotificationsPage = lazyPage(() => import("./features/mobile/MobileNotificationsPage"), "MobileNotificationsPage");
+const MobileSchedulePage = lazyPage(() => import("./features/mobile/MobileSchedulePage"), "MobileSchedulePage");
+const NoticesPage = lazyPage(() => import("./features/notices/NoticesPage"), "NoticesPage");
+const NoticeDetailPage = lazyPage(() => import("./features/notices/NoticeDetailPage"), "NoticeDetailPage");
+const NoticeFormPage = lazyPage(() => import("./features/notices/NoticeFormPage"), "NoticeFormPage");
+const ApprovalHubPage = lazyPage(() => import("./features/approvalHub/ApprovalHubPage"), "ApprovalHubPage");
+const LeavesPage = lazyPage(() => import("./features/leaves/LeavesPage"), "LeavesPage");
+const DocumentsPage = lazyPage(() => import("./features/documents/DocumentsPage"), "DocumentsPage");
+const ClientsPage = lazyPage(() => import("./features/clients/ClientsPage"), "ClientsPage");
+const ClientDetailPage = lazyPage(() => import("./features/clients/ClientDetailPage"), "ClientDetailPage");
+const ClientFormPage = lazyPage(() => import("./features/clients/ClientFormPage"), "ClientFormPage");
+const ProjectsPage = lazyPage(() => import("./features/projects/ProjectsPage"), "ProjectsPage");
+const ProjectFormPage = lazyPage(() => import("./features/projects/ProjectFormPage"), "ProjectFormPage");
+const ProjectDetailPage = lazyPage(() => import("./features/projects/ProjectDetailPage"), "ProjectDetailPage");
+const ProjectDocumentsPage = lazyPage(() => import("./features/projectDocuments/ProjectDocumentsPage"), "ProjectDocumentsPage");
+const ProjectDocumentFormPage = lazyPage(() => import("./features/projectDocuments/ProjectDocumentFormPage"), "ProjectDocumentFormPage");
+const ProposalFormPage = lazyPage(() => import("./features/proposals/ProposalFormPage"), "ProposalFormPage");
+const TransactionsPage = lazyPage(() => import("./features/transactions/TransactionsPage"), "TransactionsPage");
+const TransactionFormPage = lazyPage(() => import("./features/transactions/TransactionFormPage"), "TransactionFormPage");
+const PaymentsPage = lazyPage(() => import("./features/payments/PaymentsPage"), "PaymentsPage");
+const PaymentFormPage = lazyPage(() => import("./features/payments/PaymentFormPage"), "PaymentFormPage");
+const UsersPage = lazyPage(() => import("./features/settings/UsersPage"), "UsersPage");
+const AuditLogsPage = lazyPage(() => import("./features/settings/AuditLogsPage"), "AuditLogsPage");
+const UserFormPage = lazyPage(() => import("./features/settings/UserFormPage"), "UserFormPage");
+const CalendarPage = lazyPage(() => import("./features/schedule/CalendarPage"), "CalendarPage");
+
+function usePrefetchPages(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const run = () => {
+      console.debug(`[App] 화면 미리 받기: ${pageLoaders.length}개`);
+      pageLoaders.forEach((load) => load().catch(() => undefined));
+    };
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
+    const handle = idle(run);
+    return () => (window.cancelIdleCallback ?? window.clearTimeout)(handle);
+  }, [enabled]);
+}
+
+const pageFallback = <p className="p-8 text-sm text-text-muted">불러오는 중...</p>;
 
 function DashboardRoute() {
   const { user } = useAuth();
@@ -56,7 +81,10 @@ function mobileRoute(element: ReactNode, options: { menuKey?: MenuPermissionKey;
 }
 
 function App() {
+  const { user } = useAuth();
+  usePrefetchPages(user !== null);
   return (
+    <Suspense fallback={pageFallback}>
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
@@ -319,6 +347,7 @@ function App() {
         }
       />
     </Routes>
+    </Suspense>
   );
 }
 
