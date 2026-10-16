@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { ApiError, apiGet, apiPut, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
-import { useOpenTarget } from "../../lib/useOpenTarget";
+import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { ProposalDetailModal } from "./ProposalDetailModal";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal } from "./types";
@@ -17,13 +17,19 @@ function pdfFilename(p: Proposal): string {
   return `품의서_${p.issue_date}.pdf`;
 }
 
-export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
+export function ProposalsPage({
+  embedded = false,
+  openId,
+  modalOnly = false,
+  onDecided,
+  onModalClose,
+}: { embedded?: boolean } & OpenOverlayProps) {
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [pendingForMe, setPendingForMe] = useState<Proposal[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [detail, setDetail] = useState<Proposal | null>(null);
-  const openTargetId = useOpenTarget();
+  const openTargetId = useOpenTarget(openId);
   const openedTargetRef = useRef(false);
 
   // 업무 알림(?open=품의서ID)으로 들어오면 해당 품의서 상세를 바로 연다. 승인/반려 이후에도 동일하게 열린다.
@@ -72,6 +78,7 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
       await apiPut(`/api/proposals/${p.id}/approve`);
       reloadAll();
       window.alert("결재 승인되었습니다.");
+      onDecided?.();
     } catch (err) {
       logError("Proposals", "결재 승인 실패", err);
       setError(err instanceof ApiError ? err.message : "결재 승인 중 오류가 발생했습니다.");
@@ -88,6 +95,7 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
     try {
       await apiPut(`/api/proposals/${p.id}/reject`, { reason: reason.trim() });
       reloadAll();
+      onDecided?.();
     } catch (err) {
       logError("Proposals", "결재 반려 실패", err);
       setError(err instanceof ApiError ? err.message : "결재 반려 중 오류가 발생했습니다.");
@@ -114,6 +122,26 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
       logError("Proposals", "PDF 출력 열기 실패", err);
     }
   }
+
+  const detailModal = detail && (
+    <ProposalDetailModal
+      proposal={detail}
+      isBusy={busyId === detail.id}
+      onClose={() => {
+        setDetail(null);
+        onModalClose?.();
+      }}
+      onApprove={handleApprove}
+      onReject={handleReject}
+      onDownload={handleDownload}
+      onPrint={handlePrint}
+      onDeleted={reloadAll}
+      onAttachmentsChanged={(updated) => {
+        setDetail(updated);
+        setProposals((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? prev);
+      }}
+    />
+  );
 
   const content = (
     <>
@@ -233,24 +261,11 @@ export function ProposalsPage({ embedded = false }: { embedded?: boolean }) {
         </div>
       )}
 
-      {detail && (
-        <ProposalDetailModal
-          proposal={detail}
-          isBusy={busyId === detail.id}
-          onClose={() => setDetail(null)}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onDownload={handleDownload}
-          onPrint={handlePrint}
-          onDeleted={reloadAll}
-          onAttachmentsChanged={(updated) => {
-            setDetail(updated);
-            setProposals((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? prev);
-          }}
-        />
-      )}
+      {detailModal}
     </>
   );
+
+  if (modalOnly) return detailModal;
 
   if (embedded) return content;
 

@@ -27,7 +27,7 @@ import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal } from "../proposals/types";
 import { HometaxImportModal } from "../transactions/HometaxImportModal";
 import { ApproverPickerModal } from "./ApproverPickerModal";
-import { useOpenTarget } from "../../lib/useOpenTarget";
+import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { ProjectDocumentDetailModal } from "./ProjectDocumentDetailModal";
 import { ProjectSearchBox } from "./ProjectSearchBox";
 import { PopbillRequiredInfoModal, type PopbillClientInfo } from "./PopbillRequiredInfoModal";
@@ -183,12 +183,19 @@ function excelFilename(doc: ProjectDocument): string {
   return `${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}_${doc.issue_date}.xlsx`;
 }
 
-interface ProjectDocumentsPageProps {
+interface ProjectDocumentsPageProps extends OpenOverlayProps {
   embedded?: boolean;
   lockedDocType?: ProjectDocType;
 }
 
-export function ProjectDocumentsPage({ embedded = false, lockedDocType }: ProjectDocumentsPageProps) {
+export function ProjectDocumentsPage({
+  embedded = false,
+  lockedDocType,
+  openId,
+  modalOnly = false,
+  onDecided,
+  onModalClose,
+}: ProjectDocumentsPageProps) {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -217,7 +224,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
   // "전체" 탭에서는 품의서도 같은 목록에 함께 보여준다.
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [proposalDetail, setProposalDetail] = useState<Proposal | null>(null);
-  const openTargetId = useOpenTarget();
+  const openTargetId = useOpenTarget(openId);
   const openedTargetRef = useRef(false);
   const listTopRef = useRef<HTMLDivElement>(null);
 
@@ -366,6 +373,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       setDetailDoc(null);
       reloadAll();
       window.alert("결재 승인되었습니다.");
+      onDecided?.();
     } catch (err) {
       logError("ProjectDocuments", "결재 승인 실패", err);
       setError(err instanceof ApiError ? err.message : "결재 승인 중 오류가 발생했습니다.");
@@ -383,6 +391,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       await apiPut(`/api/project-documents/${doc.id}/reject`, { reason: reason.trim() });
       setDetailDoc(null);
       reloadAll();
+      onDecided?.();
     } catch (err) {
       logError("ProjectDocuments", "결재 반려 실패", err);
       setError(err instanceof ApiError ? err.message : "결재 반려 중 오류가 발생했습니다.");
@@ -670,6 +679,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
 
   const content = (
     <>
+      {!modalOnly && (
+      <>
       {newDocCardCount > 0 && (
       <div className={`grid gap-4 mb-6 ${newDocGridCols}`}>
         {!lockedDocType && (
@@ -1127,6 +1138,8 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
       )}
         </>
       )}
+      </>
+      )}
 
       {deleteRequestDoc && (
         <ApproverPickerModal
@@ -1179,7 +1192,10 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
         <ProjectDocumentDetailModal
           doc={detailDoc}
           isBusy={busyId === detailDoc.id}
-          onClose={() => setDetailDoc(null)}
+          onClose={() => {
+          setDetailDoc(null);
+          onModalClose?.();
+        }}
           onApprove={handleApprove}
           onReject={handleReject}
           onDownload={handleDownload}
@@ -1198,7 +1214,7 @@ export function ProjectDocumentsPage({ embedded = false, lockedDocType }: Projec
     </>
   );
 
-  if (embedded) return content;
+  if (embedded || modalOnly) return content;
 
   const layoutTitle = lockedDocType ? PROJECT_DOC_TYPE_LABELS[lockedDocType] : "문서관리";
   const layoutDescription =

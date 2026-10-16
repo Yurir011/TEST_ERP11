@@ -1,8 +1,33 @@
 import { Bell, ChevronDown, ChevronUp, Stamp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { DocumentsPage } from "../documents/DocumentsPage";
+import { LeavesPage } from "../leaves/LeavesPage";
+import { ProjectDocumentsPage } from "../projectDocuments/ProjectDocumentsPage";
+import { ProposalsPage } from "../proposals/ProposalsPage";
+
+type OverlayTarget = {
+  kind: "leave" | "certificate" | "proposal" | "project_document" | "tax_invoice";
+  id: number;
+};
+
+// 알림 링크(/leaves?open=3 등)를 대시보드에서 바로 띄울 상세 모달 대상으로 바꾼다. 해당하지 않으면 null (일반 이동).
+function parseOverlayTarget(link: string | null): OverlayTarget | null {
+  if (!link) return null;
+  const [path, query = ""] = link.split("?");
+  const params = new URLSearchParams(query);
+  const id = Number(params.get("open"));
+  if (!Number.isFinite(id) || id <= 0) return null;
+  if (path === "/leaves") return { kind: "leave", id };
+  if (path === "/documents") return { kind: "certificate", id };
+  if (path === "/tax-invoices") return { kind: "tax_invoice", id };
+  if (path === "/project-documents") {
+    return { kind: params.get("tab") === "proposal" ? "proposal" : "project_document", id };
+  }
+  return null;
+}
 
 interface NotificationItem {
   id: number;
@@ -47,7 +72,7 @@ function NotificationGroups({
 }: {
   groups: [string, NotificationItem[]][];
   unread: boolean;
-  onOpen: (notification: NotificationItem) => void;
+  onOpen: (notification: NotificationItem, event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <>
@@ -59,7 +84,7 @@ function NotificationGroups({
               <li key={n.id} className={idx < items.length - 1 ? "border-b border-border" : ""}>
                 <Link
                   to={n.link ?? "#"}
-                  onClick={() => onOpen(n)}
+                  onClick={(e) => onOpen(n, e)}
                   className={`block py-1.5 hover:text-primary transition-colors ${unread ? "" : "opacity-70"}`}
                 >
                   <div className="flex items-center gap-1.5">
@@ -87,6 +112,7 @@ function NotificationGroups({
 export function MyNotificationsBoard() {
   const [notifications, setNotifications] = useState<NotificationItem[] | null>(null);
   const [showRead, setShowRead] = useState(false);
+  const [overlay, setOverlay] = useState<OverlayTarget | null>(null);
 
   function load() {
     logDebug("Dashboard", "내 업무 알림 조회 시작");
@@ -102,7 +128,25 @@ export function MyNotificationsBoard() {
     load();
   }, []);
 
-  async function handleOpen(notification: NotificationItem) {
+  function closeOverlay() {
+    setOverlay(null);
+  }
+
+  // 결재 처리가 끝나면 대시보드의 다른 영역은 그대로 두고 업무 알림만 다시 불러온다.
+  function handleDecided() {
+    logDebug("Dashboard", "알림 상세에서 결재 처리 완료 → 업무 알림만 새로고침");
+    setOverlay(null);
+    load();
+  }
+
+  async function handleOpen(notification: NotificationItem, event: MouseEvent<HTMLAnchorElement>) {
+    const target = parseOverlayTarget(notification.link);
+    if (target) {
+      // 페이지를 이동하지 않고 대시보드 위에 상세 모달만 띄운다.
+      event.preventDefault();
+      logDebug("Dashboard", `알림 상세 모달 열기: kind=${target.kind}, id=${target.id}`);
+      setOverlay(target);
+    }
     if (notification.is_read) return;
     try {
       await apiPut(`/api/notifications/${notification.id}/read`);
@@ -149,6 +193,28 @@ export function MyNotificationsBoard() {
             </div>
           )}
         </div>
+      )}
+
+      {overlay?.kind === "leave" && (
+        <LeavesPage modalOnly openId={overlay.id} onDecided={handleDecided} onModalClose={closeOverlay} />
+      )}
+      {overlay?.kind === "certificate" && (
+        <DocumentsPage modalOnly openId={overlay.id} onDecided={handleDecided} onModalClose={closeOverlay} />
+      )}
+      {overlay?.kind === "proposal" && (
+        <ProposalsPage modalOnly openId={overlay.id} onDecided={handleDecided} onModalClose={closeOverlay} />
+      )}
+      {overlay?.kind === "project_document" && (
+        <ProjectDocumentsPage modalOnly openId={overlay.id} onDecided={handleDecided} onModalClose={closeOverlay} />
+      )}
+      {overlay?.kind === "tax_invoice" && (
+        <ProjectDocumentsPage
+          modalOnly
+          lockedDocType="tax_invoice"
+          openId={overlay.id}
+          onDecided={handleDecided}
+          onModalClose={closeOverlay}
+        />
       )}
     </div>
   );

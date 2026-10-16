@@ -6,7 +6,7 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
-import { openTargetDomId, useOpenTarget, useScrollToOpenTarget } from "../../lib/useOpenTarget";
+import { openTargetDomId, useOpenTarget, useScrollToOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { LeaveDetailModal } from "./LeaveDetailModal";
 import type { LeaveBalance, LeaveRecord } from "./types";
 
@@ -14,11 +14,11 @@ function toMonthValue(year: number, month: number) {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
-interface LeavesPageProps {
+interface LeavesPageProps extends OpenOverlayProps {
   embedded?: boolean;
 }
 
-export function LeavesPage({ embedded = false }: LeavesPageProps) {
+export function LeavesPage({ embedded = false, openId, modalOnly = false, onDecided, onModalClose }: LeavesPageProps) {
   const now = new Date();
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
@@ -38,7 +38,7 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const openTargetId = useOpenTarget();
+  const openTargetId = useOpenTarget(openId);
   useScrollToOpenTarget(openTargetId, myLeaves.length > 0 || pendingLeaves.length > 0);
   const [detail, setDetail] = useState<LeaveRecord | null>(null);
 
@@ -159,6 +159,7 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
       loadBalance();
       loadTeamCalendar();
       window.alert("결재 승인되었습니다.");
+      onDecided?.();
     } catch (err) {
       logError("Leaves", "승인 처리 실패", err);
     } finally {
@@ -177,12 +178,26 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
       loadMyLeaves();
       loadBalance();
       loadTeamCalendar();
+      onDecided?.();
     } catch (err) {
       logError("Leaves", "반려 처리 실패", err);
     } finally {
       setBusyId(null);
     }
   }
+
+  const detailModal = detail && (
+    <LeaveDetailModal
+      leave={detail}
+      isBusy={busyId === detail.id}
+      onClose={() => {
+        setDetail(null);
+        onModalClose?.();
+      }}
+      onApprove={handleApprove}
+      onReject={handleReject}
+    />
+  );
 
   const content = (
     <>
@@ -409,18 +424,11 @@ export function LeavesPage({ embedded = false }: LeavesPageProps) {
           )}
         </div>
       </section>
-      {detail && (
-        <LeaveDetailModal
-          leave={detail}
-          isBusy={busyId === detail.id}
-          onClose={() => setDetail(null)}
-          onApprove={handleApprove}
-          onReject={handleReject}
-        />
-      )}
+      {detailModal}
     </>
   );
 
+  if (modalOnly) return detailModal;
   if (embedded) return content;
 
   return (

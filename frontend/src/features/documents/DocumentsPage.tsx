@@ -6,15 +6,15 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { ApiError, apiGet, apiPost, apiPut, downloadFile } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
-import { useOpenTarget } from "../../lib/useOpenTarget";
+import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { DocumentDetailModal } from "./DocumentDetailModal";
 import { DOC_TYPE_LABELS, type DocumentRecord, type DocumentType } from "./types";
 
-interface DocumentsPageProps {
+interface DocumentsPageProps extends OpenOverlayProps {
   embedded?: boolean;
 }
 
-export function DocumentsPage({ embedded = false }: DocumentsPageProps) {
+export function DocumentsPage({ embedded = false, openId, modalOnly = false, onDecided, onModalClose }: DocumentsPageProps) {
   const [docType, setDocType] = useState<DocumentType>("employment");
   const [purpose, setPurpose] = useState("");
   const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
@@ -26,7 +26,7 @@ export function DocumentsPage({ embedded = false }: DocumentsPageProps) {
   const [pendingForMe, setPendingForMe] = useState<DocumentRecord[]>([]);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const openTargetId = useOpenTarget();
+  const openTargetId = useOpenTarget(openId);
   const [detail, setDetail] = useState<DocumentRecord | null>(null);
 
   // 업무 알림(?open=문서ID)으로 들어오면 해당 신청 건의 상세 내용을 바로 연다. 승인/반려 이후에도 동일하다.
@@ -114,6 +114,7 @@ export function DocumentsPage({ embedded = false }: DocumentsPageProps) {
       await apiPut(`/api/documents/${id}/approve`);
       reloadAll();
       window.alert("결재 승인되었습니다.");
+      onDecided?.();
     } catch (err) {
       logError("Documents", "결재 승인 실패", err);
     } finally {
@@ -128,12 +129,28 @@ export function DocumentsPage({ embedded = false }: DocumentsPageProps) {
     try {
       await apiPut(`/api/documents/${id}/reject`, { reason: reason.trim() });
       reloadAll();
+      onDecided?.();
     } catch (err) {
       logError("Documents", "결재 반려 실패", err);
     } finally {
       setBusyId(null);
     }
   }
+
+  const detailModal = detail && (
+    <DocumentDetailModal
+      doc={detail}
+      isBusy={busyId === detail.id}
+      isDownloading={downloadingId === detail.id}
+      onClose={() => {
+        setDetail(null);
+        onModalClose?.();
+      }}
+      onApprove={handleApprove}
+      onReject={handleReject}
+      onDownload={handleDownload}
+    />
+  );
 
   const content = (
     <>
@@ -281,19 +298,11 @@ export function DocumentsPage({ embedded = false }: DocumentsPageProps) {
           ))}
         </div>
       )}
-      {detail && (
-        <DocumentDetailModal
-          doc={detail}
-          isBusy={busyId === detail.id}
-          isDownloading={downloadingId === detail.id}
-          onClose={() => setDetail(null)}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onDownload={handleDownload}
-        />
-      )}
+      {detailModal}
     </>
   );
+
+  if (modalOnly) return detailModal;
 
   if (embedded) return content;
 
