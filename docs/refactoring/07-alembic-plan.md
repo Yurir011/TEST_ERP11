@@ -1,7 +1,7 @@
-# 07. DB 마이그레이션 체계(Alembic) 도입 계획 (승인 대기)
+# 07. DB 마이그레이션 체계(Alembic) 도입 계획
 
 > 작성일: 2026-10-16 · 관련: [01-analysis.md](01-analysis.md) D1, [05-remaining-issues.md](05-remaining-issues.md) O6
-> **이 문서는 계획이다. 승인 전에는 코드·DB를 바꾸지 않는다.** 이번 조사도 DB를 읽기만 했다.
+> 상태: **1~4단계 완료(2026-10-16)**. 개발 DB 는 아직 바꾸지 않았다(읽기만 함). 5·6단계는 아래 8장 결과를 보고 승인받는다.
 
 ## 1. 왜 필요한가
 
@@ -88,3 +88,34 @@ Alembic 자동 생성은 **enum에 값을 추가한 것을 알아채지 못한�
 
 1. 이 방식(기준점 + stamp, 시작 시 자동 구조 변경 중단)으로 진행해도 되는지
 2. 단계 1~4를 먼저 진행하고, 개발 DB에 표시를 남기는 5단계와 시작 절차를 바꾸는 6단계는 결과를 본 뒤 따로 승인받는 방식이 좋은지
+
+## 8. 1~4단계 결과 (2026-10-16)
+
+| 단계 | 결과 |
+|---|---|
+| 1 | `alembic==1.20.0`(+`Mako`)을 `requirements.txt`에 추가. `models/__init__.py`에 `ApprovalStep` 등록(테이블 27개 모두 등록됨) |
+| 2 | `backend/alembic/`, `alembic.ini` 생성. DB 주소는 `.env`에서 읽음(파일에 비밀번호 없음). 기준점 `0001_baseline`(테이블 27, enum 22) 생성 |
+| 2 | 자동 생성된 순서가 `payments ↔ transactions` 순환 참조 때문에 틀려 실행이 실패했다 → 테이블을 외래키 의존 순서로 정렬하고 순환 외래키 1개를 마지막에 추가하도록 고쳤다. 모델에도 같은 외래키에 `use_alter=True`(DB 구조 변화 없음)를 지정해 순환 경고를 없앴다 |
+| 2 | 빈 임시 DB 에서 `upgrade → downgrade → upgrade` 왕복과 `alembic check`(차이 없음) 확인 후 임시 DB 삭제 |
+| 3 | 테스트 DB 를 `create_all` 대신 **리비전으로 생성**하도록 변경. 일치 검사 테스트 2건 추가(모델 ↔ 최신 리비전 차이 없음, 테스트 DB 가 최신 리비전). 전체 184 passed |
+| 4 | 개발 DB(`erp_db`)와 기준점 비교(읽기 전용): **차이 20건, 모두 무해한 종류** |
+
+### 개발 DB 와 기준점의 차이 (4단계)
+
+| 종류 | 건수 | 내용 | 원인 |
+|---|---|---|---|
+| 서버 기본값 | 18 | `clients.receivable_amount`, `project_documents.status` 등 18개 컬럼에 DB 기본값(`DEFAULT 0`, `'draft'` 등)이 있는데 모델에는 없다 | 예전 1회성 스크립트가 컬럼을 추가하며 `DEFAULT` 를 붙였다. 앱은 값을 항상 직접 넣으므로 동작 영향 없음 |
+| NULL 허용 | 1 | `document_issues.status` 가 DB 에서는 NULL 허용, 모델은 NOT NULL. **현재 NULL 인 행 0건** | 스크립트가 NOT NULL 을 빠뜨림 |
+| 인덱스 | 1 | `schedule_events.recurrence_group_id` 인덱스가 DB 에 없음 | 스크립트가 인덱스를 만들지 않음 |
+
+### 5·6단계 수정 제안
+
+기준점과 개발 DB 를 같게 맞추는 **정리 리비전 `0002_align_legacy_db`** 를 추가한 뒤 stamp 한다.
+
+1. 개발 DB 를 `pg_dump` 로 백업
+2. `alembic stamp 0001_baseline` (개발 DB 에 `alembic_version` 표 1개 추가)
+3. `alembic upgrade head` → `0002` 실행: 위 18개 기본값 제거, `document_issues.status` NOT NULL 지정, 빠진 인덱스 생성. 모든 문장을 `IF EXISTS / IF NOT EXISTS` 형태로 써서 **새 DB(기준점에서 만든 DB)에서는 아무 일도 하지 않는다**
+4. 다시 비교해 차이 0건 확인
+5. 서버 시작 절차 변경(6단계): `create_all`·자동 스크립트 3개 실행을 없애고, 리비전이 최신인지 확인만 한다. `start.bat` 에 `alembic upgrade head` 추가
+
+데이터는 바뀌지 않는다(구조 메타데이터만 바뀌고, NOT NULL 대상 컬럼에 NULL 행이 없음을 확인함).

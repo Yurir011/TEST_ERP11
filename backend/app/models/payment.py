@@ -100,7 +100,10 @@ class Payment(Base):
     bank_type: Mapped[BankType | None] = mapped_column(Enum(BankType, name="banktype"), nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 매입매출 한 건의 일부만 수금/지급한 결제. 연결된 매입매출의 paid_amount에 반영되어 있다 (전액 결제는 Transaction.settled_payment_id로 연결).
-    partial_transaction_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True)
+    # transactions.settled_payment_id 와 서로 참조하는 순환 관계라 테이블을 만든 뒤 외래키를 추가한다(use_alter). 이름은 실제 DB 와 같다.
+    partial_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL", use_alter=True, name="payments_partial_transaction_id_fkey"), nullable=True
+    )
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

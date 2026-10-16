@@ -1,0 +1,7 @@
+DB 구조 변경 이력(Alembic). 사용법은 docs/refactoring/07-alembic-plan.md 4장 참고.
+
+  새 DB 만들기 / 최신으로 올리기:   venv\Scripts\python.exe -m alembic upgrade head
+  모델 변경 후 리비전 만들기:       venv\Scripts\python.exe -m alembic revision --autogenerate -m "설명"
+  현재 DB 리비전 확인:             venv\Scripts\python.exe -m alembic current
+
+주의: PostgreSQL enum 에 값을 추가한 것은 자동으로 잡히지 않는다. 리비전에 ALTER TYPE ... ADD VALUE 를 직접 적는다.

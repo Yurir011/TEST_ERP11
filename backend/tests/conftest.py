@@ -12,6 +12,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 TEST_DB_NAME = "erp_test"
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 def _build_test_database_url() -> str:
@@ -43,7 +44,16 @@ assert engine.url.database == TEST_DB_NAME
 
 @pytest.fixture(scope="session", autouse=True)
 def _create_schema():
-    Base.metadata.create_all(bind=engine)
+    """테스트 DB 를 비우고 Alembic 리비전으로 구조를 만든다 (create_all 이 아니라 실제 배포와 같은 방법).
+    리비전 파일이 잘못되면 여기서 실패한다."""
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP SCHEMA public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+    command.upgrade(Config(str(BACKEND_DIR / "alembic.ini")), "head")
     yield
 
 

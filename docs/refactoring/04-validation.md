@@ -2,11 +2,11 @@
 
 > 단계가 끝날 때마다 추가한다. 실행하지 못한 검증은 실행했다고 쓰지 않고 이유를 적는다.
 
-## 최종 종합 결과 (2026-10-16, 잔액 초과 정산 거절 반영 기준)
+## 최종 종합 결과 (2026-10-16, Alembic 1~4단계 반영 기준)
 
 | 검증 | 명령 | 결과 | 시작 시점 |
 |---|---|---|---|
-| 백엔드 테스트 | `backend/venv/Scripts/python.exe -m pytest` | **182 passed** (약 55초) | 0건 |
+| 백엔드 테스트 | `backend/venv/Scripts/python.exe -m pytest` | **184 passed** (약 59초, 테스트 DB 를 Alembic 으로 생성) | 0건 |
 | 프론트엔드 테스트 | `npm test` (vitest) | **36 passed** (6개 파일) | 0건 |
 | 타입 검사 | `npx tsc -b --noEmit` | 오류 0 | 오류 0 |
 | 린트 | `npx oxlint` | 오류 0 / 경고 **10** | 경고 16 |
@@ -263,3 +263,12 @@
 
 - 진행 중 발견: 수정 API에서 처음에는 "잔액을 되돌린 뒤 검사"하도록 만들었는데, 검사가 실패해도 되돌린 값이 같은 세션에 남는 것을 테스트가 잡아냈다. 운영에서는 요청마다 세션이 버려져 실제 피해는 없지만, **잔액을 바꾸기 전에 검사**하도록 고쳐 어느 경우에도 안전하게 했다.
 - 실행하지 못한 검증: 화면에서 잔액보다 큰 금액을 넣었을 때의 안내 문구 확인.
+
+## P6(일부). Alembic 1~4단계 — 2026-10-16
+
+| 검증 | 결과 |
+|---|---|
+| 빈 임시 DB: `upgrade head` → `downgrade base` → `upgrade head` | 성공 |
+| 빈 임시 DB: `alembic check` | "No new upgrade operations detected" (모델과 일치) |
+| `pytest` (테스트 DB 를 리비전으로 생성) | **184 passed**, 경고 0 |
+| 개발 DB 비교(읽기 전용) | 차이 20건(기본값 18, NULL 허용 1, 인덱스 1), `document_issues.status` NULL 행 0건 |
