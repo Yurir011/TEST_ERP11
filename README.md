@@ -132,3 +132,29 @@ cd backend
 - 모델만 바꾸고 리비전을 만들지 않으면 테스트(`tests/test_alembic_schema.py`)가 실패한다.
 - PostgreSQL enum 에 값을 추가한 것은 자동으로 잡히지 않는다. 리비전에 `ALTER TYPE ... ADD VALUE`를 직접 적는다.
 - 예전 1회성 스크립트는 `backend/app/scripts/legacy_migrations/`에 이력으로만 남아 있고 실행하지 않는다.
+
+## 백업과 복원
+
+`backup.bat`(또는 `backend` 폴더에서 `venv\Scripts\python.exe -m app.scripts.backup_db --with-files`)를 실행하면 `backend/storage/backups/daily/`에 다음이 생긴다.
+
+| 파일 | 내용 |
+|---|---|
+| `erp_db_YYYYMMDD_HHMMSS.dump` | DB 전체 (`pg_dump -Fc`). 만든 직후 파일을 열어 표 데이터가 들어 있는지 확인한다 |
+| `storage_YYYYMMDD_HHMMSS.zip` | 영수증·PDF·첨부 파일 (`storage` 폴더, 백업 폴더 제외). `--with-files` 일 때만 |
+
+- 30일(`--keep-days`로 변경) 지난 **이 형식의 파일만** 자동으로 지운다. 수동 백업(`*_before_*.dump` 등)은 건드리지 않는다.
+- 다른 위치에 두려면 `--dir D:\erp_backup`. 백업은 같은 디스크가 아닌 곳(외장 디스크·NAS)에 한 부 더 두는 것을 권한다.
+- 첨부 파일 zip 은 지금 약 40MB 라 30일이면 약 1.2GB 다. 공간이 부족하면 DB 는 매일, 첨부 파일은 매주(`--with-files` 를 주 1회 작업에만)로 나눈다.
+- 실패하면 종료 코드 1 과 `[Backup] 백업 실패: ...` 로그를 남긴다(작업 스케줄러의 "마지막 실행 결과"에서 확인).
+
+**매일 새벽 3시에 자동 실행 (Windows 작업 스케줄러, 관리자 명령 프롬프트에서 1회)**
+```bat
+schtasks /Create /TN "BENCH ERP 백업" /TR "\"C:\Repo\Python\GUI_STUDY\11\backup.bat\"" /SC DAILY /ST 03:00 /RU SYSTEM
+```
+경로는 실제 설치 위치로 바꾼다. Docker 로 옮기면 같은 스크립트를 백엔드 컨테이너 안에서 실행하거나(`PG_BIN` 환경변수로 `pg_dump` 위치 지정), DB 컨테이너에서 `pg_dump` 를 직접 실행한다.
+
+**복원** (덮어쓰므로 먼저 지금 DB 를 한 번 더 백업할 것)
+```bash
+pg_restore --clean --if-exists --no-owner -h localhost -U erp_user -d erp_db backend/storage/backups/daily/erp_db_YYYYMMDD_HHMMSS.dump
+# 첨부 파일: zip 을 backend/storage/ 에 풀기
+```
