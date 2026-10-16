@@ -1,0 +1,4 @@
+# 개발/테스트 전용 의존성 (운영 서버에는 설치하지 않는다)
+-r requirements.txt
+pytest==9.1.1
+httpx==0.28.1

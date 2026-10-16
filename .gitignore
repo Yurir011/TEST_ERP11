@@ -22,3 +22,6 @@ PopBill.zip
 
 # 참고용 원본 템플릿/DB 백업 (앱 내부는 backend/app/assets/templates 사용)
 Doc/
+
+# pytest
+.pytest_cache/
