@@ -35,6 +35,7 @@ import { TransactionFormPage } from "./features/transactions/TransactionFormPage
 import { PaymentsPage } from "./features/payments/PaymentsPage";
 import { PaymentFormPage } from "./features/payments/PaymentFormPage";
 import { UsersPage } from "./features/settings/UsersPage";
+import { AuditLogsPage } from "./features/settings/AuditLogsPage";
 import { UserFormPage } from "./features/settings/UserFormPage";
 import { CalendarPage } from "./features/schedule/CalendarPage";
 
@@ -289,6 +290,15 @@ function App() {
         element={
           <ProtectedRoute requireAdmin siteAdminAllowed>
             <UsersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/audit-logs"
+        element={
+          // 대표 전용 (사이트 관리자는 볼 수 없다: 서버 API 도 대표만 허용)
+          <ProtectedRoute requireAdmin>
+            <AuditLogsPage />
           </ProtectedRoute>
         }
       />

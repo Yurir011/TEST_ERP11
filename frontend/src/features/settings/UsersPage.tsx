@@ -1,7 +1,8 @@
-import { KeyRound, Plus, UserX, UserCheck } from "lucide-react";
+import { History, KeyRound, Plus, UserX, UserCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import { useAuth } from "../../context/AuthContext";
 import type { CurrentUser, JobGrade, JobTitle } from "../../lib/auth";
 import { apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
@@ -23,6 +24,7 @@ const TITLE_LABELS: Record<JobTitle, string> = {
 };
 
 export function UsersPage() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState<CurrentUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resetTargetId, setResetTargetId] = useState<number | null>(null);
@@ -76,13 +78,25 @@ export function UsersPage() {
       title="설정 · 직원 계정 관리"
       description="사내 ERP를 사용할 직원 계정을 관리합니다."
       actions={
-        <Link
-          to="/settings/users/new"
-          className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={16} />
-          새 직원 등록
-        </Link>
+        <div className="flex items-center gap-2">
+          {me?.role === "admin" && (
+            // 변경 이력(감사 로그)은 대표만 볼 수 있다
+            <Link
+              to="/settings/audit-logs"
+              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
+            >
+              <History size={14} />
+              변경 이력
+            </Link>
+          )}
+          <Link
+            to="/settings/users/new"
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={16} />
+            새 직원 등록
+          </Link>
+        </div>
       }
     >
       {error && <p className="text-sm text-danger mb-4">{error}</p>}

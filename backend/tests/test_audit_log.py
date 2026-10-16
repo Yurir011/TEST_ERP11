@@ -159,3 +159,19 @@ def test_audit_api_has_no_write_endpoints():
 
     methods = {m for r in app.routes if getattr(r, "path", "").startswith("/api/audit-logs") for m in r.methods}
     assert methods <= {"GET", "HEAD"}
+
+
+def test_audit_api_search_group_and_multi_type_filters(client, db, h, make_client, make_user):
+    c = make_client(name="검색용거래처", receivable=1_000)
+    _pay(client, h, c.id, 100)
+    user = make_user()
+    client.post("/api/auth/login", json={"email": user.email, "password": "wrong"})
+
+    found = client.get("/api/audit-logs?q=검색용거래처", headers=h).json()
+    assert found and all("검색용거래처" in (r["summary"] or "") or "검색용거래처" in (r["user_name"] or "") for r in found)
+
+    logins = client.get("/api/audit-logs?action=login", headers=h).json()
+    assert logins and all(r["action"].startswith("login_") for r in logins)
+
+    multi = client.get("/api/audit-logs?entity_type=client,payment", headers=h).json()
+    assert {r["entity_type"] for r in multi} <= {"client", "payment"} and len({r["entity_type"] for r in multi}) == 2
