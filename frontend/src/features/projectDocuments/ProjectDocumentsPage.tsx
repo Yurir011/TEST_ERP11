@@ -299,6 +299,8 @@ export function ProjectDocumentsPage({
 
   useEffect(() => {
     loadPendingForMe();
+    // 화면에 처음 들어올 때 한 번만 조회한다 (이후에는 reloadAll 이 갱신)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function reloadAll() {

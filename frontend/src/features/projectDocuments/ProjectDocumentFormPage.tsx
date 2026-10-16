@@ -90,6 +90,8 @@ export function ProjectDocumentFormPage() {
     const label = [user.name, position].filter(Boolean).join(" ");
     logDebug("ProjectDocumentForm", `세금계산서 담당자 자동입력: ${label}`);
     setManagerName((prev) => prev || label);
+    // isEdit 는 화면 진입 시 경로로 정해지는 값이라 의존성에서 뺀다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docType, user]);
 
   useEffect(() => {
@@ -148,6 +150,8 @@ export function ProjectDocumentFormPage() {
     apiGet<Client[]>("/api/clients")
       .then(setClients)
       .catch((err) => logError("ProjectDocumentForm", "거래처 목록 조회 실패", err));
+    // 처음 한 번만 조회한다 (routeProjectId 는 경로 값이라 화면이 열려 있는 동안 바뀌지 않는다)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

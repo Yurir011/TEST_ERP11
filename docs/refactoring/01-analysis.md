@@ -126,7 +126,8 @@
 
 ### 4.6 미사용 코드·정리 대상
 
-- 미사용 import(AST 검사): `models/project_document.py`의 `BigInteger`, `services/recurring_payment.py`의 `Client`. (`main.py`의 `models`는 테이블 등록용이라 의도된 것이므로 삭제 금지.)
+- 미사용 import(AST 검사): `models/project_document.py`의 `BigInteger`(제거 대상). `services/recurring_payment.py`의 `Client`와 `main.py`의 `models`는 SQLAlchemy 관계·테이블 등록을 위한 **의도된 import이므로 삭제 금지**(P1에서 확인).
+- 프론트엔드 번들이 단일 파일 1,002KB(gzip 277KB)로 빌드 경고가 난다. 라우트별 코드 분할 후보이나 측정 후 판단한다.
 - 마이그레이션 스크립트 54개는 **삭제하지 않는다**(이력 보존). 일부는 서버 시작 시 호출된다.
 - 프론트엔드 `console.debug/log` 직접 호출 4곳(나머지는 `lib/logger`). 프로젝트 규칙상 디버그 메시지는 유지 대상이다.
 - 루트의 `PopBill/`(48MB), `PopBill.zip`, `archieve/`(155MB), `Doc/`는 `.gitignore`로 제외되어 있어 저장소에는 영향이 없다.

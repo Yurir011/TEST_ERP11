@@ -25,9 +25,12 @@ export function OutstandingDetailModal({ kind, client, period, onClose, onSettle
   const [items, setItems] = useState<Transaction[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const periodYear = period?.year;
+  const periodMonth = period?.month;
+
   useEffect(() => {
     logDebug("Payments", `${label} 상세 조회 시작: client_id=${client.id}`);
-    apiGet<Transaction[]>(`/api/transactions?type=${txType}&settled=false${period ? `&year=${period.year}&month=${period.month}` : ""}`)
+    apiGet<Transaction[]>(`/api/transactions?type=${txType}&settled=false${periodYear ? `&year=${periodYear}&month=${periodMonth}` : ""}`)
       .then((list) => {
         const mine = list.filter((t) => t.client_id === client.id);
         logDebug("Payments", `${label} 상세 조회 성공: ${mine.length}건`);
@@ -37,7 +40,7 @@ export function OutstandingDetailModal({ kind, client, period, onClose, onSettle
         logError("Payments", `${label} 상세 조회 실패`, err);
         setError("상세 내역을 불러오지 못했습니다.");
       });
-  }, [client.id, txType, label, period?.year, period?.month]);
+  }, [client.id, txType, label, periodYear, periodMonth]);
 
   const listTotal = (items ?? []).reduce((sum, t) => sum + remainingAmount(t), 0);
 

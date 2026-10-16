@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export const POPBILL_CLIENT_FIELDS: { key: string; label: string; placeholder?: string }[] = [
+const POPBILL_CLIENT_FIELDS: { key: string; label: string; placeholder?: string }[] = [
   { key: "biz_reg_no", label: "사업자등록번호", placeholder: "000-00-00000" },
   { key: "ceo_name", label: "대표자명" },
   { key: "address", label: "사업장 주소" },

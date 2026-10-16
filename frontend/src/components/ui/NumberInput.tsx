@@ -9,7 +9,7 @@ interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "
 }
 
 /** 숫자 문자열에 세 자리마다 콤마를 붙인다 (소수부는 그대로). */
-export function formatNumberText(raw: string): string {
+function formatNumberText(raw: string): string {
   if (raw === "") return "";
   const [intPart, decPart] = raw.split(".");
   const withComma = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");

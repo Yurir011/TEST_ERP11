@@ -58,3 +58,19 @@
 - 이미 **저장된 장부(매입매출) 금액은 바뀌지 않는다.** 저장된 값은 그대로이고 새로 계산하는 문서부터 새 규칙이 적용된다.
 - 이미 발행된 문서를 **PDF/엑셀로 다시 내려받으면** 합계가 계산식을 다시 실행하므로 끝자리가 5인 경우 1원 차이가 날 수 있다.
 - 일부 코드(`sales_documents.py`)는 품목별 반올림 없이 합계를 곱하는 별도 방식을 쓰고 있어 그대로 두었다(이 파일의 계산 방식 통일은 별도 검토 항목).
+
+## P1. 무해한 정리 — 2026-10-16
+
+동작 변경 없는 정리만 수행했다.
+
+| 구분 | 내용 | 파일 |
+|---|---|---|
+| 미사용 import 제거 | `BigInteger` 제거 | `backend/app/models/project_document.py` |
+| 확인 후 유지 | `recurring_payment.py`의 `Client`는 관계 매핑용(`noqa: F401` 주석 있음)이라 **삭제하지 않음** | — |
+| 린트(only-export-components) | 파일 밖에서 쓰지 않는 `formatNumberText`, `POPBILL_CLIENT_FIELDS`를 `export` 해제 | `NumberInput.tsx`, `PopbillRequiredInfoModal.tsx` |
+| 린트(exhaustive-deps) | 객체(`period`) 대신 `period?.year/month` 값을 의존성으로 쓰도록 정리(조회 조건 동일) | `OutstandingDetailModal.tsx` |
+| 린트(exhaustive-deps) | 의도된 "처음 한 번만 실행" 이펙트 3곳에 이유 주석과 `eslint-disable-next-line` 추가 | `ProjectDocumentsPage.tsx`, `ProjectDocumentFormPage.tsx` |
+| 문서 | README를 실제 기능·구조·테스트 방법에 맞게 갱신 | `README.md` |
+
+- 린트 경고 16개 → **10개**. 남은 것: `set-state-in-effect` 9개(P4에서 화면별 처리), `AuthContext`의 `only-export-components` 1개(훅과 Provider를 한 파일에 두는 일반적인 패턴이라 유지).
+- 마이그레이션 스크립트는 삭제하지 않았다.
