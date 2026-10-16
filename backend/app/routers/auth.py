@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.audit import record_event, set_current_user
 from app.core.deps import get_current_user
 from app.core.login_throttle import LoginThrottle, ThrottleRule
 from app.core.security import create_access_token, verify_password
@@ -28,6 +29,8 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     wait = login_throttle.retry_after(payload.email, client_ip)
     if wait > 0:
         logger.warning(f"[Auth] 로그인 시도 제한 중: email={payload.email}, ip={client_ip}, 남은 {wait}초")
+        record_event(db, "login_blocked", "user", None, f"로그인 차단(시도 제한): {payload.email}")
+        db.commit()
         minutes = (wait + 59) // 60
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -40,6 +43,8 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     if user is None or not verify_password(payload.password, user.hashed_password):
         login_throttle.record_failure(payload.email, client_ip)
         logger.debug(f"[Auth] 로그인 실패: email={payload.email}")
+        record_event(db, "login_failed", "user", user.id if user else None, f"로그인 실패: {payload.email}")
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="이메일 또는 비밀번호가 올바르지 않습니다.")
 
     if not user.is_active:
@@ -47,6 +52,9 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="비활성화된 계정입니다.")
 
     login_throttle.record_success(payload.email, client_ip)
+    set_current_user(user)
+    record_event(db, "login_success", "user", user.id, f"로그인: {user.name} ({user.email})")
+    db.commit()
     token = create_access_token(subject=user.email)
     logger.debug(f"[Auth] 로그인 성공: email={payload.email}, role={user.role}")
     return TokenResponse(access_token=token)

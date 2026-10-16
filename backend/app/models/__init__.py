@@ -1,5 +1,6 @@
 # 모든 모델을 여기서 import 해야 Base.metadata 에 등록된다 (서버 시작 시 테이블 확인과 Alembic 자동 비교가 이 목록을 쓴다).
 from app.models.approval_step import ApprovalStep
+from app.models.audit_log import AuditLog
 from app.models.attendance import Attendance
 from app.models.client import Client
 from app.models.document import DocumentIssue
@@ -46,3 +47,6 @@ __all__ = [
     "ScheduleEvent",
     "TodoItem",
 ]
+
+# 감사 로그 자동 기록(flush 이벤트)을 등록한다. 모든 모델을 import 한 뒤에 불러야 한다.
+import app.core.audit  # noqa: E402,F401

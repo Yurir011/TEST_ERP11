@@ -1,9 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app import models  # noqa: F401  (테이블 메타데이터 등록을 위해 import)
 from app.config import settings
+from app.core.audit import end_request, start_request
 from app.core.db_revision import check_db_revision
 from app.core.startup_checks import enforce_security_settings
 from app.database import SessionLocal, engine
@@ -11,6 +12,7 @@ from app.logging_config import get_logger, setup_logging
 from app.services.recurring_payment import generate_recurring_payments
 from app.routers import (
     attendance,
+    audit_logs,
     auth,
     clients,
     documents,
@@ -35,6 +37,16 @@ logger = get_logger("Main")
 
 app = FastAPI(title=settings.app_name)
 
+# 감사 로그용: 요청마다 접속 주소와 요청 경로를 담는다 (로그인 사용자는 인증 의존성이 채운다).
+@app.middleware("http")
+async def audit_context_middleware(request: Request, call_next):
+    token = start_request(request.client.host if request.client else None, f"{request.method} {request.url.path}")
+    try:
+        return await call_next(request)
+    finally:
+        end_request(token)
+
+
 # CORS: 허용 주소는 설정(CORS_ORIGINS)으로만 정하고, 실제로 쓰는 메서드·헤더만 연다.
 # 인증은 쿠키가 아니라 Authorization 헤더(Bearer 토큰)로 하므로 allow_credentials 는 필요 없다.
 app.add_middleware(
@@ -46,6 +58,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(audit_logs.router)
 app.include_router(notices.router)
 app.include_router(notifications.router)
 app.include_router(attendance.router)

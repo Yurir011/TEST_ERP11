@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.audit import set_current_user
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.logging_config import get_logger
@@ -29,6 +30,7 @@ def get_current_user(
         logger.debug(f"[Auth] 사용자 조회 실패 또는 비활성 계정: email={email}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="사용자를 찾을 수 없습니다.")
 
+    set_current_user(user)  # 감사 로그의 "누가"
     return user
 
 
