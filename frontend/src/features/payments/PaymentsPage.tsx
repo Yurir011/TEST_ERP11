@@ -27,7 +27,7 @@ import { CardSettleModal } from "./CardSettleModal";
 import { CardPendingDetailModal } from "./CardPendingDetailModal";
 import { SettleModal } from "./SettleModal";
 import { OutstandingDetailModal } from "./OutstandingDetailModal";
-import type { Transaction } from "../transactions/types";
+import { remainingAmount, type Transaction } from "../transactions/types";
 import {
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
@@ -42,11 +42,21 @@ import {
 } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
-const TABS: { key: PaymentType | "all"; label: string }[] = [
+// 구분 탭. 카드는 결제수단이 법인카드인 내역(결제예정 포함)만 모아 보며, 카드 출금은 출금 탭에도 함께 나온다.
+type PaymentTab = PaymentType | "card" | "all";
+const TABS: { key: PaymentTab; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "deposit", label: "입금" },
   { key: "withdrawal", label: "출금" },
+  { key: "card", label: "카드" },
 ];
+
+// 너비가 고정된 칸에서 글자가 길면 폰트 크기를 줄여 한 줄에 맞춘다 (글자 수 기준).
+function fitFontClass(length: number): string {
+  if (length <= 9) return "text-sm";
+  if (length <= 12) return "text-xs";
+  return "text-[11px]";
+}
 
 function toMonthValue(year: number, month: number) {
   return `${year}-${String(month).padStart(2, "0")}`;
@@ -60,7 +70,8 @@ export function PaymentsPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [tab, setTab] = useState<PaymentType | "all">("all");
+  const [tab, setTab] = useState<PaymentTab>("all");
+  const [cardFilter, setCardFilter] = useState<"all" | CardType>("all"); // 카드 탭에서 고른 카드 종류
 
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,10 +103,16 @@ export function PaymentsPage() {
   const [unsettledTx, setUnsettledTx] = useState<Transaction[]>([]);
 
   const usingCustomRange = Boolean(dateFrom || dateTo);
+  // 카드 탭: 카드 종류별 건수/금액 요약은 선택과 상관없이 전체 카드 기준, 표는 고른 카드만 보여준다.
+  const cardTabRows = tab === "card" ? payments ?? [] : [];
+  const shownPayments =
+    payments !== null && tab === "card" && cardFilter !== "all" ? payments.filter((p) => p.card_type === cardFilter) : payments;
+
 
   function buildFilterParams() {
     const params = new URLSearchParams();
-    if (tab !== "all") params.set("type", tab);
+    if (tab === "card") params.set("method", "corporate_card");
+    else if (tab !== "all") params.set("type", tab);
     if (usingCustomRange) {
       if (dateFrom) params.set("date_from", dateFrom);
       if (dateTo) params.set("date_to", dateTo);
@@ -200,19 +217,31 @@ export function PaymentsPage() {
   }, [outstandingPeriod, year, month]);
 
   function buildOutstandingRows(kind: "receivable" | "payable") {
-    if (outstandingPeriod === "all") {
-      return clients
-        .map((client) => ({ client, amount: kind === "receivable" ? client.receivable_amount : client.payable_amount }))
-        .filter((r) => r.amount > 0);
-    }
     const txType = kind === "receivable" ? "sales" : "purchase";
+    if (outstandingPeriod === "all") {
+      // 미결제 매입매출 건이 있으면 그 남은 금액 합계를 기준으로 삼는다 (월별 보기와 같은 기준이라 전체가 항상 월별 이상이 된다).
+      // 거래처 잔액이 그보다 크면(건과 무관하게 잔액만 있는 경우) 잔액을 쓴다. 건이 없는 거래처는 잔액이 0보다 클 때만 표시한다.
+      const remainingByClient = new Map<number, number>();
+      unsettledTx.forEach((t) => {
+        if (t.type === txType && t.client_id !== null) {
+          remainingByClient.set(t.client_id, (remainingByClient.get(t.client_id) ?? 0) + remainingAmount(t));
+        }
+      });
+      return clients
+        .map((client) => {
+          const balance = kind === "receivable" ? client.receivable_amount : client.payable_amount;
+          return { client, amount: Math.max(balance, remainingByClient.get(client.id) ?? 0), hasTx: remainingByClient.has(client.id) };
+        })
+        .filter((r) => r.amount > 0 || r.hasTx)
+        .map(({ client, amount }) => ({ client, amount }));
+    }
     const byClient = new Map<number, number>();
     (periodTx ?? []).forEach((t) => {
-      if (t.type === txType && t.client_id !== null) byClient.set(t.client_id, (byClient.get(t.client_id) ?? 0) + t.total_amount);
+      if (t.type === txType && t.client_id !== null) byClient.set(t.client_id, (byClient.get(t.client_id) ?? 0) + remainingAmount(t));
     });
     return clients.filter((c) => byClient.has(c.id)).map((client) => ({ client, amount: byClient.get(client.id) ?? 0 }));
   }
-  // 거래처별 미수금/미지급금 발생일(미결제 매출·매입의 거래일). 여러 건이면 가장 이른 날부터 가장 늦은 날까지 표시한다.
+  // 거래처별 미수금/미지급금 발생일(미결제 매출·매입의 거래일). 여러 건이면 가장 이른(최초) 발생일을 표시한다.
   function occurredLabel(kind: "receivable" | "payable", clientId: number) {
     const txType = kind === "receivable" ? "sales" : "purchase";
     const dates = unsettledTx
@@ -220,9 +249,16 @@ export function PaymentsPage() {
       .map((t) => t.transaction_date)
       .sort();
     if (dates.length === 0) return null;
-    const first = dates[0];
-    const last = dates[dates.length - 1];
-    return first === last ? first : `${first} ~ ${last}`;
+    return dates[0];
+  }
+  // 일부만 수금/지급한 거래처는 가장 최근 부분 결제일을 함께 보여준다.
+  function partialPaidLabel(kind: "receivable" | "payable", clientId: number) {
+    const txType = kind === "receivable" ? "sales" : "purchase";
+    const dates = unsettledTx
+      .filter((t) => t.type === txType && t.client_id === clientId)
+      .flatMap((t) => t.payment_history.map((p) => p.payment_date))
+      .sort();
+    return dates.length > 0 ? dates[dates.length - 1] : null;
   }
 
   const receivableRows = buildOutstandingRows("receivable");
@@ -253,6 +289,7 @@ export function PaymentsPage() {
     setIsExporting(true);
     try {
       const params = buildFilterParams();
+      if (tab === "card" && cardFilter !== "all") params.set("card_type", cardFilter);
       const filenameRange = usingCustomRange
         ? `${dateFrom || "처음"}~${dateTo || "지금"}`
         : toMonthValue(year, month);
@@ -528,23 +565,35 @@ export function PaymentsPage() {
             ) : (
               <ul className="space-y-2">
                 {card.rows.map(({ client: c, amount }) => (
-                  <li key={c.id} className="bg-bg rounded-xl px-4 py-3">
-                    {/* 두 줄: 윗줄 = 거래처명 ←→ 금액, 아랫줄 = 발생일 ←→ 처리 버튼 */}
-                    <button
-                      type="button"
-                      onClick={() => setDetailTarget({ kind: card.kind, client: c })}
-                      className="flex items-center justify-between gap-2 w-full text-left hover:opacity-70"
-                      title="상세 내역 보기"
-                    >
-                      <span className="text-sm font-medium truncate min-w-0">{c.name}</span>
+                  <li
+                    key={c.id}
+                    onClick={() => setDetailTarget({ kind: card.kind, client: c })}
+                    title="상세 내역 보기"
+                    className="bg-bg rounded-xl px-4 py-3 cursor-pointer hover:bg-border/40 transition-colors"
+                  >
+                    {/* 두 줄: 윗줄 = 거래처명 ←→ 금액, 아랫줄 = 발생일 ←→ 처리 버튼. 칸 어디를 눌러도 상세가 열리고, 처리 버튼만 별도로 동작한다. */}
+                    <div className="flex items-center justify-between gap-2 w-full text-left">
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm font-medium truncate min-w-0">{c.name}</span>
+                        {partialPaidLabel(card.kind, c.id) && (
+                          <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${SOFT_BADGE.orange}`}>
+                            {card.kind === "receivable" ? "수금" : "지급"}(일부)
+                          </span>
+                        )}
+                      </span>
                       <span className="text-sm font-semibold tabular-nums shrink-0">{formatCurrency(amount)}</span>
-                    </button>
+                    </div>
                     <div className="flex items-center justify-between gap-2 mt-1">
                       <span className="text-xs text-text-muted min-w-0">
                         {occurredLabel(card.kind, c.id) && `${card.title} 발생일 ${occurredLabel(card.kind, c.id)}`}
+                        {partialPaidLabel(card.kind, c.id) &&
+                          ` · ${card.kind === "receivable" ? "수금" : "지급"}(일부) ${partialPaidLabel(card.kind, c.id)}`}
                       </span>
                       <button
-                        onClick={() => setSettleTarget({ kind: card.kind, client: c })}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSettleTarget({ kind: card.kind, client: c });
+                        }}
                         className={`text-[11px] font-medium border bg-surface rounded-full px-2.5 py-1 shrink-0 transition-colors ${card.style}`}
                       >
                         {card.action}
@@ -607,7 +656,38 @@ export function PaymentsPage() {
 
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
-      {payments !== null && payments.length === 0 && (
+      {tab === "card" && payments !== null && (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 mb-4">
+          {(
+            [
+              { key: "all", label: "전체 카드", rows: cardTabRows },
+              ...(Object.keys(CARD_TYPE_LABELS) as CardType[]).map((ct) => ({
+                key: ct,
+                label: CARD_TYPE_LABELS[ct],
+                rows: cardTabRows.filter((p) => p.card_type === ct),
+              })),
+            ] as { key: "all" | CardType; label: string; rows: Payment[] }[]
+          ).map((box) => (
+            <button
+              key={box.key}
+              type="button"
+              onClick={() => setCardFilter(box.key)}
+              className={`flex items-baseline justify-between gap-3 text-left rounded-xl border px-4 py-2.5 transition-colors ${
+                cardFilter === box.key ? "border-primary bg-tile-blue" : "border-border bg-surface hover:border-primary/40"
+              }`}
+            >
+              <span className="text-sm min-w-0 truncate">
+                {box.label} <span className="text-xs text-text-muted">· {box.rows.length}건</span>
+              </span>
+              <span className="text-base font-semibold tabular-nums shrink-0">
+                {formatCurrency(box.rows.reduce((sum, p) => sum + p.amount, 0))}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {shownPayments !== null && shownPayments.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <Wallet className="mx-auto mb-2 text-text-muted" size={24} />
           <p className="text-sm text-text-muted">
@@ -616,36 +696,48 @@ export function PaymentsPage() {
         </div>
       )}
 
-      {payments !== null && payments.length > 0 && (
+      {shownPayments !== null && shownPayments.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
           {/* 표 스타일: 가로선 없이 연한 세로선 + 줄무늬 (첫 열 앞, 버튼 열 앞은 선 제외) */}
-          <table className="w-full text-sm [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-text/[0.07] [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
+          <table className="w-full table-fixed text-sm [&_th:not(:first-child):not(:last-child)]:border-l [&_th:not(:first-child):not(:last-child)]:border-text/[0.07] [&_td:not(:first-child):not(:last-child)]:border-l [&_td:not(:first-child):not(:last-child)]:border-text/[0.07]">
+            {/* 너비 고정: 내용 칸만 남는 폭을 차지하고 줄바꿈된다. 나머지 칸은 글자가 길면 폰트 크기를 줄여 맞춘다. */}
+            <colgroup>
+              <col className="w-[4.5rem]" />
+              <col className="w-[8.5rem]" />
+              <col className="w-[6.5rem]" />
+              <col />
+              <col className="w-[9rem]" />
+              <col className="w-[9rem]" />
+              <col className="w-[6rem]" />
+              <col className="w-[7.5rem]" />
+              <col className="w-24" />
+            </colgroup>
             <thead>
               <tr className="text-center text-text-muted border-b border-border">
-                <th className="py-2.5 px-6 font-medium w-px whitespace-nowrap">구분</th>
-                <th className="py-2.5 px-8 font-medium w-px whitespace-nowrap">날짜</th>
-                <th className="py-2.5 px-8 font-medium w-px whitespace-nowrap">분류</th>
+                <th className="py-2.5 px-2 font-medium whitespace-nowrap">구분</th>
+                <th className="py-2.5 px-2 font-medium whitespace-nowrap">날짜</th>
+                <th className="py-2.5 px-2 font-medium whitespace-nowrap">분류</th>
                 <th className="py-2.5 px-4 font-medium">내용</th>
-                <th className="py-2.5 px-8 font-medium w-px whitespace-nowrap">거래처</th>
-                <th className="py-2.5 px-6 font-medium w-px whitespace-nowrap">수단</th>
-                <th className="py-2.5 px-6 font-medium w-px whitespace-nowrap">증빙발행</th>
-                <th className="py-2.5 px-8 font-medium text-right w-px whitespace-nowrap border-r border-text/[0.07]">금액</th>
-                <th className="w-24"></th>
+                <th className="py-2.5 px-2 font-medium whitespace-nowrap">거래처</th>
+                <th className="py-2.5 px-2 font-medium whitespace-nowrap">수단</th>
+                <th className="py-2.5 px-2 font-medium whitespace-nowrap">증빙발행</th>
+                <th className="py-2.5 px-4 font-medium text-right whitespace-nowrap border-r border-text/[0.07]">금액</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {payments.map((p) => (
+              {shownPayments.map((p) => (
                 <tr
                   key={p.id}
                   onClick={() => setSelectedPayment(p)}
                   className="cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
                 >
-                  <td className="text-center py-2.5 px-6 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-2 whitespace-nowrap">
                     <span className={`text-xs px-2 py-1 font-medium ${PAYMENT_TYPE_STYLES[p.type]}`}>
                       {PAYMENT_TYPE_LABELS[p.type]}
                     </span>
                   </td>
-                  <td className="text-center py-2.5 px-8 whitespace-nowrap">
+                  <td className="text-center py-2.5 px-2">
                     {p.payment_date}
                     {p.occurred_date && (
                       <span className="block text-xs text-text-muted">
@@ -653,14 +745,21 @@ export function PaymentsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="text-center py-2.5 px-8 whitespace-nowrap">{p.category}</td>
-                  <td className="text-center py-2.5 px-4">{p.description}</td>
-                  <td className="text-center py-2.5 px-8 whitespace-nowrap">{p.client_name ?? <span className="text-text-muted">-</span>}</td>
-                  <td className="text-center py-2.5 px-6 whitespace-nowrap">
-                    {paymentMethodDetailLabel(p)}
-                    {p.card_pending && <span className={`ml-1.5 text-xs px-2 py-0.5 font-medium ${SOFT_BADGE.orange}`}>결제예정</span>}
+                  <td className={`text-center py-2.5 px-2 whitespace-nowrap overflow-hidden ${fitFontClass(p.category.length)}`}>{p.category}</td>
+                  <td className="text-center py-2.5 px-4 break-words">{p.description}</td>
+                  <td
+                    className={`text-center py-2.5 px-2 whitespace-nowrap overflow-hidden text-ellipsis ${fitFontClass((p.client_name ?? "").length)}`}
+                    title={p.client_name ?? undefined}
+                  >
+                    {p.client_name ?? <span className="text-text-muted">-</span>}
                   </td>
-                  <td className="text-center py-2.5 px-6 whitespace-nowrap">
+                  <td
+                    className={`text-center py-2.5 px-2 whitespace-nowrap overflow-hidden ${fitFontClass(paymentMethodDetailLabel(p).length + (p.card_pending ? 5 : 0))}`}
+                  >
+                    {paymentMethodDetailLabel(p)}
+                    {p.card_pending && <span className={`ml-1 text-[11px] px-1.5 py-0.5 font-medium ${SOFT_BADGE.orange}`}>결제예정</span>}
+                  </td>
+                  <td className="text-center py-2.5 px-2 whitespace-nowrap overflow-hidden">
                     {p.proof_type ? (
                       <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>
                         {p.proof_type === "other" && p.proof_type_detail ? p.proof_type_detail : PROOF_TYPE_LABELS[p.proof_type]}
@@ -671,7 +770,7 @@ export function PaymentsPage() {
                       <span className="text-xs text-text-muted">-</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-8 text-right font-medium whitespace-nowrap border-r border-text/[0.07]">{formatCurrency(p.amount)}</td>
+                  <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap border-r border-text/[0.07]">{formatCurrency(p.amount)}</td>
                   <td className="py-2.5 px-2">
                     <div className="flex items-center justify-end gap-1">
                       {p.has_receipt && (
@@ -763,13 +862,11 @@ export function PaymentsPage() {
           kind={settleTarget.kind}
           client={settleTarget.client}
           occurredLabel={occurredLabel(settleTarget.kind, settleTarget.client.id)}
-          transactions={
-            outstandingPeriod === "month"
-              ? (periodTx ?? []).filter(
-                  (t) => t.client_id === settleTarget.client.id && t.type === (settleTarget.kind === "receivable" ? "sales" : "purchase")
-                )
-              : undefined
-          }
+          // 월별/전체 모두 해당 거래처의 미결제 매입매출에 입력한 금액을 오래된 건부터 배분한다 (전액이 아니면 일부 수금/지급으로 남는다).
+          // 연결된 미결제 건이 없을 때(건과 무관하게 잔액만 있는 경우)에는 모달이 거래처 잔액만 줄인다.
+          transactions={(outstandingPeriod === "month" ? periodTx ?? [] : unsettledTx).filter(
+            (t) => t.client_id === settleTarget.client.id && t.type === (settleTarget.kind === "receivable" ? "sales" : "purchase")
+          )}
           onClose={() => setSettleTarget(null)}
           onSuccess={handleSettleSuccess}
         />
