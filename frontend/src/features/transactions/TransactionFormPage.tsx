@@ -6,6 +6,7 @@ import type { Client } from "../clients/types";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
+import { vatAmount as calcVat } from "../../lib/money";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type TaxInvoiceCandidate, type Transaction, type TransactionType } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
@@ -157,7 +158,7 @@ export function TransactionFormPage() {
   useEffect(() => {
     if (vatManuallyEdited) return;
     const supply = Number(supplyAmount) || 0;
-    setVatAmount(String(Math.round(supply * 0.1)));
+    setVatAmount(String(calcVat(supply)));
   }, [supplyAmount, vatManuallyEdited]);
 
   function changeParty(name: string) {

@@ -1,3 +1,4 @@
+import { lineAmount, vatAmount } from "../../lib/money";
 import type {
   ProjectDocType,
   ProjectDocumentItem,
@@ -43,15 +44,15 @@ export function projectPayload(projectId: string, projectOtherName: string) {
   };
 }
 
-/** 품목 금액 = 수량 x 단가 (원 단위 반올림) */
+/** 품목 금액 = 수량 x 단가 (원 단위 사사오입, 서버와 같은 계산) */
 export function formItemAmount(it: ProjectDocumentItemFormValues): number {
-  return Math.round((Number(it.quantity) || 0) * (Number(it.unit_price) || 0));
+  return lineAmount(Number(it.quantity) || 0, Number(it.unit_price) || 0);
 }
 
 /** 공급가액(품목 금액 합) · 부가세 10% · 합계 */
 export function formTotals(items: ProjectDocumentItemFormValues[]) {
   const subtotal = items.reduce((sum, it) => sum + formItemAmount(it), 0);
-  const vat = Math.round(subtotal * 0.1);
+  const vat = vatAmount(subtotal);
   return { subtotal, vat, total: subtotal + vat };
 }
 

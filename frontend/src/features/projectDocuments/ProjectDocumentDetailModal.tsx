@@ -1,22 +1,15 @@
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
 import { Check, Download, Eye, Mail, Pencil, Printer, Send, Sheet, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { lineAmount } from "../../lib/money";
+import { formatDocAmount, itemsTotal } from "./documentHelpers";
 import { TaxInvoiceImages } from "./TaxInvoiceImages";
 import {
-  DOC_CURRENCY_SYMBOLS,
   PROJECT_DOC_STATUS_LABELS,
   PROJECT_DOC_STATUS_STYLES,
   PROJECT_DOC_TYPE_LABELS,
   type ProjectDocument,
 } from "./types";
-
-function itemsTotal(doc: ProjectDocument): number {
-  return doc.items.reduce((sum, it) => sum + Math.round(it.quantity * it.unit_price), 0);
-}
-
-function formatDocAmount(doc: ProjectDocument, amount: number): string {
-  return `${DOC_CURRENCY_SYMBOLS[doc.currency]}${amount.toLocaleString()}`;
-}
 
 export function ProjectDocumentDetailModal({
   doc,
@@ -127,7 +120,7 @@ export function ProjectDocumentDetailModal({
                   <td className="py-2 px-3">{item.content}</td>
                   <td className="py-2 px-3 text-right">{item.quantity.toLocaleString()}</td>
                   <td className="py-2 px-3 text-right">{formatDocAmount(doc, item.unit_price)}</td>
-                  <td className="py-2 px-3 text-right">{formatDocAmount(doc, Math.round(item.quantity * item.unit_price))}</td>
+                  <td className="py-2 px-3 text-right">{formatDocAmount(doc, lineAmount(item.quantity, item.unit_price))}</td>
                   <td className="py-2 px-3">{item.note ?? "-"}</td>
                 </tr>
               ))}

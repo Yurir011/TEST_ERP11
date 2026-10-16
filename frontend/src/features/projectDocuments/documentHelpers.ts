@@ -1,3 +1,4 @@
+import { lineAmount } from "../../lib/money";
 import type { Proposal } from "../proposals/types";
 import { DOC_CURRENCY_SYMBOLS, PROJECT_DOC_TYPE_LABELS, type ProjectDocument, type ProjectDocumentStatus, type TaxInvoicePurpose } from "./types";
 
@@ -18,9 +19,9 @@ export function itemsSummary(doc: ProjectDocument): string {
   return doc.items.length > 1 ? `${first} 외 ${doc.items.length - 1}건` : first;
 }
 
-/** 품목 금액 합계(공급가액). 품목별로 원 단위 반올림한 값을 더한다. */
+/** 품목 금액 합계(공급가액). 품목별로 원 단위 사사오입한 값을 더한다 (서버와 같은 계산). */
 export function itemsTotal(doc: ProjectDocument): number {
-  return doc.items.reduce((sum, it) => sum + Math.round(it.quantity * it.unit_price), 0);
+  return doc.items.reduce((sum, it) => sum + lineAmount(it.quantity, it.unit_price), 0);
 }
 
 export function formatDocAmount(doc: ProjectDocument, amount: number): string {
