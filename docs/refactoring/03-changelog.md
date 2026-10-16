@@ -97,3 +97,13 @@
 
 ### 진행 중 확인된 사항
 - 리팩토링 중 `remaining_amount` import 누락 실수가 있었고, **기존 통합 테스트가 즉시 잡아냈다**(`test_linkable_transactions_show_remaining_amount` 실패). 수정 후 전부 통과. 안전망이 의도대로 작동함을 확인했다.
+
+## P3-2. 결재 단계 처리 공통화 — 2026-10-16
+
+- 신규 헬퍼 `core/approval.py`의 `approve_current_step()`, `reject_current_step()`: "현재 단계를 승인/반려 처리하고(상태·결정 시각), 승인이면 다음 단계(마지막이면 None)를 돌려준다"는 반복 로직을 한곳에 모음.
+- 적용(6곳): `routers/leaves.py`(승인·반려), `routers/documents.py`(승인·반려), `routers/project_documents.py`(`_approve_one`, `_reject_one`). 각 곳에서 3~4줄씩 반복되던 `next(...)` 검색과 상태·시각 기록을 제거.
+- **유지한 것**: 최종 승인 시 도메인별 후처리(PDF 발급, 매입매출 자동 기록, 연차 일정 반영, 삭제 결재 처리), 알림 문구와 링크, 묶음 문서(견적서+거래명세서) 동시 처리는 각 라우터에 그대로 둠. 이들은 도메인마다 달라서 억지로 합치면 오히려 복잡해진다(과도한 추상화 방지).
+- 테스트 추가: `tests/test_approval_flows.py` 10건(증명서 승인·반려·전결 금지·자기결재, 프로젝트 문서 승인·반려·재처리 방지, 헬퍼 단위).
+
+### 범위에서 제외한 것
+- **품의서(`proposals.py`)는 별도의 단계 테이블(`ProposalApprovalStep`)을 쓴다.** 다른 3개 도메인의 공용 `ApprovalStep`과 모델이 다르다. 하나로 합치려면 DB 스키마·데이터 이전이 필요하므로 **승인 없이 진행하지 않았다**(05-remaining-issues.md S1).

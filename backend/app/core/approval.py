@@ -107,3 +107,21 @@ def get_steps_map(db: Session, target_type: ApprovalTargetType, target_ids: list
     for row in rows:
         result.setdefault(row.target_id, []).append(row)
     return result
+
+
+def approve_current_step(steps: list[ApprovalStep], current_step: int) -> ApprovalStep | None:
+    """현재 결재 단계를 승인 처리한다 (commit은 호출부에서).
+    마지막 단계였다면 None(= 최종 승인), 아니면 다음 단계를 반환한다."""
+    current = next(s for s in steps if s.step_order == current_step)
+    current.status = ApprovalStepStatus.approved
+    current.decided_at = datetime.now(timezone.utc)
+    if current.step_order == len(steps):
+        return None
+    return next(s for s in steps if s.step_order == current.step_order + 1)
+
+
+def reject_current_step(steps: list[ApprovalStep], current_step: int) -> None:
+    """현재 결재 단계를 반려 처리한다 (이후 단계는 대기 상태로 남는다. commit은 호출부에서)."""
+    current = next(s for s in steps if s.step_order == current_step)
+    current.status = ApprovalStepStatus.rejected
+    current.decided_at = datetime.now(timezone.utc)

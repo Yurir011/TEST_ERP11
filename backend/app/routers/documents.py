@@ -6,7 +6,15 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.core.approval import advance_chain_self_approvals, build_chain_steps, get_steps, get_steps_map, validate_chain_approvers
+from app.core.approval import (
+    advance_chain_self_approvals,
+    approve_current_step,
+    build_chain_steps,
+    get_steps,
+    get_steps_map,
+    reject_current_step,
+    validate_chain_approvers,
+)
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
@@ -188,11 +196,9 @@ def approve_document(doc_id: int, db: Session = Depends(get_db), current_user: U
     logger.debug(f"[Documents] 결재 승인 시도: id={doc_id}, by={current_user.id}")
     record = _get_doc_for_approver(db, doc_id, current_user)
     steps = get_steps(db, _TARGET, record.id)
-    current = next(s for s in steps if s.step_order == record.current_step)
-    current.status = ApprovalStepStatus.approved
-    current.decided_at = datetime.now(timezone.utc)
+    next_step = approve_current_step(steps, record.current_step)
 
-    if current.step_order == len(steps):
+    if next_step is None:
         record.status = DocumentStatus.approved
         record.reviewed_at = datetime.now(timezone.utc)
         _issue_pdf(record, record.user)
@@ -205,7 +211,6 @@ def approve_document(doc_id: int, db: Session = Depends(get_db), current_user: U
             link=f"/documents?open={record.id}",
         )
     else:
-        next_step = next(s for s in steps if s.step_order == current.step_order + 1)
         record.current_step = next_step.step_order
         record.approver_id = next_step.approver_id
         create_request_notification(
@@ -230,9 +235,7 @@ def reject_document(
     logger.debug(f"[Documents] 결재 반려 시도: id={doc_id}, by={current_user.id}")
     record = _get_doc_for_approver(db, doc_id, current_user)
     steps = get_steps(db, _TARGET, record.id)
-    current = next(s for s in steps if s.step_order == record.current_step)
-    current.status = ApprovalStepStatus.rejected
-    current.decided_at = datetime.now(timezone.utc)
+    reject_current_step(steps, record.current_step)
 
     record.status = DocumentStatus.rejected
     record.reject_reason = payload.reason

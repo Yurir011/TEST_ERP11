@@ -9,7 +9,15 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.core.approval import advance_chain_self_approvals, build_chain_steps, get_steps, get_steps_map, validate_chain_approvers
+from app.core.approval import (
+    advance_chain_self_approvals,
+    approve_current_step,
+    build_chain_steps,
+    get_steps,
+    get_steps_map,
+    reject_current_step,
+    validate_chain_approvers,
+)
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
@@ -881,14 +889,12 @@ def _approve_one(db: Session, doc: ProjectDocument, current_user: User, notify: 
     """문서 1건의 현재 결재 단계를 승인하고, 마지막 단계면 승인 완료, 아니면 다음 결재권자로 넘긴다 (commit은 호출자가).
     삭제 결재의 마지막 단계를 승인한 경우에는 상태를 바꾸지 않고 True(지금 삭제해야 함)를 돌려준다."""
     steps = get_steps(db, _TARGET, doc.id)
-    current = next(s for s in steps if s.step_order == doc.current_step)
-    current.status = ApprovalStepStatus.approved
-    current.decided_at = datetime.now(timezone.utc)
+    next_step = approve_current_step(steps, doc.current_step)
     doc_label = f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})"
 
-    if current.step_order == len(steps) and doc.delete_requested:
+    if next_step is None and doc.delete_requested:
         return True
-    if current.step_order == len(steps):
+    if next_step is None:
         doc.status = ProjectDocumentStatus.approved
         doc.reviewed_at = datetime.now(timezone.utc)
         _record_tax_invoice_transaction(db, doc, current_user)
@@ -897,7 +903,6 @@ def _approve_one(db: Session, doc: ProjectDocument, current_user: User, notify: 
                 db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
             )
     else:
-        next_step = next(s for s in steps if s.step_order == current.step_order + 1)
         doc.current_step = next_step.step_order
         doc.approver_id = next_step.approver_id
         if notify:
@@ -946,9 +951,7 @@ def approve_project_document(doc_id: int, db: Session = Depends(get_db), current
 
 def _reject_one(db: Session, doc: ProjectDocument, reason: str, notify: bool) -> None:
     steps = get_steps(db, _TARGET, doc.id)
-    current = next(s for s in steps if s.step_order == doc.current_step)
-    current.status = ApprovalStepStatus.rejected
-    current.decided_at = datetime.now(timezone.utc)
+    reject_current_step(steps, doc.current_step)
 
     doc.status = ProjectDocumentStatus.rejected
     doc.reject_reason = reason

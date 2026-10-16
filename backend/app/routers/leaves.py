@@ -3,7 +3,15 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.approval import advance_chain_self_approvals, build_chain_steps, get_steps, get_steps_map, validate_chain_approvers
+from app.core.approval import (
+    advance_chain_self_approvals,
+    approve_current_step,
+    build_chain_steps,
+    get_steps,
+    get_steps_map,
+    reject_current_step,
+    validate_chain_approvers,
+)
 from app.core.deps import get_current_user
 from app.core.leave_calc import calculate_annual_leave_days, count_business_days, get_leave_year_window
 from app.database import get_db
@@ -320,13 +328,10 @@ def approve_leave(leave_id: int, db: Session = Depends(get_db), current_user: Us
     logger.debug(f"[Leaves] 승인 시도: id={leave_id}, by={current_user.id}")
     record = _get_leave_for_approver(db, leave_id, current_user)
     steps = get_steps(db, _TARGET, record.id)
-    current = next(s for s in steps if s.step_order == record.current_step)
-
-    current.status = ApprovalStepStatus.approved
-    current.decided_at = datetime.now(timezone.utc)
+    next_step = approve_current_step(steps, record.current_step)
     doc_label = f"연차 ({record.start_date} ~ {record.end_date}, {record.days}일)"
 
-    if current.step_order == len(steps):
+    if next_step is None:
         record.status = LeaveStatus.approved
         record.reviewed_by = current_user.id
         record.reviewed_at = datetime.now(timezone.utc)
@@ -334,7 +339,6 @@ def approve_leave(leave_id: int, db: Session = Depends(get_db), current_user: Us
             db, target_name=record.user.name, target_user_id=record.user_id, doc_label=doc_label, approved=True, link=f"/leaves?open={record.id}"
         )
     else:
-        next_step = next(s for s in steps if s.step_order == current.step_order + 1)
         record.current_step = next_step.step_order
         record.approver_id = next_step.approver_id
         create_request_notification(
@@ -356,9 +360,7 @@ def reject_leave(
     logger.debug(f"[Leaves] 반려 시도: id={leave_id}, by={current_user.id}")
     record = _get_leave_for_approver(db, leave_id, current_user)
     steps = get_steps(db, _TARGET, record.id)
-    current = next(s for s in steps if s.step_order == record.current_step)
-    current.status = ApprovalStepStatus.rejected
-    current.decided_at = datetime.now(timezone.utc)
+    reject_current_step(steps, record.current_step)
 
     _remove_leave_schedule_event(db, record.id)
     record.status = LeaveStatus.rejected
