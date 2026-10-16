@@ -42,6 +42,7 @@ from app.services.payment_csv import CsvParseError, parse_card_statement_csv
 from app.services.payment_list_excel import generate_payment_list_excel
 from app.services.payment_voucher_excel import generate_payment_voucher_excel
 from app.services.payment_voucher_pdf import generate_payment_voucher_pdf
+from app.services.upload_check import IMAGE_TYPES, read_upload
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 logger = get_logger("Payments")
@@ -402,11 +403,12 @@ def upload_receipt(
     if file.content_type not in ALLOWED_RECEIPT_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
 
+    content = read_upload(file, IMAGE_TYPES)
     os.makedirs(settings.receipts_dir, exist_ok=True)
     ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[file.content_type]
     file_path = os.path.join(settings.receipts_dir, f"{payment.id}.{ext}")
     with open(file_path, "wb") as f:
-        f.write(file.file.read())
+        f.write(content)
 
     payment.receipt_path = file_path
     db.commit()

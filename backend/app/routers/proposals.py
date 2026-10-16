@@ -34,6 +34,7 @@ from app.schemas.proposal import (
 )
 from app.services.approval_notice import create_decision_notification, create_request_notification
 from app.services.proposal_pdf import generate_proposal_pdf
+from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
 logger = get_logger("Proposals")
@@ -528,13 +529,11 @@ def upload_attachment_file(
     if file.content_type not in ALLOWED_ATTACHMENT_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="지원하지 않는 파일 형식입니다.")
 
-    content = file.file.read()
-    if len(content) > MAX_ATTACHMENT_SIZE:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 크기는 15MB를 초과할 수 없습니다.")
+    content = read_upload(file, ATTACHMENT_TYPES, MAX_ATTACHMENT_SIZE)
 
     os.makedirs(settings.proposal_attachments_dir, exist_ok=True)
-    ext = os.path.splitext(file.filename or "")[1][:10]
-    stored_name = f"{proposal_id}_{uuid.uuid4().hex}{ext}"
+    # 저장 확장자는 사용자가 붙인 파일 이름이 아니라 확인된 형식에서 정한다 (원래 이름은 label 로 보관해 다운로드 때 쓴다).
+    stored_name = f"{proposal_id}_{uuid.uuid4().hex}.{EXTENSIONS[file.content_type]}"
     file_path = os.path.join(settings.proposal_attachments_dir, stored_name)
     with open(file_path, "wb") as f:
         f.write(content)

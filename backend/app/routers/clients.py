@@ -15,6 +15,7 @@ from app.schemas.client import BankbookOcrOut, BusinessRegOcrOut, ClientCreate, 
 from app.services.bankbook_ocr import recognize_bankbook
 from app.services.business_reg_ocr import recognize_business_registration
 from app.services.client_list_excel import generate_client_list_excel
+from app.services.upload_check import IMAGE_OR_PDF_TYPES, IMAGE_TYPES, read_upload
 
 router = APIRouter(prefix="/api/clients", tags=["clients"])
 logger = get_logger("Clients")
@@ -99,7 +100,7 @@ def ocr_business_registration(
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
 
-    raw = file.file.read()
+    raw = read_upload(file, IMAGE_TYPES)
     logger.debug(f"[Clients] 사업자등록증 인식 시도: filename={file.filename}, size={len(raw)}, by={current_user.id}")
     try:
         fields = recognize_business_registration(raw)
@@ -127,7 +128,7 @@ def ocr_bankbook(file: UploadFile = File(...), current_user: User = Depends(requ
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
 
-    raw = file.file.read()
+    raw = read_upload(file, IMAGE_TYPES)
     logger.debug(f"[Clients] 통장사본 인식 시도: filename={file.filename}, size={len(raw)}, by={current_user.id}")
     try:
         fields = recognize_bankbook(raw)
@@ -196,7 +197,7 @@ def upload_biz_reg_image(
     if file.content_type not in ALLOWED_BIZ_REG_FILE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지(jpg, png, webp) 또는 PDF 파일만 업로드할 수 있습니다.")
 
-    content = file.file.read()
+    content = read_upload(file, IMAGE_OR_PDF_TYPES)
     os.makedirs(settings.business_reg_images_dir, exist_ok=True)
     if client.biz_reg_image_path and os.path.exists(client.biz_reg_image_path):
         os.remove(client.biz_reg_image_path)
@@ -234,7 +235,7 @@ def upload_biz_reg_image2(
     if file.content_type not in ALLOWED_BIZ_REG_FILE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지(jpg, png, webp) 또는 PDF 파일만 업로드할 수 있습니다.")
 
-    content = file.file.read()
+    content = read_upload(file, IMAGE_OR_PDF_TYPES)
     os.makedirs(settings.business_reg_images_dir, exist_ok=True)
     if client.biz_reg_image2_path and os.path.exists(client.biz_reg_image2_path):
         os.remove(client.biz_reg_image2_path)
@@ -272,7 +273,7 @@ def upload_bankbook_image(
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
 
-    content = file.file.read()
+    content = read_upload(file, IMAGE_TYPES)
     os.makedirs(settings.bankbook_images_dir, exist_ok=True)
     if client.bankbook_image_path and os.path.exists(client.bankbook_image_path):
         os.remove(client.bankbook_image_path)

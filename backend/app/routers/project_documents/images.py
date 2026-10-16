@@ -15,6 +15,7 @@ from app.schemas.project_document import ProjectDocumentOut, TaxInvoiceOcrItemOu
 from app.services.tax_invoice_ocr import recognize_tax_invoice
 
 from app.routers.project_documents._common import PREFIX, _get_doc_or_404, _to_out_db, logger
+from app.services.upload_check import IMAGE_TYPES, read_upload
 
 
 router = APIRouter(prefix=PREFIX, tags=["project-documents"])
@@ -38,9 +39,7 @@ def ocr_tax_invoice(file: UploadFile = File(...), current_user: User = Depends(g
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 작성 권한이 없습니다.")
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
-    raw = file.file.read()
-    if len(raw) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 크기는 15MB를 초과할 수 없습니다.")
+    raw = read_upload(file, IMAGE_TYPES, MAX_IMAGE_SIZE)
 
     logger.debug(f"[ProjectDocuments] 세금계산서 사진 인식 시작: filename={file.filename}, size={len(raw)}, by={current_user.id}")
     try:
@@ -89,9 +88,7 @@ def upload_document_image(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 사진을 등록할 수 있습니다.")
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
-    content = file.file.read()
-    if len(content) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 크기는 15MB를 초과할 수 없습니다.")
+    content = read_upload(file, IMAGE_TYPES, MAX_IMAGE_SIZE)
 
     os.makedirs(settings.tax_invoice_images_dir, exist_ok=True)
     stored_name = f"{doc.id}_{uuid.uuid4().hex}.{ALLOWED_IMAGE_TYPES[file.content_type]}"
