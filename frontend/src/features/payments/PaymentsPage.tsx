@@ -704,7 +704,7 @@ export function PaymentsPage() {
             <colgroup>
               <col className="w-[4.5rem]" />
               <col className="w-[8.5rem]" />
-              <col className="w-[6.5rem]" />
+              <col className="w-[8.5rem]" />
               <col />
               <col className="w-[12rem]" />
               <col className="w-[12rem]" />
@@ -721,7 +721,7 @@ export function PaymentsPage() {
                 <th className="py-2.5 px-2 font-medium whitespace-nowrap">거래처</th>
                 <th className="py-2.5 px-2 font-medium whitespace-nowrap">수단</th>
                 <th className="py-2.5 px-2 font-medium whitespace-nowrap">증빙발행</th>
-                <th className="py-2.5 px-4 font-medium text-right whitespace-nowrap border-r border-text/[0.07]">금액</th>
+                <th className="py-2.5 px-4 font-medium text-center whitespace-nowrap border-r border-text/[0.07]">금액</th>
                 <th></th>
               </tr>
             </thead>
