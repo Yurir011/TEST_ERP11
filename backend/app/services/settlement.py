@@ -35,6 +35,26 @@ def settlement_field(payment_type: PaymentType, category: str) -> str | None:
     return None
 
 
+_BALANCE_LABELS = {"receivable_amount": "미수금", "payable_amount": "미지급금"}
+
+
+def ensure_within_balance(client: Client, field: str, amount: int, returning: int = 0) -> None:
+    """거래처 잔액보다 큰 금액은 잔액 정산으로 처리할 수 없다 (400).
+
+    예전에는 잔액보다 많이 입력하면 0에서 멈추고, 그 결제를 지우면 입력 금액 전체가 되살아나 잔액이 실제보다 커졌다.
+    그 어긋남을 막기 위해 처음부터 잔액 이내만 받는다.
+    returning: 수정하는 경우 되돌려질 기존 금액(같은 거래처·같은 잔액일 때). 잔액을 바꾸기 전에 검사하려고 따로 받는다.
+    """
+    balance = (getattr(client, field) or 0) + returning
+    if amount > balance:
+        label = _BALANCE_LABELS.get(field, "잔액")
+        logger.debug(f"[Settlement] 잔액 초과 정산 거절: client_id={client.id}, {field}={balance}, amount={amount}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{client.name}의 {label} 잔액(₩{balance:,})보다 큰 금액은 {label} 처리할 수 없습니다. 금액이나 분류를 확인해주세요.",
+        )
+
+
 def apply_balance_settlement(client: Client, field: str, amount: int) -> None:
     """거래처 잔액을 amount 만큼 줄인다. 잔액이 음수가 되지 않도록 0에서 멈춘다."""
     current = getattr(client, field)

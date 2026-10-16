@@ -58,6 +58,11 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
       setError(`미결제 금액(${formatCurrency(outstanding)})보다 많이 입력할 수 없습니다.`);
       return;
     }
+    if (!byTransactions && amountNum > outstanding) {
+      // 연결된 건 없이 잔액만 줄이는 경우: 잔액보다 큰 금액은 서버도 거절한다 (잔액이 어긋나는 것을 막기 위함)
+      setError(`${kind === "receivable" ? "미수금" : "미지급금"} 잔액(${formatCurrency(outstanding)})보다 많이 입력할 수 없습니다.`);
+      return;
+    }
     if (method === "corporate_card" && !cardType) {
       setError("카드 종류를 선택해주세요.");
       return;

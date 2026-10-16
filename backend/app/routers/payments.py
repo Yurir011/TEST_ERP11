@@ -19,6 +19,7 @@ from app.models.transaction import Transaction, TransactionType
 from app.services.settlement import (
     apply_balance_settlement,
     apply_transaction_payment,
+    ensure_within_balance,
     is_partial_payment,
     revert_balance_settlement,
     settlement_field,
@@ -320,6 +321,7 @@ def create_payment(
     # 매입매출 내역을 불러온 결제는 그 내역의 결제 처리에서 거래처 잔액을 줄이므로, 분류 기반 자동 정산은 건너뛴다.
     balance_field = None if linked_tx is not None else settlement_field(payload.type, payload.category)
     if client is not None and balance_field is not None:
+        ensure_within_balance(client, balance_field, payload.amount)
         apply_balance_settlement(client, balance_field, payload.amount)
 
     # 법인카드 출금은 카드 결제일에 일괄 확정할 때까지 결제예정으로 둔다 (외상 매입매출 결제 건은 즉시 확정).
@@ -491,6 +493,15 @@ def update_payment(
     # (매입매출 내역과 연결된 결제는 그 내역이 잔액을 관리하므로 건너뛴다.)
     is_partial_row = payment.partial_transaction_id is not None  # 부분 결제의 거래처 잔액은 매입매출 쪽에서 관리한다.
     old_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(payment.type, payment.category)
+    new_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(payload.type, payload.category)
+
+    # 잔액을 바꾸기 전에 새 금액이 잔액 이내인지 먼저 검사한다 (같은 거래처·같은 잔액이면 기존 금액이 되돌려지는 것까지 감안).
+    if new_settlement_field is not None and payload.client_id is not None:
+        target = db.query(Client).filter(Client.id == payload.client_id).first()
+        if target is not None:
+            returning = payment.amount if (payment.client_id == target.id and old_settlement_field == new_settlement_field) else 0
+            ensure_within_balance(target, new_settlement_field, payload.amount, returning=returning)
+
     if payment.client is not None and old_settlement_field is not None:
         revert_balance_settlement(payment.client, old_settlement_field, payment.amount)
 
@@ -500,7 +511,6 @@ def update_payment(
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
-    new_settlement_field = None if (linked_tx is not None or is_partial_row) else settlement_field(payload.type, payload.category)
     if client is not None and new_settlement_field is not None:
         apply_balance_settlement(client, new_settlement_field, payload.amount)
     if linked_tx is not None:

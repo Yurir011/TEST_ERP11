@@ -259,12 +259,41 @@ def test_balance_only_receipt_reduces_receivable(client, h, make_client, db):
     assert c.receivable_amount == 300_000
 
 
-def test_balance_only_payment_clamps_at_zero(client, h, make_client, db):
+def test_balance_only_payment_over_balance_is_rejected(client, h, make_client, db):
+    # 잔액보다 큰 금액은 잔액 정산으로 받지 않는다 (예전에는 0에서 멈춘 뒤 삭제 시 잔액이 부풀려졌다)
     c = make_client(payable=100_000)
     res = _pay(client, h, client_id=c.id, amount=250_000, type_="withdrawal", category="미지급금")
-    assert res.status_code == 201, res.text
+    assert res.status_code == 400
+    assert "미지급금 잔액" in res.json()["detail"]
     db.refresh(c)
-    assert c.payable_amount == 0  # 음수가 되지 않는다 (현재 동작)
+    assert c.payable_amount == 100_000  # 바뀌지 않는다
+
+
+def test_balance_only_payment_equal_to_balance_is_allowed(client, h, make_client, db):
+    c = make_client(payable=100_000)
+    assert _pay(client, h, client_id=c.id, amount=100_000, type_="withdrawal", category="미지급금").status_code == 201
+    db.refresh(c)
+    assert c.payable_amount == 0
+
+
+def test_balance_only_rule_does_not_affect_other_categories(client, h, make_client):
+    c = make_client(payable=0)
+    # 정산 분류가 아닌 일반 출금은 거래처 잔액과 무관하다
+    assert _pay(client, h, client_id=c.id, amount=50_000, type_="withdrawal", category="소모품비").status_code == 201
+
+
+def test_editing_balance_only_payment_checks_balance_after_revert(client, h, make_client, db):
+    c = make_client(receivable=500_000)
+    pay = _pay(client, h, client_id=c.id, amount=200_000).json()  # 잔액 30만
+    body = {
+        "type": "deposit", "payment_date": "2026-10-16", "category": "외상매출금", "description": "수정",
+        "method": "bank_transfer", "bank_type": "ibk", "client_id": c.id,
+    }
+    # 되돌리면 잔액 50만 → 50만까지는 수정 가능, 60만은 불가
+    assert client.put(f"/api/payments/{pay['id']}", headers=h, json={**body, "amount": 600_000}).status_code == 400
+    assert client.put(f"/api/payments/{pay['id']}", headers=h, json={**body, "amount": 500_000}).status_code == 200
+    db.refresh(c)
+    assert c.receivable_amount == 0
 
 
 def test_delete_balance_only_receipt_restores_receivable(client, h, make_client, db):
