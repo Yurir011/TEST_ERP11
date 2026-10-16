@@ -15,6 +15,7 @@ def test_new_proposal_steps_are_stored_in_shared_table_only(client, db, make_use
     )
     assert res.status_code == 201, res.text
     pid = res.json()["id"]
-    old = db.execute(text("SELECT count(*) FROM proposal_approval_steps WHERE proposal_id = :i"), {"i": pid}).scalar()
     new = db.execute(text("SELECT count(*) FROM approval_steps WHERE target_type = 'proposal' AND target_id = :i"), {"i": pid}).scalar()
-    assert (old, new) == (0, 1)
+    assert new == 1
+    # 옛 전용 테이블은 리비전 0006 에서 지웠다
+    assert db.execute(text("SELECT to_regclass('proposal_approval_steps')")).scalar() is None

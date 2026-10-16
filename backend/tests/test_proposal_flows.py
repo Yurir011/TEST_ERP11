@@ -75,12 +75,10 @@ def _approve(client, headers, pid):
 
 
 def _step_rows(db, proposal_id) -> int:
-    """결재 단계 행 수 (예전 전용 테이블 + 공용 테이블 합계 — 어느 쪽에 저장되든 같은 의미)."""
-    old = db.execute(text("SELECT count(*) FROM proposal_approval_steps WHERE proposal_id = :i"), {"i": proposal_id}).scalar()
-    new = db.execute(
+    """결재 단계 행 수 (공용 테이블. 옛 전용 테이블은 리비전 0006 에서 지웠다)."""
+    return db.execute(
         text("SELECT count(*) FROM approval_steps WHERE target_type::text = 'proposal' AND target_id = :i"), {"i": proposal_id}
     ).scalar()
-    return old + new
 
 
 def test_two_step_approval_and_steps_shape(client, staff, auth_headers):

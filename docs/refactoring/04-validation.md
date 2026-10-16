@@ -2,14 +2,14 @@
 
 > 단계가 끝날 때마다 추가한다. 실행하지 못한 검증은 실행했다고 쓰지 않고 이유를 적는다.
 
-## 최종 종합 결과 (2026-10-16, 프론트엔드 폼 분해 기준)
+## 최종 종합 결과 (2026-10-16, 남은 항목 처리 완료 기준)
 
 | 검증 | 명령 | 결과 | 시작 시점 |
 |---|---|---|---|
-| 백엔드 테스트 | `backend/venv/Scripts/python.exe -m pytest` | **233 passed** (약 81초, 테스트 DB 를 Alembic 으로 생성) | 0건 |
+| 백엔드 테스트 | `backend/venv/Scripts/python.exe -m pytest` | **235 passed** (약 82초, 테스트 DB 를 Alembic 으로 생성) | 0건 |
 | 프론트엔드 테스트 | `npm test` (vitest) | **58 passed** (11개 파일) | 0건 |
 | 타입 검사 | `npx tsc -b --noEmit` | 오류 0 | 오류 0 |
-| 린트 | `npx oxlint` | 오류 0 / 경고 **10** | 경고 16 |
+| 린트 | `npx oxlint` | 오류 0 / 경고 **0** | 경고 16 |
 | 빌드 | `npm run build` | 성공 (번들 1,001KB 크기 경고는 기존과 동일) | 성공 |
 | 코드 이동 동일성 | 이동 전후 함수 AST 비교 | `project_documents` 39개 함수 모두 동일 | — |
 
@@ -364,3 +364,15 @@
 | `vite build` | 성공 |
 | `npm test` | **58 passed** (신규 18: money 4, documentForm 5, clientForm 5, paymentForm 4) |
 | 화면 직접 점검 | **하지 못함**(브라우저 조작 불가). 03 문서 S4 점검 목록 참고 |
+
+## S5·S9·S1(0006) — 2026-10-16
+
+| 검증 | 결과 |
+|---|---|
+| `npx oxlint` | 오류 0 / 경고 **0** (이전 10) |
+| `tsc -b` / `vite build` | 성공 / 성공 |
+| `npm test` | 58 passed |
+| `npm audit` | 취약점 **0** (이전 고위험 1) |
+| 전체 `pytest` | **235 passed** (0006 데이터 검증 4건 포함) |
+| 개발 DB 0006 적용 | 백업 후 성공, 품의서 단계 9행 유지, 품의서 API 정상 |
+| 화면 직접 점검 | **하지 못함**(브라우저 조작 불가). 03 문서 S4·S5 점검 목록 참고 |

@@ -12,7 +12,7 @@ from app.models.payment import Payment
 from app.models.recurring_payment import RecurringPayment, RecurringPaymentRun
 from app.models.project import Project
 from app.models.project_document import ProjectDocument, ProjectDocumentImage, ProjectDocumentItem
-from app.models.proposal import Proposal, ProposalApprovalStep, ProposalAttachment
+from app.models.proposal import Proposal, ProposalAttachment
 from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
 from app.models.sales_document import SalesDocument, SalesDocumentItem
 from app.models.schedule import ScheduleEvent
@@ -33,7 +33,6 @@ __all__ = [
     "ProjectDocumentItem",
     "ProjectDocumentImage",
     "Proposal",
-    "ProposalApprovalStep",
     "ProposalAttachment",
     "ProjectProgressStage",
     "ProjectPurchaseStep",

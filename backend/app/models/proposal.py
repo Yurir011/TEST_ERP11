@@ -8,7 +8,6 @@ from sqlalchemy.sql import false, func
 
 from app.database import Base
 from app.models.approval_step import ApprovalStep, ApprovalTargetType
-from app.models.user import JobTitle
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -24,12 +23,6 @@ class ProposalStatus(str, enum.Enum):
     pending = "pending"  # 결재 대기 중 (현재 단계 결재권자의 승인 대기)
     approved = "approved"  # 전 단계 결재 완료
     rejected = "rejected"  # 반려됨
-
-
-class ProposalStepStatus(str, enum.Enum):
-    pending = "pending"
-    approved = "approved"
-    rejected = "rejected"
 
 
 class Proposal(Base):
@@ -76,26 +69,6 @@ class Proposal(Base):
     attachments: Mapped[list["ProposalAttachment"]] = relationship(
         back_populates="proposal", cascade="all, delete-orphan", order_by="ProposalAttachment.id"
     )
-
-
-class ProposalApprovalStep(Base):
-    """[보존용] 통합 이전의 품의서 결재 단계 테이블. 코드에서는 더 이상 읽거나 쓰지 않는다.
-    데이터는 리비전 0005 에서 approval_steps 로 옮겼고, 되돌릴 때를 위해 테이블만 남겨 둔다(나중에 별도 리비전으로 삭제)."""
-
-    __tablename__ = "proposal_approval_steps"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    proposal_id: Mapped[int] = mapped_column(ForeignKey("proposals.id", ondelete="CASCADE"), index=True)
-    step_order: Mapped[int] = mapped_column(Integer)  # 1, 2, 3
-    title: Mapped[JobTitle] = mapped_column(Enum(JobTitle, name="jobtitle"))  # 이 단계의 직책 (부서장/팀장/대표)
-    approver_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    status: Mapped[ProposalStepStatus] = mapped_column(
-        Enum(ProposalStepStatus, name="proposalstepstatus"), default=ProposalStepStatus.pending
-    )
-    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    proposal: Mapped["Proposal"] = relationship()
-    approver: Mapped["User"] = relationship(foreign_keys=[approver_id])
 
 
 class ProposalAttachmentKind(str, enum.Enum):
