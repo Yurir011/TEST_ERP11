@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.core.approval import validate_chain_approvers
+from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.user import JobTitle, is_admin_role
 from app.core.deps import get_current_user
 from app.database import get_db
@@ -16,11 +17,9 @@ from app.models.proposal import (
     DEPARTMENT_CODE,
     DEPARTMENT_NAME,
     Proposal,
-    ProposalApprovalStep,
     ProposalAttachment,
     ProposalAttachmentKind,
     ProposalStatus,
-    ProposalStepStatus,
 )
 from app.models.user import User
 from app.schemas.proposal import (
@@ -58,7 +57,7 @@ MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024  # 15MB
 
 _QUERY_OPTIONS = (
     joinedload(Proposal.creator),
-    joinedload(Proposal.steps).joinedload(ProposalApprovalStep.approver),
+    joinedload(Proposal.steps).joinedload(ApprovalStep.approver),
     joinedload(Proposal.attachments),
 )
 
@@ -113,7 +112,7 @@ def _get_or_404(db: Session, proposal_id: int) -> Proposal:
     return p
 
 
-def _current_step(p: Proposal) -> ProposalApprovalStep:
+def _current_step(p: Proposal) -> ApprovalStep:
     return next(s for s in p.steps if s.step_order == p.current_step)
 
 
@@ -144,7 +143,7 @@ def _advance_self_approvals(db: Session, p: Proposal, current_user: User) -> Non
                 f"[Proposals] 결재 요청 알림 발송: proposal_id={p.id}, step={step.step_order}, approver_id={step.approver_id}"
             )
             break
-        step.status = ProposalStepStatus.approved
+        step.status = ApprovalStepStatus.approved
         step.decided_at = datetime.now(timezone.utc)
         logger.debug(f"[Proposals] 자기결재 처리(즉시 승인): id={p.id}, step={step.step_order}, by={current_user.id}")
         if step.step_order == len(p.steps):
@@ -180,11 +179,12 @@ def _restore_after_delete_rejected(p: Proposal) -> None:
     """삭제 결재가 반려되면 삭제 요청 전의 승인 상태(결재선 포함)로 되돌린다."""
     snap = p.delete_prev_steps or {}
     p.steps = [
-        ProposalApprovalStep(
+        ApprovalStep(
+            target_type=ApprovalTargetType.proposal,
             step_order=st["step_order"],
             title=JobTitle(st["title"]),
             approver_id=st["approver_id"],
-            status=ProposalStepStatus(st["status"]),
+            status=ApprovalStepStatus(st["status"]),
             decided_at=datetime.fromisoformat(st["decided_at"]) if st.get("decided_at") else None,
         )
         for st in snap.get("steps", [])
@@ -206,9 +206,12 @@ def list_proposals(
 ):
     query = db.query(Proposal).options(*_QUERY_OPTIONS)
     if approver_mine:
-        query = query.join(ProposalApprovalStep, ProposalApprovalStep.proposal_id == Proposal.id).filter(
-            ProposalApprovalStep.approver_id == current_user.id,
-            ProposalApprovalStep.step_order == Proposal.current_step,
+        query = query.join(
+            ApprovalStep,
+            (ApprovalStep.target_id == Proposal.id) & (ApprovalStep.target_type == ApprovalTargetType.proposal),
+        ).filter(
+            ApprovalStep.approver_id == current_user.id,
+            ApprovalStep.step_order == Proposal.current_step,
             Proposal.status == ProposalStatus.pending,
         )
     if status_filter is not None:
@@ -254,7 +257,13 @@ def create_proposal(payload: ProposalCreate, db: Session = Depends(get_db), curr
 
         logger.debug(f"[Proposals] 등록: title={payload.title}, end_title={payload.end_title}, by={current_user.id}")
         p.steps = [
-            ProposalApprovalStep(step_order=idx + 1, title=step_title, approver_id=approver.id)
+            ApprovalStep(
+                target_type=ApprovalTargetType.proposal,
+                step_order=idx + 1,
+                title=step_title,
+                approver_id=approver.id,
+                status=ApprovalStepStatus.pending,
+            )
             for idx, (step_title, approver) in enumerate(zip(chain, approvers))
         ]
         db.add(p)
@@ -280,7 +289,7 @@ def approve_proposal(proposal_id: int, db: Session = Depends(get_db), current_us
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="배정된 결재권자만 승인할 수 있습니다.")
 
     logger.debug(f"[Proposals] 결재 승인 시도: id={proposal_id}, step={step.step_order}, by={current_user.id}")
-    step.status = ProposalStepStatus.approved
+    step.status = ApprovalStepStatus.approved
     step.decided_at = datetime.now(timezone.utc)
 
     if step.step_order == len(p.steps) and p.delete_requested:
@@ -353,7 +362,7 @@ def reject_proposal(
         logger.debug(f"[Proposals] 삭제 결재 반려 → 승인 상태 복원: id={proposal_id}, by={current_user.id}, reason={payload.reason}")
         return _to_out(p)
 
-    step.status = ProposalStepStatus.rejected
+    step.status = ApprovalStepStatus.rejected
     step.decided_at = datetime.now(timezone.utc)
     p.status = ProposalStatus.rejected
     p.reject_reason = payload.reason
@@ -417,7 +426,13 @@ def update_proposal(
         )
     else:
         p.steps = [
-            ProposalApprovalStep(step_order=idx + 1, title=step_title, approver_id=approver.id)
+            ApprovalStep(
+                target_type=ApprovalTargetType.proposal,
+                step_order=idx + 1,
+                title=step_title,
+                approver_id=approver.id,
+                status=ApprovalStepStatus.pending,
+            )
             for idx, (step_title, approver) in enumerate(zip(chain, approvers))
         ]
         p.status = ProposalStatus.pending
@@ -468,7 +483,13 @@ def request_delete_proposal(
         fully_approved = True
     else:
         p.steps = [
-            ProposalApprovalStep(step_order=idx + 1, title=step_title, approver_id=approver.id)
+            ApprovalStep(
+                target_type=ApprovalTargetType.proposal,
+                step_order=idx + 1,
+                title=step_title,
+                approver_id=approver.id,
+                status=ApprovalStepStatus.pending,
+            )
             for idx, (step_title, approver) in enumerate(zip(chain, approvers))
         ]
         p.status = ProposalStatus.pending
@@ -479,7 +500,7 @@ def request_delete_proposal(
         for step in p.steps:
             if step.approver_id != current_user.id:
                 break
-            step.status = ProposalStepStatus.approved
+            step.status = ApprovalStepStatus.approved
             step.decided_at = datetime.now(timezone.utc)
             if step.step_order == len(p.steps):
                 fully_approved = True

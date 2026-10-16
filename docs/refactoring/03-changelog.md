@@ -31,7 +31,8 @@
 | P5 | 감사 로그 1~4단계: 모델·리비전 0003, 자동 기록, 로그인 기록, 대표 전용 조회 API | `ec74e9a` |
 | P5 | 감사 로그 5단계: 개발 DB 백업 후 `audit_logs` 테이블 적용 | `c2550c4`(문서) |
 | P5 | 거래처 잔액 변경 이력 화면(타임라인) + API, 거래처 메뉴 권한으로 조회 | `fbeb11e` |
-| P5 | 설정 › 변경 이력 화면(대표 전용) + 조회 API 검색 보강 | 이번 커밋 |
+| P5 | 설정 › 변경 이력 화면(대표 전용) + 조회 API 검색 보강 | `77cd2ab` |
+| P3 | 품의서 결재 단계를 공용 테이블로 통합 1~3단계(안전망·리비전 0004/0005·코드 교체) | `63fa0cb`, 이번 커밋 |
 
 사용자에게 보이는 **동작이 바뀐 것**은 모두 승인을 받았다: ① 부가세·품목 금액 반올림(사사오입), ② 오늘 날짜 기본값(로컬 시간), ③ 로그인 실패 반복 시 일시 잠금, ④ 업로드 파일 내용 검사와 크기 제한, ⑤ 잔액보다 큰 잔액 정산 거절, ⑥ 거래처 상세의 "변경 이력" 버튼(새 화면), ⑦ 설정 › 변경 이력 화면(새 화면). 나머지는 구조 정리이며 API 경로·화면·DB 스키마는 바뀌지 않았다. DB 컬럼 추가(`paid_amount` 등)는 리팩토링 이전의 부분 결제 기능 작업에서 이뤄졌다.
 
@@ -335,3 +336,11 @@
 - 신규: `models/audit_log.py`, `alembic/versions/0003_audit_logs.py`, `core/audit.py`, `routers/audit_logs.py`, `schemas/audit_log.py`
 - 변경: `main.py`(요청 정보 미들웨어, 조회 라우터 등록), `core/deps.py`(로그인 사용자를 기록 대상에 채움), `routers/auth.py`(로그인 성공·실패·차단 기록), `models/__init__.py`(모델 등록 + 자동 기록 연결)
 - 기존 API의 요청·응답은 바뀌지 않았다. 쓰기 요청마다 감사 로그 행이 같은 트랜잭션에 추가된다.
+
+## P3. 품의서 결재 단계 통합 1~3단계 — 2026-10-16 (사용자 승인)
+
+자세한 내용은 [09-proposal-approval-merge-plan.md](09-proposal-approval-merge-plan.md) 9장.
+
+- 신규: `alembic/versions/0004_proposal_target_type.py`, `0005_move_proposal_steps.py`, 테스트 3개 파일(`test_proposal_flows.py`, `test_migration_proposal_steps.py`, `test_proposal_steps_storage.py`)
+- 변경: `models/approval_step.py`(`proposal` 대상 종류), `models/proposal.py`(`steps` 관계를 공용 테이블로, 옛 모델은 보존용), `routers/proposals.py`, `routers/notifications.py`, `services/proposal_pdf.py`, `schemas/proposal.py`
+- 개발 DB 는 아직 바꾸지 않았다(4단계 대기).

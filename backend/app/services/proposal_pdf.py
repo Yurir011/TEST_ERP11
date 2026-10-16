@@ -8,7 +8,8 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.config import settings
-from app.models.proposal import Proposal, ProposalStepStatus
+from app.models.approval_step import ApprovalStepStatus
+from app.models.proposal import Proposal
 from app.models.user import JobTitle
 from app.services.certificate_pdf import FONT_BOLD, FONT_REGULAR, _ensure_fonts_registered
 
@@ -86,7 +87,7 @@ def _approval_box(proposal: Proposal, width: float) -> Table:
     else:
         for step in proposal.steps:
             header_row.append(Paragraph(TITLE_LABELS_KO[step.title], label_style))
-            if step.status == ProposalStepStatus.approved:
+            if step.status == ApprovalStepStatus.approved:
                 decided = step.decided_at.date().isoformat() if step.decided_at else ""
                 value_row.append(Paragraph(f"{escape(step.approver.name)}<br/><font size=7 color='#888888'>{decided} 결재완료</font>", name_style))
             else:

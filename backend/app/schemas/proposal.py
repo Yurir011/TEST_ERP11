@@ -2,7 +2,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.proposal import ProposalAttachmentKind, ProposalStatus, ProposalStepStatus
+from app.models.approval_step import ApprovalStepStatus
+from app.models.proposal import ProposalAttachmentKind, ProposalStatus
 from app.models.user import JobTitle
 
 
@@ -59,7 +60,7 @@ class ProposalStepOut(BaseModel):
     title: JobTitle
     approver_id: int
     approver_name: str
-    status: ProposalStepStatus
+    status: ApprovalStepStatus
     decided_at: datetime | None
 
 

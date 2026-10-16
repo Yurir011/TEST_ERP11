@@ -9,7 +9,6 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.notification import Notification
-from app.models.proposal import ProposalApprovalStep, ProposalStepStatus
 from app.models.user import User
 from app.schemas.notification import AllNotificationOut, NotificationOut, UnreadCountOut
 
@@ -58,7 +57,7 @@ def _with_approval_done(db: Session, user_id: int, items: list[Notification]) ->
                 targets[n.id] = t
 
     done: set[tuple[str, int]] = set()
-    generic = {k: [i for kk, i in targets.values() if kk == k] for k in ("leave", "document", "project_document")}
+    generic = {k: [i for kk, i in targets.values() if kk == k] for k in ("leave", "document", "project_document", "proposal")}
     for kind, ids in generic.items():
         if not ids:
             continue
@@ -73,18 +72,6 @@ def _with_approval_done(db: Session, user_id: int, items: list[Notification]) ->
             .all()
         )
         done.update((kind, r[0]) for r in rows)
-    proposal_ids = [i for k, i in targets.values() if k == "proposal"]
-    if proposal_ids:
-        rows = (
-            db.query(ProposalApprovalStep.proposal_id)
-            .filter(
-                ProposalApprovalStep.proposal_id.in_(proposal_ids),
-                ProposalApprovalStep.approver_id == user_id,
-                ProposalApprovalStep.status == ProposalStepStatus.approved,
-            )
-            .all()
-        )
-        done.update(("proposal", r[0]) for r in rows)
 
     result = []
     for n in items:

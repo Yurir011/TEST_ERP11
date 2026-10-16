@@ -2,11 +2,12 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, and_
+from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 from sqlalchemy.sql import false, func
 
 from app.database import Base
+from app.models.approval_step import ApprovalStep, ApprovalTargetType
 from app.models.user import JobTitle
 
 if TYPE_CHECKING:
@@ -61,8 +62,16 @@ class Proposal(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     creator: Mapped["User"] = relationship(foreign_keys=[created_by])
-    steps: Mapped[list["ProposalApprovalStep"]] = relationship(
-        back_populates="proposal", cascade="all, delete-orphan", order_by="ProposalApprovalStep.step_order"
+    # 결재 단계는 다른 문서와 같은 공용 테이블(approval_steps, 대상 종류 'proposal')에 저장한다 (2026-10-16 통합, 리비전 0005).
+    # 대상 종류는 관계가 자동으로 채우지 못하므로 단계를 만들 때 target_type=ApprovalTargetType.proposal 을 직접 넣는다.
+    steps: Mapped[list["ApprovalStep"]] = relationship(
+        "ApprovalStep",
+        primaryjoin=lambda: and_(
+            foreign(ApprovalStep.target_id) == Proposal.id, ApprovalStep.target_type == ApprovalTargetType.proposal
+        ),
+        cascade="all, delete-orphan",
+        order_by=lambda: ApprovalStep.step_order,
+        overlaps="steps",
     )
     attachments: Mapped[list["ProposalAttachment"]] = relationship(
         back_populates="proposal", cascade="all, delete-orphan", order_by="ProposalAttachment.id"
@@ -70,7 +79,8 @@ class Proposal(Base):
 
 
 class ProposalApprovalStep(Base):
-    """품의서 결재선의 한 단계. step_order는 1부터 시작하며, 마지막 단계는 항상 title=ceo."""
+    """[보존용] 통합 이전의 품의서 결재 단계 테이블. 코드에서는 더 이상 읽거나 쓰지 않는다.
+    데이터는 리비전 0005 에서 approval_steps 로 옮겼고, 되돌릴 때를 위해 테이블만 남겨 둔다(나중에 별도 리비전으로 삭제)."""
 
     __tablename__ = "proposal_approval_steps"
 
@@ -84,7 +94,7 @@ class ProposalApprovalStep(Base):
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    proposal: Mapped["Proposal"] = relationship(back_populates="steps")
+    proposal: Mapped["Proposal"] = relationship()
     approver: Mapped["User"] = relationship(foreign_keys=[approver_id])
 
 

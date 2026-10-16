@@ -14,11 +14,12 @@ if TYPE_CHECKING:
 
 
 class ApprovalTargetType(str, enum.Enum):
-    """다단계 결재선을 쓰는 대상 문서 종류. 품의서는 기존 proposal_approval_steps 테이블을 그대로 쓰므로 포함하지 않는다."""
+    """다단계 결재선을 쓰는 대상 문서 종류. 품의서도 2026-10-16 부터 이 공용 테이블을 쓴다(리비전 0004·0005)."""
 
     leave = "leave"
     document = "document"
     project_document = "project_document"
+    proposal = "proposal"
 
 
 class ApprovalStepStatus(str, enum.Enum):
