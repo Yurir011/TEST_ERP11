@@ -385,11 +385,11 @@ function weekSummary(project: Project): string | null {
   return `${dateToWeek(todayStr, project.start_date)}주차 / 총 ${totalWeeks}주`;
 }
 
-// 진행상황 항목들의 진행율 평균을 종합 진행률로 계산한다.
+// 진행상황 항목들의 진행율 평균을 종합 진행률로 계산한다. 서버가 10 단위 값만 받으므로 가장 가까운 10 단위로 반올림한다.
 function calcStageProgress(stages: ProgressStage[]): number | null {
   if (stages.length === 0) return null;
   const sum = stages.reduce((acc, s) => acc + s.progress_percent, 0);
-  return Math.round(sum / stages.length);
+  return Math.round(sum / stages.length / 10) * 10;
 }
 
 function ScheduleProgressCard({
