@@ -157,8 +157,10 @@ def test_audit_api_is_admin_only_and_filters(client, db, h, auth_headers, make_u
 def test_audit_api_has_no_write_endpoints():
     from app.main import app
 
-    methods = {m for r in app.routes if getattr(r, "path", "").startswith("/api/audit-logs") for m in r.methods}
-    assert methods <= {"GET", "HEAD"}
+    # app.routes 는 포함된 라우터의 경로를 펼쳐 보여 주지 않으므로 OpenAPI 명세로 확인한다.
+    paths = {p: ops for p, ops in app.openapi()["paths"].items() if p.startswith("/api/audit-logs")}
+    assert paths, "감사 로그 경로를 찾지 못함"
+    assert {m for ops in paths.values() for m in ops} == {"get"}
 
 
 def test_audit_api_search_group_and_multi_type_filters(client, db, h, make_client, make_user):

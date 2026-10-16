@@ -16,6 +16,36 @@ def _no_pdf(monkeypatch):
     monkeypatch.setattr(proposals_router, "_regenerate_pdf", lambda p: None)
 
 
+# ── API 경로 목록 (proposals.py 분할 전후 같아야 한다) ─────────────────
+
+EXPECTED_OPERATIONS = [
+    ('DELETE', '/api/proposals/{proposal_id}', 'delete_proposal_api_proposals__proposal_id__delete', ['204', '422']),
+    ('DELETE', '/api/proposals/{proposal_id}/attachments/{attachment_id}', 'delete_attachment_api_proposals__proposal_id__attachments__attachment_id__delete', ['200', '422']),
+    ('GET', '/api/proposals', 'list_proposals_api_proposals_get', ['200', '422']),
+    ('GET', '/api/proposals/{proposal_id}/attachments/{attachment_id}/file', 'download_attachment_file_api_proposals__proposal_id__attachments__attachment_id__file_get', ['200', '422']),
+    ('GET', '/api/proposals/{proposal_id}/pdf', 'download_proposal_pdf_api_proposals__proposal_id__pdf_get', ['200', '422']),
+    ('POST', '/api/proposals', 'create_proposal_api_proposals_post', ['201', '422']),
+    ('POST', '/api/proposals/{proposal_id}/attachments/file', 'upload_attachment_file_api_proposals__proposal_id__attachments_file_post', ['201', '422']),
+    ('POST', '/api/proposals/{proposal_id}/attachments/link', 'add_attachment_link_api_proposals__proposal_id__attachments_link_post', ['201', '422']),
+    ('POST', '/api/proposals/{proposal_id}/request-delete', 'request_delete_proposal_api_proposals__proposal_id__request_delete_post', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}', 'update_proposal_api_proposals__proposal_id__put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/approve', 'approve_proposal_api_proposals__proposal_id__approve_put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/reject', 'reject_proposal_api_proposals__proposal_id__reject_put', ['200', '422']),
+]
+
+
+def test_api_operations_are_unchanged():
+    from app.main import app
+
+    actual = [
+        (method.upper(), path, op["operationId"], sorted(op["responses"]))
+        for path, ops in app.openapi()["paths"].items()
+        if path.startswith("/api/proposals")
+        for method, op in ops.items()
+    ]
+    assert sorted(actual) == sorted(EXPECTED_OPERATIONS)
+
+
 @pytest.fixture()
 def staff(make_user):
     return {
