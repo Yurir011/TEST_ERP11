@@ -11,7 +11,7 @@ import {
   type Payment,
   type PaymentMethod,
 } from "../payments/types";
-import type { Transaction } from "./types";
+import { remainingAmount, type Transaction } from "./types";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -50,13 +50,13 @@ export function TransactionSettleModal({ tx, onClose, onSuccess }: TransactionSe
 
     setIsSubmitting(true);
     try {
-      logDebug("Transactions", `${title} 시도: tx_id=${tx.id}, amount=${tx.total_amount}, method=${method}`);
+      logDebug("Transactions", `${title} 시도: tx_id=${tx.id}, amount=${remainingAmount(tx)}, method=${method}`);
       await apiPost<Payment>("/api/payments", {
         type: isSales ? "deposit" : "withdrawal",
         payment_date: paymentDate,
         category: isSales ? "외상매출금" : "외상매입금",
         description: `${tx.item_name} ${isSales ? "수금" : "지급"}`,
-        amount: tx.total_amount,
+        amount: remainingAmount(tx),
         method,
         client_id: tx.client_id,
         memo: memo.trim() || null,
@@ -81,13 +81,13 @@ export function TransactionSettleModal({ tx, onClose, onSuccess }: TransactionSe
       <form onSubmit={handleSubmit} className="bg-surface rounded-2xl p-6 w-full max-w-sm">
         <h3 className="text-sm font-semibold mb-1">{title}</h3>
         <p className="text-xs text-text-muted mb-4">
-          {tx.client_name ?? tx.counterparty ?? "-"} · {tx.item_name} · {formatCurrency(tx.total_amount)}
+          {tx.client_name ?? tx.counterparty ?? "-"} · {tx.item_name} · {formatCurrency(remainingAmount(tx))}
         </p>
 
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-text-muted mb-1.5">금액</label>
-            <p className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-bg tabular-nums">{formatCurrency(tx.total_amount)}</p>
+            <p className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-bg tabular-nums">{formatCurrency(remainingAmount(tx))}</p>
           </div>
           <div>
             <label className="block text-xs text-text-muted mb-1.5">{isSales ? "입금일" : "지급일"}</label>

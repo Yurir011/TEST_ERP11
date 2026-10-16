@@ -16,7 +16,7 @@ from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.payment import CardType, Payment, PaymentMethod, PaymentType
 from app.models.transaction import Transaction, TransactionType
-from app.services.transaction_credit import credit_add, credit_remove
+from app.services.transaction_credit import credit_add, credit_reduce, credit_remove, credit_restore, remaining_amount
 from app.models.user import User
 from app.services import card_billing
 from app.services.recurring_payment import generate_recurring_payments
@@ -112,10 +112,16 @@ def _build_payment_query(
     date_to: date | None,
     q: str | None,
     card_pending: bool | None = None,
+    method: PaymentMethod | None = None,
+    card_type: CardType | None = None,
 ):
     query = db.query(Payment).options(joinedload(Payment.client), joinedload(Payment.creator))
     if type_filter is not None:
         query = query.filter(Payment.type == type_filter)
+    if method is not None:
+        query = query.filter(Payment.method == method)
+    if card_type is not None:
+        query = query.filter(Payment.card_type == card_type)
     if card_pending is not None:
         query = query.filter(Payment.card_pending.is_(card_pending))
 
@@ -154,11 +160,12 @@ def list_payments(
     date_to: date | None = Query(default=None),
     q: str | None = Query(default=None, description="분류/내용/메모/거래처명 검색어"),
     card_pending: bool | None = Query(default=None, description="true이면 카드 결제일 전(결제예정) 사용내역만"),
+    method: PaymentMethod | None = Query(default=None, description="결제수단 필터 (corporate_card = 카드 탭)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
     generate_recurring_payments(db)  # 도래한 정기 자동이체를 먼저 기록한다
-    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q, card_pending).all()
+    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q, card_pending, method).all()
     occurred = _occurred_dates(db, [p.id for p in payments])
     return [_to_out(p, occurred.get(p.id)) for p in payments]
 
@@ -171,11 +178,13 @@ def export_payments_excel(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     q: str | None = Query(default=None, description="분류/내용/메모/거래처명 검색어"),
+    method: PaymentMethod | None = Query(default=None, description="결제수단 필터 (corporate_card = 카드 탭)"),
+    card_type: CardType | None = Query(default=None, description="카드 종류 필터 (카드 탭에서 BC/KB 선택)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
     generate_recurring_payments(db)
-    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q).all()
+    payments = _build_payment_query(db, type_filter, year, month, date_from, date_to, q, method=method, card_type=card_type).all()
     logger.debug(
         f"[Payments] 목록 엑셀 내보내기: count={len(payments)}, date_from={date_from}, date_to={date_to}, "
         f"q={q}, by={current_user.id}"
@@ -296,7 +305,7 @@ def list_linkable_transactions(
             client_id=t.client_id,
             client_name=(t.client.name if t.client else t.counterparty) or "-",
             item_name=t.item_name,
-            total_amount=t.total_amount,
+            total_amount=remaining_amount(t),  # 부분 결제된 건은 아직 받지(주지) 못한 금액
             tax_invoice_no=t.tax_invoice_no,
         )
         for t in txs
@@ -323,6 +332,9 @@ def create_payment(
 
     logger.debug(f"[Payments] 등록: type={payload.type}, amount={payload.amount}, tx={payload.transaction_id}, by={current_user.id}")
 
+    # 연결한 매입매출의 미결제 금액보다 적게 수금/지급하면 전액 결제가 아니라 부분 결제로 기록한다.
+    is_partial = linked_tx is not None and 0 < payload.amount < remaining_amount(linked_tx)
+
     # 매입매출 내역을 불러온 결제는 그 내역의 결제완료 처리에서 거래처 잔액을 줄이므로, 분류 기반 자동 정산은 건너뛴다.
     settlement_field = None if linked_tx is not None else _settlement_field(payload.type, payload.category)
     if client is not None and settlement_field is not None:
@@ -345,10 +357,19 @@ def create_payment(
         bank_type=payload.bank_type,
         card_pending=is_card_pending,
         card_used_date=payload.payment_date if is_card_pending else None,
+        partial_transaction_id=linked_tx.id if is_partial else None,
         created_by=current_user.id,
     )
     db.add(payment)
-    if linked_tx is not None:
+    if is_partial:
+        db.flush()
+        linked_tx.paid_amount = (linked_tx.paid_amount or 0) + payload.amount
+        credit_reduce(db, linked_tx, payload.amount)
+        logger.debug(
+            f"[Payments] 매입매출 부분 결제: tx_id={linked_tx.id}, payment_id={payment.id}, amount={payload.amount}, "
+            f"paid={linked_tx.paid_amount}/{linked_tx.total_amount}"
+        )
+    elif linked_tx is not None:
         db.flush()
         credit_remove(db, linked_tx)  # 외상 상태일 때 거래처 미수금/미지급금에 반영했던 금액을 되돌린다 (settled 변경 전에 호출).
         linked_tx.settled = True
@@ -490,10 +511,16 @@ def update_payment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
 
     linked_tx = db.query(Transaction).filter(Transaction.settled_payment_id == payment.id).first()
+    if payment.partial_transaction_id is not None and payload.amount != payment.amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="매입매출의 일부로 수금/지급한 내역은 금액을 수정할 수 없습니다. 삭제한 뒤 다시 등록해주세요.",
+        )
 
     # 기존 내역이 정산(미수금 수금/미지급금 지급) 처리였다면, 거래처 잔액에 반영했던 금액을 먼저 되돌린다.
     # (매입매출 내역과 연결된 결제는 그 내역이 잔액을 관리하므로 건너뛴다.)
-    old_settlement_field = None if linked_tx is not None else _settlement_field(payment.type, payment.category)
+    is_partial_payment = payment.partial_transaction_id is not None  # 부분 결제의 거래처 잔액은 매입매출 쪽에서 관리한다.
+    old_settlement_field = None if (linked_tx is not None or is_partial_payment) else _settlement_field(payment.type, payment.category)
     if payment.client is not None and old_settlement_field is not None:
         _revert_settlement(payment.client, old_settlement_field, payment.amount)
 
@@ -503,7 +530,7 @@ def update_payment(
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
-    new_settlement_field = None if linked_tx is not None else _settlement_field(payload.type, payload.category)
+    new_settlement_field = None if (linked_tx is not None or is_partial_payment) else _settlement_field(payload.type, payload.category)
     if client is not None and new_settlement_field is not None:
         _apply_settlement(client, new_settlement_field, payload.amount)
     if linked_tx is not None:
@@ -541,7 +568,21 @@ def delete_payment(payment_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
 
     linked_tx = db.query(Transaction).filter(Transaction.settled_payment_id == payment.id).first()
-    if linked_tx is not None:
+    partial_tx = (
+        db.query(Transaction).filter(Transaction.id == payment.partial_transaction_id).first()
+        if payment.partial_transaction_id is not None
+        else None
+    )
+    if partial_tx is not None:
+        if partial_tx.settled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="이미 전액 결제완료된 매입매출의 분할 수금/지급 내역입니다. 마지막에 결제한 내역부터 삭제해주세요.",
+            )
+        partial_tx.paid_amount = max(0, (partial_tx.paid_amount or 0) - payment.amount)
+        credit_restore(db, partial_tx, payment.amount)
+        logger.debug(f"[Payments] 부분 결제 삭제로 미결제 금액 복원: tx_id={partial_tx.id}, amount={payment.amount}")
+    elif linked_tx is not None:
         linked_tx.settled = False
         linked_tx.settled_date = None
         linked_tx.settled_payment_id = None

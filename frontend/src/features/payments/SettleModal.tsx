@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { Client } from "../clients/types";
-import type { Transaction } from "../transactions/types";
+import { remainingAmount, type Transaction } from "../transactions/types";
 import { ApiError, apiPost } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
@@ -32,7 +32,7 @@ interface SettleModalProps {
 export function SettleModal({ kind, client, occurredLabel, transactions, onClose, onSuccess }: SettleModalProps) {
   const byTransactions = transactions !== undefined && transactions.length > 0;
   const outstanding = byTransactions
-    ? transactions.reduce((sum, t) => sum + t.total_amount, 0)
+    ? transactions.reduce((sum, t) => sum + remainingAmount(t), 0)
     : kind === "receivable"
       ? client.receivable_amount
       : client.payable_amount;
@@ -53,8 +53,12 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
     setError(null);
 
     const amountNum = Number(amount) || 0;
-    if (amountNum <= 0) {
+    if (amountNum <= 0 && !(byTransactions && outstanding === 0)) {
       setError("금액을 입력해주세요.");
+      return;
+    }
+    if (byTransactions && amountNum > outstanding) {
+      setError(`미결제 금액(${formatCurrency(outstanding)})보다 많이 입력할 수 없습니다.`);
       return;
     }
     if (method === "corporate_card" && !cardType) {
@@ -70,14 +74,22 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
     try {
       logDebug("Payments", `${actionLabel} 처리 시도: client_id=${client.id}, amount=${amountNum}, 건별=${byTransactions}`);
       if (byTransactions) {
-        // 선택한 달에 발생한 미결제 매입매출을 각각 결제완료로 바꾼다 (건마다 입출금 내역이 하나씩 기록된다).
-        for (const t of transactions!) {
+        // 선택한 달에 발생한 미결제 매입매출에 입력한 금액을 오래된 건부터 차례로 배분한다 (건마다 입출금 내역이 하나씩 기록된다).
+        // 건의 미결제 금액을 다 채우면 결제완료, 모자라면 그 건은 일부만 수금/지급한 상태(부분 결제)로 남는다.
+        const ordered = [...transactions!].sort((a, b) => a.transaction_date.localeCompare(b.transaction_date) || a.id - b.id);
+        let left = amountNum;
+        for (const t of ordered) {
+          const due = remainingAmount(t);
+          const pay = Math.min(due, left);
+          // 금액이 0원인 건은 전액을 처리할 때만 함께 결제완료로 바꾼다.
+          if (pay <= 0 && !(due === 0 && amountNum === outstanding)) continue;
+          left -= pay;
           await apiPost<Payment>("/api/payments", {
             type: kind === "receivable" ? "deposit" : "withdrawal",
             payment_date: paymentDate,
             category: kind === "receivable" ? "외상매출금" : "미지급금",
-            description: `${t.item_name} ${kind === "receivable" ? "수금" : "지급"}`,
-            amount: t.total_amount,
+            description: `${t.item_name} ${kind === "receivable" ? "수금" : "지급"}${pay < due ? "(일부)" : ""}`,
+            amount: pay,
             method,
             client_id: client.id,
             memo: memo || null,
@@ -95,7 +107,7 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
         type: kind === "receivable" ? "deposit" : "withdrawal",
         payment_date: paymentDate,
         category: kind === "receivable" ? "외상매출금" : "미지급금",
-        description: kind === "receivable" ? "미수금 수금" : "미지급금 지급",
+        description: `${kind === "receivable" ? "미수금" : "미지급금"} ${kind === "receivable" ? "수금" : "지급"}${amountNum < outstanding ? "(일부)" : ""}`,
         amount: amountNum,
         method,
         client_id: client.id,
@@ -127,17 +139,16 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-text-muted mb-1.5">금액</label>
-            {byTransactions ? (
-              <p className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-bg tabular-nums">
-                {formatCurrency(outstanding)} <span className="text-xs text-text-muted">· 미결제 {transactions!.length}건을 함께 처리</span>
+            <NumberInput
+              required={!(byTransactions && outstanding === 0)}
+              value={amount}
+              onChange={setAmount}
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+            />
+            {byTransactions && (
+              <p className="text-xs text-text-muted mt-1.5">
+                미결제 {transactions!.length}건 · 일부만 {kind === "receivable" ? "수금" : "지급"}하면 오래된 건부터 차례로 처리합니다.
               </p>
-            ) : (
-              <NumberInput
-                required
-                value={amount}
-                onChange={setAmount}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-              />
             )}
           </div>
           <div>

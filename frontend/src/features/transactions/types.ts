@@ -12,6 +12,13 @@ export const TX_TYPE_STYLES: Record<TransactionType, string> = {
   purchase: SOFT_BADGE.orange,
 };
 
+export interface TransactionPayment {
+  id: number;
+  payment_date: string;
+  amount: number;
+  method: string;
+}
+
 export interface Transaction {
   id: number;
   type: TransactionType;
@@ -27,7 +34,14 @@ export interface Transaction {
   memo: string | null;
   settled: boolean;
   settled_date: string | null;
+  paid_amount: number; // 부분 수금/지급으로 이미 받은(준) 금액
+  payment_history: TransactionPayment[]; // 부분 수금/지급 내역 (오래된 순)
   created_at: string;
+}
+
+/** 아직 결제되지 않은 금액 (부분 수금/지급을 뺀 나머지). */
+export function remainingAmount(tx: Pick<Transaction, "total_amount" | "paid_amount">): number {
+  return Math.max(0, tx.total_amount - (tx.paid_amount ?? 0));
 }
 
 export interface TaxInvoiceCandidate {

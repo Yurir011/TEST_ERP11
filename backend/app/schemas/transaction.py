@@ -37,6 +37,15 @@ class TaxInvoiceCandidateOut(BaseModel):
     status: str
 
 
+class TransactionPaymentOut(BaseModel):
+    """매입매출 한 건에 대한 부분 수금/지급 내역 (마지막에 전액을 채운 결제 포함)."""
+
+    id: int
+    payment_date: date
+    amount: int
+    method: str
+
+
 class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -54,6 +63,8 @@ class TransactionOut(BaseModel):
     memo: str | None
     settled: bool
     settled_date: date | None
+    paid_amount: int = 0  # 부분 수금/지급으로 이미 받은(준) 금액. 미결제 금액 = total_amount - paid_amount
+    payment_history: list[TransactionPaymentOut] = []  # 부분 수금/지급 내역 (오래된 순)
     created_at: datetime
 
 

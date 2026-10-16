@@ -358,7 +358,13 @@ export function TransactionsPage() {
                       </span>
                     ) : (
                       <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>
-                        {tx.type === "sales" ? "외상매출" : "외상매입"}
+                        {tx.paid_amount > 0
+                          ? tx.type === "sales"
+                            ? "수금(일부)"
+                            : "지급(일부)"
+                          : tx.type === "sales"
+                            ? "외상매출"
+                            : "외상매입"}
                       </span>
                     )}
                   </td>

@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import extract, func as sa_func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, object_session
 
 from app.config import settings
 from app.core.deps import require_menu_access
@@ -11,6 +11,7 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus, calc_amount
+from app.models.payment import Payment
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import User, has_menu_permission
 from app.schemas.transaction import (
@@ -20,6 +21,7 @@ from app.schemas.transaction import (
     TaxInvoiceCandidateOut,
     TransactionCreate,
     TransactionOut,
+    TransactionPaymentOut,
     VatReportOut,
 )
 from app.services.hometax_apply import apply_plan, build_plan
@@ -57,6 +59,20 @@ def _build_transaction_query(
     return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
 
 
+def _payment_history(tx: Transaction) -> list[TransactionPaymentOut]:
+    """부분 수금/지급이 한 번이라도 있었던 건의 결제 내역. 전액을 채운 마지막 결제도 함께 보여준다."""
+    db = object_session(tx)
+    if db is None or not (tx.paid_amount or 0) > 0:
+        return []
+    rows = (
+        db.query(Payment)
+        .filter((Payment.partial_transaction_id == tx.id) | (Payment.id == tx.settled_payment_id))
+        .order_by(Payment.payment_date, Payment.id)
+        .all()
+    )
+    return [TransactionPaymentOut(id=p.id, payment_date=p.payment_date, amount=p.amount, method=p.method.value) for p in rows]
+
+
 def _to_out(tx: Transaction) -> TransactionOut:
     return TransactionOut(
         id=tx.id,
@@ -73,11 +89,13 @@ def _to_out(tx: Transaction) -> TransactionOut:
         memo=tx.memo,
         settled=tx.settled,
         settled_date=tx.settled_date,
+        paid_amount=tx.paid_amount or 0,
+        payment_history=_payment_history(tx),
         created_at=tx.created_at,
     )
 
 
-@router.get("", response_model=list[TransactionOut])
+@router.get("",response_model=list[TransactionOut])
 def list_transactions(
     type_filter: TransactionType | None = Query(default=None, alias="type"),
     year: int | None = Query(default=None),
@@ -335,6 +353,11 @@ def update_transaction(
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
+    if (tx.paid_amount or 0) > payload.supply_amount + payload.vat_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"이미 {tx.paid_amount:,}원이 부분 수금/지급되어 합계금액을 그보다 작게 바꿀 수 없습니다.",
+        )
     credit_remove(db, tx)  # 수정 전 상태가 외상이었다면 거래처 잔액에 반영한 금액을 먼저 되돌린다.
     tx.type = payload.type
     tx.transaction_date = payload.transaction_date

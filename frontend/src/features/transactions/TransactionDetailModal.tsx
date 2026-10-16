@@ -2,6 +2,7 @@ import { Pencil, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatCurrency } from "../../lib/format";
 import { logDebug } from "../../lib/logger";
+import { PaymentHistoryList } from "./PaymentHistoryList";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
@@ -53,10 +54,11 @@ export function TransactionDetailModal({ tx, onClose, onSettle }: TransactionDet
                 {tx.settled_date ? ` ${tx.settled_date}` : ""}
               </span>
             ) : (
-              <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>{tx.type === "sales" ? "외상매출" : "외상매입"}</span>
+              <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>{tx.type === "sales" ? "외상매출" : "외상매입"}{tx.paid_amount > 0 ? (tx.type === "sales" ? " · 수금(일부)" : " · 지급(일부)") : ""}</span>
             )}
           </Row>
           {tx.memo && <Row label="메모">{tx.memo}</Row>}
+          <PaymentHistoryList tx={tx} />
         </div>
 
         <div className="flex items-center justify-between gap-2">

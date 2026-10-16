@@ -4,7 +4,8 @@ import type { Client } from "../clients/types";
 import { apiGet } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
-import type { Transaction } from "../transactions/types";
+import { PaymentHistoryList } from "../transactions/PaymentHistoryList";
+import { remainingAmount, type Transaction } from "../transactions/types";
 
 interface OutstandingDetailModalProps {
   kind: "receivable" | "payable";
@@ -38,7 +39,7 @@ export function OutstandingDetailModal({ kind, client, period, onClose, onSettle
       });
   }, [client.id, txType, label, period?.year, period?.month]);
 
-  const listTotal = (items ?? []).reduce((sum, t) => sum + t.total_amount, 0);
+  const listTotal = (items ?? []).reduce((sum, t) => sum + remainingAmount(t), 0);
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
@@ -62,16 +63,19 @@ export function OutstandingDetailModal({ kind, client, period, onClose, onSettle
           <>
             <ul className="space-y-2 overflow-y-auto">
               {items.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-3 bg-bg rounded-xl px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{t.item_name}</p>
-                    <p className="text-xs text-text-muted mt-0.5">
-                      {label} 발생일 {t.transaction_date}
-                      {t.tax_invoice_no && ` · 계산서 ${t.tax_invoice_no}`}
-                      {t.memo && ` · ${t.memo}`}
-                    </p>
+                <li key={t.id} className="bg-bg rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{t.item_name}</p>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        {label} 발생일 {t.transaction_date}
+                        {t.tax_invoice_no && ` · 계산서 ${t.tax_invoice_no}`}
+                        {t.memo && ` · ${t.memo}`}
+                      </p>
+                    </div>
+                    <span className="text-sm tabular-nums shrink-0">{formatCurrency(remainingAmount(t))}</span>
                   </div>
-                  <span className="text-sm tabular-nums shrink-0">{formatCurrency(t.total_amount)}</span>
+                  <PaymentHistoryList tx={t} />
                 </li>
               ))}
             </ul>
