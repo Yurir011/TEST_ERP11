@@ -184,3 +184,10 @@
 - **결재 코드는 의도적으로 `__init__.py`에 남겼다**(요청·승인·반려·삭제 결재와 보조 함수 8개). 위험이 가장 높아 06 분할안 7단계로 따로 승인받기로 했다.
 - 이동은 스크립트로 수행했고(함수 본문 복사, 필요한 import만 의존성 분석으로 자동 생성), **이동 전후의 함수 39개 AST가 완전히 같고 데코레이터(경로·메서드·옵션)도 같음**을 비교로 확인했다.
 - 테스트의 파일 생성 대체 지점을 `services.project_document_files.regenerate_documents`로 옮겼다.
+
+## P3-4. `project_documents` 결재 코드 분리 (06 분할안 7단계) — 2026-10-16 (사용자 승인)
+
+- 결재 코드(결재 요청, 승인·반려, 삭제 결재, 보조 함수 8개)와 `_apply_approval_request`를 `routers/project_documents/approval.py`(360줄)로 이동. `__init__.py`는 23줄(하위 라우터 조립만)이 되었다.
+- 모듈 의존 방향: `crud → approval`(작성 시 결재 요청 적용), `approval → _common`. 하위 모듈끼리 순환 import 없음.
+- 이동 전후 함수 39개 AST와 데코레이터가 동일함을 다시 확인했다. 06 분할안 1~8단계 완료.
+- 최종 구성(줄 수): `approval` 360, `crud` 248, `_common` 125, `images` 137, `popbill` 113, `listing` 97, `files` 46, `__init__` 23 (원래 1,155줄 한 파일).

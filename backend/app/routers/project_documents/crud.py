@@ -16,7 +16,8 @@ from app.schemas.project_document import ProjectDocumentCreate, ProjectDocumentO
 from app.services import project_document_files as doc_files
 from app.services.project_document_template import next_doc_no
 
-from app.routers.project_documents._common import PREFIX, _TARGET, _apply_approval_request, _get_doc_or_404, _to_out, _to_out_db, logger
+from app.routers.project_documents._common import PREFIX, _TARGET, _get_doc_or_404, _to_out, _to_out_db, logger
+from app.routers.project_documents.approval import _apply_approval_request
 
 
 router = APIRouter(prefix=PREFIX, tags=["project-documents"])

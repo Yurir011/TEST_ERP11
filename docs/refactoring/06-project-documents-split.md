@@ -1,7 +1,7 @@
 # 06. `project_documents.py` 분할안
 
 > 작성일: 2026-10-16 · 대상: `backend/app/routers/project_documents.py` (1,155줄, 함수 44개)
-> 상태: **1~6단계 완료(2026-10-16)**, 7단계(결재 코드를 `approval.py`로 이동)는 별도 승인 대기. 결과는 [03-changelog.md](03-changelog.md) P3-3 참고.
+> 상태: **전 단계 완료(2026-10-16)**. 결과는 [03-changelog.md](03-changelog.md) P3-3, P3-4 참고.
 
 ## 1. 현재 구조
 

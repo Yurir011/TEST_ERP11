@@ -1,20 +1,15 @@
-"""문서관리 라우터가 함께 쓰는 공통 코드: 상수·라벨, 응답 변환, 조회, 결재 요청 적용."""
-from datetime import datetime, timezone
-
+"""문서관리 라우터가 함께 쓰는 공통 코드: 상수·라벨, 응답 변환, 조회."""
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.approval import advance_chain_self_approvals, build_chain_steps, get_steps, get_steps_map, validate_chain_approvers
+from app.core.approval import get_steps, get_steps_map
 from app.logging_config import get_logger
-from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
+from app.models.approval_step import ApprovalStep, ApprovalTargetType
 from app.models.client import Client
 from app.models.project import Project
-from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus
-from app.models.user import JobTitle, User
+from app.models.project_document import ProjectDocType, ProjectDocument
 from app.schemas.approval import to_approval_step_out
 from app.schemas.project_document import ProjectDocumentOut
-from app.services.approval_notice import create_decision_notification, create_request_notification
-from app.services.tax_invoice_ledger import record_tax_invoice_transaction
 
 
 PREFIX = "/api/project-documents"
@@ -112,63 +107,6 @@ def _get_doc_or_404(db: Session, doc_id: int) -> ProjectDocument:
     if doc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="문서를 찾을 수 없습니다.")
     return doc
-
-
-def _apply_approval_request(
-    db: Session,
-    doc: ProjectDocument,
-    end_title: JobTitle | None,
-    approver_ids: list[int],
-    is_final_decision: bool,
-    current_user: User,
-    notify: bool = True,
-) -> list[ApprovalStep]:
-    """doc.id가 이미 확보된 상태(flush 이후)에서 호출해야 한다. 재요청(반려 후 재작성)인 경우 이전
-    결재선은 지우고 새로 만든다."""
-    doc.is_final_decision = is_final_decision
-    doc.reject_reason = None
-    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == doc.id).delete()
-    doc_label = f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})"
-
-    if is_final_decision:
-        doc.status = ProjectDocumentStatus.approved
-        doc.current_step = 1
-        doc.approver_id = current_user.id
-        doc.reviewed_at = datetime.now(timezone.utc)
-        record_tax_invoice_transaction(db, doc, current_user)
-        if notify:
-            create_decision_notification(
-                db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
-            )
-        logger.debug(f"[ProjectDocuments] 전결 처리(즉시 승인): doc_id={doc.id}, by={current_user.id}")
-        return []
-
-    chain, approvers = validate_chain_approvers(db, end_title, approver_ids)
-    steps = build_chain_steps(db, _TARGET, doc.id, chain, approvers)
-    fully_approved = advance_chain_self_approvals(steps, current_user)
-    if fully_approved:
-        doc.status = ProjectDocumentStatus.approved
-        doc.current_step = len(steps)
-        doc.approver_id = steps[-1].approver_id
-        doc.reviewed_at = datetime.now(timezone.utc)
-        record_tax_invoice_transaction(db, doc, current_user)
-        if notify:
-            create_decision_notification(
-                db, target_name=doc.creator.name, target_user_id=doc.created_by, doc_label=doc_label, approved=True, link=_doc_link(doc.doc_type, doc.id)
-            )
-        logger.debug(f"[ProjectDocuments] 자기결재 처리(즉시 승인): doc_id={doc.id}, by={current_user.id}")
-    else:
-        pending_step = next(s for s in steps if s.status == ApprovalStepStatus.pending)
-        doc.status = ProjectDocumentStatus.pending
-        doc.current_step = pending_step.step_order
-        doc.approver_id = pending_step.approver_id
-        doc.reviewed_at = None
-        if notify:
-            create_request_notification(
-                db, target_user_id=pending_step.approver_id, requester_name=current_user.name, doc_label=doc_label, link=_doc_link(doc.doc_type, doc.id)
-            )
-        logger.debug(f"[ProjectDocuments] 결재 요청: doc_id={doc.id}, approver_id={pending_step.approver_id}")
-    return steps
 
 
 def _set_siblings(db: Session, doc: ProjectDocument) -> list[ProjectDocument]:
