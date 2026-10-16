@@ -1,3 +1,5 @@
+# 모든 모델을 여기서 import 해야 Base.metadata 에 등록된다 (서버 시작 시 테이블 확인과 Alembic 자동 비교가 이 목록을 쓴다).
+from app.models.approval_step import ApprovalStep
 from app.models.attendance import Attendance
 from app.models.client import Client
 from app.models.document import DocumentIssue
