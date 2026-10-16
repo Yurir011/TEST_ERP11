@@ -20,7 +20,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { useAuth } from "../../context/AuthContext";
-import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile, openFile } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { ProposalsPage } from "../proposals/ProposalsPage";
 import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
@@ -43,6 +43,7 @@ import {
 } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { toLocalISODate } from "../../lib/date";
+import { useApprovalActions } from "../../lib/useApprovalActions";
 
 type DocTab = ProjectDocType | "all" | "proposal";
 
@@ -364,44 +365,22 @@ export function ProjectDocumentsPage({
     }
   }
 
-  async function handleApprove(doc: ProjectDocument) {
-    const approveMessage = doc.delete_requested
-      ? `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}"의 삭제 요청을 승인하시겠습니까? 최종 승인되면 문서가 삭제됩니다.`
-      : `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}" 문서를 결재 승인하시겠습니까? 승인 후 PDF에 직인이 찍힙니다.`;
-    if (!window.confirm(approveMessage)) return;
-    logDebug("ProjectDocuments", `결재 승인 시도: id=${doc.id}`);
-    setBusyId(doc.id);
-    try {
-      await apiPut(`/api/project-documents/${doc.id}/approve`);
+  const { approve: handleApprove, reject: handleReject } = useApprovalActions<ProjectDocument>({
+    module: "ProjectDocuments",
+    getId: (doc) => doc.id,
+    basePath: (id) => `/api/project-documents/${id}`,
+    confirmApprove: (doc) =>
+      doc.delete_requested
+        ? `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}"의 삭제 요청을 승인하시겠습니까? 최종 승인되면 문서가 삭제됩니다.`
+        : `"${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}" 문서를 결재 승인하시겠습니까? 승인 후 PDF에 직인이 찍힙니다.`,
+    setBusyId,
+    onDone: () => {
       setDetailDoc(null);
       reloadAll();
-      window.alert("결재 승인되었습니다.");
-      onDecided?.();
-    } catch (err) {
-      logError("ProjectDocuments", "결재 승인 실패", err);
-      setError(err instanceof ApiError ? err.message : "결재 승인 중 오류가 발생했습니다.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleReject(doc: ProjectDocument) {
-    const reason = window.prompt("반려 사유를 입력해주세요.");
-    if (!reason || !reason.trim()) return;
-    logDebug("ProjectDocuments", `결재 반려 시도: id=${doc.id}`);
-    setBusyId(doc.id);
-    try {
-      await apiPut(`/api/project-documents/${doc.id}/reject`, { reason: reason.trim() });
-      setDetailDoc(null);
-      reloadAll();
-      onDecided?.();
-    } catch (err) {
-      logError("ProjectDocuments", "결재 반려 실패", err);
-      setError(err instanceof ApiError ? err.message : "결재 반려 중 오류가 발생했습니다.");
-    } finally {
-      setBusyId(null);
-    }
-  }
+    },
+    onAfter: () => onDecided?.(),
+    onError: setError,
+  });
 
   async function handleResubmit(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
     if (!resubmitDoc) return;
@@ -566,39 +545,18 @@ export function ProjectDocumentsPage({
     }
   }
 
-  async function handleProposalApprove(p: Proposal) {
-    if (!window.confirm(`"${p.title}" 품의서를 결재 승인하시겠습니까?`)) return;
-    logDebug("ProjectDocuments", `품의서 결재 승인 시도: id=${p.id}`);
-    setBusyId(p.id);
-    try {
-      await apiPut(`/api/proposals/${p.id}/approve`);
+  const { approve: handleProposalApprove, reject: handleProposalReject } = useApprovalActions<Proposal>({
+    module: "ProjectDocuments",
+    getId: (p) => p.id,
+    basePath: (id) => `/api/proposals/${id}`,
+    confirmApprove: (p) => `"${p.title}" 품의서를 결재 승인하시겠습니까?`,
+    setBusyId,
+    onDone: () => {
       setProposalDetail(null);
       reloadAll();
-      window.alert("결재 승인되었습니다.");
-    } catch (err) {
-      logError("ProjectDocuments", "품의서 결재 승인 실패", err);
-      setError(err instanceof ApiError ? err.message : "결재 승인 중 오류가 발생했습니다.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleProposalReject(p: Proposal) {
-    const reason = window.prompt("반려 사유를 입력해주세요.");
-    if (!reason || !reason.trim()) return;
-    logDebug("ProjectDocuments", `품의서 결재 반려 시도: id=${p.id}`);
-    setBusyId(p.id);
-    try {
-      await apiPut(`/api/proposals/${p.id}/reject`, { reason: reason.trim() });
-      setProposalDetail(null);
-      reloadAll();
-    } catch (err) {
-      logError("ProjectDocuments", "품의서 결재 반려 실패", err);
-      setError(err instanceof ApiError ? err.message : "결재 반려 중 오류가 발생했습니다.");
-    } finally {
-      setBusyId(null);
-    }
-  }
+    },
+    onError: setError,
+  });
 
   async function handleProposalDownload(p: Proposal) {
     setBusyId(p.id);

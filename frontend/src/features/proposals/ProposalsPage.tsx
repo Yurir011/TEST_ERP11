@@ -2,12 +2,13 @@ import { Check, FileSignature, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { ApiError, apiGet, apiPut, downloadFile, openFile } from "../../lib/api";
+import { apiGet, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { ProposalDetailModal } from "./ProposalDetailModal";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal } from "./types";
+import { useApprovalActions } from "../../lib/useApprovalActions";
 
 function docTitle(p: Proposal): string {
   return p.kind ? `${p.kind}품의서` : "품의서";
@@ -70,39 +71,16 @@ export function ProposalsPage({
     setDetail(null);
   }
 
-  async function handleApprove(p: Proposal) {
-    if (!window.confirm(`"${docTitle(p)}" 문서를 결재 승인하시겠습니까?`)) return;
-    logDebug("Proposals", `결재 승인 시도: id=${p.id}`);
-    setBusyId(p.id);
-    try {
-      await apiPut(`/api/proposals/${p.id}/approve`);
-      reloadAll();
-      window.alert("결재 승인되었습니다.");
-      onDecided?.();
-    } catch (err) {
-      logError("Proposals", "결재 승인 실패", err);
-      setError(err instanceof ApiError ? err.message : "결재 승인 중 오류가 발생했습니다.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleReject(p: Proposal) {
-    const reason = window.prompt("반려 사유를 입력해주세요.");
-    if (!reason || !reason.trim()) return;
-    logDebug("Proposals", `결재 반려 시도: id=${p.id}`);
-    setBusyId(p.id);
-    try {
-      await apiPut(`/api/proposals/${p.id}/reject`, { reason: reason.trim() });
-      reloadAll();
-      onDecided?.();
-    } catch (err) {
-      logError("Proposals", "결재 반려 실패", err);
-      setError(err instanceof ApiError ? err.message : "결재 반려 중 오류가 발생했습니다.");
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const { approve: handleApprove, reject: handleReject } = useApprovalActions<Proposal>({
+    module: "Proposals",
+    getId: (p) => p.id,
+    basePath: (id) => `/api/proposals/${id}`,
+    confirmApprove: (p) => `"${docTitle(p)}" 문서를 결재 승인하시겠습니까?`,
+    setBusyId,
+    onDone: () => reloadAll(),
+    onAfter: () => onDecided?.(),
+    onError: setError,
+  });
 
   async function handleDownload(p: Proposal) {
     setBusyId(p.id);

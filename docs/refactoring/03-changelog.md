@@ -107,3 +107,10 @@
 
 ### 범위에서 제외한 것
 - **품의서(`proposals.py`)는 별도의 단계 테이블(`ProposalApprovalStep`)을 쓴다.** 다른 3개 도메인의 공용 `ApprovalStep`과 모델이 다르다. 하나로 합치려면 DB 스키마·데이터 이전이 필요하므로 **승인 없이 진행하지 않았다**(05-remaining-issues.md S1).
+
+## P4-1. 결재 승인/반려 핸들러 공통 훅 — 2026-10-16
+
+- 신규 `frontend/src/lib/useApprovalActions.ts`: 승인 확인창 → API 호출 → 처리 중 표시 → 승인 안내창 / 반려 사유 입력 → 실패 메시지의 공통 흐름을 한 훅으로 모음. 화면별 차이(확인 문구, 새로고침 방식, 오류 표시, 완료 후 콜백)는 옵션으로 받는다.
+- 적용: `LeavesPage`, `DocumentsPage`, `ProposalsPage`, `ProjectDocumentsPage`(문서용 + 품의서용 2세트). 총 6쌍(12개) 핸들러, 약 130줄이 훅 호출로 줄었다.
+- 확인창·안내창 문구, 처리 순서(새로고침 → 안내창 → 완료 콜백), 오류 표시 여부는 **기존 그대로** 유지했다. 달라진 점은 승인/반려 시도 로그가 모든 화면에서 남는 것뿐이다.
+- 사용하지 않게 된 import(`apiPut`, `ApiError`)를 정리했다.

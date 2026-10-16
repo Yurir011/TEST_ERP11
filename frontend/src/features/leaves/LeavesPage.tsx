@@ -4,12 +4,13 @@ import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/app
 import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCheckbox";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { StatusBadge } from "../../components/ui/StatusBadge";
-import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { openTargetDomId, useOpenTarget, useScrollToOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { LeaveDetailModal } from "./LeaveDetailModal";
 import type { LeaveBalance, LeaveRecord } from "./types";
 import { toMonthValue } from "../../lib/date";
+import { useApprovalActions } from "../../lib/useApprovalActions";
 
 interface LeavesPageProps extends OpenOverlayProps {
   embedded?: boolean;
@@ -146,42 +147,20 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
     }
   }
 
-  async function handleApprove(id: number) {
-    setBusyId(id);
-    try {
-      await apiPut(`/api/leaves/${id}/approve`);
+  const { approve: handleApprove, reject: handleReject } = useApprovalActions<number>({
+    module: "Leaves",
+    getId: (id) => id,
+    basePath: (id) => `/api/leaves/${id}`,
+    setBusyId,
+    onDone: () => {
       setDetail(null);
       loadPending();
       loadMyLeaves();
       loadBalance();
       loadTeamCalendar();
-      window.alert("결재 승인되었습니다.");
-      onDecided?.();
-    } catch (err) {
-      logError("Leaves", "승인 처리 실패", err);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleReject(id: number) {
-    const reason = window.prompt("반려 사유를 입력해주세요.");
-    if (!reason || !reason.trim()) return;
-    setBusyId(id);
-    try {
-      await apiPut(`/api/leaves/${id}/reject`, { reason: reason.trim() });
-      setDetail(null);
-      loadPending();
-      loadMyLeaves();
-      loadBalance();
-      loadTeamCalendar();
-      onDecided?.();
-    } catch (err) {
-      logError("Leaves", "반려 처리 실패", err);
-    } finally {
-      setBusyId(null);
-    }
-  }
+    },
+    onAfter: () => onDecided?.(),
+  });
 
   const detailModal = detail && (
     <LeaveDetailModal

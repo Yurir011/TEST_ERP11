@@ -3,12 +3,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { StatusBadge } from "../../components/ui/StatusBadge";
-import { ApiError, apiGet, apiPost, apiPut, downloadFile } from "../../lib/api";
+import { ApiError, apiGet, apiPost, downloadFile } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { DocumentDetailModal } from "./DocumentDetailModal";
 import { DOC_TYPE_LABELS, type DocumentRecord, type DocumentType } from "./types";
+import { useApprovalActions } from "../../lib/useApprovalActions";
 
 interface DocumentsPageProps extends OpenOverlayProps {
   embedded?: boolean;
@@ -108,34 +109,14 @@ export function DocumentsPage({ embedded = false, openId, modalOnly = false, onD
     }
   }
 
-  async function handleApprove(id: number) {
-    setBusyId(id);
-    try {
-      await apiPut(`/api/documents/${id}/approve`);
-      reloadAll();
-      window.alert("결재 승인되었습니다.");
-      onDecided?.();
-    } catch (err) {
-      logError("Documents", "결재 승인 실패", err);
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleReject(id: number) {
-    const reason = window.prompt("반려 사유를 입력해주세요.");
-    if (!reason || !reason.trim()) return;
-    setBusyId(id);
-    try {
-      await apiPut(`/api/documents/${id}/reject`, { reason: reason.trim() });
-      reloadAll();
-      onDecided?.();
-    } catch (err) {
-      logError("Documents", "결재 반려 실패", err);
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const { approve: handleApprove, reject: handleReject } = useApprovalActions<number>({
+    module: "Documents",
+    getId: (id) => id,
+    basePath: (id) => `/api/documents/${id}`,
+    setBusyId,
+    onDone: () => reloadAll(),
+    onAfter: () => onDecided?.(),
+  });
 
   const detailModal = detail && (
     <DocumentDetailModal
