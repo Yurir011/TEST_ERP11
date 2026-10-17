@@ -28,6 +28,7 @@ const ICON = path.join(ROOT, "assets", "icon.png");
 const TRAY_ICON = path.join(ROOT, "assets", "tray.png");
 
 if (SMOKE) app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "bench-smoke-")));
+else if (process.env.BENCH_USER_DATA) app.setPath("userData", process.env.BENCH_USER_DATA); // 개발용 실행(--local): 설정·기기 키를 따로 둔다
 
 let config: AppConfig = {};
 let win: BrowserWindow | null = null;
@@ -389,6 +390,10 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(async () => {
     log.info(`[Main] 시작: v${app.getVersion()}, Electron ${process.versions.electron}${SMOKE ? " (smoke)" : ""}`);
     config = loadConfig(configFile(), log);
+    if (!config.serverUrl && process.env.BENCH_SERVER_URL) {
+      const preset = normalizeServerUrl(process.env.BENCH_SERVER_URL);
+      if (preset.ok) config = { ...config, serverUrl: preset.url }; // 개발용 실행: 처음부터 이 서버로 (저장은 하지 않는다)
+    }
     registerIpc();
     try {
       deviceKey = loadOrCreateDeviceKey(path.join(app.getPath("userData"), "device-key.json"), secretStore, getLogger("Device"));
