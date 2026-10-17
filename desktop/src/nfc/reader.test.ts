@@ -116,7 +116,7 @@ describe("NfcReader", () => {
         };
       },
     };
-    const reader = new NfcReader(provider, { pollIntervalMs: 1, retryDelayMs: 1, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) });
+    const reader = new NfcReader(provider, { pollIntervalMs: 1, retryDelayMs: 1, commandTimeoutMs: 30, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) });
     return { reader, closers, opens: () => opens };
   }
 

@@ -253,6 +253,16 @@ def test_unread_does_not_count_other_peoples_messages_in_other_rooms(api, users)
     assert api.get(users["a"], "/unread-count").json() == {"unread_count": 3}
 
 
+def test_members_expose_read_positions_for_read_receipts(api, users):
+    conv = api.direct(users["a"], users["b"])
+    m1 = api.send(users["a"], conv, "읽어 주세요")
+    before = {m["name"]: m["last_read_message_id"] for m in api.get(users["a"], f"/conversations/{conv['id']}").json()["members"]}
+    assert before == {"가": m1["id"], "나": None}  # 보낸 사람은 자기 메시지까지 읽은 상태, 상대는 아직
+    api.put(users["b"], f"/conversations/{conv['id']}/read", json={"message_id": m1["id"]})
+    after = {m["name"]: m["last_read_message_id"] for m in api.get(users["a"], f"/conversations/{conv['id']}").json()["members"]}
+    assert after == {"가": m1["id"], "나": m1["id"]}
+
+
 def test_cannot_mark_read_with_a_message_from_another_conversation(api, users):
     ab, ac = api.direct(users["a"], users["b"]), api.direct(users["a"], users["c"])
     foreign = api.send(users["c"], ac, "다른 방")

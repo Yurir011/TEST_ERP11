@@ -39,6 +39,8 @@ export interface ReaderOptions {
   pollIntervalMs?: number;
   retryDelayMs?: number;
   missingPolls?: number;
+  /** PN532 명령의 응답 대기 시간(ms). 기본값을 쓰면 되고, 시험에서만 짧게 줄인다 */
+  commandTimeoutMs?: number;
   log?: Logger;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -52,6 +54,7 @@ export class NfcReader extends EventEmitter {
   private readonly pollIntervalMs: number;
   private readonly retryDelayMs: number;
   private readonly missingPolls: number;
+  private readonly commandTimeoutMs: number | undefined;
   private readonly log: Logger;
   private readonly sleep: (ms: number) => Promise<void>;
   private loop: Promise<void> | null = null;
@@ -65,6 +68,7 @@ export class NfcReader extends EventEmitter {
     this.pollIntervalMs = opts.pollIntervalMs ?? 300;
     this.retryDelayMs = opts.retryDelayMs ?? 2000;
     this.missingPolls = opts.missingPolls ?? 2;
+    this.commandTimeoutMs = opts.commandTimeoutMs;
     this.log = opts.log ?? silentLogger;
     this.sleep = opts.sleep ?? defaultSleep;
   }
@@ -127,7 +131,7 @@ export class NfcReader extends EventEmitter {
     opened.onClose(() => {
       closed = true;
     });
-    const pn = new Pn532(opened.transport, { log: this.log });
+    const pn = new Pn532(opened.transport, { log: this.log, ackTimeoutMs: this.commandTimeoutMs, responseTimeoutMs: this.commandTimeoutMs });
     const fw = await pn.init();
     this.setStatus({ state: "ready", port: path, firmware: `${fw.version}.${fw.revision}` });
 

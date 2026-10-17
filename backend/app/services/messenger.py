@@ -111,14 +111,14 @@ def conversation_summaries(db: Session, user_id: int, only_ids: list[int] | None
     ids = [c.id for c, _ in rows]
 
     members: dict[int, list[MemberOut]] = {i: [] for i in ids}
-    for cid, uid, name in (
-        db.query(ConversationMember.conversation_id, User.id, User.name)
+    for cid, uid, name, last_read in (
+        db.query(ConversationMember.conversation_id, User.id, User.name, ConversationMember.last_read_message_id)
         .join(User, User.id == ConversationMember.user_id)
         .filter(ConversationMember.conversation_id.in_(ids), ConversationMember.left_at.is_(None))
         .order_by(User.name, User.id)
         .all()
     ):
-        members[cid].append(MemberOut(id=uid, name=name))
+        members[cid].append(MemberOut(id=uid, name=name, last_read_message_id=last_read))
 
     unread = unread_counts(db, user_id, ids)
 

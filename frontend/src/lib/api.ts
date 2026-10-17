@@ -122,4 +122,24 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
   }
 }
 
+/** 파일과 함께 다른 입력값도 보내는 업로드 (FormData 를 그대로 보낸다. Content-Type 은 브라우저가 경계값까지 붙여 준다). */
+export async function apiUploadForm<T>(path: string, form: FormData): Promise<T> {
+  logDebug("Api", `폼 업로드 시작: ${path}`);
+  const token = getToken();
+  try {
+    const res = await fetch(path, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      const message = errBody?.detail ?? `HTTP ${res.status}`;
+      throw new ApiError(res.status, typeof message === "string" ? message : JSON.stringify(message));
+    }
+    const data = (await res.json()) as T;
+    logDebug("Api", `폼 업로드 성공: ${path}`);
+    return data;
+  } catch (err) {
+    logError("Api", `폼 업로드 실패: ${path}`, err);
+    throw err;
+  }
+}
+
 export { ApiError };

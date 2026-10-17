@@ -1,17 +1,20 @@
-import { CalendarDays, LayoutGrid, LogOut, Megaphone, Settings } from "lucide-react";
+import { CalendarDays, LayoutGrid, LogOut, Megaphone, MessageCircle, Settings } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
+import { useMessengerOptional } from "../../features/messenger/useMessenger";
 import { Logo } from "../ui/Logo";
 
 const menuItems = [
   { to: "/", label: "대시보드", icon: LayoutGrid, end: true },
   { to: "/schedule", label: "일정관리", icon: CalendarDays },
+  { to: "/messenger", label: "메신저", icon: MessageCircle },
   { to: "/notices", label: "공지사항", icon: Megaphone },
   { to: "/settings", label: "직원등록", icon: Settings },
 ];
 
 export function SiteAdminSidebar() {
   const { user, logout } = useAuth();
+  const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
 
   return (
     <aside className="w-64 shrink-0 bg-sidebar border-r border-border h-screen sticky top-0 flex flex-col">
@@ -35,6 +38,11 @@ export function SiteAdminSidebar() {
           >
             <Icon size={17} />
             {label}
+            {to === "/messenger" && messengerUnread > 0 && (
+              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center" aria-label={`안 읽은 메시지 ${messengerUnread}개`}>
+                {messengerUnread > 99 ? "99+" : messengerUnread}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

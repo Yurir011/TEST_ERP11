@@ -23,6 +23,7 @@ class MessengerUserOut(BaseModel):
 class MemberOut(BaseModel):
     id: int
     name: str
+    last_read_message_id: int | None = None  # 이 사람이 읽은 위치 ("읽음" 표시용)
 
 
 class LastMessageOut(BaseModel):

@@ -7,6 +7,7 @@ import {
   FileText,
   LayoutGrid,
   LogOut,
+  MessageCircle,
   Receipt,
   ScrollText,
   Settings,
@@ -14,6 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
+import { useMessengerOptional } from "../../features/messenger/useMessenger";
 import { TodoPanel } from "../../features/todos/TodoPanel";
 import { apiGet } from "../../lib/api";
 import { hasMenuPermission, type MenuPermissionKey } from "../../lib/auth";
@@ -33,6 +35,7 @@ const menuItems: {
 }[] = [
   { to: "/", label: "대시보드", icon: LayoutGrid, end: true, adminOnly: false, colorClass: "" },
   { to: "/schedule", label: "일정관리", icon: CalendarDays, adminOnly: false, colorClass: "" },
+  { to: "/messenger", label: "메신저", icon: MessageCircle, adminOnly: false, colorClass: "" },
   { to: "/approval", label: "전자결재", icon: FileSignature, adminOnly: false, colorClass: "" },
   { to: "/projects", label: "프로젝트관리", icon: FileText, adminOnly: false, menuKey: "projects", colorClass: "" },
   { to: "/clients", label: "거래처관리", icon: Building2, adminOnly: false, menuKey: "clients", colorClass: "" },
@@ -47,6 +50,7 @@ export function Sidebar() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
+  const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
   const visibleItems = menuItems.filter((item) => {
     if (item.adminOnly) return user?.role === "admin";
     if (item.menuKey) return hasMenuPermission(user, item.menuKey);
@@ -97,6 +101,11 @@ export function Sidebar() {
           >
             <Icon size={17} />
             {label}
+            {to === "/messenger" && messengerUnread > 0 && (
+              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center" aria-label={`안 읽은 메시지 ${messengerUnread}개`}>
+                {messengerUnread > 99 ? "99+" : messengerUnread}
+              </span>
+            )}
             {to === "/notices" && unreadCount > 0 && (
               <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center">
                 {unreadCount > 99 ? "99+" : unreadCount}

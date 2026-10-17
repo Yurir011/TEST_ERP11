@@ -23,8 +23,8 @@ export interface Transport {
 }
 
 export interface Pn532Options {
-  ackTimeoutMs?: number;
-  responseTimeoutMs?: number;
+  ackTimeoutMs?: number | undefined;
+  responseTimeoutMs?: number | undefined;
   log?: Logger;
 }
 
