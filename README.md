@@ -119,7 +119,7 @@ cd backend
 ## 참고 문서
 
 - [`CLAUDE.md`](./CLAUDE.md) — 20단계 구축 계획 및 진행 상황 체크리스트
-- [`CHANGELOG.md`](./CHANGELOG.md) — 버전별 변경 이력 (현재 V.0.07.150)
+- [`CHANGELOG.md`](./CHANGELOG.md) — 버전별 변경 이력 (현재 V.0.70.150)
 - [`docs/version-policy.md`](./docs/version-policy.md) — 버전 표기·올리는 기준·배포 절차
 - [`docs/refactoring/`](./docs/refactoring/) — 리팩토링 분석, 계획, 수정 내역, 검증 결과
 
