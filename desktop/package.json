@@ -1,0 +1,26 @@
+{
+  "name": "bench-desktop",
+  "productName": "BENCH ERP",
+  "version": "0.0.1",
+  "private": true,
+  "description": "BENCH ERP 데스크톱 클라이언트 (NFC 로그인, 메신저 알림)",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "npm run build && electron .",
+    "smoke": "npm run build && electron . --smoke",
+    "poc": "tsx scripts/nfc-poc.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "dependencies": {
+    "serialport": "13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "electron": "44.5.1",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "5.0.3"
+  }
+}
