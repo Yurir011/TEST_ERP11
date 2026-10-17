@@ -99,6 +99,7 @@ export class NfcReader extends EventEmitter {
       try {
         await this.session();
       } catch (err) {
+        if (!this.running) break; // 종료 중에 포트가 닫히며 난 오류는 알리지 않는다
         const message = err instanceof Error ? err.message : String(err);
         this.setStatus({ state: isBusy(message) ? "busy" : "error", port: this.status.port, message: isBusy(message) ? "다른 프로그램이 포트를 사용 중입니다" : message });
       }
@@ -135,7 +136,7 @@ export class NfcReader extends EventEmitter {
       this.track(target);
       await this.sleep(this.pollIntervalMs);
     }
-    if (closed) throw new Error("리더 연결이 끊어졌습니다");
+    if (closed && this.running) throw new Error("리더 연결이 끊어졌습니다");
   }
 
   private track(target: PassiveTarget | null): void {

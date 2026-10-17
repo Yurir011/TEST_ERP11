@@ -178,6 +178,19 @@ describe("NfcReader", () => {
     await reader.stop();
   });
 
+  it("stop 으로 끝낼 때는 error 상태가 되지 않는다", async () => {
+    const dev = new FakeDevice();
+    const { reader, closers } = setup([dev]);
+    const states: string[] = [];
+    reader.on("status", (s: NfcStatus) => states.push(s.state));
+    reader.start();
+    await waitFor(() => reader.getStatus().state === "ready");
+    const stopping = reader.stop();
+    closers[0](); // stop 이 포트를 닫으면 close 이벤트가 온다
+    await stopping;
+    expect(states).not.toContain("error");
+  });
+
   it("장치가 응답하지 않으면 error 상태가 되고 계속 재시도한다", async () => {
     const dev = new FakeDevice();
     dev.silent = true;
