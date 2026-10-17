@@ -30,6 +30,7 @@ export function UserFormPage() {
   const [employeeNo, setEmployeeNo] = useState("");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [savedName, setSavedName] = useState(""); // 불러온 이름 (NFC 카드 칸 제목용: 입력 중인 이름과 따로 둔다)
   const [password, setPassword] = useState("");
   const [grade, setGrade] = useState<JobGrade>("staff");
   const [title, setTitle] = useState<JobTitle | null>(null);
@@ -61,6 +62,7 @@ export function UserFormPage() {
         setEmployeeNo(found.employee_no);
         setEmail(found.email);
         setName(found.name);
+        setSavedName(found.name);
         setGrade(found.grade);
         setTitle(found.title);
         setHireDate(found.hire_date);
@@ -286,7 +288,7 @@ export function UserFormPage() {
           </div>
         </form>
       )}
-      {isEdit && !isLoading && <NfcCardsSection userId={Number(id)} />}
+      {isEdit && !isLoading && savedName && <NfcCardsSection key={id} userId={Number(id)} userName={savedName} />}
     </MainLayout>
   );
 }

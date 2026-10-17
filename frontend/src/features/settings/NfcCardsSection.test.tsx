@@ -26,7 +26,7 @@ const card = (over: Partial<NfcCard> = {}): NfcCard => ({
 function renderSection() {
   return render(
     <DialogProvider>
-      <NfcCardsSection userId={7} />
+      <NfcCardsSection userId={7} userName="홍길동" />
     </DialogProvider>,
   );
 }
@@ -65,6 +65,12 @@ describe("NfcCardsSection — 브라우저", () => {
     expect(screen.getAllByRole("button", { name: "사용 중지" })).toHaveLength(1); // 사용 중인 카드만
   });
 
+  it("제목에 어느 직원의 카드인지 이름이 보인다", async () => {
+    renderSection();
+    expect((await screen.findAllByText(/홍길동/)).length).toBeGreaterThan(0);
+    expect(api.apiGet).toHaveBeenCalledWith("/api/users/7/nfc-cards");
+  });
+
   it("카드가 없으면 안내하고, 번호를 직접 입력한다고 알린다", async () => {
     renderSection();
     expect(await screen.findByText("등록된 카드가 없습니다.")).toBeTruthy();
@@ -92,12 +98,12 @@ describe("NfcCardsSection — 브라우저", () => {
 
   it("서버가 거절하면(중복 등) 그 문구를 보여 주고 입력은 남겨 둔다", async () => {
     const { ApiError } = await import("../../lib/api");
-    api.apiPost.mockRejectedValue(new ApiError(409, "이미 홍길동님에게 등록된 카드입니다."));
+    api.apiPost.mockRejectedValue(new ApiError(409, "이 카드는 이미 홍길동님에게 등록되어 있어 등록할 수 없습니다."));
     renderSection();
     await screen.findByText("등록된 카드가 없습니다.");
     fireEvent.change(screen.getByLabelText("카드 번호"), { target: { value: "0B9F515D" } });
     fireEvent.click(screen.getByRole("button", { name: "카드 등록" }));
-    expect(await screen.findByText("이미 홍길동님에게 등록된 카드입니다.")).toBeTruthy();
+    expect(await screen.findByText("이 카드는 이미 홍길동님에게 등록되어 있어 등록할 수 없습니다.")).toBeTruthy();
     expect((screen.getByLabelText("카드 번호") as HTMLInputElement).value).toBe("0B9F515D");
   });
 

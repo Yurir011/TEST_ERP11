@@ -12,7 +12,7 @@ function formatDate(iso: string | null): string {
 }
 
 /** 직원 수정 화면의 "NFC 카드" 칸: 등록된 카드 목록, 카드 읽기(데스크톱 앱) 또는 번호 직접 입력(브라우저), 사용 중지·삭제. */
-export function NfcCardsSection({ userId }: { userId: number }) {
+export function NfcCardsSection({ userId, userName }: { userId: number; userName: string }) {
   const dialog = useDialog();
   const bench = getBenchClient();
 
@@ -112,10 +112,12 @@ export function NfcCardsSection({ userId }: { userId: number }) {
     <section className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-xl mt-6" aria-label="NFC 카드">
       <div className="flex items-center gap-2">
         <CreditCard size={16} className="text-text-muted" />
-        <h2 className="text-sm font-semibold">NFC 카드</h2>
+        <h2 className="text-sm font-semibold">
+          NFC 카드 <span className="text-text-muted font-normal">· {userName}</span>
+        </h2>
       </div>
       <p className="text-xs text-text-muted">
-        등록한 카드를 승인된 데스크톱 앱의 리더에 대면 이 직원으로 로그인됩니다. 카드 번호는 암호화되어 저장되고, 화면에는 끝 4자리만 표시됩니다.
+        이 직원({userName})의 카드만 이 목록에 표시됩니다. 등록한 카드를 승인된 데스크톱 앱의 리더에 대면 이 직원으로 로그인됩니다. 카드 번호는 암호화되어 저장되고, 화면에는 끝 4자리만 표시됩니다.
       </p>
 
       {cards === null ? (

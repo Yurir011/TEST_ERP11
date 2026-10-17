@@ -76,6 +76,16 @@ def test_duplicate_card_conflict_names_owner(client, ceo, make_user, auth_header
     assert r.status_code == 409 and "가" in r.json()["detail"]
 
 
+def test_each_employee_lists_only_own_cards(client, ceo, make_user, auth_headers):
+    a, b = make_user(name="가"), make_user(name="나")
+    client.post(f"/api/users/{a.id}/nfc-cards", json={"uid": "0B9F515D", "label": "A 카드"}, headers=auth_headers(ceo))
+    assert [c["label"] for c in client.get(f"/api/users/{a.id}/nfc-cards", headers=auth_headers(ceo)).json()] == ["A 카드"]
+    assert client.get(f"/api/users/{b.id}/nfc-cards", headers=auth_headers(ceo)).json() == []
+    # 같은 카드를 B 에게 등록하려 하면 거부되고, B 의 목록은 그대로 비어 있다
+    assert client.post(f"/api/users/{b.id}/nfc-cards", json={"uid": "0B9F515D"}, headers=auth_headers(ceo)).status_code == 409
+    assert client.get(f"/api/users/{b.id}/nfc-cards", headers=auth_headers(ceo)).json() == []
+
+
 def test_invalid_uid_is_rejected(client, ceo, make_user, auth_headers):
     emp = make_user()
     assert client.post(f"/api/users/{emp.id}/nfc-cards", json={"uid": "ZZZZ"}, headers=auth_headers(ceo)).status_code == 422

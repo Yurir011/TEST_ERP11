@@ -54,7 +54,7 @@ def register_card(
     owner = db.query(NfcCard).filter(NfcCard.uid_hmac == hashed).first()
     if owner is not None:
         who = db.get(User, owner.user_id)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"이미 {who.name if who else '다른 직원'}님에게 등록된 카드입니다.")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"이 카드는 이미 {who.name if who else '다른 직원'}님에게 등록되어 있어 등록할 수 없습니다.")
 
     card = NfcCard(user_id=user_id, uid_hmac=hashed, uid_last4=uid_last4(payload.uid), label=payload.label, registered_by=current_user.id)
     db.add(card)
