@@ -90,15 +90,13 @@ export function dropConfirmedPending(pending: PendingMessage[], messages: ChatMe
   return confirmed.size === 0 ? pending : pending.filter((p) => !confirmed.has(p.clientMsgId));
 }
 
-/** 이 메시지를 읽은 "다른 사람" 수 (보낸 사람 제외). 내가 보낸 메시지의 읽음 표시에 쓴다. */
-export function readCount(message: Pick<ChatMessage, "id" | "sender_id">, members: Member[]): number {
-  return members.filter((m) => m.id !== message.sender_id && (m.last_read_message_id ?? 0) >= message.id).length;
-}
-
-export function readLabel(message: Pick<ChatMessage, "id" | "sender_id">, conversation: Pick<ConversationSummary, "kind" | "members">): string | null {
-  const n = readCount(message, conversation.members);
-  if (n === 0) return null;
-  return conversation.kind === "direct" ? "읽음" : `${n}명 읽음`;
+/**
+ * 이 메시지를 **아직 읽지 않은 사람** 수 (카카오톡처럼 메시지 옆에 숫자로 보여 준다. 0 이면 숫자를 숨긴다).
+ * 보낸 사람은 세지 않고, 대화방에 지금 참여 중인 사람만 센다 (나간 사람은 목록에 없다).
+ * 새로 들어온 참여자는 그때까지의 메시지를 읽은 것으로 시작하므로(서버 규칙) 이전 메시지의 숫자에 들어가지 않는다.
+ */
+export function unreadReaders(message: Pick<ChatMessage, "id" | "sender_id">, members: Member[]): number {
+  return members.filter((m) => m.id !== message.sender_id && (m.last_read_message_id ?? 0) < message.id).length;
 }
 
 export interface ThreadItem {

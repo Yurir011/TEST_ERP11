@@ -13,7 +13,7 @@ import {
   formatBytes,
   mergeMessages,
   newClientMsgId,
-  readLabel,
+  unreadReaders,
 } from "./messengerState";
 import { NewConversationModal } from "./NewConversationModal";
 import type { ChatMessage, ConversationSummary, MessagePage, PendingMessage } from "./types";
@@ -240,7 +240,6 @@ export function MessageThread({ conversation, meId }: { conversation: Conversati
   }
 
   const items = useMemo(() => buildThreadItems(messages ?? [], meId), [messages, meId]);
-  const lastOwnId = useMemo(() => [...(messages ?? [])].reverse().find((m) => m.sender_id === meId)?.id ?? null, [messages, meId]);
   const isGroup = conversation.kind === "group";
 
   return (
@@ -294,7 +293,7 @@ export function MessageThread({ conversation, meId }: { conversation: Conversati
                 mine={!!it.mine}
                 showSender={isGroup && !it.mine && !it.continued}
                 showTime={!!it.showTime}
-                readLabel={it.mine && (isGroup || it.message!.id === lastOwnId) ? readLabel(it.message!, conversation) : null}
+                unreadCount={unreadReaders(it.message!, conversation.members)}
               />
             </div>
           ),

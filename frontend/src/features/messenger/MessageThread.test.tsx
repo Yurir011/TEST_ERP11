@@ -309,11 +309,38 @@ describe("읽음 표시", () => {
     expect(api.apiPut).not.toHaveBeenCalled();
   });
 
-  it("상대가 읽은 내 메시지에는 '읽음'이 붙는다 (마지막 것에만)", async () => {
-    const conv = conversation({ members: [{ id: ME, name: "나", last_read_message_id: 2 }, { id: 2, name: "김영희", last_read_message_id: 2 }] });
-    setup({ conv, page: { messages: [msg(1, { sender_id: ME, sender_name: "나" }), msg(2, { sender_id: ME, sender_name: "나" })], has_more: false } });
+  it("1:1: 내 메시지에는 상대가 아직 안 읽은 만큼 1 이 붙고, 상대가 읽으면 사라진다 (카카오톡처럼)", async () => {
+    const page = { messages: [msg(1, { sender_id: ME, sender_name: "나" }), msg(2, { sender_id: ME, sender_name: "나" })], has_more: false };
+    const ctx0 = makeCtx();
+    const unread = conversation({ members: [{ id: ME, name: "나", last_read_message_id: 2 }, { id: 2, name: "김영희", last_read_message_id: null }] });
+    const { rerenderWith } = setup({ conv: unread, page, ctx: ctx0.value });
     await screen.findByText("메시지 2");
-    expect(screen.getAllByText("읽음")).toHaveLength(1);
+    expect(screen.getAllByLabelText("아직 읽지 않은 사람 1명")).toHaveLength(2); // 두 메시지 모두 아직 안 읽음
+
+    // 상대가 1번까지 읽음 (대화방 목록의 참여자 정보가 갱신되어 다시 그려진다)
+    rerenderWith(ctx0.value, conversation({ members: [{ id: ME, name: "나", last_read_message_id: 2 }, { id: 2, name: "김영희", last_read_message_id: 1 }] }));
+    await waitFor(() => expect(screen.getAllByLabelText("아직 읽지 않은 사람 1명")).toHaveLength(1));
+    // 2번까지 읽음 → 숫자가 모두 사라진다
+    rerenderWith(ctx0.value, conversation({ members: [{ id: ME, name: "나", last_read_message_id: 2 }, { id: 2, name: "김영희", last_read_message_id: 2 }] }));
+    await waitFor(() => expect(screen.queryByLabelText(/아직 읽지 않은 사람/)).toBeNull());
+  });
+
+  it("그룹: 아직 읽지 않은 사람 수가 메시지마다 붙고, 읽는 사람이 늘수록 줄어든다 (남의 메시지에도)", async () => {
+    const members = (a: number | null, b: number | null) => [
+      { id: ME, name: "나", last_read_message_id: 3 }, { id: 2, name: "김영희", last_read_message_id: a }, { id: 3, name: "이철수", last_read_message_id: b },
+    ];
+    const page = { messages: [msg(1, { sender_id: ME, sender_name: "나" }), msg(2, { sender_id: 2 }), msg(3, { sender_id: ME, sender_name: "나" })], has_more: false };
+    const ctx0 = makeCtx();
+    const group = (a: number | null, b: number | null) => conversation({ kind: "group", title: "프로젝트방", members: members(a, b) });
+    const { rerenderWith } = setup({ conv: group(2, null), page, ctx: ctx0.value });
+    await screen.findByText("메시지 3");
+    const counts = () => screen.getAllByLabelText(/^아직 읽지 않은 사람/).map((e) => e.textContent);
+    // 메시지1(내 것): 김영희는 읽음, 이철수는 안 읽음 → 1 / 메시지2(김영희 것): 나는 읽음, 이철수 안 읽음 → 1 / 메시지3(내 것): 둘 다 아직 → 2
+    expect(counts()).toEqual(["1", "1", "2"]);
+    rerenderWith(ctx0.value, group(3, 2));
+    await waitFor(() => expect(counts()).toEqual(["1"])); // 김영희는 3까지, 이철수는 2까지 읽음 → 메시지3 만 이철수가 아직
+    rerenderWith(ctx0.value, group(3, 3));
+    await waitFor(() => expect(screen.queryByLabelText(/아직 읽지 않은 사람/)).toBeNull());
   });
 
   it("읽기 알림이 실패하면 다음에 다시 시도한다", async () => {

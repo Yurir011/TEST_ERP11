@@ -102,7 +102,7 @@ const msg = (over: Partial<ChatMessage> = {}): ChatMessage => ({
 function renderBubble(m: ChatMessage, extra: Partial<Parameters<typeof MessageBubble>[0]> = {}) {
   return render(
     <DialogProvider>
-      <MessageBubble message={m} mine={false} showSender showTime readLabel={null} {...extra} />
+      <MessageBubble message={m} mine={false} showSender showTime unreadCount={0} {...extra} />
     </DialogProvider>,
   );
 }
@@ -120,9 +120,17 @@ describe("MessageBubble", () => {
     expect(screen.queryByText("10:05")).toBeNull();
   });
 
-  it("읽음 표시", () => {
-    renderBubble(msg({ sender_id: 1 }), { mine: true, readLabel: "2명 읽음" });
-    expect(screen.getByText("2명 읽음")).toBeTruthy();
+  it("아직 읽지 않은 사람이 있으면 숫자로 보여 주고, 모두 읽었으면(0) 숫자를 숨긴다", () => {
+    const { unmount } = renderBubble(msg({ sender_id: 1 }), { mine: true, unreadCount: 2 });
+    expect(screen.getByLabelText("아직 읽지 않은 사람 2명").textContent).toBe("2");
+    unmount();
+    renderBubble(msg({ sender_id: 1 }), { mine: true, unreadCount: 0 });
+    expect(screen.queryByLabelText(/아직 읽지 않은 사람/)).toBeNull();
+  });
+
+  it("남이 보낸 메시지에도 숫자가 붙는다", () => {
+    renderBubble(msg(), { mine: false, unreadCount: 1 });
+    expect(screen.getByLabelText("아직 읽지 않은 사람 1명").textContent).toBe("1");
   });
 
   it("글 안의 HTML 은 요소가 되지 않고 글자 그대로 보인다", () => {

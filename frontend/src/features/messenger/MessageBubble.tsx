@@ -98,12 +98,18 @@ interface BubbleProps {
   mine: boolean;
   showSender: boolean;
   showTime: boolean;
-  readLabel: string | null;
+  /** 이 메시지를 아직 읽지 않은 사람 수 (0 이면 표시하지 않는다) */
+  unreadCount: number;
 }
 
-export function MessageBubble({ message, mine, showSender, showTime, readLabel }: BubbleProps) {
+export function MessageBubble({ message, mine, showSender, showTime, unreadCount }: BubbleProps) {
   const time = <span className="text-[11px] text-text-muted shrink-0 self-end pb-0.5">{showTime ? timeLabel(message.created_at) : ""}</span>;
-  const read = readLabel ? <span className="text-[11px] text-primary shrink-0 self-end pb-0.5">{readLabel}</span> : null;
+  const unread =
+    unreadCount > 0 ? (
+      <span className="text-[11px] font-bold text-tile-orange-fg shrink-0 self-end leading-none" aria-label={`아직 읽지 않은 사람 ${unreadCount}명`} title={`아직 읽지 않은 사람 ${unreadCount}명`}>
+        {unreadCount}
+      </span>
+    ) : null;
   return (
     <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
       {showSender && <span className="text-xs text-text-muted mb-1 px-1">{message.sender_name ?? "(알 수 없음)"}</span>}
@@ -113,7 +119,7 @@ export function MessageBubble({ message, mine, showSender, showTime, readLabel }
           {message.body && <MessageText text={message.body} />}
         </div>
         <div className={`flex flex-col justify-end ${mine ? "items-end" : "items-start"}`}>
-          {read}
+          {unread}
           {time}
         </div>
       </div>

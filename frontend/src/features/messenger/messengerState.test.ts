@@ -10,9 +10,9 @@ import {
   listTimeLabel,
   mergeMessages,
   previewOf,
-  readLabel,
   sortConversations,
   totalUnread,
+  unreadReaders,
 } from "./messengerState";
 import type { ChatMessage, ConversationSummary, PendingMessage } from "./types";
 
@@ -106,18 +106,41 @@ describe("읽음 알림", () => {
   });
 });
 
-describe("읽음 표시", () => {
-  const members = (a: number | null, b: number | null) => [
-    { id: ME, name: "나", last_read_message_id: 9 }, { id: 2, name: "상대", last_read_message_id: a }, { id: 3, name: "셋째", last_read_message_id: b },
-  ];
+describe("메시지별 안 읽은 사람 수 (카카오톡 숫자)", () => {
+  const member = (id: number, read: number | null) => ({ id, name: `직원${id}`, last_read_message_id: read });
+  const msg5 = (sender: number) => ({ id: 5, sender_id: sender });
 
-  it("1:1 은 '읽음', 그룹은 'N명 읽음', 아무도 안 읽었으면 표시 없음 (보낸 사람 본인은 세지 않는다)", () => {
-    const m = { id: 5, sender_id: ME };
-    expect(readLabel(m, { kind: "direct", members: members(5, null).slice(0, 2) })).toBe("읽음");
-    expect(readLabel(m, { kind: "direct", members: members(4, null).slice(0, 2) })).toBeNull();
-    expect(readLabel(m, { kind: "group", members: members(5, 6) })).toBe("2명 읽음");
-    expect(readLabel(m, { kind: "group", members: members(5, 3) })).toBe("1명 읽음");
-    expect(readLabel(m, { kind: "group", members: members(null, null) })).toBeNull();
+  it("1:1: 상대가 아직 안 읽었으면 1, 읽으면 0", () => {
+    expect(unreadReaders(msg5(1), [member(1, 5), member(2, null)])).toBe(1);
+    expect(unreadReaders(msg5(1), [member(1, 5), member(2, 4)])).toBe(1);
+    expect(unreadReaders(msg5(1), [member(1, 5), member(2, 5)])).toBe(0);
+    expect(unreadReaders(msg5(1), [member(1, 5), member(2, 9)])).toBe(0); // 더 뒤까지 읽었어도 읽은 것
+  });
+
+  it("그룹: 아직 읽지 않은 사람만 센다 (보낸 사람은 세지 않는다)", () => {
+    const members = [member(1, 5), member(2, 5), member(3, 3), member(4, null)];
+    expect(unreadReaders(msg5(1), members)).toBe(2); // 3번, 4번이 아직
+    expect(unreadReaders(msg5(1), [member(1, 5), member(2, 5), member(3, 5), member(4, 5)])).toBe(0);
+    expect(unreadReaders(msg5(1), [member(1, 0), member(2, null), member(3, null), member(4, null)])).toBe(3);
+  });
+
+  it("남이 보낸 메시지도 같은 방식으로 센다 (아직 안 읽은 사람 = 보낸 사람 외 모두 중 안 읽은 사람, 나 포함)", () => {
+    const members = [member(1, 2), member(2, 5), member(3, 5)]; // 1번(나)은 아직 5번을 안 읽음
+    expect(unreadReaders(msg5(2), members)).toBe(1);
+    expect(unreadReaders(msg5(2), [member(1, 5), member(2, 5), member(3, 5)])).toBe(0);
+  });
+
+  it("읽기가 진행될수록 숫자가 줄어든다", () => {
+    const counts = [null, 3, 5].map((read) => unreadReaders(msg5(1), [member(1, 5), member(2, 5), member(3, read)]));
+    expect(counts).toEqual([1, 1, 0]);
+  });
+
+  it("보낸 사람 정보가 없는(삭제된 직원) 메시지는 모든 참여자가 대상", () => {
+    expect(unreadReaders({ id: 5, sender_id: null }, [member(1, 5), member(2, null)])).toBe(1);
+  });
+
+  it("참여자가 없으면 0", () => {
+    expect(unreadReaders(msg5(1), [])).toBe(0);
   });
 });
 
