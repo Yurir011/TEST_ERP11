@@ -1,6 +1,7 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
+import { PasswordInput } from "../../components/ui/PasswordInput";
 import { useAuth } from "../../context/useAuth";
 import { ApiError } from "../../lib/api";
 import { logError } from "../../lib/logger";
@@ -72,9 +73,8 @@ export function LoginPage() {
             <label className="block text-xs text-text-muted mb-1.5" htmlFor="password">
               비밀번호
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
