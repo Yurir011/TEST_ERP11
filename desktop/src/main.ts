@@ -9,9 +9,10 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { BrowserWindow, Menu, Notification, Tray, app, ipcMain, nativeImage, session, shell } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, ipcMain, nativeImage, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 
+import { type DeviceKey, type DeviceStatusName, type SecretStore, defaultDeviceName, loadOrCreateDeviceKey, registerDevice } from "./device";
 import { getLogger } from "./log";
 import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
@@ -33,6 +34,9 @@ let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let reader: NfcReader | null = null;
 let quitting = false;
+let deviceKey: DeviceKey | null = null;
+let deviceState: { status: DeviceStatusName | "unknown"; error?: string } = { status: "unknown" };
+let deviceTimer: ReturnType<typeof setInterval> | null = null;
 let shellState: { mode: "setup" | "offline"; error?: string } = { mode: "setup" };
 
 const configFile = () => path.join(app.getPath("userData"), "config.json");
@@ -170,6 +174,8 @@ function registerIpc(): void {
   ipcMain.handle("app:version", (e) => (guard(e, "app:version", ["shell", "server"]) ? app.getVersion() : ""));
   ipcMain.handle("nfc:status", (e) => (guard(e, "nfc:status", ["shell", "server"]) ? (reader?.getStatus() ?? { state: "searching" }) : null));
 
+  ipcMain.handle("device:state", (e) => (guard(e, "device:state", ["shell", "server"]) ? deviceState : null));
+
   ipcMain.handle("app:notify", (e, title: unknown, body: unknown) => {
     if (!guard(e, "app:notify", ["server"])) return;
     if (typeof title !== "string" || typeof body !== "string") return;
@@ -207,6 +213,29 @@ function registerIpc(): void {
     if (!guard(e, "shell:retry", ["shell"])) return;
     void openServer();
   });
+}
+
+
+/** Electron safeStorage(Windows DPAPI / macOS Keychain / Linux libsecret)를 기기 키 보관용 저장소로 쓴다 */
+const secretStore: SecretStore = {
+  available: () => safeStorage.isEncryptionAvailable(),
+  encrypt: (plain) => safeStorage.encryptString(plain.toString("base64")),
+  decrypt: (cipher) => Buffer.from(safeStorage.decryptString(cipher), "base64"),
+};
+
+function setDeviceState(next: typeof deviceState): void {
+  const changed = next.status !== deviceState.status || next.error !== deviceState.error;
+  deviceState = next;
+  if (!changed) return;
+  log.info(`[Device] 상태: ${next.status}${next.error ? ` - ${next.error}` : ""}`);
+  if (win && !win.isDestroyed()) win.webContents.send("device:status", next);
+}
+
+/** 서버에 이 PC 를 등록하거나 승인 상태를 확인한다. 승인 전에는 1분마다 다시 확인한다. */
+async function refreshDevice(): Promise<void> {
+  if (!deviceKey || !config.serverUrl) return;
+  const r = await registerDevice(config.serverUrl, deviceKey, defaultDeviceName());
+  setDeviceState(r.ok ? { status: r.status } : { status: deviceState.status, error: r.error });
 }
 
 function showWindow(): void {
@@ -270,8 +299,18 @@ async function runSmoke(): Promise<void> {
 
   // 2) 서버 화면(가짜 서버): 팝업·다운로드
   const pageHtml = "<!doctype html><title>smoke</title><body>smoke</body>";
+  let registered: { name: string; public_key: string } | null = null;
   const server = http.createServer((req, res) => {
     if (req.url === "/api/health") res.end('{"status":"ok"}');
+    else if (req.url === "/api/devices/register" && req.method === "POST") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        registered = JSON.parse(body) as { name: string; public_key: string };
+        res.setHeader("Content-Type", "application/json");
+        res.end('{"status":"pending"}');
+      });
+    }
     else res.setHeader("Content-Type", "text/html; charset=utf-8"), res.end(pageHtml);
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -287,6 +326,11 @@ async function runSmoke(): Promise<void> {
   });
 
   await w.loadURL(config.serverUrl!);
+  await refreshDevice();
+  const reg = registered as { name: string; public_key: string } | null; // 서버 핸들러에서 채워진다
+  check("기기 등록 요청이 서버에 전달됨(공개키 64자 + 이름만)", !!reg && /^[0-9a-f]{64}$/.test(reg.public_key) && !!reg.name && Object.keys(reg).length === 2);
+  const devState = (await w.webContents.executeJavaScript("window.benchClient.device.state()")) as { status: string } | null;
+  check("서버 화면에서 기기 상태(pending)를 읽을 수 있다", devState?.status === "pending");
   const before = BrowserWindow.getAllWindows().length;
   const popup = (code: string) => w.webContents.executeJavaScript(code);
 
@@ -337,6 +381,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", () => showWindow());
   app.on("before-quit", () => {
     quitting = true;
+    if (deviceTimer) clearInterval(deviceTimer);
   });
   // 창이 모두 닫혀도(트레이로 내려가도) 앱은 끝내지 않는다
   app.on("window-all-closed", () => {});
@@ -345,6 +390,11 @@ if (!app.requestSingleInstanceLock()) {
     log.info(`[Main] 시작: v${app.getVersion()}, Electron ${process.versions.electron}${SMOKE ? " (smoke)" : ""}`);
     config = loadConfig(configFile(), log);
     registerIpc();
+    try {
+      deviceKey = loadOrCreateDeviceKey(path.join(app.getPath("userData"), "device-key.json"), secretStore, getLogger("Device"));
+    } catch (err) {
+      log.error(`[Device] 기기 키를 준비하지 못했습니다: ${(err as Error).message}`);
+    }
     win = createWindow();
     if (!SMOKE) createTray();
     startNfc();
@@ -353,6 +403,8 @@ if (!app.requestSingleInstanceLock()) {
       await runSmoke();
     } else {
       await openServer();
+      void refreshDevice();
+      deviceTimer = setInterval(() => void refreshDevice(), 60_000);
     }
   });
 }

@@ -21,6 +21,13 @@ export const ACTION_LABELS: Record<string, { label: string; tone: "green" | "blu
   login_success: { label: "로그인", tone: "gray" },
   login_failed: { label: "로그인 실패", tone: "orange" },
   login_blocked: { label: "로그인 차단", tone: "orange" },
+  nfc_card_registered: { label: "카드 등록", tone: "green" },
+  nfc_card_deactivated: { label: "카드 중지", tone: "orange" },
+  nfc_card_deleted: { label: "카드 삭제", tone: "red" },
+  device_registered: { label: "기기 등록 요청", tone: "gray" },
+  device_approved: { label: "기기 승인", tone: "green" },
+  device_revoked: { label: "기기 중지", tone: "orange" },
+  device_deleted: { label: "기기 요청 거절", tone: "red" },
 };
 
 export const ENTITY_LABELS: Record<string, string> = {
@@ -30,6 +37,8 @@ export const ENTITY_LABELS: Record<string, string> = {
   user: "직원 계정",
   project_document: "문서",
   proposal: "품의서",
+  nfc_card: "NFC 카드",
+  device: "기기",
 };
 
 /** 대상 필터 선택지 → API entity_type 값 (문서는 프로젝트 문서와 품의서를 함께 본다) */
@@ -40,6 +49,7 @@ export const ENTITY_FILTERS: { value: string; label: string }[] = [
   { value: "transaction", label: "매입매출" },
   { value: "user", label: "직원 계정" },
   { value: "project_document,proposal", label: "문서" },
+  { value: "nfc_card,device", label: "카드·기기" },
 ];
 
 export const FIELD_LABELS: Record<string, string> = {

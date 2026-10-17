@@ -3,9 +3,13 @@ from app.models.approval_step import ApprovalStep
 from app.models.audit_log import AuditLog
 from app.models.attendance import Attendance
 from app.models.client import Client
+from app.models.client_device import ClientDevice
+from app.models.nfc_card import NfcCard
+from app.models.client_device import ClientDevice
 from app.models.document import DocumentIssue
 from app.models.document_set import DocumentSet
 from app.models.leave import LeaveRequest
+from app.models.nfc_card import NfcCard
 from app.models.notice import Notice
 from app.models.notification import Notification
 from app.models.payment import Payment
@@ -28,6 +32,10 @@ __all__ = [
     "LeaveRequest",
     "DocumentIssue",
     "Client",
+    "ClientDevice",
+    "NfcCard",
+    "ClientDevice",
+    "NfcCard",
     "Project",
     "ProjectDocument",
     "ProjectDocumentItem",

@@ -22,6 +22,10 @@ const api = {
     onStatus: (cb: (status: unknown) => void): Unsubscribe => subscribe("nfc:status", cb),
     onCard: (cb: (card: { uid: string }) => void): Unsubscribe => subscribe("nfc:card", cb),
   },
+  device: {
+    state: (): Promise<{ status: string; error?: string } | null> => ipcRenderer.invoke("device:state"),
+    onStatus: (cb: (state: { status: string; error?: string }) => void): Unsubscribe => subscribe("device:status", cb),
+  },
   notify: (title: string, body: string): Promise<void> => ipcRenderer.invoke("app:notify", title, body),
   setBadge: (count: number): Promise<void> => ipcRenderer.invoke("app:badge", count),
   shell: {

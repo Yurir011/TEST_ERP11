@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     login_window_seconds: int = 600
     login_lockout_seconds: int = 300
 
+    # NFC 카드 번호(UID)를 DB 에 저장할 때 쓰는 비밀키(HMAC). 운영에서는 .env 에 NFC_UID_SECRET 으로 32자 이상 지정한다.
+    # 비어 있으면 JWT 비밀키에서 파생한 값을 쓴다. 이 값이 바뀌면 이미 등록한 카드를 알아볼 수 없으므로 한 번 정하면 바꾸지 않는다.
+    nfc_uid_secret: str = ""
+
+    # NFC 카드 번호(UID)를 DB 에 저장할 때 쓰는 비밀키(HMAC). 운영에서는 .env 에 NFC_UID_SECRET 으로 32자 이상 지정한다.
+    # 비어 있으면 JWT 비밀키에서 파생한 값을 쓴다. 이 값이 바뀌면 이미 등록한 카드를 알아볼 수 없으므로 한 번 정하면 바꾸지 않는다.
+    nfc_uid_secret: str = ""
+
     # 증명서 발급에 표시할 회사 정보. 설정 화면이 생기기 전까지는 .env로 관리한다.
     company_name: str = "BENCH"
     company_ceo_name: str = ""

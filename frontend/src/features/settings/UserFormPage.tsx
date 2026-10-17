@@ -5,6 +5,7 @@ import { MENU_PERMISSION_OPTIONS, type CurrentUser, type JobGrade, type JobTitle
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logError } from "../../lib/logger";
 import { todayISO } from "../../lib/date";
+import { NfcCardsSection } from "./NfcCardsSection";
 
 const GRADE_OPTIONS: { value: JobGrade; label: string }[] = [
   { value: "staff", label: "사원" },
@@ -285,6 +286,7 @@ export function UserFormPage() {
           </div>
         </form>
       )}
+      {isEdit && !isLoading && <NfcCardsSection userId={Number(id)} />}
     </MainLayout>
   );
 }

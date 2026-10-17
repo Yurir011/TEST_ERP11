@@ -1,4 +1,4 @@
-import { History, KeyRound, Plus, UserX, UserCheck } from "lucide-react";
+import { History, KeyRound, Monitor, Plus, UserX, UserCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -79,6 +79,15 @@ export function UsersPage() {
       description="사내 ERP를 사용할 직원 계정을 관리합니다."
       actions={
         <div className="flex items-center gap-2">
+          {me?.role === "admin" && (
+            <Link
+              to="/settings/devices"
+              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
+            >
+              <Monitor size={14} />
+              기기 관리
+            </Link>
+          )}
           {me?.role === "admin" && (
             // 변경 이력(감사 로그)은 대표만 볼 수 있다
             <Link

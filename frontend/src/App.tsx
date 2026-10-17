@@ -45,6 +45,7 @@ const TransactionFormPage = lazyPage(() => import("./features/transactions/Trans
 const PaymentsPage = lazyPage(() => import("./features/payments/PaymentsPage"), "PaymentsPage");
 const PaymentFormPage = lazyPage(() => import("./features/payments/PaymentFormPage"), "PaymentFormPage");
 const UsersPage = lazyPage(() => import("./features/settings/UsersPage"), "UsersPage");
+const DevicesPage = lazyPage(() => import("./features/settings/DevicesPage"), "DevicesPage");
 const AuditLogsPage = lazyPage(() => import("./features/settings/AuditLogsPage"), "AuditLogsPage");
 const UserFormPage = lazyPage(() => import("./features/settings/UserFormPage"), "UserFormPage");
 const CalendarPage = lazyPage(() => import("./features/schedule/CalendarPage"), "CalendarPage");
@@ -327,6 +328,15 @@ function App() {
           // 대표 전용 (사이트 관리자는 볼 수 없다: 서버 API 도 대표만 허용)
           <ProtectedRoute requireAdmin>
             <AuditLogsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/devices"
+        element={
+          // 대표 전용 (서버 API 도 대표만 허용): 어느 PC 에서 카드 로그인을 받을지는 대표가 정한다
+          <ProtectedRoute requireAdmin>
+            <DevicesPage />
           </ProtectedRoute>
         }
       />

@@ -15,8 +15,10 @@ from app.routers import (
     audit_logs,
     auth,
     clients,
+    devices,
     documents,
     leaves,
+    nfc_cards,
     notices,
     notifications,
     payments,
@@ -74,6 +76,8 @@ app.include_router(transactions.router)
 app.include_router(payments.router)
 app.include_router(recurring_payments.router)
 app.include_router(users.router)
+app.include_router(nfc_cards.router)
+app.include_router(devices.router)
 app.include_router(schedule.router)
 app.include_router(todos.router)
 
