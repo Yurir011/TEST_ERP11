@@ -94,3 +94,25 @@ export function classifySender(senderUrl: string, serverUrl: string | undefined,
 export function isAllowedNavigation(targetUrl: string, serverUrl: string | undefined, shellFilePath: string): boolean {
   return classifySender(targetUrl, serverUrl, shellFilePath) !== null;
 }
+
+export type WindowOpenDecision = "app-window" | "external" | "deny";
+
+/**
+ * 화면에서 window.open / target=_blank 로 새 창을 열려고 할 때의 처리.
+ *  - app-window: 같은 서버 주소의 페이지, 또는 이 서버 화면이 만든 blob: (PDF·이미지 열기). 앱 안의 새 창으로 연다.
+ *  - external: mailto:/tel: (기본 메일·전화 프로그램), 다른 사이트의 http(s) (팝빌, 링크 첨부). 기본 프로그램이 처리.
+ *  - deny: 그 외(file:, javascript:, data:, about: 등).
+ * blob: 주소의 origin 은 만든 쪽 화면의 origin 이라, 다른 사이트가 만든 blob 은 app-window 가 되지 않는다.
+ */
+export function decideWindowOpen(url: string, serverUrl: string | undefined): WindowOpenDecision {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return "deny";
+  }
+  if (u.protocol === "mailto:" || u.protocol === "tel:") return "external";
+  if (u.protocol === "blob:") return serverUrl && u.origin === serverUrl ? "app-window" : "deny";
+  if (u.protocol === "http:" || u.protocol === "https:") return serverUrl && u.origin === serverUrl ? "app-window" : "external";
+  return "deny";
+}

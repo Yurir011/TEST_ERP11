@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { checkHealth, classifySender, isAllowedNavigation, loadConfig, normalizeServerUrl, saveConfig } from "./serverConfig";
+import { checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, normalizeServerUrl, saveConfig } from "./serverConfig";
 
 const SHELL = path.join("C:\\", "app", "renderer", "shell.html");
 
@@ -96,5 +96,32 @@ describe("checkHealth", () => {
     const slow = ((_u: string, init?: RequestInit) => new Promise((_res, rej) => init?.signal?.addEventListener("abort", () => rej(init.signal?.reason)))) as unknown as typeof fetch;
     const r = await checkHealth("http://x", 20, slow);
     expect(r).toMatchObject({ ok: false, error: expect.stringContaining("시간 초과") });
+  });
+});
+
+describe("decideWindowOpen", () => {
+  const server = "http://www.epik.bio:3102";
+  it.each([
+    ["blob:http://www.epik.bio:3102/3f1c-uuid", "app-window"], // PDF·이미지 열기
+    ["http://www.epik.bio:3102/api/files/1", "app-window"],
+    ["mailto:a@b.com?subject=%EA%B2%AC%EC%A0%81%EC%84%9C", "external"],
+    ["tel:0212345678", "external"],
+    ["https://www.popbill.com/view?x=1", "external"],
+    ["http://other.example/", "external"],
+    ["http://www.epik.bio:9999/", "external"], // 포트가 다르면 다른 사이트
+    ["blob:https://evil.example/uuid", "deny"],
+    ["file:///C:/Windows/win.ini", "deny"],
+    ["javascript:alert(1)", "deny"],
+    ["data:text/html,<script>1</script>", "deny"],
+    ["about:blank", "deny"],
+    ["", "deny"],
+    ["not a url", "deny"],
+  ])("%s → %s", (url, expected) => {
+    expect(decideWindowOpen(url, server)).toBe(expected);
+  });
+
+  it("서버 주소가 없으면 같은 서버로 볼 수 없다", () => {
+    expect(decideWindowOpen("blob:http://www.epik.bio:3102/x", undefined)).toBe("deny");
+    expect(decideWindowOpen("http://www.epik.bio:3102/", undefined)).toBe("external");
   });
 });
