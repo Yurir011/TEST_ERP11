@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "../../context/useAuth";
-import { apiGet } from "../../lib/api";
+import { apiDelete, apiGet, apiPut } from "../../lib/api";
 import { getToken } from "../../lib/auth";
 import { getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
 import { RealtimeClient, realtimeUrl, type ConnectionStatus } from "../../lib/realtime";
 import { applyIncomingMessage, applyReadEvent, totalUnread } from "./messengerState";
-import type { ConversationSummary, RealtimeEvent } from "./types";
+import { withFavorite, withStatus } from "./presence";
+import type { ConversationSummary, DirectoryUser, RealtimeEvent } from "./types";
 import { MessengerContext, type MessengerContextValue } from "./useMessenger";
 
 const BASE_TITLE = "BENCH ERP";
@@ -27,6 +28,10 @@ export function MessengerProvider({ children }: { children: ReactNode }) {
   const listeners = useRef(new Set<(e: RealtimeEvent) => void>());
   const activeId = useRef<number | null>(null);
   const conversationsRef = useRef<ConversationSummary[] | null>(null);
+  const [directory, setDirectory] = useState<DirectoryUser[] | null>(null);
+  const [myStatus, setMyStatus] = useState<string | null>(null);
+  const myStatusRef = useRef<string | null>(null);
+  const directoryWanted = useRef(false); // 메신저 화면이 전체 목록을 쓰고 있는가 (아니면 상태 알림을 굳이 반영하지 않는다)
 
   const apply = useCallback((next: ConversationSummary[] | null) => {
     conversationsRef.current = next;
@@ -42,11 +47,36 @@ export function MessengerProvider({ children }: { children: ReactNode }) {
   }, [apply]);
 
   useEffect(() => {
+    myStatusRef.current = myStatus; // 상태 변경이 거절됐을 때 되돌릴 이전 값
+  }, [myStatus]);
+
+  const loadDirectory = useCallback(async () => {
+    try {
+      const [dir, status] = await Promise.all([
+        apiGet<DirectoryUser[]>("/api/messenger/directory"),
+        apiGet<{ status: string }>("/api/messenger/status"),
+      ]);
+      setDirectory(dir);
+      setMyStatus(status.status);
+    } catch (err) {
+      logError("Messenger", "전체 목록 조회 실패", err);
+    }
+  }, []);
+
+  const ensureDirectory = useCallback(() => {
+    directoryWanted.current = true;
+    void loadDirectory();
+  }, [loadDirectory]);
+
+  useEffect(() => {
     if (meId === null) return;
     const client = new RealtimeClient<RealtimeEvent>({ url: realtimeUrl(), getToken });
     const offStatus = client.onStatus((s) => {
       setConnection(s);
-      if (s.state === "connected") void refresh(); // (다시) 연결되면 그 사이 놓친 것을 반영한다
+      if (s.state === "connected") {
+        void refresh(); // (다시) 연결되면 그 사이 놓친 것을 반영한다
+        if (directoryWanted.current) void loadDirectory();
+      }
     });
     const offEvent = client.onEvent((event) => {
       handleEvent(event, meId);
@@ -76,6 +106,12 @@ export function MessengerProvider({ children }: { children: ReactNode }) {
         if (r.needsRefetch) void refresh();
       } else if (event.type === "conversation.updated") {
         void refresh();
+      } else if (event.type === "presence.updated") {
+        if (!directoryWanted.current) return;
+        setDirectory((prev) => (prev ? withStatus(prev, event.user_id, event.status) : prev));
+        if (event.user_id === me) setMyStatus(event.status);
+      } else if (event.type === "favorites.updated") {
+        if (directoryWanted.current) void loadDirectory(); // 내 다른 창에서 바꾼 즐겨찾기
       }
     }
 
@@ -89,9 +125,46 @@ export function MessengerProvider({ children }: { children: ReactNode }) {
       offEvent();
       client.stop();
       apply(null); // 로그아웃·계정 전환 때 이전 사람의 대화 목록이 남지 않게 한다
+      setDirectory(null);
+      setMyStatus(null);
+      directoryWanted.current = false;
       logDebug("Messenger", "실시간 연결 종료");
     };
-  }, [meId, apply, refresh]);
+  }, [meId, apply, refresh, loadDirectory]);
+
+  // 창을 다시 볼 때(날이 바뀌었거나 연차가 승인된 경우 등) 상태를 최신으로
+  useEffect(() => {
+    function onFocus() {
+      if (directoryWanted.current) void loadDirectory();
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [loadDirectory]);
+
+  const changeMyStatus = useCallback(
+    async (status: string) => {
+      const previous = myStatusRef.current;
+      setMyStatus(status);
+      try {
+        await apiPut("/api/messenger/status", { status });
+      } catch (err) {
+        setMyStatus(previous); // 서버가 받지 않았으면 화면도 원래대로
+        throw err;
+      }
+    },
+    [],
+  );
+
+  const toggleFavorite = useCallback(async (userId: number, on: boolean) => {
+    setDirectory((prev) => (prev ? withFavorite(prev, userId, on) : prev));
+    try {
+      if (on) await apiPut(`/api/messenger/favorites/${userId}`);
+      else await apiDelete(`/api/messenger/favorites/${userId}`);
+    } catch (err) {
+      setDirectory((prev) => (prev ? withFavorite(prev, userId, !on) : prev));
+      throw err;
+    }
+  }, []);
 
   const unreadTotal = useMemo(() => totalUnread(conversations), [conversations]);
 
@@ -113,8 +186,8 @@ export function MessengerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<MessengerContextValue>(
-    () => ({ conversations, unreadTotal, connection, refresh, subscribe, setActiveConversation }),
-    [conversations, unreadTotal, connection, refresh, subscribe, setActiveConversation],
+    () => ({ conversations, unreadTotal, connection, refresh, subscribe, setActiveConversation, directory, myStatus, ensureDirectory, changeMyStatus, toggleFavorite }),
+    [conversations, unreadTotal, connection, refresh, subscribe, setActiveConversation, directory, myStatus, ensureDirectory, changeMyStatus, toggleFavorite],
   );
   return <MessengerContext.Provider value={value}>{children}</MessengerContext.Provider>;
 }

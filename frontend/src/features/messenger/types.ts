@@ -72,4 +72,16 @@ export interface PendingMessage {
 export type RealtimeEvent =
   | { type: "message.created"; message: ChatMessage }
   | { type: "conversation.read"; conversation_id: number; user_id: number; message_id: number }
-  | { type: "conversation.updated"; conversation_id: number };
+  | { type: "conversation.updated"; conversation_id: number }
+  | { type: "presence.updated"; user_id: number; status: string }
+  | { type: "favorites.updated" };
+
+/** 메신저 전체 목록의 직원 한 명 (서버: GET /api/messenger/directory) */
+export interface DirectoryUser {
+  id: number;
+  name: string;
+  grade: string;
+  title: string | null;
+  status: string;
+  is_favorite: boolean;
+}

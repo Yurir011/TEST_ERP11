@@ -42,6 +42,8 @@ function makeCtx(over: Partial<MessengerContextValue> = {}) {
     refresh: vi.fn().mockResolvedValue(undefined),
     subscribe: (l) => { listeners.add(l); return () => { listeners.delete(l); }; },
     setActiveConversation: vi.fn(),
+    directory: null, myStatus: null, ensureDirectory: vi.fn(),
+    changeMyStatus: vi.fn().mockResolvedValue(undefined), toggleFavorite: vi.fn().mockResolvedValue(undefined),
     ...over,
   };
   return { value, emit: (e: RealtimeEvent) => act(() => { listeners.forEach((l) => l(e)); }) };

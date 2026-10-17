@@ -31,6 +31,7 @@ function Harness({ initial, afterRefresh, path }: { initial: ConversationSummary
     conversations: list, unreadTotal: 0, connection: { state: "connected", epoch: 1 },
     refresh: async () => { await new Promise((r) => setTimeout(r, 20)); setList(afterRefresh); }, // 서버에 다녀오는 시간
     subscribe: () => () => {}, setActiveConversation: () => {},
+    directory: null, myStatus: null, ensureDirectory: () => {}, changeMyStatus: async () => {}, toggleFavorite: async () => {},
   };
   const auth: AuthContextValue = { user: { id: ME, name: "나" } as AuthContextValue["user"], isLoading: false, login: vi.fn(), loginWithToken: vi.fn(), logout: vi.fn() };
   return (
@@ -92,7 +93,7 @@ describe("MessengerPage", () => {
 
   it("목록을 불러오는 동안에는 되돌려 보내지 않는다", async () => {
     function Loading() {
-      const value: MessengerContextValue = { conversations: null, unreadTotal: 0, connection: { state: "connecting", epoch: 0 }, refresh: async () => {}, subscribe: () => () => {}, setActiveConversation: () => {} };
+      const value: MessengerContextValue = { conversations: null, unreadTotal: 0, connection: { state: "connecting", epoch: 0 }, refresh: async () => {}, subscribe: () => () => {}, setActiveConversation: () => {}, directory: null, myStatus: null, ensureDirectory: () => {}, changeMyStatus: async () => {}, toggleFavorite: async () => {}, };
       const auth: AuthContextValue = { user: { id: ME, name: "나" } as AuthContextValue["user"], isLoading: false, login: vi.fn(), loginWithToken: vi.fn(), logout: vi.fn() };
       return (
         <MemoryRouter initialEntries={["/messenger/10"]}>

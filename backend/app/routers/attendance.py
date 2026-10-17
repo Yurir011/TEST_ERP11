@@ -10,6 +10,7 @@ from app.logging_config import get_logger
 from app.models.attendance import Attendance
 from app.models.user import User
 from app.schemas.attendance import AttendanceOut
+from app.services import presence
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 logger = get_logger("Attendance")
@@ -108,9 +109,11 @@ def clock_in(db: Session = Depends(get_db), current_user: User = Depends(get_cur
     else:
         record.clock_in = now
 
+    presence.set_status(db, current_user.id, "working", today)  # 출근하면 메신저 상태도 '출근'으로
     db.commit()
     db.refresh(record)
     record.user = current_user
+    presence.announce(current_user.id, "working")
     logger.debug(f"[Attendance] 출근 기록 완료: user_id={current_user.id}, time={now.isoformat()}")
     return _to_out(record)
 
@@ -128,8 +131,10 @@ def clock_out(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="오늘 이미 퇴근 처리되었습니다.")
 
     record.clock_out = datetime.now(timezone.utc)
+    presence.set_status(db, current_user.id, "off", today)  # 퇴근하면 메신저 상태도 '퇴근'으로
     db.commit()
     db.refresh(record)
+    presence.announce(current_user.id, "off")
     logger.debug(f"[Attendance] 퇴근 기록 완료: user_id={current_user.id}")
     return _to_out(record)
 

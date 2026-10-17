@@ -113,3 +113,27 @@ class MuteIn(BaseModel):
 
 class UnreadTotalOut(BaseModel):
     unread_count: int
+
+
+class DirectoryUserOut(BaseModel):
+    """메신저 전체 목록의 직원 한 명: 현재 상태와 내가 즐겨찾기했는지."""
+
+    id: int
+    name: str
+    grade: JobGrade
+    title: JobTitle | None
+    status: str
+    is_favorite: bool
+
+
+class StatusIn(BaseModel):
+    status: Literal["working", "meeting", "meal", "outside", "trip", "leave", "off"]
+
+
+class StatusOut(BaseModel):
+    status: str
+
+
+class FavoriteOut(BaseModel):
+    user_id: int
+    is_favorite: bool

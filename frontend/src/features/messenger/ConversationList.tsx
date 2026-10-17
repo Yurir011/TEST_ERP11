@@ -14,7 +14,7 @@ export function ConversationList({
   onNew: () => void;
 }) {
   return (
-    <aside className="w-80 shrink-0 bg-surface border border-border rounded-2xl flex flex-col overflow-hidden" aria-label="대화방 목록">
+    <div className="flex-1 min-h-0 flex flex-col" aria-label="대화방 목록">
       <div className="p-3 border-b border-border">
         <button type="button" onClick={onNew} className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium py-2.5">
           <Plus size={16} />새 대화
@@ -53,6 +53,6 @@ export function ConversationList({
           </button>
         ))}
       </div>
-    </aside>
+    </div>
   );
 }

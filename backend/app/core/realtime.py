@@ -62,6 +62,13 @@ class ConnectionHub:
         for conn in targets:
             asyncio.run_coroutine_threadsafe(self._send(conn, payload), conn.loop)
 
+    def broadcast(self, payload: dict[str, Any]) -> None:
+        """지금 연결된 모든 직원에게 보낸다 (상태 변경처럼 모두가 볼 정보용)."""
+        with self._lock:
+            targets = [c for group in self._conns.values() for c in group]
+        for conn in targets:
+            asyncio.run_coroutine_threadsafe(self._send(conn, payload), conn.loop)
+
     async def _send(self, conn: Connection, payload: dict[str, Any]) -> None:
         try:
             await conn.ws.send_json(payload)

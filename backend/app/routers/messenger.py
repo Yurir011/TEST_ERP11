@@ -7,6 +7,7 @@
 import os
 import re
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
@@ -20,12 +21,15 @@ from app.core.realtime import hub
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.messenger import Conversation, ConversationMember, Message, MessageAttachment
+from app.models.presence import MessengerFavorite
 from app.models.user import User
 from app.schemas.messenger import (
     MAX_BODY_LENGTH,
     MAX_GROUP_MEMBERS,
     ConversationCreate,
     ConversationOut,
+    DirectoryUserOut,
+    FavoriteOut,
     MembersAdd,
     MessageCreate,
     MessageOut,
@@ -34,9 +38,12 @@ from app.schemas.messenger import (
     MuteIn,
     ReadIn,
     ReadOut,
+    StatusIn,
+    StatusOut,
     UnreadTotalOut,
 )
 from app.services import messenger as svc
+from app.services import presence
 from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
 
 router = APIRouter(prefix="/api/messenger", tags=["messenger"])
@@ -376,3 +383,58 @@ def mark_read(conversation_id: int, payload: ReadIn, db: Session = Depends(get_d
     unread = svc.unread_counts(db, current_user.id, [conv.id]).get(conv.id, 0)
     return ReadOut(last_read_message_id=me.last_read_message_id, unread_count=unread)
 
+
+
+# ── 전체 목록·상태·즐겨찾기 ────────────────────────────────────────
+
+@router.get("/directory", response_model=list[DirectoryUserOut])
+def get_directory(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """메신저 '전체 목록': 활성 직원(나 제외)의 현재 상태와 내가 즐겨찾기했는지. 직원 수와 상관없이 쿼리는 고정."""
+    users = db.query(User).filter(User.is_active.is_(True), User.id != current_user.id).order_by(User.name, User.id).all()
+    favorites = {f for (f,) in db.query(MessengerFavorite.favorite_user_id).filter(MessengerFavorite.user_id == current_user.id)}
+    statuses = presence.statuses_for(db, [u.id for u in users], date.today())
+    return [DirectoryUserOut(id=u.id, name=u.name, grade=u.grade, title=u.title, status=statuses[u.id], is_favorite=u.id in favorites) for u in users]
+
+
+@router.get("/status", response_model=StatusOut)
+def get_my_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return StatusOut(status=presence.statuses_for(db, [current_user.id], date.today())[current_user.id])
+
+
+@router.put("/status", response_model=StatusOut)
+def set_my_status(payload: StatusIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """내 상태를 바꾼다 (본인만). 그날 하루 유지되고 다음 날 출퇴근·연차 기록으로 돌아간다. 변경 이력에는 남기지 않는다."""
+    presence.set_status(db, current_user.id, payload.status, date.today())
+    db.commit()
+    logger.debug(f"[Messenger] 내 상태 변경: user_id={current_user.id}, status={payload.status}")
+    presence.announce(current_user.id, payload.status)
+    return StatusOut(status=payload.status)
+
+
+def _favorite_target(db: Session, me: User, user_id: int) -> User:
+    if user_id == me.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="나 자신은 즐겨찾기할 수 없습니다.")
+    target = db.get(User, user_id)
+    if target is None or not target.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="직원을 찾을 수 없습니다.")
+    return target
+
+
+@router.put("/favorites/{user_id}", response_model=FavoriteOut)
+def add_favorite(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _favorite_target(db, current_user, user_id)
+    if db.get(MessengerFavorite, (current_user.id, user_id)) is None:
+        db.add(MessengerFavorite(user_id=current_user.id, favorite_user_id=user_id))
+        db.commit()
+        hub.publish([current_user.id], {"type": "favorites.updated"})  # 내 다른 창도 갱신
+    return FavoriteOut(user_id=user_id, is_favorite=True)
+
+
+@router.delete("/favorites/{user_id}", response_model=FavoriteOut)
+def remove_favorite(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    row = db.get(MessengerFavorite, (current_user.id, user_id))
+    if row is not None:
+        db.delete(row)
+        db.commit()
+        hub.publish([current_user.id], {"type": "favorites.updated"})
+    return FavoriteOut(user_id=user_id, is_favorite=False)
