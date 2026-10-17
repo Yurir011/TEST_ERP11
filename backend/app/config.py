@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     business_reg_images_dir: str = "storage/business_reg_images"
     bankbook_images_dir: str = "storage/bankbook_images"
     messenger_attachments_dir: str = "storage/messenger_attachments"
+    # 데스크톱 앱 설치 파일과 최신 버전 정보(latest.json). desktop 에서 npm run publish-release 가 여기에 올린다.
+    client_releases_dir: str = "storage/client_releases"
 
     # 사업자등록증 이미지 인식(OCR)에 사용하는 로컬 Tesseract 실행 파일 경로. 서버 PATH에 없을 때만 .env로 override.
     tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"

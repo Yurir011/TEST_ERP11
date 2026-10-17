@@ -154,7 +154,7 @@ describe("새 메시지 반영과 알림", () => {
     await waitFor(() => expect(state()).toBe("10:0,11:0|0"));
     send({ type: "message.created", message: msg(5, 11, { body: "안녕하세요" }) });
     await waitFor(() => expect(state()).toBe("11:1,10:0|1"));
-    expect(bench.notify).toHaveBeenCalledWith("김영희", "안녕하세요");
+    expect(bench.notify).toHaveBeenCalledWith("김영희", "안녕하세요", 11); // 알림을 누르면 이 대화방(11)으로
   });
 
   it("그룹은 '대화방 이름 · 보낸 사람'으로 알리고, 파일이면 파일 이름", async () => {
@@ -162,7 +162,7 @@ describe("새 메시지 반영과 알림", () => {
     mount();
     await waitFor(() => expect(state()).toBe("10:0|0"));
     send({ type: "message.created", message: msg(5, 10, { body: "", attachments: [{ id: 1, file_name: "견적서.pdf", size: 1, content_type: "application/pdf" }] }) });
-    await waitFor(() => expect(bench.notify).toHaveBeenCalledWith("프로젝트방 · 김영희", "[파일] 견적서.pdf"));
+    await waitFor(() => expect(bench.notify).toHaveBeenCalledWith("프로젝트방 · 김영희", "[파일] 견적서.pdf", 10));
   });
 
   it("내가 보낸 메시지는 안 읽음으로 세지 않고 알림도 없다", async () => {

@@ -116,3 +116,18 @@ export function decideWindowOpen(url: string, serverUrl: string | undefined): Wi
   if (u.protocol === "http:" || u.protocol === "https:") return serverUrl && u.origin === serverUrl ? "app-window" : "external";
   return "deny";
 }
+
+/**
+ * 설치 파일에 들어 있는 기본 서버 주소(resources/default-server.json, scripts/write-default-server.js 가 만든다).
+ * 파일이 없거나 형식이 이상하면 undefined (처음 실행할 때 직접 입력).
+ */
+export function loadDefaultServer(file: string): string | undefined {
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, "utf-8")) as { serverUrl?: unknown };
+    if (typeof raw.serverUrl !== "string") return undefined;
+    const check = normalizeServerUrl(raw.serverUrl);
+    return check.ok ? check.url : undefined;
+  } catch {
+    return undefined;
+  }
+}

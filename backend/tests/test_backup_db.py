@@ -29,6 +29,20 @@ def test_prune_removes_only_own_old_files(tmp_path):
     assert sorted(p.name for p in tmp_path.iterdir()) == sorted(names[2:])
 
 
+def test_zip_storage_skips_client_releases_folder_too(tmp_path):
+    """설치 파일(client_releases)은 다시 만들 수 있고 크기가 커서 매일 백업에 쌓이지 않게 뺀다."""
+    storage = tmp_path / "storage"
+    (storage / "receipts").mkdir(parents=True)
+    (storage / "receipts" / "1.jpg").write_bytes(b"img")
+    (storage / "client_releases").mkdir()
+    (storage / "client_releases" / "BENCH-ERP_V.0.07.150_Setup.exe").write_bytes(b"x" * 1000)
+    (storage / "client_releases" / "latest.json").write_text("{}")
+    out = tmp_path / "out.zip"
+    assert backup_db.zip_storage(storage, out, exclude=[storage / "backups", storage / "client_releases"]) == 1
+    with zipfile.ZipFile(out) as zf:
+        assert [n.replace("\\", "/") for n in zf.namelist()] == ["receipts/1.jpg"]
+
+
 def test_zip_storage_skips_backup_folder(tmp_path):
     storage = tmp_path / "storage"
     (storage / "receipts").mkdir(parents=True)

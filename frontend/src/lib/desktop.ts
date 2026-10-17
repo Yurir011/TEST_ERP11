@@ -19,6 +19,7 @@ export type NfcMode = "off" | "login" | "capture";
 export type DeviceApprovalStatus = "pending" | "approved" | "revoked" | "unknown";
 
 export interface BenchClient {
+  /** 앱 버전 (화면 표기 V.0.07.150) */
   getVersion(): Promise<string>;
   nfc: {
     status(): Promise<NfcReaderStatus | null>;
@@ -33,7 +34,10 @@ export interface BenchClient {
     state(): Promise<{ status: DeviceApprovalStatus; error?: string } | null>;
     onStatus(cb: (state: { status: DeviceApprovalStatus; error?: string }) => void): () => void;
   };
-  notify(title: string, body: string): Promise<void>;
+  /** 시스템 알림. conversationId 를 주면 알림을 눌렀을 때 onOpenConversation 신호가 온다 */
+  notify(title: string, body: string, conversationId?: number): Promise<void>;
+  /** 알림을 눌렀을 때 그 대화방을 열라는 신호 */
+  onOpenConversation(cb: (payload: { conversationId: number }) => void): () => void;
   setBadge(count: number): Promise<void>;
 }
 

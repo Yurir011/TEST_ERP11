@@ -9,11 +9,13 @@ from app.core.db_revision import check_db_revision
 from app.core.startup_checks import enforce_security_settings
 from app.database import SessionLocal, engine
 from app.logging_config import get_logger, setup_logging
+from app.version import APP_VERSION, format_version
 from app.services.recurring_payment import generate_recurring_payments
 from app.routers import (
     attendance,
     audit_logs,
     auth,
+    client_app,
     clients,
     devices,
     documents,
@@ -63,6 +65,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(client_app.router)
 app.include_router(nfc_auth.router)
 app.include_router(audit_logs.router)
 app.include_router(notices.router)
@@ -122,4 +125,4 @@ def health_check():
     except Exception as exc:
         db_ok = False
         logger.error(f"[Health] DB 확인 실패: {exc}")
-    return {"status": "ok", "app": settings.app_name, "db": "connected" if db_ok else "disconnected"}
+    return {"status": "ok", "app": settings.app_name, "version": format_version(APP_VERSION), "db": "connected" if db_ok else "disconnected"}

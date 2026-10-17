@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, normalizeServerUrl, saveConfig } from "./serverConfig";
+import { checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, loadDefaultServer, normalizeServerUrl, saveConfig } from "./serverConfig";
 
 const SHELL = path.join("C:\\", "app", "renderer", "shell.html");
 
@@ -123,5 +123,27 @@ describe("decideWindowOpen", () => {
   it("서버 주소가 없으면 같은 서버로 볼 수 없다", () => {
     expect(decideWindowOpen("blob:http://www.epik.bio:3102/x", undefined)).toBe("deny");
     expect(decideWindowOpen("http://www.epik.bio:3102/", undefined)).toBe("external");
+  });
+});
+
+describe("loadDefaultServer (설치 파일에 들어 있는 기본 서버 주소)", () => {
+  const tmpFile = (content?: string) => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "bench-def-")), "default-server.json");
+    if (content !== undefined) fs.writeFileSync(file, content);
+    return file;
+  };
+
+  it("올바른 주소는 origin 으로 정리해 돌려준다", () => {
+    expect(loadDefaultServer(tmpFile(JSON.stringify({ serverUrl: "www.epik.bio:3102/some/path" })))).toBe("http://www.epik.bio:3102");
+    expect(loadDefaultServer(tmpFile(JSON.stringify({ serverUrl: "https://erp.bench.co.kr" })))).toBe("https://erp.bench.co.kr");
+  });
+
+  it("파일이 없거나 깨졌거나 주소가 이상하면 undefined (직접 입력하게 한다)", () => {
+    expect(loadDefaultServer(tmpFile())).toBeUndefined();
+    expect(loadDefaultServer(tmpFile("{not json"))).toBeUndefined();
+    expect(loadDefaultServer(tmpFile(JSON.stringify({})))).toBeUndefined();
+    expect(loadDefaultServer(tmpFile(JSON.stringify({ serverUrl: 5 })))).toBeUndefined();
+    expect(loadDefaultServer(tmpFile(JSON.stringify({ serverUrl: "javascript:alert(1)" })))).toBeUndefined();
+    expect(loadDefaultServer(tmpFile(JSON.stringify({ serverUrl: "ftp://x.com" })))).toBeUndefined();
   });
 });

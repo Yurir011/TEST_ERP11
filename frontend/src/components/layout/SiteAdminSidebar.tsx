@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
 import { useMessengerOptional } from "../../features/messenger/useMessenger";
 import { Logo } from "../ui/Logo";
+import { VersionLabel } from "./VersionLabel";
 
 const menuItems = [
   { to: "/", label: "대시보드", icon: LayoutGrid, end: true },
@@ -64,6 +65,7 @@ export function SiteAdminSidebar() {
               <LogOut size={16} />
             </button>
           </div>
+          <VersionLabel />
         </div>
       )}
     </aside>

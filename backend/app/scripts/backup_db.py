@@ -1,7 +1,7 @@
 """정기 백업: DB(pg_dump) + 선택적으로 첨부 파일(storage 폴더) zip. 하루 한 번 작업 스케줄러로 실행한다 (CLAUDE.md 19단계).
 
 - DB: `pg_dump -Fc` 로 `erp_db_YYYYMMDD_HHMMSS.dump` 를 만들고, `pg_restore -l` 로 열어 표 데이터가 들어 있는지 확인한다.
-- 첨부 파일(--with-files): storage 아래 영수증·PDF·첨부 폴더를 `storage_YYYYMMDD_HHMMSS.zip` 으로 묶는다 (backups 폴더는 제외).
+- 첨부 파일(--with-files): storage 아래 영수증·PDF·첨부 폴더를 `storage_YYYYMMDD_HHMMSS.zip` 으로 묶는다 (backups 폴더와 client_releases 폴더는 제외: 백업끼리 겹치거나, 다시 만들 수 있는 설치 파일이 매일 쌓이는 것을 막는다).
 - 보관: --keep-days(기본 30)보다 오래된 백업을 지운다. 이 스크립트가 만든 이름 형식의 파일만 지운다.
 - DB 비밀번호는 명령줄에 보이지 않도록 PGPASSWORD 환경변수로만 넘긴다.
 - pg_dump 위치: 환경변수 PG_BIN(폴더) → PATH → Windows 기본 설치 경로 순으로 찾는다.
@@ -73,16 +73,16 @@ def table_data_count(dump_file: Path, pg_restore: str) -> int:
     return r.stdout.count("TABLE DATA")
 
 
-def zip_storage(storage_dir: Path, out_file: Path, exclude: Path) -> int:
-    """storage 아래 파일을 zip 으로 묶는다 (exclude 폴더 = 백업 폴더 제외). 넣은 파일 수를 돌려준다."""
+def zip_storage(storage_dir: Path, out_file: Path, exclude: Path | list[Path]) -> int:
+    """storage 아래 파일을 zip 으로 묶는다 (exclude 폴더들은 제외). 넣은 파일 수를 돌려준다."""
     count = 0
-    exclude = exclude.resolve()
+    excluded = [p.resolve() for p in ([exclude] if isinstance(exclude, Path) else exclude)]
     with zipfile.ZipFile(out_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path in sorted(storage_dir.rglob("*")):
             if not path.is_file():
                 continue
             resolved = path.resolve()
-            if resolved == out_file.resolve() or exclude in resolved.parents:
+            if resolved == out_file.resolve() or any(e in resolved.parents for e in excluded):
                 continue
             zf.write(path, path.relative_to(storage_dir))
             count += 1
@@ -124,7 +124,7 @@ def run(backup_dir: Path, keep_days: int, with_files: bool, now: datetime | None
 
     if with_files:
         zip_file = backup_dir / f"storage_{stamp(now)}.zip"
-        count = zip_storage(STORAGE_DIR, zip_file, exclude=STORAGE_DIR / "backups")
+        count = zip_storage(STORAGE_DIR, zip_file, exclude=[STORAGE_DIR / "backups", STORAGE_DIR / "client_releases"])
         result["files"] = {"file": str(zip_file), "bytes": zip_file.stat().st_size, "count": count}
         logger.info(f"[Backup] 첨부 파일 백업 완료: {zip_file.name}, 파일 {count}개, {zip_file.stat().st_size:,} bytes")
 

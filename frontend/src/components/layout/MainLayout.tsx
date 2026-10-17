@@ -2,6 +2,7 @@ import { LogOut } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "../../context/useAuth";
 import { AttendanceToggle } from "../../features/attendance/AttendanceToggle";
+import { DesktopUpdateNotice } from "../../features/desktop/DesktopUpdateNotice";
 import { TITLE_LABELS } from "../../lib/auth";
 import { Sidebar } from "./Sidebar";
 import { SiteAdminSidebar } from "./SiteAdminSidebar";
@@ -20,6 +21,7 @@ export function MainLayout({ title, description, actions, children }: MainLayout
     <div className="flex min-h-screen">
       {user?.role === "site_admin" ? <SiteAdminSidebar /> : <Sidebar />}
       <main className="flex-1 px-10 py-8">
+        <DesktopUpdateNotice />
         {user && (
           <div className="flex items-center justify-end gap-3 mb-4">
             <span className="text-sm text-text">

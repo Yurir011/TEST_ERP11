@@ -97,7 +97,7 @@ export function MessengerProvider({ children }: { children: ReactNode }) {
         const alreadyShown = !!conv?.last_message && m.id <= conv.last_message.id; // 같은 메시지가 또 온 경우 (다시 연결·중복 전달)
         if (m.sender_id !== me && !viewing && !conv?.muted && !alreadyShown) {
           const title = conv?.kind === "group" ? `${conv.title} · ${m.sender_name ?? ""}` : (m.sender_name ?? "새 메시지");
-          void getBenchClient()?.notify(title, m.body || `[파일] ${m.attachments[0]?.file_name ?? ""}`);
+          void getBenchClient()?.notify(title, m.body || `[파일] ${m.attachments[0]?.file_name ?? ""}`, m.conversation_id); // 알림을 누르면 이 대화방으로
         }
       } else if (event.type === "conversation.read") {
         if (!list) return;

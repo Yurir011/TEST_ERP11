@@ -17,16 +17,21 @@ import { getLogger } from "./log";
 import { loginMessage, performNfcLogin } from "./nfcLogin";
 import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
-import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, normalizeServerUrl, saveConfig } from "./serverConfig";
+import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, loadDefaultServer, normalizeServerUrl, saveConfig } from "./serverConfig";
+import { badgeImageName, clampBadgeCount, loginItemSettings, parseConversationId, startsHidden } from "./startup";
+import { formatVersion } from "./version";
 
 const log = getLogger("Main");
 const SMOKE = process.argv.includes("--smoke");
+const HIDDEN_START = !SMOKE && startsHidden(process.argv); // 윈도우 시작 시 자동 실행으로 켜진 경우: 창 없이 트레이에만 시작
 
 const ROOT = path.join(__dirname, "..");
 const SHELL_FILE = path.join(ROOT, "renderer", "shell.html");
 const PRELOAD = path.join(__dirname, "preload.js");
 const ICON = path.join(ROOT, "assets", "icon.png");
 const TRAY_ICON = path.join(ROOT, "assets", "tray.png");
+const BADGE_DIR = path.join(ROOT, "assets", "badges");
+const VERSION_LABEL = formatVersion(app.getVersion()); // 화면 표기: V.0.07.150
 
 if (SMOKE) app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "bench-smoke-")));
 else if (process.env.BENCH_USER_DATA) app.setPath("userData", process.env.BENCH_USER_DATA); // 개발용 실행(--local): 설정·기기 키를 따로 둔다
@@ -112,7 +117,7 @@ function createWindow(): BrowserWindow {
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    show: !SMOKE,
+    show: !SMOKE && !HIDDEN_START,
     title: "BENCH ERP",
     icon: ICON,
     autoHideMenuBar: true,
@@ -126,6 +131,7 @@ function createWindow(): BrowserWindow {
   });
 
   hardenWindow(w);
+  w.on("focus", () => w.flashFrame(false)); // 알림으로 깜박이던 작업 표시줄 아이콘은 창을 보면 멈춘다
   w.webContents.on("did-navigate", () => {
     nfcMode = "off"; // 새 화면은 카드 모드를 다시 정해야 한다
   });
@@ -209,7 +215,7 @@ function startNfc(): void {
 }
 
 function registerIpc(): void {
-  ipcMain.handle("app:version", (e) => (guard(e, "app:version", ["shell", "server"]) ? app.getVersion() : ""));
+  ipcMain.handle("app:version", (e) => (guard(e, "app:version", ["shell", "server"]) ? VERSION_LABEL : "")); // V.0.07.150 (비교에도 그대로 쓸 수 있다)
   ipcMain.handle("nfc:status", (e) => (guard(e, "nfc:status", ["shell", "server"]) ? (reader?.getStatus() ?? { state: "searching" }) : null));
 
   ipcMain.handle("nfc:set-mode", (e, mode: unknown) => {
@@ -221,19 +227,28 @@ function registerIpc(): void {
 
   ipcMain.handle("device:state", (e) => (guard(e, "device:state", ["shell", "server"]) ? deviceState : null));
 
-  ipcMain.handle("app:notify", (e, title: unknown, body: unknown) => {
+  ipcMain.handle("app:notify", (e, title: unknown, body: unknown, conversationId?: unknown) => {
     if (!guard(e, "app:notify", ["server"])) return;
     if (typeof title !== "string" || typeof body !== "string") return;
+    const id = parseConversationId(conversationId);
     const n = new Notification({ title: title.slice(0, 100), body: body.slice(0, 300), icon: ICON });
-    n.on("click", () => showWindow());
+    n.on("click", () => {
+      showWindow();
+      if (id !== null) sendOpenConversation(id); // 알림을 누르면 그 대화방으로 바로 간다
+    });
     n.show();
+    if (win && !win.isDestroyed() && !win.isFocused()) win.flashFrame(true); // 작업 표시줄 아이콘 깜박임
   });
 
   ipcMain.handle("app:badge", (e, count: unknown) => {
     if (!guard(e, "app:badge", ["server"])) return;
-    const n = Number.isFinite(count) ? Math.max(0, Math.min(999, Math.trunc(count as number))) : 0;
+    const n = clampBadgeCount(count);
     app.setBadgeCount(n); // macOS/Linux
-    tray?.setToolTip(n > 0 ? `BENCH ERP (안 읽은 ${n}건)` : "BENCH ERP");
+    tray?.setToolTip(n > 0 ? `BENCH ERP ${VERSION_LABEL} (안 읽은 ${n}건)` : `BENCH ERP ${VERSION_LABEL}`);
+    if (process.platform === "win32" && win && !win.isDestroyed()) {
+      const name = badgeImageName(n);
+      win.setOverlayIcon(name ? nativeImage.createFromPath(path.join(BADGE_DIR, name)) : null, n > 0 ? `안 읽은 메시지 ${n}건` : "");
+    }
   });
 
   ipcMain.handle("shell:state", (e) => {
@@ -283,6 +298,23 @@ async function refreshDevice(): Promise<void> {
   setDeviceState(r.ok ? { status: r.status } : { status: deviceState.status, error: r.error });
 }
 
+/** 서버 화면이 열려 있을 때만, 그 화면에 "이 대화방을 열어라"고 알린다 (알림을 눌렀을 때). */
+function sendOpenConversation(conversationId: number): void {
+  if (!win || win.isDestroyed() || !currentIsServerPage()) return;
+  win.webContents.send("app:open-conversation", { conversationId });
+}
+
+/** 윈도우 시작 시 자동 실행이 켜져 있는가. 설치해서 쓰는 앱(패키지)에서만 의미가 있다. */
+function autoStartEnabled(): boolean {
+  return app.isPackaged && app.getLoginItemSettings({ args: loginItemSettings(true).args }).openAtLogin;
+}
+
+function setAutoStart(enabled: boolean): void {
+  app.setLoginItemSettings(loginItemSettings(enabled));
+  log.info(`[Main] 윈도우 시작 시 자동 실행: ${enabled ? "켬" : "끔"}`);
+  buildTrayMenu(); // 실제 등록 상태를 다시 읽어 메뉴에 반영한다
+}
+
 function showWindow(): void {
   if (!win) return;
   if (win.isMinimized()) win.restore();
@@ -290,17 +322,31 @@ function showWindow(): void {
   win.focus();
 }
 
-function createTray(): void {
-  tray = new Tray(nativeImage.createFromPath(TRAY_ICON));
-  tray.setToolTip("BENCH ERP");
+function buildTrayMenu(): void {
+  if (!tray) return;
   tray.setContextMenu(
     Menu.buildFromTemplate([
+      { label: `BENCH ERP ${VERSION_LABEL}`, enabled: false },
+      { type: "separator" },
       { label: "BENCH ERP 열기", click: showWindow },
       { label: "서버 주소 변경", click: () => { showWindow(); showShell("setup"); } },
+      {
+        label: app.isPackaged ? "윈도우 시작 시 자동 실행" : "윈도우 시작 시 자동 실행 (설치한 앱에서만)",
+        type: "checkbox",
+        checked: autoStartEnabled(),
+        enabled: app.isPackaged,
+        click: (item) => setAutoStart(item.checked),
+      },
       { type: "separator" },
       { label: "종료", click: () => { quitting = true; app.quit(); } },
     ]),
   );
+}
+
+function createTray(): void {
+  tray = new Tray(nativeImage.createFromPath(TRAY_ICON));
+  tray.setToolTip(`BENCH ERP ${VERSION_LABEL}`);
+  buildTrayMenu();
   tray.on("click", showWindow);
 }
 
@@ -331,6 +377,11 @@ async function runSmoke(): Promise<void> {
     return cond();
   };
 
+  // 0) 설치 파일에 들어 있는 기본 서버 주소가 적용되는가 (설치한 앱에서만: 개발 실행에는 없다). 서버에는 접속하지 않는다.
+  const bundled = app.isPackaged ? loadDefaultServer(path.join(process.resourcesPath, "default-server.json")) : undefined;
+  log.info(`[Smoke] 기본 서버 주소: ${config.serverUrl ?? "(없음)"} / 설치 파일에 든 값: ${bundled ?? "(없음)"}`);
+  check("설치 파일의 기본 서버 주소가 처음부터 적용된다 (직원이 입력하지 않아도 됨)", app.isPackaged ? config.serverUrl === bundled : config.serverUrl === undefined);
+
   // 1) 안내 화면: 통로와 보안
   await new Promise<void>((resolve) => w.webContents.once("did-finish-load", () => resolve()));
   const shellInfo = (await w.webContents.executeJavaScript(`(async () => ({
@@ -339,7 +390,7 @@ async function runSmoke(): Promise<void> {
     hasRequire: typeof require, hasProcess: typeof process, shellState: (await window.benchClient.shell.state())?.mode,
   }))()`)) as Record<string, unknown>;
   log.info(`[Smoke] 안내 화면: ${JSON.stringify(shellInfo)}`);
-  check("안내 화면: 통로 있음, require/process 없음", shellInfo.bridge === "object" && shellInfo.hasRequire === "undefined" && shellInfo.hasProcess === "undefined" && shellInfo.shellState === "setup" && !!shellInfo.version);
+  check("안내 화면: 통로 있음, require/process 없음, 버전 표기(V.0.07.150 형식)", shellInfo.bridge === "object" && shellInfo.hasRequire === "undefined" && shellInfo.hasProcess === "undefined" && shellInfo.shellState === "setup" && shellInfo.version === VERSION_LABEL && /^V\.\d+\.\d{2}\.\d{3}$/.test(VERSION_LABEL));
   check("다른 사이트로 이동 차단", !isAllowedNavigation("https://example.com/", config.serverUrl, SHELL_FILE));
 
   // 2) 서버 화면(가짜 서버): 팝업·다운로드
@@ -427,6 +478,14 @@ async function runSmoke(): Promise<void> {
   await sleep(200);
   check("알 수 없는 모드는 무시된다 (capture 그대로)", (await events()).filter((e) => e.t === "card").length === 2);
 
+  // 4) 알림을 눌렀을 때: 서버 화면에 "이 대화방을 열어라" 신호 (잘못된 번호는 보내지 않는다)
+  await w.webContents.executeJavaScript(`(() => { window.__open = []; window.benchClient.onOpenConversation((p) => window.__open.push(p)); })()`);
+  sendOpenConversation(7);
+  sendOpenConversation(12);
+  await sleep(200);
+  check("알림을 누르면 서버 화면에 그 대화방을 열라는 신호가 간다", JSON.stringify(await w.webContents.executeJavaScript("window.__open")) === '[{"conversationId":7},{"conversationId":12}]');
+  check("앱은 개발 실행에서는 자동 실행을 등록하지 않는다 (설치한 앱에서만)", !app.isPackaged ? !autoStartEnabled() : true);
+
   const shellGuard = await w.webContents.executeJavaScript("typeof window.benchClient.nfc.setMode");
   check("setMode 통로가 있다", shellGuard === "function");
 
@@ -492,6 +551,11 @@ if (!app.requestSingleInstanceLock()) {
       const preset = normalizeServerUrl(process.env.BENCH_SERVER_URL);
       if (preset.ok) config = { ...config, serverUrl: preset.url }; // 개발용 실행: 처음부터 이 서버로 (저장은 하지 않는다)
     }
+    if (!config.serverUrl && app.isPackaged) {
+      // 설치 파일에 기본 서버 주소가 들어 있으면 처음부터 그 서버로 (저장은 하지 않는다: 직원이 [서버 주소 변경]을 쓰면 그때 저장)
+      const preset = loadDefaultServer(path.join(process.resourcesPath, "default-server.json"));
+      if (preset) config = { ...config, serverUrl: preset };
+    }
     registerIpc();
     try {
       deviceKey = loadOrCreateDeviceKey(path.join(app.getPath("userData"), "device-key.json"), secretStore, getLogger("Device"));
@@ -506,6 +570,7 @@ if (!app.requestSingleInstanceLock()) {
       await runSmoke();
     } else {
       await openServer();
+      if (HIDDEN_START && !config.serverUrl) showWindow(); // 서버 주소를 아직 모르면 입력받아야 하므로 창을 띄운다
       void refreshDevice();
       deviceTimer = setInterval(() => void refreshDevice(), 60_000);
     }

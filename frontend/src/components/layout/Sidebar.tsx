@@ -21,6 +21,7 @@ import { apiGet } from "../../lib/api";
 import { hasMenuPermission, type MenuPermissionKey } from "../../lib/auth";
 import { logError } from "../../lib/logger";
 import { Logo } from "../ui/Logo";
+import { VersionLabel } from "./VersionLabel";
 
 const UNREAD_POLL_MS = 20000;
 
@@ -136,6 +137,7 @@ export function Sidebar() {
               <LogOut size={16} />
             </button>
           </div>
+          <VersionLabel />
         </div>
       )}
     </aside>

@@ -31,7 +31,9 @@ const api = {
     state: (): Promise<{ status: string; error?: string } | null> => ipcRenderer.invoke("device:state"),
     onStatus: (cb: (state: { status: string; error?: string }) => void): Unsubscribe => subscribe("device:status", cb),
   },
-  notify: (title: string, body: string): Promise<void> => ipcRenderer.invoke("app:notify", title, body),
+  /** 시스템 알림. conversationId 를 주면 알림을 눌렀을 때 그 대화방으로 이동하라는 신호(onOpenConversation)가 온다 */
+  notify: (title: string, body: string, conversationId?: number): Promise<void> => ipcRenderer.invoke("app:notify", title, body, conversationId),
+  onOpenConversation: (cb: (payload: { conversationId: number }) => void): Unsubscribe => subscribe("app:open-conversation", cb),
   setBadge: (count: number): Promise<void> => ipcRenderer.invoke("app:badge", count),
   shell: {
     state: (): Promise<{ serverUrl?: string; mode: string; error?: string }> => ipcRenderer.invoke("shell:state"),

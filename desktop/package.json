@@ -1,9 +1,9 @@
 {
   "name": "bench-desktop",
   "productName": "BENCH ERP",
-  "version": "0.0.1",
+  "version": "0.7.150",
   "private": true,
-  "description": "BENCH ERP 데스크톱 클라이언트 (NFC 로그인, 메신저 알림)",
+  "description": "BENCH ERP 데스크톱 클라이언트 (NFC 카드 로그인, 메신저 알림)",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p .",
@@ -12,7 +12,11 @@
     "poc": "tsx scripts/nfc-poc.ts",
     "test": "vitest run",
     "typecheck": "tsc -p . --noEmit",
-    "start:local": "npm run build && node scripts/run-electron.js . --local"
+    "start:local": "npm run build && node scripts/run-electron.js . --local",
+    "dist": "npm run build && node scripts/write-default-server.js && electron-builder --win --publish never",
+    "dist:dir": "npm run build && node scripts/write-default-server.js && electron-builder --win --dir --publish never",
+    "bump-version": "tsx scripts/bump-version.ts",
+    "publish-release": "tsx scripts/publish-release.ts"
   },
   "dependencies": {
     "serialport": "13.0.0"
@@ -20,8 +24,61 @@
   "devDependencies": {
     "@types/node": "24.19.1",
     "electron": "44.5.1",
+    "electron-builder": "26.15.3",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vitest": "5.0.3"
-  }
+  },
+  "build": {
+    "appId": "kr.co.bench.erp",
+    "productName": "BENCH ERP",
+    "copyright": "BENCH",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json",
+      "!node_modules/@serialport/bindings-cpp/prebuilds/{linux-*,darwin-*,android-*,win32-ia32,win32-arm64}/**"
+    ],
+    "asarUnpack": [
+      "node_modules/@serialport/bindings-cpp/prebuilds/**"
+    ],
+    "extraResources": [
+      {
+        "from": "build-resources",
+        "to": ".",
+        "filter": [
+          "default-server.json"
+        ]
+      }
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BENCH ERP",
+      "deleteAppDataOnUninstall": false,
+      "language": "1042",
+      "artifactName": "BENCH-ERP_Setup_${version}.exe"
+    }
+  },
+  "benchDefaultServer": "http://www.epik.bio:3102"
 }
