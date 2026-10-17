@@ -2,7 +2,7 @@
 
 주식회사 벤치소프트(BENCH) 사내 전용 ERP 시스템. 통신기기 개발·제조업체 특성에 맞춰 인사·영업·회계 업무를 하나의 인트라넷 웹앱에서 처리한다.
 
-> 현재 버전 **V.0.70.151** ([변경 이력](./CHANGELOG.md)). 서비스는 사내 전용(외부 접근 차단 전제)이며, 이 저장소의 소스는 공개 상태다. 비밀번호·키 등 민감한 값은 `.env`(git 미포함)에만 두고 `.env.example`에는 예시 값만 둔다. 상세 기획/진행 상황은 [`CLAUDE.md`](./CLAUDE.md) 참고.
+> 현재 버전 **V.0.70.160** ([변경 이력](./CHANGELOG.md)). 서비스는 사내 전용(외부 접근 차단 전제)이며, 이 저장소의 소스는 공개 상태다. 비밀번호·키 등 민감한 값은 `.env`(git 미포함)에만 두고 `.env.example`에는 예시 값만 둔다. 상세 기획/진행 상황은 [`CLAUDE.md`](./CLAUDE.md) 참고.
 
 ## 기술 스택
 
@@ -35,7 +35,7 @@
 - **업무 알림(공지)**: 관리자 작성 공지와 결재 알림
 - **출퇴근기록**: 출근/퇴근 버튼, 월별 조회(최근 36개월), 관리자 전체 현황
 - **메신저**: 대화목록·즐겨찾기·전체목록 탭, 직원별 현재 상태(출근·외근·출장·휴가 등, 출근 토글과 연동), 1:1·그룹 대화, 파일 첨부(20MB), 메시지별 안 읽은 사람 수 표시(카카오톡 방식), 실시간 알림. 대화방 참여자만 볼 수 있고 대표(관리자)도 남의 대화는 볼 수 없다. 변경 이력에는 대화 내용이 남지 않는다
-- **데스크톱 앱(`/desktop`, Electron)**: 서버 화면을 그대로 불러오고, NFC 카드 로그인(승인된 PC만), 메신저 알림·트레이·윈도우 시작 시 자동 실행(선택)을 더한다. Windows 설치 파일은 `cd desktop && npm run dist` → `desktop/release/BENCH-ERP_Setup_0.70.151.exe`(기본 서버 주소 포함), 직원에게는 `npm run publish-release`로 새 버전을 알린다. macOS·Linux는 보류. 사용법은 [`docs/client-app/사용설명서.md`](./docs/client-app/사용설명서.md), 진행 상황은 [`docs/client-app/`](./docs/client-app/)
+- **데스크톱 앱(`/desktop`, Electron)**: 서버 화면을 그대로 불러오고, NFC 카드 로그인(승인된 PC만), 메신저 알림·트레이·윈도우 시작 시 자동 실행(선택)을 더한다. Windows 설치 파일은 `cd desktop && npm run dist` → `desktop/release/BENCH-ERP_Setup_0.70.160.exe`(기본 서버 주소 포함), 직원에게는 `npm run publish-release`로 새 버전을 알린다. macOS·Linux는 보류. 사용법은 [`docs/client-app/사용설명서.md`](./docs/client-app/사용설명서.md), 진행 상황은 [`docs/client-app/`](./docs/client-app/)
 - **모바일 화면(`/m`)**: 출퇴근, 연차, 결재, 일정, 공지, 거래처 조회
 
 ## 시작하기
@@ -121,7 +121,7 @@ cd backend
 ## 참고 문서
 
 - [`CLAUDE.md`](./CLAUDE.md) — 20단계 구축 계획 및 진행 상황 체크리스트
-- [`CHANGELOG.md`](./CHANGELOG.md) — 버전별 변경 이력 (현재 V.0.70.151)
+- [`CHANGELOG.md`](./CHANGELOG.md) — 버전별 변경 이력 (현재 V.0.70.160)
 - [`docs/version-policy.md`](./docs/version-policy.md) — 버전 표기·올리는 기준·배포 절차 (커밋 메시지는 `[V.0.70.150] type(scope): 설명` 형식)
 - [`docs/client-app/`](./docs/client-app/) — 데스크톱 앱·NFC 로그인·메신저 단계별 문서, [사용 설명서](./docs/client-app/사용설명서.md)
 - [`docs/refactoring/`](./docs/refactoring/) — 리팩토링 분석, 계획, 수정 내역, 검증 결과
