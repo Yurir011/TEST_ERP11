@@ -18,6 +18,8 @@ from app.routers import (
     devices,
     documents,
     leaves,
+    messenger,
+    messenger_ws,
     nfc_auth,
     nfc_cards,
     notices,
@@ -78,6 +80,8 @@ app.include_router(transactions.router)
 app.include_router(payments.router)
 app.include_router(recurring_payments.router)
 app.include_router(users.router)
+app.include_router(messenger.router)
+app.include_router(messenger_ws.router)
 app.include_router(nfc_cards.router)
 app.include_router(devices.router)
 app.include_router(schedule.router)

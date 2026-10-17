@@ -15,15 +15,9 @@ logger = get_logger("Deps")
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
-) -> User:
-    if credentials is None:
-        logger.debug("[Auth] 인증 헤더 없음")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다.")
-
-    claims = decode_access_payload(credentials.credentials)
+def resolve_user(db: Session, token: str) -> User:
+    """토큰이 가리키는 사용 가능한 직원을 돌려준다. 문제가 있으면 401. (HTTP 요청과 WebSocket 인증이 함께 쓴다)"""
+    claims = decode_access_payload(token)
     if claims is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰입니다.")
     email = claims["sub"]
@@ -35,7 +29,18 @@ def get_current_user(
 
     if claims.get("amr") == "nfc":
         _ensure_nfc_session_valid(db, claims)
+    return user
 
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    if credentials is None:
+        logger.debug("[Auth] 인증 헤더 없음")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다.")
+
+    user = resolve_user(db, credentials.credentials)
     set_current_user(user)  # 감사 로그의 "누가"
     return user
 

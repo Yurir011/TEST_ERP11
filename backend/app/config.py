@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     proposal_attachments_dir: str = "storage/proposal_attachments"
     business_reg_images_dir: str = "storage/business_reg_images"
     bankbook_images_dir: str = "storage/bankbook_images"
+    messenger_attachments_dir: str = "storage/messenger_attachments"
 
     # 사업자등록증 이미지 인식(OCR)에 사용하는 로컬 Tesseract 실행 파일 경로. 서버 PATH에 없을 때만 .env로 override.
     tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"

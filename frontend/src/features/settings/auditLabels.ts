@@ -28,6 +28,9 @@ export const ACTION_LABELS: Record<string, { label: string; tone: "green" | "blu
   device_approved: { label: "기기 승인", tone: "green" },
   device_revoked: { label: "기기 중지", tone: "orange" },
   device_deleted: { label: "기기 요청 거절", tone: "red" },
+  conversation_created: { label: "대화방 만들기", tone: "green" },
+  conversation_members_added: { label: "대화 참여자 추가", tone: "blue" },
+  conversation_left: { label: "대화방 나가기", tone: "gray" },
 };
 
 export const ENTITY_LABELS: Record<string, string> = {
@@ -39,6 +42,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   proposal: "품의서",
   nfc_card: "NFC 카드",
   device: "기기",
+  conversation: "대화방",
 };
 
 /** 대상 필터 선택지 → API entity_type 값 (문서는 프로젝트 문서와 품의서를 함께 본다) */
@@ -50,6 +54,7 @@ export const ENTITY_FILTERS: { value: string; label: string }[] = [
   { value: "user", label: "직원 계정" },
   { value: "project_document,proposal", label: "문서" },
   { value: "nfc_card,device", label: "카드·기기" },
+  { value: "conversation", label: "대화방" },
 ];
 
 export const FIELD_LABELS: Record<string, string> = {

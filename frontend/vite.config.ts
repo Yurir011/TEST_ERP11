@@ -14,7 +14,8 @@ export default defineConfig({
   server: {
     host: true, // 같은 네트워크의 다른 PC에서도 접속 가능하게 0.0.0.0으로 바인딩
     proxy: {
-      '/api': 'http://localhost:8000',
+      // 메신저 실시간 알림(WebSocket, /api/ws)도 같은 프록시로 전달한다
+      '/api': { target: 'http://localhost:8000', ws: true },
     },
   },
 })

@@ -5,11 +5,10 @@ from app.models.attendance import Attendance
 from app.models.client import Client
 from app.models.client_device import ClientDevice
 from app.models.nfc_card import NfcCard
-from app.models.client_device import ClientDevice
 from app.models.document import DocumentIssue
 from app.models.document_set import DocumentSet
 from app.models.leave import LeaveRequest
-from app.models.nfc_card import NfcCard
+from app.models.messenger import Conversation, ConversationMember, Message, MessageAttachment
 from app.models.notice import Notice
 from app.models.notification import Notification
 from app.models.payment import Payment
@@ -34,8 +33,10 @@ __all__ = [
     "Client",
     "ClientDevice",
     "NfcCard",
-    "ClientDevice",
-    "NfcCard",
+    "Conversation",
+    "ConversationMember",
+    "Message",
+    "MessageAttachment",
     "Project",
     "ProjectDocument",
     "ProjectDocumentItem",
