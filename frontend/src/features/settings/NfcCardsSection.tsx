@@ -5,6 +5,7 @@ import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { NFC_STATE_LABELS, getBenchClient, type NfcReaderStatus } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
+import { useNfcMode } from "../../lib/nfcMode";
 import { cardTitle, isUidReady, normalizeUid, uidError, type NfcCard } from "./nfcCards";
 
 function formatDate(iso: string | null): string {
@@ -38,6 +39,9 @@ export function NfcCardsSection({ userId, userName }: { userId: number; userName
   useEffect(() => {
     load();
   }, [load]);
+
+  // [카드 읽기] 중에는 앱이 카드 번호를 이 화면에 전달한다 (그동안은 카드 로그인이 일어나지 않는다)
+  useNfcMode("capture", waiting);
 
   // 데스크톱 앱: 리더 상태를 보여 주고, "카드 읽기" 중일 때 닿은 카드의 번호를 받는다
   useEffect(() => {

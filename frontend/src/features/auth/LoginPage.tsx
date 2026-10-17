@@ -1,17 +1,27 @@
-import { useState, type FormEvent } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
 import { useAuth } from "../../context/useAuth";
 import { ApiError } from "../../lib/api";
 import { logError } from "../../lib/logger";
+import { NfcLoginPanel } from "./NfcLoginPanel";
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithToken } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 카드 로그인: 앱이 서버에서 받아 온 토큰으로 로그인 상태를 만들고 첫 화면으로 간다
+  const handleNfcToken = useCallback(
+    async (token: string) => {
+      await loginWithToken(token);
+      navigate("/", { replace: true });
+    },
+    [loginWithToken, navigate],
+  );
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -83,6 +93,8 @@ export function LoginPage() {
             {isSubmitting ? "로그인 중..." : "로그인"}
           </button>
         </form>
+
+        <NfcLoginPanel onToken={handleNfcToken} />
       </div>
     </div>
   );

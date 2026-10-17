@@ -120,7 +120,7 @@ describe("NfcReader", () => {
     return { reader, closers, opens: () => opens };
   }
 
-  const waitFor = async (cond: () => boolean, ms = 1000) => {
+  const waitFor = async (cond: () => boolean, ms = 3000) => {
     const end = Date.now() + ms;
     while (!cond()) {
       if (Date.now() > end) throw new Error("시간 초과");

@@ -10,6 +10,12 @@ export interface NfcReaderStatus {
   message?: string;
 }
 
+/** 앱이 카드로 로그인을 요청한 결과. 카드 번호는 오지 않는다. */
+export type NfcLoginResult = { ok: true; token: string } | { ok: false; error: string };
+
+/** 카드가 닿았을 때 앱이 할 일: off(기본) / login(로그인 화면, 앱이 서버에 로그인 요청) / capture(카드 등록 중, 번호를 화면에 전달) */
+export type NfcMode = "off" | "login" | "capture";
+
 export type DeviceApprovalStatus = "pending" | "approved" | "revoked" | "unknown";
 
 export interface BenchClient {
@@ -17,8 +23,11 @@ export interface BenchClient {
   nfc: {
     status(): Promise<NfcReaderStatus | null>;
     onStatus(cb: (status: NfcReaderStatus) => void): () => void;
-    /** 카드가 리더에 닿을 때마다 호출된다. uid 는 대문자 16진수 */
+    setMode(mode: NfcMode): Promise<void>;
+    /** capture 모드에서 카드가 리더에 닿을 때 호출된다. uid 는 대문자 16진수 */
     onCard(cb: (card: { uid: string }) => void): () => void;
+    /** login 모드에서 카드로 로그인한 결과 */
+    onLogin(cb: (result: NfcLoginResult) => void): () => void;
   };
   device: {
     state(): Promise<{ status: DeviceApprovalStatus; error?: string } | null>;

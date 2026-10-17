@@ -18,6 +18,7 @@ from app.routers import (
     devices,
     documents,
     leaves,
+    nfc_auth,
     nfc_cards,
     notices,
     notifications,
@@ -60,6 +61,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(nfc_auth.router)
 app.include_router(audit_logs.router)
 app.include_router(notices.router)
 app.include_router(notifications.router)

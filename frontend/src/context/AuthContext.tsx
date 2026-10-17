@@ -30,11 +30,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logDebug("Auth", `로그인 성공: role=${me.role}`);
   }
 
+  async function loginWithToken(token: string) {
+    logDebug("Auth", "카드 로그인 토큰으로 사용자 정보 조회");
+    setToken(token);
+    try {
+      const me = await apiGet<CurrentUser>("/api/auth/me");
+      setUser(me);
+      logDebug("Auth", `카드 로그인 성공: role=${me.role}`);
+    } catch (err) {
+      clearToken(); // 확인되지 않은 토큰을 남겨 두지 않는다
+      throw err;
+    }
+  }
+
   function logout() {
     logDebug("Auth", "로그아웃");
     clearToken();
     setUser(null);
   }
 
-  return <AuthContext.Provider value={{ user, isLoading, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, isLoading, login, loginWithToken, logout }}>{children}</AuthContext.Provider>;
 }

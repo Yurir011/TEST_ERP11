@@ -7,6 +7,8 @@ export interface AuthContextValue {
   user: CurrentUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  /** 이미 발급된 토큰(카드 로그인)으로 로그인 상태를 만든다. 토큰이 올바르지 않으면 오류를 던지고 저장하지 않는다. */
+  loginWithToken: (token: string) => Promise<void>;
   logout: () => void;
 }
 

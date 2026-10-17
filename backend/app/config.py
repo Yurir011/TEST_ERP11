@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # NFC 카드 번호(UID)를 DB 에 저장할 때 쓰는 비밀키(HMAC). 운영에서는 .env 에 NFC_UID_SECRET 으로 32자 이상 지정한다.
     # 비어 있으면 JWT 비밀키에서 파생한 값을 쓴다. 이 값이 바뀌면 이미 등록한 카드를 알아볼 수 없으므로 한 번 정하면 바꾸지 않는다.
     nfc_uid_secret: str = ""
+    # 카드 로그인: 기기가 받는 1회용 확인값(nonce)의 유효 시간(초), 카드 로그인으로 받은 토큰의 유효 시간(분, 기본 8시간).
+    nfc_challenge_ttl_seconds: int = 60
+    nfc_token_expire_minutes: int = 60 * 8
 
     # NFC 카드 번호(UID)를 DB 에 저장할 때 쓰는 비밀키(HMAC). 운영에서는 .env 에 NFC_UID_SECRET 으로 32자 이상 지정한다.
     # 비어 있으면 JWT 비밀키에서 파생한 값을 쓴다. 이 값이 바뀌면 이미 등록한 카드를 알아볼 수 없으므로 한 번 정하면 바꾸지 않는다.

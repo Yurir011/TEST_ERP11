@@ -12,8 +12,9 @@ import path from "node:path";
 import { BrowserWindow, Menu, Notification, Tray, app, ipcMain, nativeImage, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 
-import { type DeviceKey, type DeviceStatusName, type SecretStore, defaultDeviceName, loadOrCreateDeviceKey, registerDevice } from "./device";
+import { type DeviceKey, type DeviceStatusName, type SecretStore, defaultDeviceName, loadOrCreateDeviceKey, registerDevice, verifySignature } from "./device";
 import { getLogger } from "./log";
+import { loginMessage, performNfcLogin } from "./nfcLogin";
 import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
 import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, normalizeServerUrl, saveConfig } from "./serverConfig";
@@ -36,6 +37,16 @@ let tray: Tray | null = null;
 let reader: NfcReader | null = null;
 let quitting = false;
 let deviceKey: DeviceKey | null = null;
+/**
+ * 카드가 닿았을 때 하는 일 (화면이 IPC 로 정한다):
+ *  - off: 아무것도 하지 않는다 (기본)
+ *  - login: 로그인 화면. 앱이 직접 서버에 카드 로그인을 요청하고, 화면에는 결과(토큰 또는 안내 문구)만 준다. 카드 번호는 화면에 주지 않는다.
+ *  - capture: 직원 화면의 [카드 읽기]. 카드 번호를 화면에 준다 (등록용).
+ * 화면이 새로 불러와지면(이동·새로고침) off 로 돌아간다.
+ */
+type NfcMode = "off" | "login" | "capture";
+let nfcMode: NfcMode = "off";
+let loginBusy = false;
 let deviceState: { status: DeviceStatusName | "unknown"; error?: string } = { status: "unknown" };
 let deviceTimer: ReturnType<typeof setInterval> | null = null;
 let shellState: { mode: "setup" | "offline"; error?: string } = { mode: "setup" };
@@ -115,6 +126,9 @@ function createWindow(): BrowserWindow {
   });
 
   hardenWindow(w);
+  w.webContents.on("did-navigate", () => {
+    nfcMode = "off"; // 새 화면은 카드 모드를 다시 정해야 한다
+  });
   w.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* 이동 취소 */) return;
     log.error(`[Main] 화면 불러오기 실패: ${safeOrigin(url)} (${code} ${desc})`);
@@ -159,21 +173,51 @@ function currentIsServerPage(): boolean {
   return !!win && !win.isDestroyed() && classifySender(win.webContents.getURL(), config.serverUrl, SHELL_FILE) === "server";
 }
 
+
+/** 카드가 닿았을 때: 현재 모드에 따라 처리한다. 서버 화면이 열려 있을 때만 반응한다. */
+async function handleCard(uid: string): Promise<void> {
+  if (!currentIsServerPage() || !win) return;
+  if (nfcMode === "capture") {
+    win.webContents.send("nfc:card", { uid });
+    return;
+  }
+  if (nfcMode !== "login") return;
+  if (loginBusy) return;
+  loginBusy = true;
+  try {
+    if (!deviceKey || !config.serverUrl) {
+      win.webContents.send("nfc:login", { ok: false, error: "이 PC 의 기기 키를 준비하지 못했습니다. 앱을 다시 실행하세요." });
+      return;
+    }
+    log.info(`[NFC] 카드 로그인 요청: 카드 끝 4자리 ${uid.slice(-4)}`);
+    const result = await performNfcLogin(config.serverUrl, deviceKey, uid);
+    log.info(`[NFC] 카드 로그인 결과: ${result.ok ? "성공" : `거절 - ${result.error}`}`);
+    // 로그인 요청 중에 화면이 바뀌었거나 모드가 바뀌었으면 결과를 버린다 (토큰이 엉뚱한 화면으로 가지 않게)
+    if (win && !win.isDestroyed() && currentIsServerPage() && nfcMode === "login") win.webContents.send("nfc:login", result);
+  } finally {
+    loginBusy = false;
+  }
+}
+
 function startNfc(): void {
   reader = new NfcReader(serialPortProvider({ preferred: config.nfcPort, log: getLogger("NFC") }), { log: getLogger("NFC") });
   reader.on("status", (s: NfcStatus) => {
     if (win && !win.isDestroyed()) win.webContents.send("nfc:status", s);
   });
-  // 카드 UID 는 서버 화면에만 전달한다 (안내 화면이나 다른 주소로 새어 나가지 않게)
-  reader.on("card", (t: { uid: string }) => {
-    if (currentIsServerPage()) win?.webContents.send("nfc:card", { uid: t.uid });
-  });
+  reader.on("card", (t: { uid: string }) => void handleCard(t.uid));
   reader.start();
 }
 
 function registerIpc(): void {
   ipcMain.handle("app:version", (e) => (guard(e, "app:version", ["shell", "server"]) ? app.getVersion() : ""));
   ipcMain.handle("nfc:status", (e) => (guard(e, "nfc:status", ["shell", "server"]) ? (reader?.getStatus() ?? { state: "searching" }) : null));
+
+  ipcMain.handle("nfc:set-mode", (e, mode: unknown) => {
+    if (!guard(e, "nfc:set-mode", ["server"])) return;
+    if (mode !== "off" && mode !== "login" && mode !== "capture") return;
+    if (mode !== nfcMode) log.debug(`[NFC] 카드 모드 변경: ${nfcMode} → ${mode}`);
+    nfcMode = mode;
+  });
 
   ipcMain.handle("device:state", (e) => (guard(e, "device:state", ["shell", "server"]) ? deviceState : null));
 
@@ -301,15 +345,31 @@ async function runSmoke(): Promise<void> {
   // 2) 서버 화면(가짜 서버): 팝업·다운로드
   const pageHtml = "<!doctype html><title>smoke</title><body>smoke</body>";
   let registered: { name: string; public_key: string } | null = null;
+  let challengeCalls = 0;
+  const loginCalls: Record<string, string>[] = [];
   const server = http.createServer((req, res) => {
     if (req.url === "/api/health") res.end('{"status":"ok"}');
-    else if (req.url === "/api/devices/register" && req.method === "POST") {
+    else if (req.method === "POST" && req.url?.startsWith("/api/")) {
       let body = "";
       req.on("data", (c) => (body += c));
       req.on("end", () => {
-        registered = JSON.parse(body) as { name: string; public_key: string };
+        const json = JSON.parse(body) as Record<string, string>;
         res.setHeader("Content-Type", "application/json");
-        res.end('{"status":"pending"}');
+        if (req.url === "/api/devices/register") {
+          registered = json as { name: string; public_key: string };
+          res.end('{"status":"pending"}');
+        } else if (req.url === "/api/auth/nfc/challenge") {
+          challengeCalls++;
+          res.end(JSON.stringify({ nonce: "0123456789abcdef0123456789abcdef", expires_in: 60 }));
+        } else if (req.url === "/api/auth/nfc/login") {
+          loginCalls.push(json);
+          const signed = verifySignature(json.public_key, loginMessage(json.nonce, json.uid), json.signature);
+          res.statusCode = signed ? 200 : 401;
+          res.end(JSON.stringify(signed ? { access_token: "smoke-token" } : { detail: "기기 인증에 실패했습니다." }));
+        } else {
+          res.statusCode = 404;
+          res.end("{}");
+        }
       });
     }
     else res.setHeader("Content-Type", "text/html; charset=utf-8"), res.end(pageHtml);
@@ -332,6 +392,44 @@ async function runSmoke(): Promise<void> {
   check("기기 등록 요청이 서버에 전달됨(공개키 64자 + 이름만)", !!reg && /^[0-9a-f]{64}$/.test(reg.public_key) && !!reg.name && Object.keys(reg).length === 2);
   const devState = (await w.webContents.executeJavaScript("window.benchClient.device.state()")) as { status: string } | null;
   check("서버 화면에서 기기 상태(pending)를 읽을 수 있다", devState?.status === "pending");
+
+  // 3) 카드 모드: login(결과만 전달) / capture(번호 전달) / off(무반응)
+  await w.webContents.executeJavaScript(`(() => {
+    window.__ev = [];
+    window.benchClient.nfc.onLogin((r) => window.__ev.push({ t: "login", r }));
+    window.benchClient.nfc.onCard((c) => window.__ev.push({ t: "card", c }));
+  })()`);
+  const events = () => w.webContents.executeJavaScript("window.__ev") as Promise<{ t: string; r?: { ok: boolean; token?: string }; c?: { uid: string } }[]>;
+  const setMode = (m: string) => w.webContents.executeJavaScript(`window.benchClient.nfc.setMode(${JSON.stringify(m)})`);
+
+  await handleCard("0B9F515D");
+  await sleep(200);
+  check("모드 off: 카드를 대도 아무 일도 없다", (await events()).length === 0 && loginCalls.length === 0 && challengeCalls === 0);
+
+  await setMode("login");
+  await handleCard("0B9F515D");
+  await until(() => loginCalls.length === 1);
+  await sleep(200);
+  const evLogin = await events();
+  check("모드 login: 앱이 서버에 로그인을 요청하고 화면에는 토큰만 전달", evLogin.length === 1 && evLogin[0].t === "login" && evLogin[0].r?.ok === true && evLogin[0].r?.token === "smoke-token");
+  check("login 모드에서는 카드 번호가 화면에 전달되지 않는다", !evLogin.some((e) => e.t === "card") && !JSON.stringify(evLogin).includes("0B9F515D"));
+  check("서버가 앱의 서명을 확인했다", loginCalls[0].uid === "0B9F515D" && /^[0-9a-f]{128}$/.test(loginCalls[0].signature));
+
+  await setMode("capture");
+  const callsBefore = loginCalls.length;
+  await handleCard("0B9F625D");
+  await sleep(200);
+  const evCapture = await events();
+  check("모드 capture: 카드 번호만 전달하고 로그인은 요청하지 않는다", evCapture.at(-1)?.t === "card" && evCapture.at(-1)?.c?.uid === "0B9F625D" && loginCalls.length === callsBefore);
+
+  await w.webContents.executeJavaScript(`window.benchClient.nfc.setMode("hack")`);
+  await handleCard("0B9F625D");
+  await sleep(200);
+  check("알 수 없는 모드는 무시된다 (capture 그대로)", (await events()).filter((e) => e.t === "card").length === 2);
+
+  const shellGuard = await w.webContents.executeJavaScript("typeof window.benchClient.nfc.setMode");
+  check("setMode 통로가 있다", shellGuard === "function");
+
   const before = BrowserWindow.getAllWindows().length;
   const popup = (code: string) => w.webContents.executeJavaScript(code);
 

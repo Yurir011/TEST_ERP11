@@ -20,7 +20,12 @@ const api = {
   nfc: {
     status: (): Promise<unknown> => ipcRenderer.invoke("nfc:status"),
     onStatus: (cb: (status: unknown) => void): Unsubscribe => subscribe("nfc:status", cb),
+    /** 카드가 닿았을 때 앱이 할 일: off(기본) / login(로그인 화면) / capture(카드 등록 중) */
+    setMode: (mode: "off" | "login" | "capture"): Promise<void> => ipcRenderer.invoke("nfc:set-mode", mode),
+    /** capture 모드에서만 카드 번호를 받는다 */
     onCard: (cb: (card: { uid: string }) => void): Unsubscribe => subscribe("nfc:card", cb),
+    /** login 모드에서 카드로 로그인한 결과 (카드 번호는 오지 않는다) */
+    onLogin: (cb: (result: { ok: true; token: string } | { ok: false; error: string }) => void): Unsubscribe => subscribe("nfc:login", cb),
   },
   device: {
     state: (): Promise<{ status: string; error?: string } | null> => ipcRenderer.invoke("device:state"),

@@ -36,6 +36,7 @@ function installBench(status: NfcReaderStatus) {
   let onCard: ((c: { uid: string }) => void) | null = null;
   const bench = {
     nfc: {
+      setMode: vi.fn().mockResolvedValue(undefined),
       status: vi.fn().mockResolvedValue(status),
       onStatus: vi.fn(() => () => {}),
       onCard: vi.fn((cb: (c: { uid: string }) => void) => {
@@ -132,7 +133,7 @@ describe("NfcCardsSection — 데스크톱 앱", () => {
   });
 
   it("[카드 읽기] 후 카드를 대면 끝 4자리만 보여 주고, 그 번호로 등록한다", async () => {
-    const { tap, listening } = installBench({ state: "ready", port: "COM3" });
+    const { bench, tap, listening } = installBench({ state: "ready", port: "COM3" });
     api.apiPost.mockResolvedValue(card());
     renderSection();
     expect(await screen.findByText("리더 연결됨")).toBeTruthy();
@@ -141,12 +142,14 @@ describe("NfcCardsSection — 데스크톱 앱", () => {
     fireEvent.click(screen.getByRole("button", { name: "카드 읽기" }));
     expect(screen.getByText("카드를 리더에 대세요...")).toBeTruthy();
     expect(listening()).toBe(true);
+    await waitFor(() => expect(bench.nfc.setMode).toHaveBeenLastCalledWith("capture")); // 읽는 동안 앱은 로그인하지 않고 번호만 전달
 
     tap("0B9F515D");
     expect(await screen.findByText(/카드를 읽었습니다/)).toBeTruthy();
     expect(screen.getByText(/끝 4자리 515D/)).toBeTruthy();
     expect(screen.queryByText(/0B9F515D/)).toBeNull(); // 전체 번호는 화면에 나오지 않는다
     expect(listening()).toBe(false); // 한 번 읽으면 더 받지 않는다
+    await waitFor(() => expect(bench.nfc.setMode).toHaveBeenLastCalledWith("off")); // 읽기가 끝나면 모드 해제
 
     fireEvent.click(screen.getByRole("button", { name: "카드 등록" }));
     await waitFor(() => expect(api.apiPost).toHaveBeenCalledWith("/api/users/7/nfc-cards", { uid: "0B9F515D", label: "" }));

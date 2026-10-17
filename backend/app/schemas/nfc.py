@@ -69,3 +69,24 @@ class DeviceOut(BaseModel):
     last_seen_at: datetime | None
     last_ip: str | None
     created_at: datetime
+
+
+class NfcChallengeRequest(BaseModel):
+    public_key: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+
+
+class NfcChallengeOut(BaseModel):
+    nonce: str
+    expires_in: int  # 초
+
+
+class NfcLoginRequest(BaseModel):
+    public_key: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    nonce: str = Field(pattern=r"^[0-9a-f]{32}$")
+    uid: str = Field(max_length=40)
+    signature: str = Field(pattern=r"^[0-9a-fA-F]{128}$")  # Ed25519 서명 64바이트
+
+    @field_validator("uid")
+    @classmethod
+    def _uid_format(cls, v: str) -> str:
+        return normalize_uid(v)

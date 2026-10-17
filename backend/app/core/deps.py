@@ -3,9 +3,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.audit import set_current_user
-from app.core.security import decode_access_token
+from app.core.security import decode_access_payload
 from app.database import get_db
 from app.logging_config import get_logger
+from app.models.client_device import ClientDevice, DeviceStatus
+from app.models.nfc_card import NfcCard
 from app.models.user import User, UserRole, has_menu_permission, is_admin_role, is_dept_head_or_above
 
 logger = get_logger("Deps")
@@ -21,17 +23,30 @@ def get_current_user(
         logger.debug("[Auth] 인증 헤더 없음")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증이 필요합니다.")
 
-    email = decode_access_token(credentials.credentials)
-    if email is None:
+    claims = decode_access_payload(credentials.credentials)
+    if claims is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰입니다.")
+    email = claims["sub"]
 
     user = db.query(User).filter(User.email == email).first()
     if user is None or not user.is_active:
         logger.debug(f"[Auth] 사용자 조회 실패 또는 비활성 계정: email={email}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="사용자를 찾을 수 없습니다.")
 
+    if claims.get("amr") == "nfc":
+        _ensure_nfc_session_valid(db, claims)
+
     set_current_user(user)  # 감사 로그의 "누가"
     return user
+
+
+def _ensure_nfc_session_valid(db: Session, claims: dict) -> None:
+    """카드 로그인으로 받은 토큰은 카드와 기기가 계속 사용 가능할 때만 통한다 (사용 중지하면 이미 받은 토큰도 바로 막힌다)."""
+    device = db.get(ClientDevice, claims.get("did")) if isinstance(claims.get("did"), int) else None
+    card = db.get(NfcCard, claims.get("cid")) if isinstance(claims.get("cid"), int) else None
+    if device is None or device.status != DeviceStatus.approved.value or card is None or not card.is_active:
+        logger.debug(f"[Auth] 카드 로그인 토큰 거절: 기기 또는 카드가 더 이상 사용 가능하지 않음 (did={claims.get('did')}, cid={claims.get('cid')})")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="카드 또는 기기가 사용 중지되어 다시 로그인해야 합니다.")
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
