@@ -74,6 +74,22 @@ export async function downloadFile(path: string, filename: string) {
   }
 }
 
+/** 파일 내용을 바이트로 받는다 (메일에 PDF 를 첨부할 때처럼 저장하지 않고 다른 곳에 넘길 때) */
+export async function fetchFileBytes(path: string): Promise<ArrayBuffer> {
+  logDebug("Api", `파일 받기 시작: ${path}`);
+  const token = getToken();
+  try {
+    const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
+    const bytes = await res.arrayBuffer();
+    logDebug("Api", `파일 받기 성공: ${path} (${bytes.byteLength}바이트)`);
+    return bytes;
+  } catch (err) {
+    logError("Api", `파일 받기 실패: ${path}`, err);
+    throw err;
+  }
+}
+
 export async function openFile(path: string) {
   logDebug("Api", `파일 열기 시작: ${path}`);
   const token = getToken();

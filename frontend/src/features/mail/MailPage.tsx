@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
-import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailDetail, type MailDraft, type MailDraftKind, type MailFolder, type MailSendResult, type MailSummary, getBenchClient } from "../../lib/desktop";
+import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailDocRef, type MailDetail, type MailDraft, type MailDraftKind, type MailFolder, type MailSendResult, type MailSummary, getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
 import { ComposeView } from "./ComposeView";
+import { reportDocumentMailSent } from "./documentMail";
 import { MailAccountForm } from "./MailAccountForm";
 import { MailListView } from "./MailListView";
 import { MailReader } from "./MailReader";
@@ -70,6 +71,8 @@ function MailApp() {
   const [tick, setTick] = useState(0); // 값이 바뀌면 저장된 목록을 다시 읽는다
   const [composing, setComposing] = useState<ComposeInit | null>(null);
   const composeState = useRef<{ dirty: boolean; attachmentIds: string[] }>({ dirty: false, attachmentIds: [] });
+  /** 쓰고 있는 메일이 ERP 문서에서 시작된 것이면 그 문서 (보낸 뒤 발송 이력을 남긴다) */
+  const composeDoc = useRef<MailDocRef | null>(null);
   const detailReq = useRef(0);
   const openMessageRef = useRef<(id: number) => Promise<void>>(async () => {});
   const reload = useCallback(() => setTick((t) => t + 1), []);
@@ -133,13 +136,30 @@ function MailApp() {
     if (!composing) return true;
     if (composeState.current.dirty && !(await dialog.confirm("작성 중인 메일을 버릴까요?", { okLabel: "버리기", danger: true }))) return false;
     await bridge.discardAttachments(composeState.current.attachmentIds);
+    composeDoc.current = null;
     setComposing(null);
     return true;
   }
 
+  /** 문서 화면에서 "메일 보내기"로 넘어온 초안(PDF 첨부 포함)이 있으면 쓰기 화면으로 연다 */
+  async function openPendingDocumentCompose() {
+    const pending = await bridge.consumePendingCompose();
+    if (!pending) return;
+    if (!(await leaveCompose())) {
+      await bridge.discardAttachments(pending.draft.attachments.map((a) => a.id)); // 쓰던 메일을 계속 쓰기로 했으니 새 초안은 버린다
+      return;
+    }
+    composeState.current = { dirty: false, attachmentIds: pending.draft.attachments.map((a) => a.id) };
+    composeDoc.current = pending.doc;
+    logDebug("Mail", `문서에서 시작한 메일 쓰기: ${pending.doc.type}#${pending.doc.id}`);
+    setComposing(pending.draft);
+  }
+  const openPendingComposeRef = useRef<() => Promise<void>>(async () => {});
+
   /** 새 메일·내게쓰기·답장·전체답장·전달 화면 열기 */
   async function openCompose(kind: "new" | MailDraftKind, id?: number) {
     if (!(await leaveCompose())) return;
+    composeDoc.current = null;
     let init: ComposeInit = BLANK_DRAFT;
     if (kind !== "new") {
       const r = await bridge.composeDraft(kind, id);
@@ -153,7 +173,10 @@ function MailApp() {
     setComposing(init);
   }
 
-  function onSent(result: MailSendResult) {
+  function onSent(result: MailSendResult, sent: { to: string; cc: string; bcc: string; subject: string }) {
+    const doc = composeDoc.current;
+    composeDoc.current = null;
+    if (doc) void reportDocumentMailSent(doc, sent); // 문서 상세의 발송 이력용. 실패해도 메일은 이미 나갔다
     setComposing(null);
     if (result.savedToSent === false) dialog.notifyError("메일을 보냈지만 보낸메일함에는 저장하지 못했습니다.");
     else dialog.notify("메일을 보냈습니다.");
@@ -165,10 +188,13 @@ function MailApp() {
     if (!account) return;
     const offChanged = bridge.onChanged(() => setTick((t) => t + 1));
     const offOpen = bridge.onOpenMessage(({ id }) => void openMessageRef.current(id));
+    const offCompose = bridge.onOpenCompose(() => void openPendingComposeRef.current());
     void bridge.consumePendingOpen().then((id) => id && void openMessageRef.current(id));
+    void openPendingComposeRef.current();
     return () => {
       offChanged();
       offOpen();
+      offCompose();
     };
   }, [bridge, account]);
 
@@ -346,6 +372,7 @@ function MailApp() {
 
   useEffect(() => {
     openMessageRef.current = (id) => openMessage(id); // 알림 신호가 항상 최신 상태의 열기 함수를 쓰게 한다
+    openPendingComposeRef.current = openPendingDocumentCompose;
   });
 
   if (account === undefined) return <p className="min-h-screen bg-bg p-8 text-sm text-text-muted">불러오는 중...</p>;
@@ -407,7 +434,10 @@ function MailApp() {
               composeState.current = st;
             }}
             onSent={onSent}
-            onClose={() => setComposing(null)}
+            onClose={() => {
+              composeDoc.current = null;
+              setComposing(null);
+            }}
           />
         ) : reading ? (
           <MailReader

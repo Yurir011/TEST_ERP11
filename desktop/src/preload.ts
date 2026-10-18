@@ -63,6 +63,13 @@ const api = {
     /** 새 메일 확인으로 목록이 바뀌었을 때 / 알림을 눌러 특정 메일을 열라는 신호 */
     onChanged: (cb: () => void): Unsubscribe => subscribe("mail:changed", () => cb()),
     onOpenMessage: (cb: (payload: { id: number }) => void): Unsubscribe => subscribe("mail:open-message", cb),
+    /** ERP 문서(PDF)를 첨부해 메일 창에서 쓰기 화면을 연다 */
+    composeDocument: (payload: unknown): Promise<unknown> => ipcRenderer.invoke("mail:compose-document", payload),
+    onOpenCompose: (cb: () => void): Unsubscribe => subscribe("mail:open-compose", () => cb()),
+    consumePendingCompose: (): Promise<unknown> => ipcRenderer.invoke("mail:consume-pending-compose"),
+    /** 이 PC 받은메일함의 안 읽은 수 (계정이 없으면 null) 와 그 값이 바뀔 때의 신호 */
+    unread: (): Promise<number | null> => ipcRenderer.invoke("mail:unread"),
+    onUnread: (cb: (payload: { unread: number }) => void): Unsubscribe => subscribe("mail:unread", cb),
     consumePendingOpen: (): Promise<number | null> => ipcRenderer.invoke("mail:consume-pending-open"),
     openAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-open", id, index),
   },

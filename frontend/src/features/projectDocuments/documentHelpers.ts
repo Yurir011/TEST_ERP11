@@ -115,3 +115,19 @@ export function filterTaxInvoices(docs: ProjectDocument[], f: TaxInvoiceFilters,
     return true;
   });
 }
+
+/** 앱에서 문서를 메일로 보낼 때 채워 둘 제목·본문 초안 (직원이 보내기 전에 고칠 수 있다) */
+export function documentMailDraft(doc: ProjectDocument, senderName: string): { subject: string; body: string } {
+  const label = PROJECT_DOC_TYPE_LABELS[doc.doc_type];
+  const subject = `[${label}] ${doc.project_name}`.slice(0, 255);
+  const greeting = doc.manager_name ? `${doc.client_name} ${doc.manager_name}님,` : `${doc.client_name} 담당자님,`;
+  const body = `${greeting}
+안녕하세요.
+
+${label}${doc.doc_no ? `(${doc.doc_no})` : ""}를 첨부하여 보내드립니다.
+확인 부탁드립니다.
+
+감사합니다.
+${senderName}`;
+  return { subject, body };
+}

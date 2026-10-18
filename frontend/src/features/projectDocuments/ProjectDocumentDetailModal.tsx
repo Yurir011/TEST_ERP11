@@ -2,6 +2,7 @@ import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable
 import { Check, Download, Eye, Mail, Pencil, Printer, Send, Sheet, X } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
 import { lineAmount } from "../../lib/money";
+import { DocumentMailHistory } from "../mail/DocumentMailHistory";
 import { formatDocAmount, itemsTotal } from "./documentHelpers";
 import { TaxInvoiceImages } from "./TaxInvoiceImages";
 import {
@@ -220,6 +221,8 @@ export function ProjectDocumentDetailModal({
             </button>
           </div>
         )}
+
+        <DocumentMailHistory docType="project_document" docId={doc.id} />
 
         <div className="flex items-center gap-2">
           <button

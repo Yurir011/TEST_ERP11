@@ -166,6 +166,35 @@ export interface MailBridge {
   onOpenMessage(cb: (payload: { id: number }) => void): () => void;
   /** 알림을 눌러 메일 창이 새로 열린 경우, 열어야 할 메일 번호를 한 번만 받는다 */
   consumePendingOpen(): Promise<number | null>;
+  /** ERP 문서(PDF)를 첨부해 메일 창에서 쓰기 화면을 연다. 메일 계정이 없으면 needsAccount */
+  composeDocument(payload: MailDocumentPayload): Promise<MailResult<null> & { needsAccount?: boolean }>;
+  /** 문서 화면에서 넘어온 쓰기 초안이 도착했다는 신호(메일 창이 이미 열려 있을 때) / 새로 열린 창이 한 번만 가져가는 초안 */
+  onOpenCompose(cb: () => void): () => void;
+  consumePendingCompose(): Promise<MailPendingCompose | null>;
+  /** 이 PC 받은메일함의 안 읽은 수 (계정이 없으면 null) 와 바뀔 때의 신호 */
+  unread(): Promise<number | null>;
+  onUnread(cb: (payload: { unread: number }) => void): () => void;
+}
+
+/** 문서 화면이 메일 쓰기로 넘기는 값. 문서 PDF 는 바이트로 넘기고, 앱이 임시 파일로 만들어 첨부한다 */
+export interface MailDocumentPayload {
+  to: string;
+  subject: string;
+  body: string;
+  doc: MailDocRef;
+  filename: string;
+  data: ArrayBuffer;
+}
+
+/** 메일이 어느 문서에서 시작됐는지 (보낸 뒤 발송 이력을 서버에 남길 때 쓴다) */
+export interface MailDocRef {
+  type: "project_document";
+  id: number;
+}
+
+export interface MailPendingCompose {
+  draft: { to: string; cc: string; subject: string; body: string; attachments: MailStagedAttachment[] };
+  doc: MailDocRef;
 }
 
 export interface BenchClient {

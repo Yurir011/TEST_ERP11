@@ -10,7 +10,8 @@ interface Props {
   fromName: string;
   fromEmail: string;
   initial: Pick<MailDraft, "to" | "cc" | "subject" | "body" | "attachments" | "threading">;
-  onSent: (result: MailSendResult) => void;
+  /** sent: 보낸 주소·제목 (문서에서 시작한 메일의 발송 이력을 남길 때 쓴다) */
+  onSent: (result: MailSendResult, sent: { to: string; cc: string; bcc: string; subject: string }) => void;
   onClose: () => void;
   /** 작성 내용이 바뀌었는지와 준비된 첨부 번호를 바깥(다른 화면으로 나갈 때 버릴지 묻는 쪽)에 알린다 */
   onState?: (state: { dirty: boolean; attachmentIds: string[] }) => void;
@@ -61,7 +62,7 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
         setError(r.error);
         return;
       }
-      onSent(r.value);
+      onSent(r.value, { to, cc, bcc, subject });
     } catch (err) {
       logError("Mail", "메일 보내기 실패", err);
       setError("메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");

@@ -76,3 +76,30 @@ export function parseSendPayload(v: unknown): SendPayload | null {
   }
   return { fromName, to, cc, bcc, subject, body, attachmentIds: o.attachmentIds as string[], threading };
 }
+
+export interface DocumentComposeRequest {
+  to: string;
+  subject: string;
+  body: string;
+  doc: { type: "project_document"; id: number };
+  filename: string;
+  data: Buffer;
+}
+
+/** 문서 화면에서 "메일 보내기"로 넘어온 값: 문서 PDF 와 받는 사람·제목·본문 초안. 형식이 틀리면 null */
+export function parseDocumentCompose(v: unknown): DocumentComposeRequest | null {
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  const to = str(o.to, 2_000);
+  const subject = str(o.subject, 255);
+  const body = str(o.body, 20_000);
+  const filename = str(o.filename, 200);
+  if (to === null || subject === null || body === null || filename === null || filename === "") return null;
+  const d = o.doc as Record<string, unknown> | null | undefined;
+  const id = d ? parseMailId(d.id) : null;
+  if (!d || d.type !== "project_document" || id === null) return null;
+  const raw = o.data;
+  const data = raw instanceof ArrayBuffer ? Buffer.from(raw) : ArrayBuffer.isView(raw) ? Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength) : null;
+  if (!data) return null;
+  return { to, subject, body, doc: { type: "project_document", id }, filename, data };
+}

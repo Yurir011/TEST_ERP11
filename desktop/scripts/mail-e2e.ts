@@ -79,16 +79,18 @@ async function main(): Promise<number> {
   check(`서버에 읽음 표시가 반영됨 (읽음 ${seen}/3, 기대 2)`, seen === 2);
 
   if (!noCa) {
-    // 보내기: 전달 메일 1통 + 답장 1통만 도착해야 한다 (거절된 메일·잘못된 주소·형식 오류·가짜 첨부 번호는 서버에 닿지 않는다)
-    check(`SMTP 서버가 받은 메일은 정확히 2통 (받은 ${smtp.messages.length}통)`, smtp.messages.length === 2);
+    // 보내기: 전달 메일 1통 + 답장 1통 + 문서(PDF) 메일 1통만 도착해야 한다 (거절된 메일·잘못된 주소·형식 오류·가짜 첨부 번호는 서버에 닿지 않는다)
+    check(`SMTP 서버가 받은 메일은 정확히 3통 (받은 ${smtp.messages.length}통)`, smtp.messages.length === 3);
     const fwd = smtp.messages.find((m) => m.parsed.subject === "Fwd: 첨부 메일");
     const rep = smtp.messages.find((m) => m.parsed.subject === "Re: 첨부 메일");
     check("전달 메일: 한글 이름 첨부(견적서.pdf)가 그대로 가고 받는 사람 봉투에 숨은참조가 있다", !!fwd && fwd.parsed.attachments[0]?.filename === "견적서.pdf" && fwd.parsed.attachments[0].content.toString() === "%PDF-1.4 fake" && fwd.envelope.to.includes("hidden@test.local"));
     check("전달 메일: 숨은참조 주소가 메일 원문 어디에도 없다", !!fwd && !fwd.raw.toString().includes("hidden@test.local"));
     check("전달 메일: 보내는 사람은 내 계정(e2e@test.local)이고 표시 이름이 붙는다", !!fwd && fwd.parsed.from?.value[0].address === "e2e@test.local" && fwd.parsed.from.value[0].name === "점검 담당");
     check("답장 메일: In-Reply-To 가 붙어 대화로 이어진다", !!rep && /^<.+>$/.test(rep.parsed.inReplyTo ?? ""));
+    const docMail = smtp.messages.find((m) => m.parsed.subject === "[견적서] 점검");
+    check("문서 메일: ERP 문서 PDF(견적서.pdf)가 첨부되어 받는 사람(client@test.local)에게 갔다", !!docMail && docMail.parsed.attachments[0]?.filename === "견적서.pdf" && docMail.parsed.attachments[0].content.toString() === "%PDF-1.4 smoke" && docMail.envelope.to.includes("client@test.local"));
     const sentCount = await countIn(imap.port, imap.user, imap.pass, "Sent");
-    check(`보낸메일함에 보낸 메일 2통이 저장됨 (저장 ${sentCount}통)`, sentCount === 2);
+    check(`보낸메일함에 보낸 메일 3통이 저장됨 (저장 ${sentCount}통)`, sentCount === 3);
   }
 
   if (!noCa) {

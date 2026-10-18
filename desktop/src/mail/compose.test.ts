@@ -184,6 +184,35 @@ describe("첨부 파일 준비", () => {
   });
 });
 
+describe("ERP 문서(PDF) 첨부", () => {
+  beforeEach(() => setup());
+  const pdf = Buffer.from("%PDF-1.4 견적서");
+
+  it("PDF 를 첨부로 준비해 보내고, 보낸 뒤 임시 파일은 지워진다", async () => {
+    const staged = composer.stageDocument("견적서_2026-10-01.pdf", pdf);
+    if (!staged.ok) throw new Error("준비 실패");
+    const tmp = path.join(dir, "tmp", staged.value.id);
+    expect(fs.existsSync(tmp)).toBe(true);
+    const r = await composer.send(payload({ to: "kim@sender.test", attachmentIds: [staged.value.id] }));
+    expect(r.ok).toBe(true);
+    expect(smtp.messages[0].parsed.attachments[0].filename).toBe("견적서_2026-10-01.pdf");
+    expect(smtp.messages[0].parsed.attachments[0].content.equals(pdf)).toBe(true);
+    expect(fs.existsSync(tmp)).toBe(false);
+  });
+
+  it("이름에 .pdf 가 없으면 붙이고, 경로 문자는 이름에서 걸러진다", () => {
+    const r = composer.stageDocument("../../evil", pdf);
+    expect(r.ok && r.value.filename).toBe("evil.pdf");
+  });
+
+  it("PDF 가 아니거나 비었거나 너무 크면 거절한다", () => {
+    expect(composer.stageDocument("a.pdf", Buffer.from("MZ not a pdf")).ok).toBe(false);
+    expect(composer.stageDocument("a.pdf", Buffer.alloc(0)).ok).toBe(false);
+    const big = Buffer.concat([Buffer.from("%PDF-"), Buffer.alloc(MAX_ATTACHMENT_BYTES)]);
+    expect(composer.stageDocument("a.pdf", big).ok).toBe(false);
+  });
+});
+
 describe("보내기", () => {
   beforeEach(() => setup());
 

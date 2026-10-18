@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeTaxInvoiceStats, filterTaxInvoices, itemsSummary, itemsTotal, type TaxInvoiceFilters } from "./documentHelpers";
+import { computeTaxInvoiceStats, documentMailDraft, filterTaxInvoices, itemsSummary, itemsTotal, type TaxInvoiceFilters } from "./documentHelpers";
 import type { ProjectDocument } from "./types";
 
 const doc = (over: Partial<ProjectDocument> = {}): ProjectDocument =>
@@ -109,5 +109,22 @@ describe("filterTaxInvoices", () => {
     expect(ids(filterTaxInvoices(docs, { ...noFilter, query: "대성" }, NOW))).toEqual([2]);
     expect(ids(filterTaxInvoices(docs, { ...noFilter, query: "  q-001 " }, NOW))).toEqual([1, 2, 3]);
     expect(ids(filterTaxInvoices(docs, { ...noFilter, query: "없는검색어" }, NOW))).toEqual([]);
+  });
+});
+
+describe("문서 메일 초안", () => {
+  it("제목에는 문서 종류와 프로젝트, 본문에는 담당자·문서 번호·보내는 사람이 들어간다", () => {
+    const d = documentMailDraft(doc({ doc_type: "quotation", doc_no: "1018-01" }), "박소장");
+    expect(d.subject).toBe("[견적서] 프로젝트A");
+    expect(d.body).toContain("한빛통신 김담당님,");
+    expect(d.body).toContain("견적서(1018-01)를 첨부하여");
+    expect(d.body.trimEnd().endsWith("박소장")).toBe(true);
+  });
+
+  it("담당자·문서 번호가 없어도 어색한 빈칸이 생기지 않고, 제목은 255자를 넘지 않는다", () => {
+    const d = documentMailDraft(doc({ manager_name: null, doc_no: null, project_name: "가".repeat(400) }), "박소장");
+    expect(d.body).toContain("한빛통신 담당자님,");
+    expect(d.body).not.toContain("()");
+    expect(d.subject.length).toBe(255);
   });
 });

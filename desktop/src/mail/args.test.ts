@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAttachmentIndex, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./args";
+import { parseAttachmentIndex, parseDocumentCompose, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./args";
 
 describe("IPC 인자 검사", () => {
   it("메일 번호는 양의 정수만", () => {
@@ -59,5 +59,33 @@ describe("IPC 인자 검사", () => {
     expect(parsePaging(-3, 99999)).toEqual({ offset: 0, limit: 200 });
     expect(parsePaging("x", 0)).toEqual({ offset: 0, limit: 1 });
     expect(parsePaging(undefined, undefined)).toEqual({ offset: 0, limit: 50 });
+  });
+});
+
+describe("문서 메일 보내기 인자 검사", () => {
+  const ok = () => ({ to: "a@x.com", subject: "견적서", body: "안녕하세요", doc: { type: "project_document", id: 3 }, filename: "견적서.pdf", data: new Uint8Array([37, 80, 68, 70]).buffer });
+
+  it("올바른 값은 받고 PDF 바이트를 Buffer 로 바꾼다", () => {
+    const r = parseDocumentCompose(ok());
+    expect(r?.doc).toEqual({ type: "project_document", id: 3 });
+    expect(r?.data.toString()).toBe("%PDF");
+    expect(parseDocumentCompose({ ...ok(), data: new Uint8Array([1, 2]) })?.data.length).toBe(2);
+  });
+
+  it("틀린 값은 모두 거절한다", () => {
+    const bad: Record<string, unknown>[] = [
+      { doc: { type: "payment", id: 3 } },
+      { doc: { type: "project_document", id: 0 } },
+      { doc: null },
+      { to: 5 },
+      { subject: "x".repeat(256) },
+      { body: "x".repeat(20_001) },
+      { filename: "" },
+      { filename: "x".repeat(201) },
+      { data: "문자열" },
+      { data: undefined },
+    ];
+    for (const patch of bad) expect(parseDocumentCompose({ ...ok(), ...patch }), JSON.stringify(Object.keys(patch))).toBeNull();
+    expect(parseDocumentCompose(null)).toBeNull();
   });
 });

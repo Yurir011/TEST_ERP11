@@ -14,7 +14,9 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiGet, apiPost, downloadFile, openFile } from "../../lib/api";
+import { getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
+import { canComposeDocumentMail, openDocumentMail } from "../mail/documentMail";
 import { ProposalsPage } from "../proposals/ProposalsPage";
 import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
 import type { Proposal } from "../proposals/types";
@@ -27,6 +29,7 @@ import { TaxInvoiceStatsCard } from "./TaxInvoiceStatsCard";
 import { PendingApprovalBox } from "./PendingApprovalBox";
 import { ProjectDocumentsTable } from "./ProjectDocumentsTable";
 import {
+  documentMailDraft,
   excelFilename,
   filterTaxInvoices,
   type DocListRow,
@@ -339,6 +342,22 @@ export function ProjectDocumentsPage({
   async function handleSend(doc: ProjectDocument) {
     setBusyId(doc.id);
     try {
+      // 데스크톱 앱이면 메일 창에서 PDF 를 첨부한 쓰기 화면을 연다 (내 메일 계정으로 보낸다)
+      const mailBridge = getBenchClient()?.mail;
+      if (canComposeDocumentMail(mailBridge)) {
+        const draft = documentMailDraft(doc, user?.name ?? "");
+        const r = await openDocumentMail({
+          bridge: mailBridge,
+          doc: { type: "project_document", id: doc.id },
+          pdfPath: `/api/project-documents/${doc.id}/pdf`,
+          filename: pdfFilename(doc),
+          to: doc.client_contact_email ?? "",
+          ...draft,
+        });
+        if (!r.ok) notifyError(r.error);
+        else if (!doc.client_contact_email) notify("메일 창을 열었습니다. 등록된 거래처 담당자 이메일이 없어 받는 사람을 직접 입력해 주세요.");
+        return;
+      }
       await downloadFile(`/api/project-documents/${doc.id}/pdf`, pdfFilename(doc));
       const subject = encodeURIComponent(`${PROJECT_DOC_TYPE_LABELS[doc.doc_type]} - ${doc.project_name}`);
       const to = doc.client_contact_email ?? "";

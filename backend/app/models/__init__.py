@@ -4,6 +4,7 @@ from app.models.audit_log import AuditLog
 from app.models.attendance import Attendance
 from app.models.client import Client
 from app.models.client_device import ClientDevice
+from app.models.mail_log import MailLog
 from app.models.nfc_card import NfcCard
 from app.models.document import DocumentIssue
 from app.models.document_set import DocumentSet

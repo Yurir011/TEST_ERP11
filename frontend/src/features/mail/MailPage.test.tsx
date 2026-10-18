@@ -8,6 +8,8 @@ const notifyError = vi.fn();
 const notify = vi.fn();
 const confirm = vi.fn();
 vi.mock("../../components/ui/dialog/useDialog", () => ({ useDialog: () => ({ notifyError, notify, confirm }) }));
+const reportDocumentMailSent = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+vi.mock("./documentMail", () => ({ reportDocumentMailSent }));
 vi.mock("../../context/useAuth", () => ({ useAuth: () => ({ user: { name: "박소장" } }) }));
 
 import { MailPage } from "./MailPage";
@@ -37,7 +39,7 @@ const detail = (over: Partial<MailDetail> = {}): MailDetail => ({
 });
 
 /** 앱이 화면에 보내는 신호(새 메일 확인 결과, 알림 클릭)를 시험에서 직접 보낼 수 있게 붙잡아 둔다 */
-const handlers: { changed: (() => void) | null; open: ((p: { id: number }) => void) | null } = { changed: null, open: null };
+const handlers: { changed: (() => void) | null; open: ((p: { id: number }) => void) | null; compose: (() => void) | null } = { changed: null, open: null, compose: null };
 
 function installMail(over: Partial<MailBridge> = {}) {
   const bridge: MailBridge = {
@@ -74,6 +76,16 @@ function installMail(over: Partial<MailBridge> = {}) {
       };
     }),
     consumePendingOpen: vi.fn().mockResolvedValue(null),
+    composeDocument: vi.fn().mockResolvedValue({ ok: true, value: null }),
+    onOpenCompose: vi.fn((cb: () => void) => {
+      handlers.compose = cb;
+      return () => {
+        handlers.compose = null;
+      };
+    }),
+    consumePendingCompose: vi.fn().mockResolvedValue(null),
+    unread: vi.fn().mockResolvedValue(0),
+    onUnread: vi.fn(() => () => {}),
     ...over,
   };
   window.benchClient = { mail: bridge } as unknown as BenchClient;
@@ -90,6 +102,8 @@ const renderPage = () =>
 beforeEach(() => {
   handlers.changed = null;
   handlers.open = null;
+  handlers.compose = null;
+  reportDocumentMailSent.mockClear();
   notifyError.mockReset();
   notify.mockReset();
   confirm.mockReset();
@@ -736,6 +750,97 @@ describe("새 메일 신호와 알림", () => {
     unmount();
     expect(handlers.changed).toBeNull();
     expect(handlers.open).toBeNull();
+  });
+});
+
+describe("문서에서 시작한 메일", () => {
+  const pending = {
+    draft: { to: "client@cust.co.kr", cc: "", subject: "[견적서] 신제품 개발", body: "담당자님,\n견적서를 보내드립니다.", attachments: [{ id: "doc-1", filename: "견적서_2026-10-01.pdf", size: 4096 }] },
+    doc: { type: "project_document" as const, id: 7 },
+  };
+  const send = async () => {
+    fireEvent.click(await screen.findByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("메일을 보냈습니다."));
+  };
+
+  it("메일 창이 새로 열릴 때 넘어온 초안(받는 사람·제목·본문·PDF 첨부)으로 쓰기 화면이 열린다", async () => {
+    installMail({ consumePendingCompose: vi.fn().mockResolvedValueOnce(pending).mockResolvedValue(null) });
+    renderPage();
+    expect(await screen.findByRole("form", { name: "메일 쓰기" })).toBeTruthy();
+    expect((screen.getByLabelText("받는사람") as HTMLInputElement).value).toBe("client@cust.co.kr");
+    expect((screen.getByLabelText("제목") as HTMLInputElement).value).toBe("[견적서] 신제품 개발");
+    expect(screen.getByText("견적서_2026-10-01.pdf")).toBeTruthy();
+  });
+
+  it("보내면 문서의 발송 이력(받는 사람·제목)을 서버에 알린다", async () => {
+    const bridge = installMail({ consumePendingCompose: vi.fn().mockResolvedValueOnce(pending).mockResolvedValue(null) });
+    renderPage();
+    await send();
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ to: "client@cust.co.kr", attachmentIds: ["doc-1"] }));
+    expect(reportDocumentMailSent).toHaveBeenCalledWith(pending.doc, { to: "client@cust.co.kr", cc: "", bcc: "", subject: "[견적서] 신제품 개발" });
+  });
+
+  it("보내기에 실패하면 발송 이력을 남기지 않는다", async () => {
+    installMail({ consumePendingCompose: vi.fn().mockResolvedValueOnce(pending).mockResolvedValue(null), send: vi.fn().mockResolvedValue({ ok: false, error: "서버 거절" }) });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "보내기" }));
+    expect(await screen.findByText("서버 거절")).toBeTruthy();
+    expect(reportDocumentMailSent).not.toHaveBeenCalled();
+  });
+
+  it("일반 메일(문서와 무관)은 발송 이력을 남기지 않는다", async () => {
+    installMail();
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    fireEvent.change(await screen.findByLabelText("받는사람"), { target: { value: "a@t.l" } });
+    await send();
+    expect(reportDocumentMailSent).not.toHaveBeenCalled();
+  });
+
+  it("문서 초안을 보내고 나면 다음 일반 메일에는 이전 문서가 따라가지 않는다", async () => {
+    installMail({ consumePendingCompose: vi.fn().mockResolvedValueOnce(pending).mockResolvedValue(null) });
+    renderPage();
+    await send();
+    expect(reportDocumentMailSent).toHaveBeenCalledTimes(1);
+    notify.mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    fireEvent.change(await screen.findByLabelText("받는사람"), { target: { value: "b@t.l" } });
+    await send();
+    expect(reportDocumentMailSent).toHaveBeenCalledTimes(1);
+  });
+
+  it("메일 창이 이미 열려 있을 때 신호를 받으면 그 초안으로 쓰기 화면을 연다", async () => {
+    const consume = vi.fn().mockResolvedValue(null);
+    installMail({ consumePendingCompose: consume });
+    renderPage();
+    await screen.findByText("견적서 송부");
+    await waitFor(() => expect(handlers.compose).toBeTruthy());
+    consume.mockResolvedValueOnce(pending);
+    handlers.compose!();
+    expect(await screen.findByRole("form", { name: "메일 쓰기" })).toBeTruthy();
+    expect((screen.getByLabelText("제목") as HTMLInputElement).value).toBe("[견적서] 신제품 개발");
+  });
+
+  it("쓰던 메일을 계속 쓰기로 하면 새 초안의 임시 첨부는 버린다", async () => {
+    const consume = vi.fn().mockResolvedValue(null);
+    const bridge = installMail({ consumePendingCompose: consume });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    fireEvent.change(await screen.findByLabelText("제목"), { target: { value: "쓰던 메일" } });
+    confirm.mockResolvedValue(false); // "버릴까요?" → 아니오
+    consume.mockResolvedValueOnce(pending);
+    handlers.compose!();
+    await waitFor(() => expect(bridge.discardAttachments).toHaveBeenCalledWith(["doc-1"]));
+    expect((screen.getByLabelText("제목") as HTMLInputElement).value).toBe("쓰던 메일");
+  });
+
+  it("창을 닫으면 쓰기 신호 받기도 그만둔다", async () => {
+    installMail();
+    const { unmount } = renderPage();
+    await screen.findByText("견적서 송부");
+    await waitFor(() => expect(handlers.compose).toBeTruthy());
+    unmount();
+    expect(handlers.compose).toBeNull();
   });
 });
 

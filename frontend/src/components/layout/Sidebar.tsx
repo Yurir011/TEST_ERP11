@@ -20,6 +20,7 @@ import { useMessengerOptional } from "../../features/messenger/useMessenger";
 import { TodoPanel } from "../../features/todos/TodoPanel";
 import { apiGet } from "../../lib/api";
 import { hasMenuPermission, type MenuPermissionKey } from "../../lib/auth";
+import { useMailUnread } from "../../features/mail/useMailUnread";
 import { getBenchClient } from "../../lib/desktop";
 import { logError } from "../../lib/logger";
 import { Logo } from "../ui/Logo";
@@ -60,6 +61,7 @@ export function Sidebar() {
   const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
   const mailBridge = getBenchClient()?.mail;
   const hasDesktopMail = typeof mailBridge?.openWindow === "function";
+  const mailUnread = useMailUnread(!!user) ?? 0;
   const visibleItems = menuItems.filter((item) => {
     if (item.desktopMailOnly && !hasDesktopMail) return false;
     if (item.adminOnly) return user?.role === "admin";
@@ -104,6 +106,11 @@ export function Sidebar() {
             >
               <Icon size={17} />
               {label}
+              {mailUnread > 0 && (
+                <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center" aria-label={`안 읽은 메일 ${mailUnread}통`}>
+                  {mailUnread > 99 ? "99+" : mailUnread}
+                </span>
+              )}
             </button>
           ) : (
           <NavLink
@@ -138,6 +145,16 @@ export function Sidebar() {
             )}
           </NavLink>
           ),
+        )}
+        {/* 브라우저에서는 메일을 볼 수 없으므로 앱이 알려 준 안 읽은 수만 보여 준다 */}
+        {!hasDesktopMail && mailUnread > 0 && (
+          <p className="flex items-center gap-2.5 px-3 py-2 text-sm text-text-muted" title="메일은 데스크톱 앱에서 확인할 수 있습니다">
+            <Mail size={17} />
+            안 읽은 메일
+            <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center" aria-label={`안 읽은 메일 ${mailUnread}통`}>
+              {mailUnread > 99 ? "99+" : mailUnread}
+            </span>
+          </p>
         )}
       </nav>
 

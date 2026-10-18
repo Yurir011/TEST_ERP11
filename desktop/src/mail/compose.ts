@@ -148,6 +148,15 @@ export class MailComposer {
     return { id, filename: name, size: content.length };
   }
 
+  /** ERP 문서(PDF)를 첨부로 준비한다. 앱이 임시 파일로 만들고 보낸 뒤(또는 버릴 때) 지운다 */
+  stageDocument(filename: string, content: Buffer): MailResult<StagedAttachment> {
+    if (content.length === 0) return { ok: false, error: "문서 파일이 비어 있습니다." };
+    if (content.length > MAX_ATTACHMENT_BYTES) return { ok: false, error: `문서 파일이 너무 큽니다(최대 ${MAX_ATTACHMENT_BYTES / 1024 / 1024}MB).` };
+    if (content.subarray(0, 5).toString("latin1") !== "%PDF-") return { ok: false, error: "PDF 문서만 첨부할 수 있습니다." };
+    const name = safeFilename(filename);
+    return { ok: true, value: this.stageBuffer(/\.pdf$/i.test(name) ? name : `${name}.pdf`, content) };
+  }
+
   /** 준비한 첨부를 버린다 (임시로 만든 파일만 지운다) */
   discard(ids: string[]): void {
     for (const id of ids) {

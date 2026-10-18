@@ -16,8 +16,8 @@ import { ImapFlow } from "imapflow";
 import { type DeviceKey, type DeviceStatusName, type SecretStore, defaultDeviceName, loadOrCreateDeviceKey, registerDevice, verifySignature } from "./device";
 import { getLogger } from "./log";
 import { MailAccountStore } from "./mail/account";
-import { parseAttachmentIndex, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./mail/args";
-import { MailComposer } from "./mail/compose";
+import { parseAttachmentIndex, parseDocumentCompose, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./mail/args";
+import { MailComposer, type StagedAttachment } from "./mail/compose";
 import { formatNewMailNotice } from "./mail/notify";
 import { MailPoller, type PollResult, resolvePollInterval } from "./mail/poller";
 import { MailSender } from "./mail/send";
@@ -74,6 +74,12 @@ let badgeMessenger = 0;
 let badgeMail = 0;
 /** 알림을 눌러 메일 창을 여는 중이면 열어야 할 메일 번호 (창의 화면이 준비되면 가져간다) */
 let pendingOpenMessage: number | null = null;
+/** ERP 문서 화면에서 "메일 보내기"로 넘어온 작성 초안 (메일 창의 화면이 준비되면 한 번만 가져간다) */
+interface PendingCompose {
+  draft: { to: string; cc: string; subject: string; body: string; attachments: StagedAttachment[] };
+  doc: { type: "project_document"; id: number };
+}
+let pendingCompose: PendingCompose | null = null;
 /** 새 메일 알림을 띄우는 통로. 점검(smoke)에서는 진짜 알림 대신 기록만 하도록 바꿔 끼운다 */
 let showMailNotification: (title: string, body: string, onClick: () => void) => void = (title, body, onClick) => {
   const n = new Notification({ title, body, icon: ICON });
@@ -276,6 +282,8 @@ function startNfc(): void {
 
 /** 작업 표시줄·트레이 배지를 메신저+메일 합계로 새로 그린다 */
 function applyBadge(): void {
+  // 웹 화면(서버)이 사이드바에 보여 줄 안 읽은 메일 수를 알 수 있게 ERP 창에 알려 준다
+  if (win && !win.isDestroyed()) win.webContents.send("mail:unread", { unread: badgeMail });
   const total = combinedBadgeCount(badgeMessenger, badgeMail);
   const summary = badgeSummary(badgeMessenger, badgeMail);
   app.setBadgeCount(total); // macOS/Linux
@@ -300,6 +308,14 @@ function openMessageInMailWindow(id: number | null): void {
   if (id === null || !mailWin || mailWin.isDestroyed() || mailWin.webContents.isLoading()) return; // 아직 불러오는 중이면 화면이 준비된 뒤 가져간다
   mailWin.webContents.send("mail:open-message", { id });
   pendingOpenMessage = null;
+}
+
+/** 문서 화면에서 넘어온 작성 초안으로 메일 창을 열고(이미 열려 있으면 앞으로) 쓰기 화면을 띄운다 */
+function openComposeInMailWindow(p: PendingCompose): void {
+  pendingCompose = p;
+  openMailWindow();
+  if (!mailWin || mailWin.isDestroyed() || mailWin.webContents.isLoading()) return; // 아직 불러오는 중이면 화면이 준비된 뒤 가져간다
+  mailWin.webContents.send("mail:open-compose");
 }
 
 /** 새 메일 확인 결과: 배지 갱신, 열려 있는 메일 창 새로 읽기, 새 메일 알림 */
@@ -424,6 +440,30 @@ function registerIpc(): void {
     if (!f || typeof query !== "string" || query.length > 200) return { ok: false, error: "검색어가 올바르지 않습니다." };
     return mail ? mail.searchBody(f, query) : MAIL_UNAVAILABLE;
   });
+
+  /** ERP 문서(PDF)를 첨부한 메일 쓰기 화면을 메일 창에서 연다. 보내는 쪽은 서버 화면의 문서 상세 */
+  ipcMain.handle("mail:compose-document", (e, payload: unknown) => {
+    if (!guard(e, "mail:compose-document", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const req = parseDocumentCompose(payload);
+    if (!req) return { ok: false, error: "문서 정보가 올바르지 않습니다." };
+    if (!composer || !mail) return MAIL_UNAVAILABLE;
+    if (!mail.accountInfo()) return { ok: false, error: "메일 계정이 등록되어 있지 않습니다. 메일 창에서 먼저 계정을 설정해 주세요.", needsAccount: true };
+    const staged = composer.stageDocument(req.filename, req.data);
+    if (!staged.ok) return staged;
+    // 이전에 가져가지 않은 초안이 있으면 그 첨부는 버린다
+    if (pendingCompose) composer.discard(pendingCompose.draft.attachments.map((a) => a.id));
+    openComposeInMailWindow({ draft: { to: req.to, cc: "", subject: req.subject, body: req.body, attachments: [staged.value] }, doc: req.doc });
+    return { ok: true, value: null };
+  });
+
+  ipcMain.handle("mail:consume-pending-compose", (e) => {
+    if (!guard(e, "mail:consume-pending-compose", ["server"])) return null;
+    const p = pendingCompose;
+    pendingCompose = null;
+    return p;
+  });
+
+  ipcMain.handle("mail:unread", (e) => (guard(e, "mail:unread", ["server"]) && mail?.accountInfo() ? mail.inboxUnread() : null));
 
   /** 알림을 눌러 메일 창이 새로 열린 경우, 화면이 준비된 뒤 열어야 할 메일 번호를 한 번만 알려 준다 */
   ipcMain.handle("mail:consume-pending-open", (e) => {
@@ -956,6 +996,26 @@ async function runSmoke(): Promise<void> {
     const badFolder = await call(`window.benchClient.mail.move([1], "a" + String.fromCharCode(10) + "b")`);
     const manyIds = await call(`window.benchClient.mail.remove(Array.from({ length: 501 }, (_, i) => i + 1), false)`);
     check("[메일 정리] 형식이 틀린 요청(빈 목록·글자 번호·줄바꿈 폴더·501개)은 거절된다", badMove.ok === false && badRemove.ok === false && badFolder.ok === false && manyIds.ok === false);
+
+    // 2-5) ERP 문서(PDF)를 첨부한 메일 쓰기, 안 읽은 수 (M4)
+    const unreadNow = await call("window.benchClient.mail.unread()");
+    check("[문서 메일] 화면이 안 읽은 메일 수를 물어볼 수 있다 (앱이 가진 숫자와 같다)", unreadNow === mail!.inboxUnread() && typeof unreadNow === "number");
+    const pdfBytes = "new TextEncoder().encode('%PDF-1.4 smoke').buffer";
+    const docPayload = (over: string) => `window.benchClient.mail.composeDocument({ to: "client@test.local", subject: "[견적서] 점검", body: "본문", doc: { type: "project_document", id: 7 }, filename: "견적서.pdf", data: ${pdfBytes}${over} })`;
+    const notPdf = await call(`window.benchClient.mail.composeDocument({ to: "", subject: "s", body: "b", doc: { type: "project_document", id: 7 }, filename: "a.pdf", data: new TextEncoder().encode("MZ exe").buffer })`);
+    const badDoc = await call(docPayload(", doc: { type: 'payment', id: 1 }"));
+    check("[문서 메일] PDF 가 아닌 파일·알 수 없는 문서 종류는 거절된다", notPdf.ok === false && badDoc.ok === false);
+    const winsBeforeDoc = BrowserWindow.getAllWindows().length;
+    const docOpened = await call(docPayload(""));
+    check("[문서 메일] 문서 PDF 를 넘기면 메일 창이 열린다", docOpened.ok === true && (await until(() => BrowserWindow.getAllWindows().length === winsBeforeDoc + 1)));
+    const docWindow = BrowserWindow.getAllWindows().find((x) => x !== w)!;
+    await until(() => !docWindow.webContents.isLoading() && docWindow.webContents.getURL().endsWith("/mail"));
+    const pendingDoc = await docWindow.webContents.executeJavaScript("window.benchClient.mail.consumePendingCompose()");
+    const pendingDocAgain = await docWindow.webContents.executeJavaScript("window.benchClient.mail.consumePendingCompose()");
+    check("[문서 메일] 새 메일 창이 초안(받는 사람·제목·PDF 첨부)을 한 번만 받는다", pendingDoc?.draft?.to === "client@test.local" && pendingDoc.draft.attachments?.[0]?.filename === "견적서.pdf" && pendingDoc.doc?.id === 7 && pendingDocAgain === null);
+    const sentDoc = await docWindow.webContents.executeJavaScript(`window.benchClient.mail.send({ fromName: "점검", to: "client@test.local", cc: "", bcc: "", subject: "[견적서] 점검", body: "본문", attachmentIds: ${JSON.stringify((pendingDoc?.draft?.attachments ?? []).map((x: { id: string }) => x.id))} })`);
+    check("[문서 메일] 초안 그대로 보내면 PDF 가 첨부되어 나간다", sentDoc.ok === true);
+    docWindow.destroy();
   }
 
   // 3) 카드 모드: login(결과만 전달) / capture(번호 전달) / off(무반응)
