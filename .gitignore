@@ -25,3 +25,7 @@ Doc/
 
 # pytest
 .pytest_cache/
+
+# 직원에게 내려줄 데스크톱 앱 설치 파일 (용량이 커서 저장소에 올리지 않는다. 안내 문서만 올린다)
+/release/*
+!/release/README.md

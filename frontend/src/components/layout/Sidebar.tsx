@@ -23,6 +23,7 @@ import { hasMenuPermission, type MenuPermissionKey } from "../../lib/auth";
 import { getBenchClient } from "../../lib/desktop";
 import { logError } from "../../lib/logger";
 import { Logo } from "../ui/Logo";
+import { DesktopDownloadLink } from "../../features/desktop/DesktopDownloadLink";
 import { VersionLabel } from "./VersionLabel";
 
 const UNREAD_POLL_MS = 20000;
@@ -162,6 +163,7 @@ export function Sidebar() {
             </button>
           </div>
           <VersionLabel />
+          <DesktopDownloadLink className="mt-2" />
         </div>
       )}
     </aside>

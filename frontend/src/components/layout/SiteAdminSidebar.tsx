@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
 import { useMessengerOptional } from "../../features/messenger/useMessenger";
 import { Logo } from "../ui/Logo";
+import { DesktopDownloadLink } from "../../features/desktop/DesktopDownloadLink";
 import { VersionLabel } from "./VersionLabel";
 
 const menuItems = [
@@ -66,6 +67,7 @@ export function SiteAdminSidebar() {
             </button>
           </div>
           <VersionLabel />
+          <DesktopDownloadLink className="mt-2" />
         </div>
       )}
     </aside>

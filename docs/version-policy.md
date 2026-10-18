@@ -37,8 +37,9 @@
 4. **커밋** — 메시지 앞에 버전 접두사: `[V.0.70.151] fix(messenger): 설명`.
 5. **설치 파일 만들기** — `cd desktop && npm run dist` → `desktop/release/BENCH-ERP_Setup_0.70.151.exe`
    (기본 서버 주소 `http://www.epik.bio:3102` 가 자동으로 들어간다. 다른 서버용은 `set BENCH_DEFAULT_SERVER=http://주소 && npm run dist`)
-6. **직원에게 알리기** — `npm run publish-release -- --notes "바뀐 내용"` → 서버가 최신 버전으로 안내하고, 직원 앱 화면 위쪽에 "새 버전이 있습니다 [다운로드]"가 뜬다.
-7. **운영 서버에 올리기** — 코드를 서버에 배포하기 전에 **DB 백업(`pg_dump`)**, DB 구조가 바뀐 버전이면 `alembic upgrade head`. (README "DB 구조 변경", "백업과 복원")
+6. **직원이 내려받게 하기** — 만든 설치 파일을 프로젝트의 `release` 폴더에 복사하면 로그인 화면·사이드바의 "설치 파일 받기" 링크가 가장 높은 버전을 내려준다(로그인 없이, `release/README.md`).
+7. **직원에게 알리기** — `npm run publish-release -- --notes "바뀐 내용"` → 서버가 최신 버전으로 안내하고, 직원 앱 화면 위쪽에 "새 버전이 있습니다 [다운로드]"가 뜬다.
+8. **운영 서버에 올리기** — 코드를 서버에 배포하기 전에 **DB 백업(`pg_dump`)**, DB 구조가 바뀐 버전이면 `alembic upgrade head`. (README "DB 구조 변경", "백업과 복원")
 
 ## 커밋 규칙
 - 커밋할 때마다 **버전 번호를 먼저 묻고**, 메시지 맨 앞에 `[V.0.70.150]` 를 붙인다. (CLAUDE.md "커밋 규칙 — 버전 번호"에도 적혀 있다.)

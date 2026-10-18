@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     messenger_attachments_dir: str = "storage/messenger_attachments"
     # 데스크톱 앱 설치 파일과 최신 버전 정보(latest.json). desktop 에서 npm run publish-release 가 여기에 올린다.
     client_releases_dir: str = "storage/client_releases"
+    # 로그인 화면·사이드바의 "설치 파일 받기" 링크가 내려주는 설치 파일 폴더(여러 개면 세미콜론으로 구분).
+    # 비워 두면 프로젝트의 release 폴더와 desktop/release 폴더를 본다.
+    client_public_release_dirs: str = ""
 
     # 사업자등록증 이미지 인식(OCR)에 사용하는 로컬 Tesseract 실행 파일 경로. 서버 PATH에 없을 때만 .env로 override.
     tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"

@@ -35,7 +35,7 @@
 - **업무 알림(공지)**: 관리자 작성 공지와 결재 알림
 - **출퇴근기록**: 출근/퇴근 버튼, 월별 조회(최근 36개월), 관리자 전체 현황
 - **메신저**: 대화목록·즐겨찾기·전체목록 탭, 직원별 현재 상태(출근·외근·출장·휴가 등, 출근 토글과 연동), 1:1·그룹 대화, 파일 첨부(20MB), 메시지별 안 읽은 사람 수 표시(카카오톡 방식), 실시간 알림. 대화방 참여자만 볼 수 있고 대표(관리자)도 남의 대화는 볼 수 없다. 변경 이력에는 대화 내용이 남지 않는다
-- **데스크톱 앱(`/desktop`, Electron)**: 서버 화면을 그대로 불러오고, NFC 카드 로그인(승인된 PC만), 메신저 알림·트레이·윈도우 시작 시 자동 실행(선택)을 더한다. Windows 설치 파일은 `cd desktop && npm run dist` → `desktop/release/BENCH-ERP_Setup_0.70.162.exe`(기본 서버 주소 포함), 직원에게는 `npm run publish-release`로 새 버전을 알린다. macOS·Linux는 보류. 사용법은 [`docs/client-app/사용설명서.md`](./docs/client-app/사용설명서.md), 진행 상황은 [`docs/client-app/`](./docs/client-app/)
+- **데스크톱 앱(`/desktop`, Electron)**: 서버 화면을 그대로 불러오고, NFC 카드 로그인(승인된 PC만), 메신저 알림·트레이·윈도우 시작 시 자동 실행(선택)을 더한다. Windows 설치 파일은 `cd desktop && npm run dist`(만든 파일을 프로젝트의 `release` 폴더에 넣어 두면 **로그인 화면과 사이드바 맨 아래의 "설치 파일 받기" 링크**로 직원이 로그인 없이 내려받는다, [`release/README.md`](./release/README.md)) → `desktop/release/BENCH-ERP_Setup_0.70.162.exe`(기본 서버 주소 포함), 직원에게는 `npm run publish-release`로 새 버전을 알린다. macOS·Linux는 보류. 사용법은 [`docs/client-app/사용설명서.md`](./docs/client-app/사용설명서.md), 진행 상황은 [`docs/client-app/`](./docs/client-app/)
 - **모바일 화면(`/m`)**: 출퇴근, 연차, 결재, 일정, 공지, 거래처 조회
 
 ## 시작하기
@@ -93,6 +93,7 @@ cd backend
     scripts/        1회성 마이그레이션·관리자 생성 (일부는 서버 시작 때 자동 실행)
   tests/            pytest 테스트 (별도 erp_test DB 사용)
 /desktop            데스크톱 앱(Electron): NFC 리더, 카드 로그인, 트레이·알림, 설치 파일·배포 스크립트
+/release            직원에게 내려줄 설치 파일을 넣는 폴더 (파일은 git 제외)
 /frontend
   src/
     features/       기능별 모듈 (attendance, leaves, payments, transactions, ...)

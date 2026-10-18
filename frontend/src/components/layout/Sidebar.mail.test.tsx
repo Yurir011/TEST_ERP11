@@ -7,6 +7,7 @@ import type { BenchClient } from "../../lib/desktop";
 vi.mock("../../context/useAuth", () => ({ useAuth: () => ({ user: { id: 1, name: "박소장", role: "admin", title: null, menu_permissions: [] }, logout: vi.fn() }) }));
 vi.mock("../../features/todos/TodoPanel", () => ({ TodoPanel: () => null }));
 vi.mock("./VersionLabel", () => ({ VersionLabel: () => null }));
+vi.mock("../../features/desktop/DesktopDownloadLink", () => ({ DesktopDownloadLink: () => null }));
 vi.mock("../../lib/api", () => ({ apiGet: vi.fn().mockResolvedValue({ count: 0 }) }));
 
 import { Sidebar } from "./Sidebar";

@@ -16,6 +16,7 @@ from app.routers import (
     audit_logs,
     auth,
     client_app,
+    client_public,
     clients,
     devices,
     documents,
@@ -66,6 +67,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(client_app.router)
+app.include_router(client_public.router)
 app.include_router(nfc_auth.router)
 app.include_router(audit_logs.router)
 app.include_router(notices.router)

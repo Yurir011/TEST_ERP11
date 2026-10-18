@@ -5,6 +5,7 @@ import { PasswordInput } from "../../components/ui/PasswordInput";
 import { useAuth } from "../../context/useAuth";
 import { ApiError } from "../../lib/api";
 import { logError } from "../../lib/logger";
+import { DesktopDownloadLink } from "../desktop/DesktopDownloadLink";
 import { NfcLoginPanel } from "./NfcLoginPanel";
 
 export function LoginPage() {
@@ -95,6 +96,10 @@ export function LoginPage() {
         </form>
 
         <NfcLoginPanel onToken={handleNfcToken} />
+
+        <div className="mt-5 pt-4 border-t border-border flex justify-center">
+          <DesktopDownloadLink />
+        </div>
       </div>
     </div>
   );
