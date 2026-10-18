@@ -132,7 +132,13 @@ export class MailSync {
   }
 
   /** 폴더 목록과 지정한 폴더(기본 INBOX)의 메일을 맞춘다 */
-  syncFolder(folderPath: string): Promise<{ added: number; removed: number }> {
+  async syncFolder(folderPath: string): Promise<{ added: number; removed: number }> {
+    const { added, removed } = await this.syncFolderDetailed(folderPath);
+    return { added, removed };
+  }
+
+  /** syncFolder 와 같지만 이번에 새로 받은 메일의 UID 목록도 알려 준다 (새 메일 알림용) */
+  syncFolderDetailed(folderPath: string): Promise<{ added: number; removed: number; addedUids: number[] }> {
     return this.serial(() =>
       this.withClient(async (client) => {
         await this.doSyncFolders(client);
@@ -168,7 +174,7 @@ export class MailSync {
     );
   }
 
-  private async doSyncMessages(client: ImapFlow, folderPath: string): Promise<{ added: number; removed: number }> {
+  private async doSyncMessages(client: ImapFlow, folderPath: string): Promise<{ added: number; removed: number; addedUids: number[] }> {
     const store = this.deps.store;
     const now = this.deps.now?.() ?? Date.now();
     const days = this.deps.windowDays ?? DEFAULT_WINDOW_DAYS;
@@ -195,6 +201,7 @@ export class MailSync {
 
       const toFetch = sinceUids.filter((u) => !local.has(u));
       let added = 0;
+      const addedUids: number[] = [];
       for (let i = 0; i < toFetch.length; i += FETCH_CHUNK) {
         const chunk = toFetch.slice(i, i + FETCH_CHUNK);
         const rows: NewMessage[] = [];
@@ -203,6 +210,7 @@ export class MailSync {
         }
         store.insertMessages(rows);
         added += rows.length;
+        addedUids.push(...rows.map((r) => r.uid));
       }
 
       // 이미 받아 둔 메일의 읽음/별표 표시를 서버 값으로 맞춘다
@@ -216,7 +224,7 @@ export class MailSync {
         store.updateFlags(folderPath, flags);
       }
       this.log.info(`[Mail] 동기화 완료: ${folderPath} (새 ${added}건, 서버에서 삭제된 ${removed.length}건)`);
-      return { added, removed: removed.length };
+      return { added, removed: removed.length, addedUids };
     } finally {
       lock.release();
     }
@@ -263,6 +271,53 @@ export class MailSync {
     );
   }
 
+  /** 메일을 다른 폴더로 옮긴다 (서버의 MOVE 를 쓴다). 옮긴 메일은 서버에서 새 번호를 받으므로 도착 폴더는 다음 동기화 때 들어온다 */
+  moveMessages(folderPath: string, uids: number[], destPath: string): Promise<void> {
+    if (uids.length === 0) return Promise.resolve();
+    return this.serial(() =>
+      this.withClient(async (client) => {
+        const lock = await client.getMailboxLock(folderPath);
+        try {
+          await client.messageMove(uids.join(","), destPath, { uid: true });
+          this.log.info(`[Mail] 메일 ${uids.length}통 이동: ${folderPath} → ${destPath}`);
+        } finally {
+          lock.release();
+        }
+      }),
+    );
+  }
+
+  /** 메일을 서버에서 완전히 지운다 (\Deleted 표시 후 정리). 되돌릴 수 없으므로 휴지통·스팸함에서만 쓴다 */
+  deleteMessages(folderPath: string, uids: number[]): Promise<void> {
+    if (uids.length === 0) return Promise.resolve();
+    return this.serial(() =>
+      this.withClient(async (client) => {
+        const lock = await client.getMailboxLock(folderPath);
+        try {
+          await client.messageDelete(uids.join(","), { uid: true });
+          this.log.info(`[Mail] 메일 ${uids.length}통 완전 삭제: ${folderPath}`);
+        } finally {
+          lock.release();
+        }
+      }),
+    );
+  }
+
+  /** 서버에서 본문까지 검색한다 (IMAP SEARCH BODY). 이 PC 에 받아 두지 않은 본문도 서버가 찾아 준다 */
+  searchBody(folderPath: string, query: string): Promise<number[]> {
+    return this.serial(() =>
+      this.withClient(async (client) => {
+        const lock = await client.getMailboxLock(folderPath, { readOnly: true });
+        try {
+          const found = await client.search({ or: [{ body: query }, { subject: query }, { from: query }] }, { uid: true });
+          return (found || []) as number[];
+        } finally {
+          lock.release();
+        }
+      }),
+    );
+  }
+
   /** 서버의 별표(중요) 표시를 바꾼다 */
   setFlaggedOnServer(folderPath: string, uid: number, flagged: boolean): Promise<void> {
     return this.setFlagOnServer(folderPath, uid, "\\Flagged", flagged);
@@ -288,6 +343,21 @@ const SENT_NAMES = /^(sent|sent items|sent mail|sent messages|보낸\s*메일함
 /** 보낸메일함 폴더: 서버가 용도(\Sent)를 알려 주면 그것, 아니면 이름으로 짐작한다 */
 export function findSentFolder<T extends { path: string; name: string; specialUse: string | null }>(folders: T[]): T | undefined {
   return folders.find((f) => f.specialUse === "\\Sent") ?? folders.find((f) => SENT_NAMES.test(f.name.trim()));
+}
+
+const TRASH_NAMES = /^(trash|deleted items|deleted messages|bin|휴지통)$/i;
+const JUNK_NAMES = /^(spam|junk|junk e-?mail|junk mail|bulk mail|스팸\s*메일함|스팸\s*편지함|스팸)$/i;
+
+type FolderLike = { path: string; name: string; specialUse: string | null };
+
+/** 휴지통 폴더: 서버가 용도(\Trash)를 알려 주면 그것, 아니면 이름으로 짐작한다 */
+export function findTrashFolder<T extends FolderLike>(folders: T[]): T | undefined {
+  return folders.find((f) => f.specialUse === "\\Trash") ?? folders.find((f) => TRASH_NAMES.test(f.name.trim()));
+}
+
+/** 스팸 폴더 */
+export function findJunkFolder<T extends FolderLike>(folders: T[]): T | undefined {
+  return folders.find((f) => f.specialUse === "\\Junk") ?? folders.find((f) => JUNK_NAMES.test(f.name.trim()));
 }
 
 function hasAttachment(node: unknown): boolean {

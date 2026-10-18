@@ -52,3 +52,27 @@ describe("알림의 대화방 번호", () => {
     for (const bad of [0, -1, 1.5, "7", null, undefined, Number.NaN, Number.MAX_VALUE, {}, [7]]) expect(parseConversationId(bad)).toBeNull();
   });
 });
+
+import { badgeSummary, combinedBadgeCount } from "./startup";
+
+describe("메신저·메일 배지 합산", () => {
+  it("메신저와 메일의 안 읽은 수를 더하고 999 를 넘기지 않는다", () => {
+    expect(combinedBadgeCount(2, 3)).toBe(5);
+    expect(combinedBadgeCount(0, 0)).toBe(0);
+    expect(combinedBadgeCount(0, 4)).toBe(4);
+    expect(combinedBadgeCount(700, 700)).toBe(999);
+  });
+
+  it("이상한 값은 0 으로 본다", () => {
+    expect(combinedBadgeCount("3", null)).toBe(0);
+    expect(combinedBadgeCount(NaN, 2)).toBe(2);
+    expect(combinedBadgeCount(-5, 2)).toBe(2);
+  });
+
+  it("설명 문구는 있는 것만 보여 준다", () => {
+    expect(badgeSummary(2, 3)).toBe("안 읽은 메시지 2건 · 메일 3통");
+    expect(badgeSummary(2, 0)).toBe("안 읽은 메시지 2건");
+    expect(badgeSummary(0, 3)).toBe("안 읽은 메일 3통");
+    expect(badgeSummary(0, 0)).toBe("");
+  });
+});

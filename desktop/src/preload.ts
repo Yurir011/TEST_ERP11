@@ -54,6 +54,16 @@ const api = {
     pickAttachments: (): Promise<unknown> => ipcRenderer.invoke("mail:pick-attachments"),
     discardAttachments: (ids: string[]): Promise<void> => ipcRenderer.invoke("mail:discard-attachments", ids),
     send: (payload: unknown): Promise<unknown> => ipcRenderer.invoke("mail:send", payload),
+    /** 선택한 메일을 다른 폴더로 옮기기 / 삭제(기본은 휴지통, permanent 는 휴지통 안의 메일 완전 삭제) / 스팸 신고 */
+    move: (ids: number[], dest: string): Promise<unknown> => ipcRenderer.invoke("mail:move", ids, dest),
+    remove: (ids: number[], permanent: boolean): Promise<unknown> => ipcRenderer.invoke("mail:remove", ids, permanent),
+    spam: (ids: number[]): Promise<unknown> => ipcRenderer.invoke("mail:spam", ids),
+    /** 서버에서 본문까지 검색해 해당하는 메일 번호를 받는다 */
+    searchBody: (folder: string, query: string): Promise<unknown> => ipcRenderer.invoke("mail:search-body", folder, query),
+    /** 새 메일 확인으로 목록이 바뀌었을 때 / 알림을 눌러 특정 메일을 열라는 신호 */
+    onChanged: (cb: () => void): Unsubscribe => subscribe("mail:changed", () => cb()),
+    onOpenMessage: (cb: (payload: { id: number }) => void): Unsubscribe => subscribe("mail:open-message", cb),
+    consumePendingOpen: (): Promise<number | null> => ipcRenderer.invoke("mail:consume-pending-open"),
     openAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-open", id, index),
   },
   shell: {

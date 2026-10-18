@@ -38,7 +38,7 @@ export async function startFakeImap(
   for (const [name, use] of Object.entries(extraFolders)) folders[name] = { "special-use": use };
   const server = hoodiecrow({
     storage: { INBOX: { messages }, "": { separator: "/", folders } },
-    plugins: ["UIDPLUS", "SPECIAL-USE"],
+    plugins: ["UIDPLUS", "SPECIAL-USE", "MOVE"],
     secureConnection: options.secure === true, // 993 처럼 암호화로 바로 접속 (번들된 자체 서명 인증서)
   });
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));

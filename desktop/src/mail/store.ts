@@ -211,6 +211,11 @@ export class MailStore {
     if (filter.unread) parts.push("seen = 0");
     if (filter.flagged) parts.push("flagged = 1");
     if (filter.attachment) parts.push("has_attachments = 1");
+    if (filter.ids) {
+      const ids = filter.ids.filter((n) => Number.isSafeInteger(n) && n > 0).slice(0, 5000);
+      parts.push(ids.length ? `id IN (${ids.map(() => "?").join(",")})` : "0 = 1"); // 번호가 하나도 없으면 결과도 없다
+      args.push(...ids);
+    }
     const q = filter.query?.trim().slice(0, 100);
     if (q) {
       // LIKE 의 특수 문자(% _)와 이스케이프 문자(!)는 글자 그대로 찾는다
@@ -232,6 +237,22 @@ export class MailStore {
   count(folder: string, filter: MailFilter = {}): number {
     const w = this.where(folder, filter);
     return (this.db.prepare(`SELECT COUNT(*) AS c FROM messages ${w.sql}`).get(...w.args) as { c: number }).c;
+  }
+
+  /** 번호로 메일의 위치(폴더·서버 번호)와 읽음 여부를 찾는다 */
+  locate(ids: number[]): { id: number; folder: string; uid: number; seen: boolean }[] {
+    const clean = ids.filter((n) => Number.isSafeInteger(n) && n > 0).slice(0, 5000);
+    if (clean.length === 0) return [];
+    const rows = this.db.prepare(`SELECT id, folder, uid, seen FROM messages WHERE id IN (${clean.map(() => "?").join(",")})`).all(...clean) as { id: number; folder: string; uid: number; seen: number }[];
+    return rows.map((r) => ({ ...r, seen: r.seen === 1 }));
+  }
+
+  /** 폴더 안의 서버 번호들에 해당하는 로컬 메일 번호 */
+  idsByUids(folder: string, uids: number[]): number[] {
+    const clean = uids.filter((n) => Number.isSafeInteger(n) && n > 0).slice(0, 5000);
+    if (clean.length === 0) return [];
+    const rows = this.db.prepare(`SELECT id FROM messages WHERE folder = ? AND uid IN (${clean.map(() => "?").join(",")})`).all(folder, ...clean) as { id: number }[];
+    return rows.map((r) => r.id);
   }
 
   setFlagged(id: number, flagged: boolean): void {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAttachmentIndex, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parsePaging, parseSendPayload } from "./args";
+import { parseAttachmentIndex, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./args";
 
 describe("IPC 인자 검사", () => {
   it("메일 번호는 양의 정수만", () => {
@@ -24,6 +24,20 @@ describe("IPC 인자 검사", () => {
     expect(parseFilter({ unread: "true", flagged: 1, evil: true, query: "   " })).toEqual({});
     expect(parseFilter({ query: "x".repeat(300) }).query).toHaveLength(100);
     for (const v of [null, undefined, "x", 5]) expect(parseFilter(v)).toEqual({});
+  });
+
+  it("메일 번호 목록은 1~500개의 양의 정수만", () => {
+    expect(parseMailIds([1, 2, 3])).toEqual([1, 2, 3]);
+    expect(parseMailIds(Array.from({ length: 500 }, (_, i) => i + 1))).toHaveLength(500);
+    for (const v of [[], Array.from({ length: 501 }, (_, i) => i + 1), [0], [-1], [1.5], ["1"], [1, null], "1", null, undefined, {}]) {
+      expect(parseMailIds(v), JSON.stringify(v)?.slice(0, 30)).toBeNull();
+    }
+  });
+
+  it("목록 조건의 번호(ids)는 양의 정수 배열만 받는다", () => {
+    expect(parseFilter({ ids: [3, 4] }).ids).toEqual([3, 4]);
+    expect(parseFilter({ ids: [] }).ids).toEqual([]); // 빈 목록은 "결과 없음"이라는 뜻이라 그대로 둔다
+    for (const bad of [["a"], [0], [1.2], "1", 5, Array.from({ length: 5001 }, (_, i) => i + 1)]) expect(parseFilter({ ids: bad }).ids).toBeUndefined();
   });
 
   it("초안 종류는 정해진 네 가지만", () => {

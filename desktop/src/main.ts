@@ -11,12 +11,15 @@ import path from "node:path";
 
 import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
+import { ImapFlow } from "imapflow";
 
 import { type DeviceKey, type DeviceStatusName, type SecretStore, defaultDeviceName, loadOrCreateDeviceKey, registerDevice, verifySignature } from "./device";
 import { getLogger } from "./log";
 import { MailAccountStore } from "./mail/account";
-import { parseAttachmentIndex, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parsePaging, parseSendPayload } from "./mail/args";
+import { parseAttachmentIndex, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./mail/args";
 import { MailComposer } from "./mail/compose";
+import { formatNewMailNotice } from "./mail/notify";
+import { MailPoller, type PollResult, resolvePollInterval } from "./mail/poller";
 import { MailSender } from "./mail/send";
 import { MailService, isDangerousFilename, safeFilename } from "./mail/service";
 import { MailStore } from "./mail/store";
@@ -25,7 +28,7 @@ import { loginMessage, performNfcLogin } from "./nfcLogin";
 import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
 import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, loadDefaultServer, normalizeServerUrl, saveConfig } from "./serverConfig";
-import { badgeImageName, clampBadgeCount, loginItemSettings, parseConversationId, startsHidden } from "./startup";
+import { badgeImageName, badgeSummary, clampBadgeCount, combinedBadgeCount, loginItemSettings, parseConversationId, startsHidden } from "./startup";
 import { formatVersion } from "./version";
 
 const log = getLogger("Main");
@@ -65,6 +68,18 @@ let shellState: { mode: "setup" | "offline"; error?: string } = { mode: "setup" 
 let mailWin: BrowserWindow | null = null;
 let mail: MailService | null = null;
 let composer: MailComposer | null = null;
+let mailPoller: MailPoller | null = null;
+/** 작업 표시줄 배지는 메신저 안 읽은 수와 메일 안 읽은 수를 합쳐 하나로 보여 준다 */
+let badgeMessenger = 0;
+let badgeMail = 0;
+/** 알림을 눌러 메일 창을 여는 중이면 열어야 할 메일 번호 (창의 화면이 준비되면 가져간다) */
+let pendingOpenMessage: number | null = null;
+/** 새 메일 알림을 띄우는 통로. 점검(smoke)에서는 진짜 알림 대신 기록만 하도록 바꿔 끼운다 */
+let showMailNotification: (title: string, body: string, onClick: () => void) => void = (title, body, onClick) => {
+  const n = new Notification({ title, body, icon: ICON });
+  n.on("click", onClick);
+  n.show();
+};
 let mailStore: MailStore | null = null;
 
 const configFile = () => path.join(app.getPath("userData"), "config.json");
@@ -259,6 +274,50 @@ function startNfc(): void {
   reader.start();
 }
 
+/** 작업 표시줄·트레이 배지를 메신저+메일 합계로 새로 그린다 */
+function applyBadge(): void {
+  const total = combinedBadgeCount(badgeMessenger, badgeMail);
+  const summary = badgeSummary(badgeMessenger, badgeMail);
+  app.setBadgeCount(total); // macOS/Linux
+  tray?.setToolTip(summary ? `BENCH ERP ${VERSION_LABEL} (${summary})` : `BENCH ERP ${VERSION_LABEL}`);
+  if (process.platform === "win32" && win && !win.isDestroyed()) {
+    const name = badgeImageName(total);
+    win.setOverlayIcon(name ? nativeImage.createFromPath(path.join(BADGE_DIR, name)) : null, summary);
+  }
+}
+
+/** 이 PC 에 받아 둔 받은메일함의 안 읽은 수로 메일 배지를 다시 계산한다 (읽음 표시·이동·삭제 뒤에 부른다) */
+function refreshMailBadge(): void {
+  if (!mail) return;
+  badgeMail = mail.inboxUnread();
+  applyBadge();
+}
+
+/** 알림을 눌렀을 때 메일 창을 열고(이미 열려 있으면 앞으로) 해당 메일로 이동하게 한다. id 가 없으면 메일 창만 연다 */
+function openMessageInMailWindow(id: number | null): void {
+  pendingOpenMessage = id;
+  openMailWindow();
+  if (id === null || !mailWin || mailWin.isDestroyed() || mailWin.webContents.isLoading()) return; // 아직 불러오는 중이면 화면이 준비된 뒤 가져간다
+  mailWin.webContents.send("mail:open-message", { id });
+  pendingOpenMessage = null;
+}
+
+/** 새 메일 확인 결과: 배지 갱신, 열려 있는 메일 창 새로 읽기, 새 메일 알림 */
+function handlePollResult(r: PollResult): void {
+  badgeMail = r.unread;
+  applyBadge();
+  const window = mailWin && !mailWin.isDestroyed() ? mailWin : null;
+  if (r.changed && window) window.webContents.send("mail:changed");
+  const notice = formatNewMailNotice(r.newMail);
+  if (!notice) return;
+  if (window && window.isFocused()) return; // 지금 메일 창을 보고 있으면 따로 알리지 않는다 (목록에 바로 나타난다)
+  log.info(`[Mail] 새 메일 알림: ${r.newMail.length}통`);
+  const only = r.newMail.length === 1 ? r.newMail[0].id : null;
+  showMailNotification(notice.title, notice.body, () => openMessageInMailWindow(only));
+  if (win && !win.isDestroyed() && !win.isFocused()) win.flashFrame(true);
+}
+
+
 function registerIpc(): void {
   ipcMain.handle("app:version", (e) => (guard(e, "app:version", ["shell", "server"]) ? VERSION_LABEL : "")); // V.0.07.150 (비교에도 그대로 쓸 수 있다)
   ipcMain.handle("nfc:status", (e) => (guard(e, "nfc:status", ["shell", "server"]) ? (reader?.getStatus() ?? { state: "searching" }) : null));
@@ -287,13 +346,8 @@ function registerIpc(): void {
 
   ipcMain.handle("app:badge", (e, count: unknown) => {
     if (!guard(e, "app:badge", ["server"])) return;
-    const n = clampBadgeCount(count);
-    app.setBadgeCount(n); // macOS/Linux
-    tray?.setToolTip(n > 0 ? `BENCH ERP ${VERSION_LABEL} (안 읽은 ${n}건)` : `BENCH ERP ${VERSION_LABEL}`);
-    if (process.platform === "win32" && win && !win.isDestroyed()) {
-      const name = badgeImageName(n);
-      win.setOverlayIcon(name ? nativeImage.createFromPath(path.join(BADGE_DIR, name)) : null, n > 0 ? `안 읽은 메시지 ${n}건` : "");
-    }
+    badgeMessenger = clampBadgeCount(count);
+    applyBadge();
   });
 
   // ---- 메일 (서버 화면에서만. 비밀번호는 저장할 때 한 번 들어오고, 어떤 응답에도 담기지 않는다) ----
@@ -329,6 +383,54 @@ function registerIpc(): void {
     const p = parseSendPayload(payload);
     if (!p) return { ok: false, error: "보낼 내용의 형식이 올바르지 않습니다." };
     return composer ? composer.send(p) : MAIL_UNAVAILABLE;
+  });
+
+
+  // ---- 이동·삭제·스팸 신고·서버 본문 검색·알림으로 연 메일 (서버 화면에서만) ----
+  ipcMain.handle("mail:move", async (e, ids: unknown, dest: unknown) => {
+    if (!guard(e, "mail:move", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const list = parseMailIds(ids);
+    const folder = parseFolderPath(dest);
+    if (!list || !folder) return { ok: false, error: "요청이 올바르지 않습니다." };
+    if (!mail) return MAIL_UNAVAILABLE;
+    const r = await mail.move(list, folder);
+    refreshMailBadge();
+    return r;
+  });
+
+  ipcMain.handle("mail:remove", async (e, ids: unknown, permanent: unknown) => {
+    if (!guard(e, "mail:remove", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const list = parseMailIds(ids);
+    if (!list) return { ok: false, error: "요청이 올바르지 않습니다." };
+    if (!mail) return MAIL_UNAVAILABLE;
+    const r = await mail.remove(list, permanent === true);
+    refreshMailBadge();
+    return r;
+  });
+
+  ipcMain.handle("mail:spam", async (e, ids: unknown) => {
+    if (!guard(e, "mail:spam", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const list = parseMailIds(ids);
+    if (!list) return { ok: false, error: "요청이 올바르지 않습니다." };
+    if (!mail) return MAIL_UNAVAILABLE;
+    const r = await mail.spam(list);
+    refreshMailBadge();
+    return r;
+  });
+
+  ipcMain.handle("mail:search-body", async (e, folder: unknown, query: unknown) => {
+    if (!guard(e, "mail:search-body", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const f = parseFolderPath(folder);
+    if (!f || typeof query !== "string" || query.length > 200) return { ok: false, error: "검색어가 올바르지 않습니다." };
+    return mail ? mail.searchBody(f, query) : MAIL_UNAVAILABLE;
+  });
+
+  /** 알림을 눌러 메일 창이 새로 열린 경우, 화면이 준비된 뒤 열어야 할 메일 번호를 한 번만 알려 준다 */
+  ipcMain.handle("mail:consume-pending-open", (e) => {
+    if (!guard(e, "mail:consume-pending-open", ["server"])) return null;
+    const id = pendingOpenMessage;
+    pendingOpenMessage = null;
+    return id;
   });
 
 
@@ -369,7 +471,10 @@ function registerIpc(): void {
     if (!guard(e, "mail:get", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
     const n = parseMailId(id);
     if (!n) return { ok: false, error: "메일 번호가 올바르지 않습니다." };
-    return mail ? mail.get(n, { allowRemoteImages: allowRemoteImages === true }) : MAIL_UNAVAILABLE;
+    if (!mail) return MAIL_UNAVAILABLE;
+    const result = await mail.get(n, { allowRemoteImages: allowRemoteImages === true });
+    refreshMailBadge(); // 메일을 열면 읽음으로 바뀐다
+    return result;
   });
 
   ipcMain.handle("mail:set-flagged", async (e, id: unknown, flagged: unknown) => {
@@ -381,7 +486,10 @@ function registerIpc(): void {
   ipcMain.handle("mail:mark-seen", async (e, id: unknown, seen: unknown) => {
     if (!guard(e, "mail:mark-seen", ["server"])) return;
     const n = parseMailId(id);
-    if (n && mail && typeof seen === "boolean") await mail.markSeen(n, seen);
+    if (n && mail && typeof seen === "boolean") {
+      await mail.markSeen(n, seen);
+      refreshMailBadge();
+    }
   });
 
   /** 첨부 저장: 저장 위치는 사용자가 고른다 */
@@ -481,9 +589,18 @@ function startMail(): void {
     const sender = new MailSender({ credentials: () => accounts.credentials(), log: getLogger("Mail") });
     composer = new MailComposer({ accounts, store, sync, sender, tempDir: path.join(dir, "compose-tmp"), log: getLogger("Mail") });
     log.info("[Mail] 로컬 메일 저장소 준비 완료");
+    refreshMailBadge(); // 이전에 받아 둔 안 읽은 메일 수를 배지에 바로 반영
+    mailPoller = new MailPoller({
+      poll: () => mail!.pollInbox(),
+      onResult: handlePollResult,
+      intervalMs: resolvePollInterval(process.env.BENCH_MAIL_POLL_MS),
+      log: getLogger("Mail"),
+    });
+    if (!SMOKE) mailPoller.start(); // 점검(smoke)에서는 시간에 맞춘 자동 확인 대신 직접 부른다
   } catch (err) {
     mail = null;
     composer = null;
+    mailPoller = null;
     log.error(`[Mail] 메일 저장소를 준비하지 못했습니다: ${(err as Error).message}`);
   }
 }
@@ -605,8 +722,13 @@ async function runSmoke(): Promise<void> {
     save: await window.benchClient.mail.saveAccount({ email: "a@b.co", password: "x" }),
     send: await window.benchClient.mail.send({ fromName: "x", to: "a@b.co", cc: "", bcc: "", subject: "s", body: "b", attachmentIds: [] }),
     draft: await window.benchClient.mail.composeDraft("self"),
-  }))()`)) as { account: unknown; folders: unknown[]; save: { ok: boolean }; send: { ok: boolean }; draft: { ok: boolean } };
-  check("안내 화면에서는 메일 통로가 막혀 있다 (계정·폴더 없음, 저장·보내기·초안 거절)", shellMail.account === null && shellMail.folders.length === 0 && shellMail.save.ok === false && shellMail.send.ok === false && shellMail.draft.ok === false);
+    move: await window.benchClient.mail.move([1], "Archive"),
+    remove: await window.benchClient.mail.remove([1], false),
+    spam: await window.benchClient.mail.spam([1]),
+    search: await window.benchClient.mail.searchBody("INBOX", "x"),
+    pending: await window.benchClient.mail.consumePendingOpen(),
+  }))()`)) as { account: unknown; folders: unknown[]; save: { ok: boolean }; send: { ok: boolean }; draft: { ok: boolean }; move: { ok: boolean }; remove: { ok: boolean }; spam: { ok: boolean }; search: { ok: boolean }; pending: unknown };
+  check("안내 화면에서는 메일 통로가 막혀 있다 (계정·폴더 없음, 저장·보내기·초안 거절)", shellMail.account === null && shellMail.folders.length === 0 && shellMail.save.ok === false && shellMail.send.ok === false && shellMail.draft.ok === false && shellMail.move.ok === false && shellMail.remove.ok === false && shellMail.spam.ok === false && shellMail.search.ok === false && shellMail.pending === null);
 
   // 2) 서버 화면(가짜 서버): 팝업·다운로드
   const pageHtml = "<!doctype html><title>smoke</title><body>smoke</body>";
@@ -759,6 +881,81 @@ async function runSmoke(): Promise<void> {
       const badAttach = await call(`window.benchClient.mail.send(${JSON.stringify({ fromName: "x", to: "a@test.local", cc: "", bcc: "", subject: "s", body: "b", attachmentIds: ["../../Windows/win.ini"] })})`);
       check("[메일 쓰기] 앱이 준비하지 않은 첨부 번호(경로)는 쓸 수 없다", badAttach.ok === false && String(badAttach.error).includes("첨부 파일을 찾을 수 없습니다"));
     }
+
+    // 2-4) 새 메일 확인·알림·배지, 이동·삭제·스팸 신고·서버 본문 검색 (점검이 직접 가짜 서버에 새 메일을 넣는다)
+    const appendRaw = async (subject: string, body: string) => {
+      const c = new ImapFlow({ host: cfg.host, port: cfg.port, secure: true, auth: { user: cfg.user, pass: cfg.pass }, logger: false, tls: { rejectUnauthorized: false } }); // 점검용 상대 서버에 메일을 넣는 접속(앱의 접속과 별개)
+      await c.connect();
+      try {
+        const raw = ["From: Smoke Sender <smoke@test.local>", "To: e2e@test.local", `Subject: ${subject}`, "Date: Fri, 16 Oct 2026 09:00:00 +0900", "MIME-Version: 1.0", "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: 8bit", "", body].join(String.fromCharCode(13, 10));
+        await c.append("INBOX", Buffer.from(raw), [], new Date());
+      } finally {
+        await c.logout();
+      }
+    };
+    const notices: { title: string; body: string; click: () => void }[] = [];
+    showMailNotification = (title, body, click) => void notices.push({ title, body, click });
+
+    const base = await mail!.pollInbox();
+    if (base.ok) handlePollResult(base.value);
+    check("[새 메일] 처음 확인에서는 이미 받아 둔 메일 때문에 알림이 뜨지 않는다", base.ok && base.value.newMail.length === 0 && notices.length === 0);
+
+    await appendRaw("NOTIFY-TEST", "알림 시험 본문");
+    const poll1 = await mail!.pollInbox();
+    if (poll1.ok) handlePollResult(poll1.value);
+    check("[새 메일] 새로 도착한 안 읽은 메일 한 통이 알림으로 전달된다 (보낸 사람 이름·제목)", poll1.ok && poll1.value.newMail.length === 1 && notices.length === 1 && notices[0].title === "Smoke Sender" && notices[0].body === "NOTIFY-TEST");
+    check("[새 메일] 작업 표시줄 배지가 메일 안 읽은 수를 따라간다", badgeMail === mail!.inboxUnread() && badgeMail >= 2);
+
+    const poll2 = await mail!.pollInbox();
+    if (poll2.ok) handlePollResult(poll2.value);
+    check("[새 메일] 같은 메일은 두 번 알리지 않는다", poll2.ok && poll2.value.newMail.length === 0 && notices.length === 1);
+
+    const winsBeforeNotice = BrowserWindow.getAllWindows().length;
+    notices[0].click(); // 알림을 누른 것과 같다
+    check("[새 메일] 알림을 누르면 메일 창이 열린다", await until(() => BrowserWindow.getAllWindows().length === winsBeforeNotice + 1));
+    const noticeWindow = BrowserWindow.getAllWindows().find((x) => x !== w)!;
+    await until(() => !noticeWindow.webContents.isLoading() && noticeWindow.webContents.getURL().endsWith("/mail"));
+    const pendingId = await noticeWindow.webContents.executeJavaScript("window.benchClient.mail.consumePendingOpen()");
+    const pendingAgain = await noticeWindow.webContents.executeJavaScript("window.benchClient.mail.consumePendingOpen()");
+    check("[새 메일] 새로 열린 메일 창이 열어야 할 메일 번호를 한 번만 받는다", poll1.ok && pendingId === poll1.value.newMail[0]?.id && pendingAgain === null);
+    noticeWindow.destroy();
+
+    const ids = async (folderPath: string) => ((await call(`window.benchClient.mail.list(${JSON.stringify(folderPath)}, 0, 100)`)) as { items: { id: number; subject: string }[] }).items;
+    const idBySubject = async (folderPath: string, subject: string) => (await ids(folderPath)).find((m) => m.subject === subject)?.id;
+
+    await appendRaw("CLEANUP-1", "스팸으로 보낼 메일");
+    await appendRaw("CLEANUP-2", "서버 검색 시험 SMOKESEARCH 포함");
+    await appendRaw("CLEANUP-3", "휴지통으로 보낼 메일");
+    await call(`window.benchClient.mail.sync("INBOX")`);
+    const [c1, c2, c3] = [await idBySubject("INBOX", "CLEANUP-1"), await idBySubject("INBOX", "CLEANUP-2"), await idBySubject("INBOX", "CLEANUP-3")];
+    check("[메일 정리] 시험용 메일 3통이 받은메일함에 들어왔다", !!c1 && !!c2 && !!c3);
+
+    const found = await call(`window.benchClient.mail.searchBody("INBOX", "SMOKESEARCH")`);
+    check("[메일 정리] 서버 본문 검색이 본문에만 있는 단어로 그 메일을 찾는다", found.ok === true && found.value.ids.length === 1 && found.value.ids[0] === c2);
+    const narrowed = (await call(`window.benchClient.mail.list("INBOX", 0, 50, { ids: ${JSON.stringify(found.ok ? found.value.ids : [])} })`)) as { items: { subject: string }[]; total: number };
+    check("[메일 정리] 검색 결과 번호로 목록이 그 메일만 남는다", narrowed.total === 1 && narrowed.items[0].subject === "CLEANUP-2");
+
+    const spamRes = await call(`window.benchClient.mail.spam([${c1}])`);
+    check("[메일 정리] 스팸 신고하면 스팸메일함으로 옮겨진다", spamRes.ok === true && (await ids("Junk")).some((m) => m.subject === "CLEANUP-1") && !(await ids("INBOX")).some((m) => m.subject === "CLEANUP-1"));
+
+    const moveRes = await call(`window.benchClient.mail.move([${c2}], "Archive")`);
+    check("[메일 정리] 이동하면 고른 폴더로 옮겨진다", moveRes.ok === true && (await ids("Archive")).some((m) => m.subject === "CLEANUP-2") && !(await ids("INBOX")).some((m) => m.subject === "CLEANUP-2"));
+
+    const permanentTooEarly = await call(`window.benchClient.mail.remove([${c3}], true)`);
+    check("[메일 정리] 받은메일함의 메일은 완전 삭제할 수 없다 (먼저 휴지통으로)", permanentTooEarly.ok === false && (await ids("INBOX")).some((m) => m.subject === "CLEANUP-3"));
+
+    const trashRes = await call(`window.benchClient.mail.remove([${c3}], false)`);
+    check("[메일 정리] 삭제하면 휴지통으로 옮겨진다", trashRes.ok === true && trashRes.value.trashed === 1 && (await ids("Trash")).some((m) => m.subject === "CLEANUP-3"));
+
+    const trashedId = await idBySubject("Trash", "CLEANUP-3");
+    const purge = await call(`window.benchClient.mail.remove([${trashedId}], true)`);
+    check("[메일 정리] 휴지통의 메일을 완전 삭제하면 서버에서도 사라진다", purge.ok === true && purge.value.deleted === 1 && !(await ids("Trash")).some((m) => m.subject === "CLEANUP-3"));
+
+    const badMove = await call(`window.benchClient.mail.move([], "Archive")`);
+    const badRemove = await call(`window.benchClient.mail.remove(["x"], false)`);
+    const badFolder = await call(`window.benchClient.mail.move([1], "a" + String.fromCharCode(10) + "b")`);
+    const manyIds = await call(`window.benchClient.mail.remove(Array.from({ length: 501 }, (_, i) => i + 1), false)`);
+    check("[메일 정리] 형식이 틀린 요청(빈 목록·글자 번호·줄바꿈 폴더·501개)은 거절된다", badMove.ok === false && badRemove.ok === false && badFolder.ok === false && manyIds.ok === false);
   }
 
   // 3) 카드 모드: login(결과만 전달) / capture(번호 전달) / off(무반응)
@@ -857,6 +1054,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", () => {
     quitting = true;
     if (deviceTimer) clearInterval(deviceTimer);
+    mailPoller?.stop();
     try {
       mailStore?.close();
     } catch {

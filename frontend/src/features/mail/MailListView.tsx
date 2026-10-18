@@ -1,7 +1,7 @@
 import { ChevronDown, Mail, MailOpen, Paperclip, RefreshCw, Search, Star } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import type { MailSummary } from "../../lib/desktop";
-import { PAGE_SIZES, formatMailDate, pageNumbers, senderLabel, subjectLabel } from "./mailFormat";
+import type { MailFolder, MailSummary } from "../../lib/desktop";
+import { PAGE_SIZES, folderLabel, formatMailDate, pageNumbers, senderLabel, subjectLabel } from "./mailFormat";
 
 interface Props {
   title: string;
@@ -13,30 +13,46 @@ interface Props {
   syncing: boolean;
   syncError: string | null;
   query: string;
+  /** 서버에서 본문까지 찾는 중이거나, 그 결과로 목록이 좁혀진 상태 */
+  searching: boolean;
+  bodySearchActive: boolean;
+  searchNotice: string | null;
+  /** 지금 폴더가 휴지통이면 [삭제]는 완전 삭제가 된다 */
+  inTrash: boolean;
+  inJunk: boolean;
+  /** [이동] 메뉴에 보일 폴더들 (지금 폴더와 가상 폴더는 뺀 것) */
+  moveTargets: MailFolder[];
   onOpen: (id: number) => void;
   onToggleSelect: (id: number) => void;
   onToggleSelectAll: (on: boolean) => void;
   onToggleStar: (id: number, on: boolean) => void;
   onMarkSelected: (seen: boolean) => void;
+  onDelete: () => void;
+  onSpam: () => void;
+  onForward: () => void;
+  onMove: (dest: string) => void;
   onRefresh: () => void;
-  onSearch: (query: string) => void;
+  onSearch: (query: string, includeBody: boolean) => void;
   onPage: (page: number) => void;
   onPageSize: (size: number) => void;
 }
 
-const SOON = "이 기능은 다음 단계에서 지원됩니다";
-
-/** 메일 목록 화면: 폴더 이름 탭, 도구줄(선택·읽음 표시·새로고침·검색), 한 줄씩 보이는 목록, 쪽 번호 */
+/** 메일 목록 화면: 폴더 이름 탭, 도구줄(선택·삭제·스팸신고·전달·이동·읽음 표시·새로고침·검색), 한 줄씩 보이는 목록, 쪽 번호 */
 export function MailListView(p: Props) {
   const [markOpen, setMarkOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [text, setText] = useState(p.query);
+  const [includeBody, setIncludeBody] = useState(false);
   const totalPages = Math.max(1, Math.ceil(p.total / p.pageSize));
   const allSelected = p.items.length > 0 && p.items.every((m) => p.selected.has(m.id));
+  const none = p.selected.size === 0;
 
   function submitSearch(e: FormEvent) {
     e.preventDefault();
-    p.onSearch(text.trim());
+    p.onSearch(text.trim(), includeBody);
   }
+
+  const toolButton = "px-3 py-1.5 rounded-lg font-semibold hover:bg-bg disabled:text-text-muted/60 disabled:cursor-not-allowed disabled:hover:bg-transparent";
 
   return (
     <div className="flex flex-col h-full min-w-0">
@@ -53,22 +69,44 @@ export function MailListView(p: Props) {
             onChange={(e) => p.onToggleSelectAll(e.target.checked)}
             className="w-4 h-4 mr-3 accent-primary"
           />
-          {["삭제", "스팸신고", "전달"].map((label) => (
-            <button key={label} type="button" disabled title={SOON} className="px-3 py-1.5 rounded-lg font-semibold text-text-muted/60 cursor-not-allowed">
-              {label}
-            </button>
-          ))}
-          <span className="w-px h-4 bg-border mx-2" />
-          <button type="button" disabled title={SOON} className="px-2.5 py-1.5 rounded-lg text-text-muted/60 cursor-not-allowed flex items-center gap-1">
-            이동 <ChevronDown size={14} />
+          <button type="button" disabled={none} onClick={p.onDelete} className={toolButton} title={p.inTrash ? "선택한 메일을 서버에서 완전히 지웁니다" : "선택한 메일을 휴지통으로 옮깁니다"}>
+            {p.inTrash ? "완전삭제" : "삭제"}
           </button>
+          <button type="button" disabled={none || p.inJunk} onClick={p.onSpam} className={toolButton} title="선택한 메일을 스팸메일함으로 옮깁니다">
+            스팸신고
+          </button>
+          <button type="button" disabled={p.selected.size !== 1} onClick={p.onForward} className={toolButton} title="메일 한 통을 골라 전달합니다">
+            전달
+          </button>
+          <span className="w-px h-4 bg-border mx-2" />
           <div className="relative">
             <button
               type="button"
-              disabled={p.selected.size === 0}
+              disabled={none || p.moveTargets.length === 0}
+              aria-haspopup="menu"
+              aria-expanded={moveOpen}
+              onClick={() => { setMoveOpen((v) => !v); setMarkOpen(false); }}
+              className="px-2.5 py-1.5 rounded-lg flex items-center gap-1 hover:bg-bg disabled:text-text-muted/60 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              이동 <ChevronDown size={14} />
+            </button>
+            {moveOpen && (
+              <div role="menu" aria-label="이동할 폴더" className="absolute z-10 mt-1 w-44 max-h-72 overflow-y-auto rounded-lg border border-border bg-surface shadow-md py-1">
+                {p.moveTargets.map((f) => (
+                  <button key={f.path} role="menuitem" type="button" onClick={() => { setMoveOpen(false); p.onMove(f.path); }} className="w-full text-left px-3 py-2 text-sm hover:bg-bg truncate">
+                    {folderLabel(f)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              disabled={none}
               aria-haspopup="menu"
               aria-expanded={markOpen}
-              onClick={() => setMarkOpen((v) => !v)}
+              onClick={() => { setMarkOpen((v) => !v); setMoveOpen(false); }}
               className="px-2.5 py-1.5 rounded-lg flex items-center gap-1 hover:bg-bg disabled:text-text-muted/60 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             >
               읽음 표시 <ChevronDown size={14} />
@@ -88,23 +126,30 @@ export function MailListView(p: Props) {
           </button>
         </div>
 
-        <form onSubmit={submitSearch} role="search" className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 w-72 max-w-full">
+        <form onSubmit={submitSearch} role="search" className="flex items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 w-[26rem] max-w-full">
           <Search size={15} className="text-text-muted shrink-0" />
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="메일 검색 (제목·보낸 사람)"
+            placeholder={includeBody ? "메일 검색 (제목·보낸 사람·본문)" : "메일 검색 (제목·보낸 사람)"}
             aria-label="메일 검색"
             className="flex-1 min-w-0 bg-transparent text-sm outline-none"
           />
-          {text && (
-            <button type="button" aria-label="검색어 지우기" onClick={() => { setText(""); p.onSearch(""); }} className="text-text-muted text-xs hover:text-text">
+          <label className="flex items-center gap-1 text-xs text-text-muted shrink-0 cursor-pointer" title="서버에서 본문까지 찾습니다 (시간이 조금 걸릴 수 있습니다)">
+            <input type="checkbox" checked={includeBody} onChange={(e) => setIncludeBody(e.target.checked)} className="w-3.5 h-3.5 accent-primary" />
+            본문 포함
+          </label>
+          {(text || p.bodySearchActive) && (
+            <button type="button" aria-label="검색어 지우기" onClick={() => { setText(""); p.onSearch("", false); }} className="text-text-muted text-xs hover:text-text shrink-0">
               지우기
             </button>
           )}
         </form>
       </div>
 
+      {p.searching && <p role="status" className="px-6 py-2 text-xs text-text-muted border-b border-border">서버에서 본문까지 검색하는 중...</p>}
+      {p.searchNotice && <p role="alert" className="px-6 py-2 text-xs text-danger border-b border-border">{p.searchNotice}</p>}
+      {p.bodySearchActive && !p.searching && !p.searchNotice && <p className="px-6 py-2 text-xs text-text-muted border-b border-border">서버에서 본문까지 검색한 결과입니다.</p>}
       {p.syncError && <p role="alert" className="px-6 py-2 text-xs text-danger border-b border-border">{p.syncError}</p>}
 
       <ul className="flex-1 overflow-y-auto" aria-label="메일 목록">
@@ -132,7 +177,7 @@ export function MailListView(p: Props) {
           </li>
         ))}
         {p.items.length === 0 && (
-          <li className="px-6 py-16 text-center text-sm text-text-muted">{p.syncing ? "메일을 가져오는 중..." : "메일이 없습니다."}</li>
+          <li className="px-6 py-16 text-center text-sm text-text-muted">{p.syncing || p.searching ? "메일을 가져오는 중..." : "메일이 없습니다."}</li>
         )}
       </ul>
 

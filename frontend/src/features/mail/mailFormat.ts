@@ -88,3 +88,16 @@ export const DEFAULT_PAGE_SIZE = 20;
 
 /** 한 번에 보낼 첨부 파일 크기의 합 한도 (앱의 한도와 같은 값) */
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+const TRASH_NAMES = /^(trash|deleted items|deleted messages|bin|휴지통)$/i;
+const JUNK_NAMES = /^(spam|junk|junk e-?mail|junk mail|bulk mail|스팸\s*메일함|스팸\s*편지함|스팸)$/i;
+
+/** 휴지통 폴더인가 (앱과 같은 기준: 서버가 알려 준 용도, 없으면 이름) */
+export function isTrashFolder(f: Pick<MailFolder, "name" | "specialUse"> | undefined): boolean {
+  return !!f && (f.specialUse === "\\Trash" || TRASH_NAMES.test(f.name.trim()));
+}
+
+/** 스팸메일함 폴더인가 */
+export function isJunkFolder(f: Pick<MailFolder, "name" | "specialUse"> | undefined): boolean {
+  return !!f && (f.specialUse === "\\Junk" || JUNK_NAMES.test(f.name.trim()));
+}

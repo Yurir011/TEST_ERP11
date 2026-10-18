@@ -57,6 +57,13 @@ export interface MailDetail extends MailSummary {
   attachments: MailAttachmentInfo[];
 }
 
+/** 새로 도착한 메일 한 통의 알림용 정보 */
+export interface NewMailInfo {
+  id: number;
+  from: string;
+  subject: string;
+}
+
 /** 모든 폴더의 메일을 한꺼번에 보는 가상 폴더("전체메일") */
 export const ALL_MAIL_FOLDER = "*";
 
@@ -66,6 +73,8 @@ export interface MailFilter {
   flagged?: boolean;
   attachment?: boolean;
   query?: string;
+  /** 이 번호의 메일만 (서버 본문 검색 결과로 목록을 좁힐 때) */
+  ids?: number[];
 }
 
 export type MailResult<T> = { ok: true; value: T } | { ok: false; error: string };

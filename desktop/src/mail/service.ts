@@ -10,9 +10,9 @@ import { type AddressObject, simpleParser } from "mailparser";
 import { type Logger, silentLogger } from "../log";
 import { type MailAccountStore, validateAccountInput } from "./account";
 import { sanitizeEmailHtml } from "./html";
-import { MailError, MailSync } from "./sync";
+import { MailError, MailSync, findJunkFolder, findTrashFolder } from "./sync";
 import type { CachedBody, MailStore } from "./store";
-import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailAttachmentInfo, type MailDetail, type MailFilter, type MailFolder, type MailResult, type MailSummary } from "./types";
+import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailAttachmentInfo, type MailDetail, type MailFilter, type MailFolder, type MailResult, type MailSummary, type NewMailInfo } from "./types";
 
 const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const MAX_INLINE_IMAGE_BYTES = 1_000_000;
@@ -101,7 +101,7 @@ export class MailService {
 
   list(folder: string, offset: number, limit: number, filter: MailFilter = {}): { items: MailSummary[]; total: number } {
     const safeLimit = Math.max(1, Math.min(Math.trunc(limit) || 50, PAGE_MAX));
-    const f: MailFilter = { unread: filter.unread === true, flagged: filter.flagged === true, attachment: filter.attachment === true, query: typeof filter.query === "string" ? filter.query : undefined };
+    const f: MailFilter = { unread: filter.unread === true, flagged: filter.flagged === true, attachment: filter.attachment === true, query: typeof filter.query === "string" ? filter.query : undefined, ids: Array.isArray(filter.ids) ? filter.ids : undefined };
     return { items: this.deps.store.list(folder, safeLimit, Math.max(0, Math.trunc(offset) || 0), f), total: this.deps.store.count(folder, f) };
   }
 
@@ -159,6 +159,125 @@ export class MailService {
       await this.deps.sync.setFlaggedOnServer(row.folder, row.uid, flagged);
     } catch {
       this.log.warn(`[Mail] 서버에 별표 표시를 알리지 못함: id=${id} (다음 동기화에서 서버 값으로 다시 맞춰집니다)`);
+    }
+  }
+
+  /** 받은메일함의 안 읽은 메일 수 (이 PC 에 받아 둔 기준, 배지에 쓴다) */
+  inboxUnread(): number {
+    return this.deps.store.unreadTotal("INBOX");
+  }
+
+  // ---- 이동·삭제·스팸 ----
+
+  /** 메일을 다른 폴더로 옮긴다. 이미 그 폴더에 있는 메일은 건드리지 않는다 */
+  async move(ids: number[], dest: string): Promise<MailResult<{ moved: number }>> {
+    if (!this.deps.store.hasFolder(dest)) return { ok: false, error: "도착 폴더를 찾을 수 없습니다." };
+    return this.moveRows(ids, dest);
+  }
+
+  private async moveRows(ids: number[], dest: string): Promise<MailResult<{ moved: number }>> {
+    const rows = this.deps.store.locate(ids).filter((r) => r.folder !== dest);
+    const byFolder = new Map<string, number[]>();
+    for (const r of rows) byFolder.set(r.folder, [...(byFolder.get(r.folder) ?? []), r.uid]);
+    try {
+      for (const [folder, uids] of byFolder) {
+        await this.deps.sync.moveMessages(folder, uids, dest);
+        this.deps.store.deleteUids(folder, uids); // 옮긴 메일은 이 폴더에서 사라진다 (도착 폴더에는 동기화로 들어온다)
+      }
+    } catch (e) {
+      return { ok: false, error: e instanceof MailError ? e.message : "메일을 옮기지 못했습니다." };
+    }
+    if (rows.length > 0) {
+      try {
+        await this.deps.sync.syncFolder(dest); // 도착 폴더에 바로 보이게
+      } catch {
+        this.log.warn(`[Mail] 메일은 옮겼지만 도착 폴더(${dest})를 새로 읽지 못했습니다 (다음 동기화에서 보입니다)`);
+      }
+    }
+    return { ok: true, value: { moved: rows.length } };
+  }
+
+  /**
+   * 삭제. 기본은 휴지통으로 옮긴다(되살릴 수 있다). `permanent` 는 이미 휴지통·스팸메일함에 있는 메일을 서버에서 완전히 지울 때만 허용한다.
+   * 휴지통 폴더를 찾지 못하면 지우지 않고 알린다 (조용히 완전 삭제로 바뀌는 일은 없다).
+   */
+  async remove(ids: number[], permanent = false): Promise<MailResult<{ trashed: number; deleted: number }>> {
+    const folders = this.deps.store.folders();
+    const trash = findTrashFolder(folders);
+    if (permanent) {
+      const allowed = new Set([trash?.path, findJunkFolder(folders)?.path].filter((p): p is string => !!p));
+      const rows = this.deps.store.locate(ids);
+      if (rows.some((r) => !allowed.has(r.folder))) return { ok: false, error: "휴지통(또는 스팸메일함)에 있는 메일만 완전히 삭제할 수 있습니다." };
+      const byFolder = new Map<string, number[]>();
+      for (const r of rows) byFolder.set(r.folder, [...(byFolder.get(r.folder) ?? []), r.uid]);
+      try {
+        for (const [folder, uids] of byFolder) {
+          await this.deps.sync.deleteMessages(folder, uids);
+          this.deps.store.deleteUids(folder, uids);
+        }
+      } catch (e) {
+        return { ok: false, error: e instanceof MailError ? e.message : "메일을 지우지 못했습니다." };
+      }
+      return { ok: true, value: { trashed: 0, deleted: rows.length } };
+    }
+    if (!trash) return { ok: false, error: "휴지통 폴더를 찾을 수 없어 삭제하지 않았습니다. 메일 서버에 휴지통 폴더가 있는지 확인해 주세요." };
+    const moved = await this.moveRows(ids, trash.path);
+    return moved.ok ? { ok: true, value: { trashed: moved.value.moved, deleted: 0 } } : moved;
+  }
+
+  /** 스팸 신고: 스팸메일함으로 옮긴다 */
+  async spam(ids: number[]): Promise<MailResult<{ moved: number }>> {
+    const junk = findJunkFolder(this.deps.store.folders());
+    if (!junk) return { ok: false, error: "스팸메일함 폴더를 찾을 수 없어 옮기지 못했습니다." };
+    return this.moveRows(ids, junk.path);
+  }
+
+  // ---- 본문 검색 (서버) ----
+
+  /** 서버에서 본문·제목·보낸 사람을 찾아, 이 PC 에 받아 둔 메일 중 해당하는 번호를 돌려준다 */
+  async searchBody(folder: string, query: string): Promise<MailResult<{ ids: number[] }>> {
+    const q = query.trim().slice(0, 100);
+    if (!q) return { ok: true, value: { ids: [] } };
+    const all = this.deps.store.folders();
+    const skip = new Set([findTrashFolder(all)?.path, findJunkFolder(all)?.path]);
+    const targets = folder === ALL_MAIL_FOLDER ? all.filter((f) => !skip.has(f.path)).map((f) => f.path) : [folder];
+    const ids: number[] = [];
+    let ok = 0;
+    let lastError = "서버에서 검색하지 못했습니다.";
+    for (const path of targets) {
+      try {
+        const uids = await this.deps.sync.searchBody(path, q);
+        ids.push(...this.deps.store.idsByUids(path, uids));
+        ok++;
+      } catch (e) {
+        if (e instanceof MailError) lastError = e.message;
+        this.log.warn(`[Mail] 서버 검색 실패: ${path}`);
+      }
+    }
+    if (ok === 0) return { ok: false, error: lastError };
+    return { ok: true, value: { ids } };
+  }
+
+  // ---- 새 메일 확인 (주기적으로 불린다) ----
+
+  /**
+   * 받은메일함을 서버와 맞추고, 새로 도착한 안 읽은 메일 정보를 돌려준다.
+   * 이 PC 에 받은메일함 메일이 하나도 없던 첫 동기화(처음 등록 직후)는 알림을 만들지 않는다 (예전 메일이 한꺼번에 알림으로 쏟아지는 것을 막는다).
+   */
+  async pollInbox(): Promise<MailResult<{ unread: number; newMail: NewMailInfo[]; changed: boolean }>> {
+    if (!this.deps.accounts.load()) return { ok: true, value: { unread: 0, newMail: [], changed: false } };
+    const first = this.deps.store.count("INBOX") === 0;
+    try {
+      const r = await this.deps.sync.syncFolderDetailed("INBOX");
+      const fresh = first ? [] : this.deps.store.locate(this.deps.store.idsByUids("INBOX", r.addedUids)).filter((m) => !m.seen).map((m) => this.deps.store.get(m.id)!);
+      const newMail = fresh
+        .filter((m) => !!m)
+        .sort((a, b) => b.date - a.date)
+        .slice(0, 20)
+        .map((m) => ({ id: m.id, from: m.fromName || m.fromAddr || "(보낸 사람 없음)", subject: m.subject.trim() || "(제목 없음)" }));
+      return { ok: true, value: { unread: this.deps.store.unreadTotal("INBOX"), newMail, changed: r.added > 0 || r.removed > 0 } };
+    } catch (e) {
+      return { ok: false, error: e instanceof MailError ? e.message : "새 메일을 확인하지 못했습니다." };
     }
   }
 

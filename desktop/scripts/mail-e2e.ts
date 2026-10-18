@@ -47,7 +47,7 @@ async function countIn(port: number, user: string, pass: string, mailbox: string
 }
 
 async function main(): Promise<number> {
-  const imap = await startFakeImap(messages, { Sent: "\\Sent" }, { secure: true });
+  const imap = await startFakeImap(messages, { Sent: "\\Sent", Trash: "\\Trash", Junk: "\\Junk", Archive: "\\Archive" }, { secure: true });
   const smtp = await startFakeSmtp({ secure: true, rejectRcpt: "nobody@test.local" });
   const cert = path.join(root, "node_modules", "hoodiecrow-imap", "cert", "server.crt");
   const env: NodeJS.ProcessEnv = { ...process.env, BENCH_SMOKE_MAIL: JSON.stringify({ host: "127.0.0.1", port: imap.port, smtpPort: smtp.port, user: imap.user, pass: imap.pass }) };
@@ -63,7 +63,7 @@ async function main(): Promise<number> {
     child.stdout.on("data", onData);
     child.stderr.on("data", onData);
     child.on("exit", (c) => {
-      for (const line of out.split(/\r?\n/)) if (/\[Smoke\].*(통과|실패|결과)/.test(line) && /(\[메일|결과|실패)/.test(line)) console.log(line.replace(/^\S+\s+\S+\s+\[Main\]\s*/, ""));
+      for (const line of out.split(/\r?\n/)) if (/\[Smoke\].*(통과|실패|결과)/.test(line) && /(\[메일|\[새 메일|결과|실패)/.test(line)) console.log(line.replace(/^\S+\s+\S+\s+\[Main\]\s*/, ""));
       resolve(c ?? 1);
     });
   });
@@ -89,6 +89,16 @@ async function main(): Promise<number> {
     check("답장 메일: In-Reply-To 가 붙어 대화로 이어진다", !!rep && /^<.+>$/.test(rep.parsed.inReplyTo ?? ""));
     const sentCount = await countIn(imap.port, imap.user, imap.pass, "Sent");
     check(`보낸메일함에 보낸 메일 2통이 저장됨 (저장 ${sentCount}통)`, sentCount === 2);
+  }
+
+  if (!noCa) {
+    // 메일 정리: 스팸 1통, 보관함 1통(이동 시험 메일), 휴지통은 완전 삭제로 비어 있어야 하고, 받은메일함에는 시험용 메일이 남지 않아야 한다
+    const junkCount = await countIn(imap.port, imap.user, imap.pass, "Junk");
+    const archiveCount = await countIn(imap.port, imap.user, imap.pass, "Archive");
+    const trashCount = await countIn(imap.port, imap.user, imap.pass, "Trash");
+    check(`서버의 스팸메일함에 1통 (실제 ${junkCount}통)`, junkCount === 1);
+    check(`서버의 보관함에 1통 (실제 ${archiveCount}통)`, archiveCount === 1);
+    check(`서버의 휴지통은 완전 삭제로 비어 있음 (실제 ${trashCount}통)`, trashCount === 0);
   }
 
   await smtp.close();

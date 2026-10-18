@@ -27,7 +27,14 @@ export function parseFilter(v: unknown): MailFilter {
   if (o.flagged === true) f.flagged = true;
   if (o.attachment === true) f.attachment = true;
   if (typeof o.query === "string" && o.query.trim()) f.query = o.query.trim().slice(0, 100);
+  if (Array.isArray(o.ids) && o.ids.length <= 5000 && o.ids.every((n) => typeof n === "number" && Number.isSafeInteger(n) && n > 0)) f.ids = o.ids as number[];
   return f;
+}
+
+/** 메일 번호 목록: 양의 정수만, 한 번에 500개까지 */
+export function parseMailIds(v: unknown): number[] | null {
+  if (!Array.isArray(v) || v.length === 0 || v.length > 500) return null;
+  return v.every((n) => typeof n === "number" && Number.isSafeInteger(n) && n > 0) ? (v as number[]) : null;
 }
 
 export function parsePaging(offset: unknown, limit: unknown): { offset: number; limit: number } {

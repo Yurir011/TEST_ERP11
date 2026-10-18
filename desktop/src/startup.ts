@@ -34,3 +34,19 @@ export function clampBadgeCount(count: unknown): number {
 export function parseConversationId(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 1 ? value : null;
 }
+
+/**
+ * 작업 표시줄 배지에 보일 총 개수: 메신저 안 읽은 수 + 메일 안 읽은 수 (둘을 합쳐 하나의 배지로 보여 준다).
+ * 각각 0~999 로 정리한 뒤 더하고 999 를 넘기지 않는다.
+ */
+export function combinedBadgeCount(messenger: unknown, mail: unknown): number {
+  return Math.min(999, clampBadgeCount(messenger) + clampBadgeCount(mail));
+}
+
+/** 트레이 아이콘 설명과 작업 표시줄 배지 설명 (예: "안 읽은 메시지 2건 · 메일 3통") */
+export function badgeSummary(messenger: unknown, mail: unknown): string {
+  const m = clampBadgeCount(messenger);
+  const x = clampBadgeCount(mail);
+  const parts = [...(m > 0 ? [`메시지 ${m}건`] : []), ...(x > 0 ? [`메일 ${x}통`] : [])];
+  return parts.length ? `안 읽은 ${parts.join(" · ")}` : "";
+}

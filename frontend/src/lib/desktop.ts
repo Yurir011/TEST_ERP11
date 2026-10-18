@@ -85,6 +85,8 @@ export interface MailFilter {
   flagged?: boolean;
   attachment?: boolean;
   query?: string;
+  /** 이 번호의 메일만 (서버 본문 검색 결과로 목록을 좁힐 때) */
+  ids?: number[];
 }
 
 /** 모든 폴더의 메일을 한꺼번에 보는 가상 폴더("전체메일") */
@@ -150,6 +152,20 @@ export interface MailBridge {
   pickAttachments(): Promise<MailResult<MailStagedAttachment[]>>;
   discardAttachments(ids: string[]): Promise<void>;
   send(payload: MailSendPayload): Promise<MailResult<MailSendResult>>;
+  /** 선택한 메일을 다른 폴더로 옮긴다 */
+  move(ids: number[], dest: string): Promise<MailResult<{ moved: number }>>;
+  /** 삭제: 기본은 휴지통으로 옮김. permanent=true 는 휴지통(또는 스팸메일함) 안의 메일을 서버에서 완전히 지운다 */
+  remove(ids: number[], permanent: boolean): Promise<MailResult<{ trashed: number; deleted: number }>>;
+  /** 스팸 신고: 스팸메일함으로 옮긴다 */
+  spam(ids: number[]): Promise<MailResult<{ moved: number }>>;
+  /** 서버에서 본문·제목·보낸 사람을 찾아, 이 PC 에 받아 둔 메일 중 해당하는 번호를 받는다 */
+  searchBody(folder: string, query: string): Promise<MailResult<{ ids: number[] }>>;
+  /** 새 메일 확인으로 목록이 바뀌었을 때 호출된다 */
+  onChanged(cb: () => void): () => void;
+  /** 알림을 눌러 특정 메일을 열라는 신호 (메일 창이 이미 열려 있을 때) */
+  onOpenMessage(cb: (payload: { id: number }) => void): () => void;
+  /** 알림을 눌러 메일 창이 새로 열린 경우, 열어야 할 메일 번호를 한 번만 받는다 */
+  consumePendingOpen(): Promise<number | null>;
 }
 
 export interface BenchClient {

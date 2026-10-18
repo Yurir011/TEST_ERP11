@@ -16,6 +16,9 @@ const account = { email: "me@bench.co.kr", username: "me@bench.co.kr", imapHost:
 const folders: MailFolder[] = [
   { path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 2, total: 2 },
   { path: "Sent", name: "Sent", specialUse: "\\Sent", unread: 0, total: 0 },
+  { path: "Archive", name: "Archive", specialUse: "\\Archive", unread: 0, total: 0 },
+  { path: "Trash", name: "Trash", specialUse: "\\Trash", unread: 0, total: 0 },
+  { path: "Junk", name: "Junk", specialUse: "\\Junk", unread: 0, total: 0 },
 ];
 const mails: MailSummary[] = [
   { id: 1, folder: "INBOX", uid: 1, subject: "견적서 송부", fromName: "김영업", fromAddr: "kim@t.l", date: new Date(2026, 9, 16, 9, 0).getTime(), seen: false, flagged: false, hasAttachments: true },
@@ -32,6 +35,9 @@ const detail = (over: Partial<MailDetail> = {}): MailDetail => ({
   attachments: [{ index: 0, filename: "견적서.pdf", contentType: "application/pdf", size: 2048 }],
   ...over,
 });
+
+/** 앱이 화면에 보내는 신호(새 메일 확인 결과, 알림 클릭)를 시험에서 직접 보낼 수 있게 붙잡아 둔다 */
+const handlers: { changed: (() => void) | null; open: ((p: { id: number }) => void) | null } = { changed: null, open: null };
 
 function installMail(over: Partial<MailBridge> = {}) {
   const bridge: MailBridge = {
@@ -51,6 +57,23 @@ function installMail(over: Partial<MailBridge> = {}) {
     pickAttachments: vi.fn().mockResolvedValue({ ok: true, value: [{ id: "att-1", filename: "자료.xlsx", size: 4096 }] }),
     discardAttachments: vi.fn().mockResolvedValue(undefined),
     send: vi.fn().mockResolvedValue({ ok: true, value: { messageId: "<new@bench.co.kr>", savedToSent: null } }),
+    move: vi.fn().mockResolvedValue({ ok: true, value: { moved: 1 } }),
+    remove: vi.fn().mockResolvedValue({ ok: true, value: { trashed: 1, deleted: 0 } }),
+    spam: vi.fn().mockResolvedValue({ ok: true, value: { moved: 1 } }),
+    searchBody: vi.fn().mockResolvedValue({ ok: true, value: { ids: [2] } }),
+    onChanged: vi.fn((cb: () => void) => {
+      handlers.changed = cb;
+      return () => {
+        handlers.changed = null;
+      };
+    }),
+    onOpenMessage: vi.fn((cb: (p: { id: number }) => void) => {
+      handlers.open = cb;
+      return () => {
+        handlers.open = null;
+      };
+    }),
+    consumePendingOpen: vi.fn().mockResolvedValue(null),
     ...over,
   };
   window.benchClient = { mail: bridge } as unknown as BenchClient;
@@ -65,6 +88,8 @@ const renderPage = () =>
   );
 
 beforeEach(() => {
+  handlers.changed = null;
+  handlers.open = null;
   notifyError.mockReset();
   notify.mockReset();
   confirm.mockReset();
@@ -141,7 +166,7 @@ describe("화면 구성", () => {
     expect(within(side).getByText("박소장")).toBeTruthy();
     expect(within(side).getByText("me@bench.co.kr")).toBeTruthy();
     const nav = within(side).getByRole("navigation", { name: "메일 폴더" });
-    expect(within(nav).getAllByRole("button").map((b) => b.textContent?.replace(/\d+$/, ""))).toEqual(["전체메일", "받은메일함", "보낸메일함"]);
+    expect(within(nav).getAllByRole("button").map((b) => b.textContent?.replace(/\d+$/, ""))).toEqual(["전체메일", "받은메일함", "보낸메일함", "보관함", "스팸메일함", "휴지통"]);
     expect(within(nav).getByLabelText("안 읽은 메일 2개")).toBeTruthy();
   });
 
@@ -159,13 +184,13 @@ describe("화면 구성", () => {
     expect(within(list).getByRole("button", { name: "중요 표시" })).toBeTruthy();
   });
 
-  it("아직 지원하지 않는 버튼(삭제·스팸신고·전달·이동)은 눌리지 않는다", async () => {
+  it("메일을 고르기 전에는 삭제·스팸신고·전달·이동·읽음 표시를 쓸 수 없다", async () => {
     installMail();
     renderPage();
     await screen.findByText("견적서 송부");
-    for (const name of ["삭제", "스팸신고", "전달", "이동"]) {
-      const b = screen.getByRole("button", { name: new RegExp(name) }) as HTMLButtonElement;
-      expect(b.disabled, name).toBe(true);
+    for (const name of ["삭제", "스팸신고", "전달", /이동/, /읽음 표시/]) {
+      const b = screen.getByRole("button", { name }) as HTMLButtonElement;
+      expect(b.disabled, String(name)).toBe(true);
     }
   });
 
@@ -531,6 +556,186 @@ describe("메일 쓰기", () => {
     fireEvent.change(screen.getByLabelText("메일 비밀번호"), { target: { value: "비번" } });
     fireEvent.click(screen.getByRole("button", { name: "등록" }));
     await waitFor(() => expect(bridge.saveAccount).toHaveBeenCalledWith(expect.objectContaining({ saveToSent: true })));
+  });
+});
+
+describe("메일 정리: 삭제·스팸신고·이동·전달", () => {
+  const pick = async (subject: string) => fireEvent.click(await screen.findByLabelText(`${subject} 선택`));
+
+  it("[삭제]는 고른 메일을 휴지통으로 옮기고 알려 준다 (여러 통 가능)", async () => {
+    const bridge = installMail();
+    renderPage();
+    await pick("견적서 송부");
+    await pick("회의 안내");
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    await waitFor(() => expect(bridge.remove).toHaveBeenCalledWith([1, 2], false));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("메일 1통을 휴지통으로 옮겼습니다."));
+    expect(screen.getByLabelText("선택 0개, 전체 2개")).toBeTruthy(); // 처리 후 선택이 풀린다
+  });
+
+  it("삭제에 실패하면(휴지통 폴더 없음 등) 이유를 알린다", async () => {
+    installMail({ remove: vi.fn().mockResolvedValue({ ok: false, error: "휴지통 폴더를 찾을 수 없어 삭제하지 않았습니다." }) });
+    renderPage();
+    await pick("견적서 송부");
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith(expect.stringContaining("휴지통 폴더를 찾을 수 없어")));
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("휴지통에서는 [완전삭제]가 되고, 확인을 받은 뒤에만 서버에서 지운다", async () => {
+    const bridge = installMail({ remove: vi.fn().mockResolvedValue({ ok: true, value: { trashed: 0, deleted: 1 } }) });
+    confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderPage();
+    await screen.findByText("견적서 송부");
+    fireEvent.click(screen.getByRole("button", { name: /휴지통/ }));
+    await waitFor(() => expect(screen.getByLabelText("현재 폴더").textContent).toBe("휴지통"));
+    await pick("견적서 송부");
+    const del = screen.getByRole("button", { name: "완전삭제" });
+    fireEvent.click(del);
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(confirm.mock.calls[0][0]).toContain("완전히 삭제");
+    expect(bridge.remove).not.toHaveBeenCalled(); // 취소하면 아무것도 지우지 않는다
+    fireEvent.click(del);
+    await waitFor(() => expect(bridge.remove).toHaveBeenCalledWith([1], true));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("메일 1통을 완전히 삭제했습니다."));
+  });
+
+  it("[스팸신고]는 스팸메일함으로 옮긴다. 스팸메일함 안에서는 쓸 수 없다", async () => {
+    const bridge = installMail();
+    renderPage();
+    await pick("회의 안내");
+    fireEvent.click(screen.getByRole("button", { name: "스팸신고" }));
+    await waitFor(() => expect(bridge.spam).toHaveBeenCalledWith([2]));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("메일 1통을 스팸메일함으로 옮겼습니다."));
+    fireEvent.click(screen.getByRole("button", { name: /스팸메일함/ }));
+    await waitFor(() => expect(screen.getByLabelText("현재 폴더").textContent).toBe("스팸메일함"));
+    await pick("견적서 송부");
+    expect((screen.getByRole("button", { name: "스팸신고" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("[이동]은 현재 폴더를 뺀 폴더 목록을 보여 주고, 고른 폴더로 옮긴다", async () => {
+    const bridge = installMail();
+    renderPage();
+    await pick("견적서 송부");
+    fireEvent.click(screen.getByRole("button", { name: /이동/ }));
+    const menu = await screen.findByRole("menu", { name: "이동할 폴더" });
+    const names = within(menu).getAllByRole("menuitem").map((b) => b.textContent);
+    expect(names).toEqual(["보낸메일함", "보관함", "스팸메일함", "휴지통"]); // 받은메일함(현재 폴더)은 없다
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "보관함" }));
+    await waitFor(() => expect(bridge.move).toHaveBeenCalledWith([1], "Archive"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("메일 1통을 보관함(으)로 옮겼습니다."));
+  });
+
+  it("[전달]은 한 통만 골랐을 때만 쓸 수 있고, 그 메일의 전달 쓰기 화면을 연다", async () => {
+    const bridge = installMail({ composeDraft: vi.fn().mockResolvedValue({ ok: true, value: { to: "", cc: "", subject: "Fwd: 견적서 송부", body: "전달", attachments: [] } }) });
+    renderPage();
+    await pick("견적서 송부");
+    await pick("회의 안내");
+    expect((screen.getByRole("button", { name: "전달" }) as HTMLButtonElement).disabled).toBe(true); // 두 통
+    await pick("회의 안내"); // 한 통만 남긴다
+    fireEvent.click(screen.getByRole("button", { name: "전달" }));
+    await waitFor(() => expect(bridge.composeDraft).toHaveBeenCalledWith("forward", 1));
+    expect(await screen.findByRole("form", { name: "메일 쓰기" })).toBeTruthy();
+  });
+
+  it("읽기 화면의 [삭제]·[스팸신고]도 같은 동작을 하고 목록으로 돌아간다", async () => {
+    const bridge = installMail();
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일 열기: 견적서 송부" }));
+    await screen.findByRole("button", { name: "안 읽음으로 표시" }); // 읽기 화면이 열릴 때까지 (목록 도구줄에도 [삭제]가 있어 먼저 기다린다)
+    fireEvent.click(screen.getByRole("button", { name: "삭제" }));
+    await waitFor(() => expect(bridge.remove).toHaveBeenCalledWith([1], false));
+    expect(await screen.findByRole("list", { name: "메일 목록" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "메일 열기: 견적서 송부" }));
+    await screen.findByRole("button", { name: "안 읽음으로 표시" });
+    fireEvent.click(screen.getByRole("button", { name: "스팸신고" }));
+    await waitFor(() => expect(bridge.spam).toHaveBeenCalledWith([1]));
+    expect(await screen.findByRole("list", { name: "메일 목록" })).toBeTruthy();
+  });
+});
+
+describe("서버 본문 검색", () => {
+  const search = async (text: string, withBody: boolean) => {
+    fireEvent.change(await screen.findByLabelText("메일 검색"), { target: { value: text } });
+    if (withBody) fireEvent.click(screen.getByLabelText("본문 포함"));
+    fireEvent.submit(screen.getByRole("search"));
+  };
+
+  it("[본문 포함]을 켜고 검색하면 서버가 찾은 번호로 목록을 좁힌다", async () => {
+    const bridge = installMail();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    await search("단가표", true);
+    await waitFor(() => expect(bridge.searchBody).toHaveBeenCalledWith("INBOX", "단가표"));
+    await waitFor(() => expect(bridge.list).toHaveBeenLastCalledWith("INBOX", 0, 20, { ids: [2], query: undefined }));
+    expect(await screen.findByText("서버에서 본문까지 검색한 결과입니다.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "검색어 지우기" }));
+    await waitFor(() => expect(bridge.list).toHaveBeenLastCalledWith("INBOX", 0, 20, { ids: undefined, query: undefined }));
+  });
+
+  it("[본문 포함]이 꺼져 있으면 서버에 묻지 않고 제목·보낸 사람만 찾는다", async () => {
+    const bridge = installMail();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    await search("견적", false);
+    await waitFor(() => expect(bridge.list).toHaveBeenLastCalledWith("INBOX", 0, 20, { query: "견적" }));
+    expect(bridge.searchBody).not.toHaveBeenCalled();
+  });
+
+  it("서버 검색에 실패하면 제목·보낸 사람 검색으로 대신하고 이유를 알린다", async () => {
+    const bridge = installMail({ searchBody: vi.fn().mockResolvedValue({ ok: false, error: "메일 서버에 연결할 수 없습니다." }) });
+    renderPage();
+    await screen.findByText("견적서 송부");
+    await search("단가표", true);
+    expect((await screen.findByRole("alert")).textContent).toContain("제목·보낸 사람만 찾았습니다");
+    await waitFor(() => expect(bridge.list).toHaveBeenLastCalledWith("INBOX", 0, 20, { query: "단가표" }));
+  });
+
+  it("폴더를 옮기면 본문 검색 결과(번호)는 풀린다", async () => {
+    const bridge = installMail();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    await search("단가표", true);
+    await screen.findByText("서버에서 본문까지 검색한 결과입니다.");
+    fireEvent.click(screen.getByRole("button", { name: /보낸메일함/ }));
+    await waitFor(() => expect(bridge.list).toHaveBeenLastCalledWith("Sent", 0, 20, { ids: undefined, query: undefined }));
+  });
+});
+
+describe("새 메일 신호와 알림", () => {
+  it("새 메일 확인으로 목록이 바뀌었다는 신호를 받으면 목록을 다시 읽는다", async () => {
+    const bridge = installMail();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    const before = (bridge.list as ReturnType<typeof vi.fn>).mock.calls.length;
+    await waitFor(() => expect(handlers.changed).toBeTruthy());
+    handlers.changed!();
+    await waitFor(() => expect((bridge.list as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it("알림을 눌러 특정 메일을 열라는 신호를 받으면 그 메일을 연다", async () => {
+    const bridge = installMail();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    await waitFor(() => expect(handlers.open).toBeTruthy());
+    handlers.open!({ id: 2 });
+    await waitFor(() => expect(bridge.get).toHaveBeenCalledWith(2, false));
+  });
+
+  it("알림을 눌러 메일 창이 새로 열린 경우(대기 중인 번호)에도 그 메일을 연다", async () => {
+    const bridge = installMail({ consumePendingOpen: vi.fn().mockResolvedValue(2) });
+    renderPage();
+    await waitFor(() => expect(bridge.get).toHaveBeenCalledWith(2, false));
+  });
+
+  it("창을 닫을 때(화면이 사라질 때) 신호 받기를 그만둔다", async () => {
+    installMail();
+    const { unmount } = renderPage();
+    await screen.findByText("견적서 송부");
+    await waitFor(() => expect(handlers.changed).toBeTruthy());
+    unmount();
+    expect(handlers.changed).toBeNull();
+    expect(handlers.open).toBeNull();
   });
 });
 

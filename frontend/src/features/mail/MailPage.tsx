@@ -10,7 +10,7 @@ import { MailAccountForm } from "./MailAccountForm";
 import { MailListView } from "./MailListView";
 import { MailReader } from "./MailReader";
 import { MailSidebar } from "./MailSidebar";
-import { DEFAULT_PAGE_SIZE, folderLabel } from "./mailFormat";
+import { DEFAULT_PAGE_SIZE, folderLabel, isJunkFolder, isTrashFolder, sortFolders } from "./mailFormat";
 
 type QuickFilter = { unread?: boolean; flagged?: boolean; attachment?: boolean };
 type ComposeInit = Pick<MailDraft, "to" | "cc" | "subject" | "body" | "attachments" | "threading">;
@@ -52,6 +52,9 @@ function MailApp() {
   const [folder, setFolder] = useState("INBOX");
   const [filter, setFilter] = useState<QuickFilter>({});
   const [query, setQuery] = useState("");
+  const [bodyIds, setBodyIds] = useState<number[] | null>(null); // 서버 본문 검색으로 좁혀진 메일 번호 (없으면 null)
+  const [searching, setSearching] = useState(false);
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [items, setItems] = useState<MailSummary[]>([]);
@@ -68,6 +71,7 @@ function MailApp() {
   const [composing, setComposing] = useState<ComposeInit | null>(null);
   const composeState = useRef<{ dirty: boolean; attachmentIds: string[] }>({ dirty: false, attachmentIds: [] });
   const detailReq = useRef(0);
+  const openMessageRef = useRef<(id: number) => Promise<void>>(async () => {});
   const reload = useCallback(() => setTick((t) => t + 1), []);
 
   // 저장된 목록(폴더·조건·검색·쪽)은 바뀔 때마다 이 PC 의 저장소에서 바로 읽는다
@@ -75,7 +79,7 @@ function MailApp() {
     if (!account) return;
     let cancelled = false;
     void (async () => {
-      const [fs, list] = await Promise.all([bridge.folders(), bridge.list(folder, (page - 1) * pageSize, pageSize, { ...filter, query: query || undefined })]);
+      const [fs, list] = await Promise.all([bridge.folders(), bridge.list(folder, (page - 1) * pageSize, pageSize, { ...filter, query: query || undefined, ids: bodyIds ?? undefined })]);
       if (cancelled) return;
       setFolders(fs);
       setItems(list.items);
@@ -84,7 +88,7 @@ function MailApp() {
     return () => {
       cancelled = true;
     };
-  }, [bridge, account, folder, filter, query, page, pageSize, tick]);
+  }, [bridge, account, folder, filter, query, bodyIds, page, pageSize, tick]);
 
   const syncFolder = useCallback(
     async (path: string) => {
@@ -156,6 +160,18 @@ function MailApp() {
     if (result.savedToSent === true) void syncFolder(folder); // 보낸메일함을 보고 있다면 새로 보낸 메일이 보이게
   }
 
+  // 새 메일 확인으로 목록이 바뀌었다는 신호, 알림을 눌러 특정 메일을 열라는 신호
+  useEffect(() => {
+    if (!account) return;
+    const offChanged = bridge.onChanged(() => setTick((t) => t + 1));
+    const offOpen = bridge.onOpenMessage(({ id }) => void openMessageRef.current(id));
+    void bridge.consumePendingOpen().then((id) => id && void openMessageRef.current(id));
+    return () => {
+      offChanged();
+      offOpen();
+    };
+  }, [bridge, account]);
+
   function goList() {
     setReading(false);
     setDetail(null);
@@ -165,6 +181,9 @@ function MailApp() {
   async function selectFolder(path: string) {
     if (!(await leaveCompose())) return;
     setFolder(path);
+    setQuery("");
+    setBodyIds(null);
+    setSearchNotice(null);
     setPage(1);
     setSelected(new Set());
     goList();
@@ -232,6 +251,85 @@ function MailApp() {
     reload();
   }
 
+  /** 검색: 본문 포함이면 서버에서 찾은 번호로 목록을 좁힌다. 서버 검색에 실패하면 제목·보낸 사람 검색으로 대신하고 알린다 */
+  async function doSearch(q: string, includeBody: boolean) {
+    setPage(1);
+    setSelected(new Set());
+    setSearchNotice(null);
+    if (!q) {
+      setQuery("");
+      setBodyIds(null);
+      return;
+    }
+    if (!includeBody) {
+      setBodyIds(null);
+      setQuery(q);
+      return;
+    }
+    setSearching(true);
+    try {
+      const r = await bridge.searchBody(folder, q);
+      if (r.ok) {
+        setQuery("");
+        setBodyIds(r.value.ids);
+      } else {
+        setBodyIds(null);
+        setQuery(q);
+        setSearchNotice(`서버에서 본문을 검색하지 못해 제목·보낸 사람만 찾았습니다. (${r.error})`);
+      }
+    } catch (err) {
+      logError("Mail", "서버 본문 검색 중 오류", err);
+      setBodyIds(null);
+      setQuery(q);
+      setSearchNotice("서버에서 본문을 검색하지 못해 제목·보낸 사람만 찾았습니다.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  /** 삭제: 휴지통이 아닌 곳에서는 휴지통으로 옮기고, 휴지통에서는 확인한 뒤 완전히 지운다 */
+  async function deleteItems(ids: number[], fromTrash: boolean) {
+    if (ids.length === 0) return;
+    if (fromTrash && !(await dialog.confirm(`선택한 메일 ${ids.length}통을 완전히 삭제할까요? 되돌릴 수 없습니다.`, { okLabel: "완전 삭제", danger: true }))) return;
+    const r = await bridge.remove(ids, fromTrash);
+    if (!r.ok) {
+      dialog.notifyError(r.error);
+      return;
+    }
+    dialog.notify(fromTrash ? `메일 ${r.value.deleted}통을 완전히 삭제했습니다.` : `메일 ${r.value.trashed}통을 휴지통으로 옮겼습니다.`);
+    afterManage();
+  }
+
+  async function spamItems(ids: number[]) {
+    if (ids.length === 0) return;
+    const r = await bridge.spam(ids);
+    if (!r.ok) {
+      dialog.notifyError(r.error);
+      return;
+    }
+    dialog.notify(`메일 ${r.value.moved}통을 스팸메일함으로 옮겼습니다.`);
+    afterManage();
+  }
+
+  async function moveItems(ids: number[], dest: string) {
+    if (ids.length === 0) return;
+    const r = await bridge.move(ids, dest);
+    if (!r.ok) {
+      dialog.notifyError(r.error);
+      return;
+    }
+    const target = folders.find((f) => f.path === dest);
+    dialog.notify(`메일 ${r.value.moved}통을 ${target ? folderLabel(target) : "선택한 폴더"}(으)로 옮겼습니다.`);
+    afterManage();
+  }
+
+  /** 삭제·이동·스팸 신고 뒤: 선택을 풀고 목록을 다시 읽고, 읽고 있던 메일이었다면 목록으로 돌아간다 */
+  function afterManage() {
+    setSelected(new Set());
+    goList();
+    reload();
+  }
+
   async function attachment(kind: "open" | "save", index: number) {
     if (!detail) return;
     const r = kind === "open" ? await bridge.openAttachment(detail.id, index) : await bridge.saveAttachment(detail.id, index);
@@ -245,6 +343,10 @@ function MailApp() {
     setAccount(null);
     setEditing(false);
   }
+
+  useEffect(() => {
+    openMessageRef.current = (id) => openMessage(id); // 알림 신호가 항상 최신 상태의 열기 함수를 쓰게 한다
+  });
 
   if (account === undefined) return <p className="min-h-screen bg-bg p-8 text-sm text-text-muted">불러오는 중...</p>;
 
@@ -333,6 +435,9 @@ function MailApp() {
             }}
             onAttachment={(k, i) => void attachment(k, i)}
             onCompose={(k) => detail && void openCompose(k, detail.id)}
+            inTrash={isTrashFolder(detail ? folders.find((f) => f.path === detail.folder) : undefined)}
+            onDelete={() => detail && void deleteItems([detail.id], isTrashFolder(folders.find((f) => f.path === detail.folder)))}
+            onSpam={() => detail && void spamItems([detail.id])}
           />
         ) : (
           <MailListView
@@ -345,17 +450,23 @@ function MailApp() {
             syncing={syncing}
             syncError={syncError}
             query={query}
+            searching={searching}
+            bodySearchActive={bodyIds !== null}
+            searchNotice={searchNotice}
+            inTrash={isTrashFolder(currentFolder)}
+            inJunk={isJunkFolder(currentFolder)}
+            moveTargets={sortFolders(folders).filter((f) => f.path !== folder)}
+            onDelete={() => void deleteItems([...selected], isTrashFolder(currentFolder))}
+            onSpam={() => void spamItems([...selected])}
+            onForward={() => selected.size === 1 && void openCompose("forward", [...selected][0])}
+            onMove={(dest) => void moveItems([...selected], dest)}
             onOpen={(id) => void openMessage(id)}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={(on) => setSelected(on ? new Set(items.map((m) => m.id)) : new Set())}
             onToggleStar={(id, on) => void toggleStar(id, on)}
             onMarkSelected={(seen) => void markSelected(seen)}
             onRefresh={() => void syncFolder(folder)}
-            onSearch={(q) => {
-              setQuery(q);
-              setPage(1);
-              setSelected(new Set());
-            }}
+            onSearch={(q, includeBody) => void doSearch(q, includeBody)}
             onPage={changePage}
             onPageSize={(n) => {
               setPageSize(n);
