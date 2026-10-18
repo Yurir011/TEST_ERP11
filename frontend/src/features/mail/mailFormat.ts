@@ -85,3 +85,6 @@ export const DAUM_DEFAULTS = { imapHost: "imap.daum.net", imapPort: "993", smtpH
 /** 한 쪽에 보여 줄 메일 수 선택지와 기본값 */
 export const PAGE_SIZES = [20, 50, 100] as const;
 export const DEFAULT_PAGE_SIZE = 20;
+
+/** 한 번에 보낼 첨부 파일 크기의 합 한도 (앱의 한도와 같은 값) */
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;

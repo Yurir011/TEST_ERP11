@@ -29,6 +29,7 @@ export function validateAccountInput(input: unknown): { ok: true; value: Require
   const imapPort = Number(i.imapPort);
   const smtpPort = Number(i.smtpPort);
   const password = typeof i.password === "string" ? i.password : "";
+  const saveToSent = i.saveToSent === true;
 
   if (!EMAIL_RE.test(email) || NO_UNSAFE.test(email)) return { ok: false, error: "이메일 주소 형식이 올바르지 않습니다." };
   if (!username || NO_UNSAFE.test(username) || username.length > 255) return { ok: false, error: "아이디가 올바르지 않습니다." };
@@ -38,7 +39,7 @@ export function validateAccountInput(input: unknown): { ok: true; value: Require
   if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) return { ok: false, error: "SMTP 포트가 올바르지 않습니다." };
   if (!password) return { ok: false, error: "비밀번호를 입력해 주세요." };
   if (password.length > 512 || /[\r\n\0]/.test(password)) return { ok: false, error: "비밀번호 형식이 올바르지 않습니다." };
-  return { ok: true, value: { email, username, imapHost, imapPort, smtpHost, smtpPort, password } };
+  return { ok: true, value: { email, username, imapHost, imapPort, smtpHost, smtpPort, saveToSent, password } };
 }
 
 export class MailAccountStore {
@@ -53,7 +54,7 @@ export class MailAccountStore {
     const raw = this.readRaw();
     if (!raw) return null;
     const { email, username, imapHost, imapPort, smtpHost, smtpPort } = raw;
-    return { email, username, imapHost, imapPort, smtpHost, smtpPort };
+    return { email, username, imapHost, imapPort, smtpHost, smtpPort, saveToSent: raw.saveToSent === true };
   }
 
   /** 접속에 쓸 정보(비밀번호 포함). main 프로세스 안에서만 쓴다. 복호화할 수 없으면 null */
@@ -98,7 +99,7 @@ export class MailAccountStore {
       const ok =
         typeof j.email === "string" && typeof j.username === "string" && typeof j.imapHost === "string" && typeof j.smtpHost === "string" &&
         typeof j.imapPort === "number" && typeof j.smtpPort === "number" && typeof j.passwordEnc === "string";
-      return ok ? (j as unknown as MailAccountInfo & { passwordEnc: string }) : null;
+      return ok ? (j as unknown as MailAccountInfo & { passwordEnc: string }) : null; // saveToSent 는 예전 파일에 없을 수 있다(없으면 꺼짐)
     } catch {
       return null;
     }

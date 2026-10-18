@@ -3,8 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
-import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailDetail, type MailFolder, type MailSummary, getBenchClient } from "../../lib/desktop";
+import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailDetail, type MailDraft, type MailDraftKind, type MailFolder, type MailSendResult, type MailSummary, getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
+import { ComposeView } from "./ComposeView";
 import { MailAccountForm } from "./MailAccountForm";
 import { MailListView } from "./MailListView";
 import { MailReader } from "./MailReader";
@@ -12,6 +13,8 @@ import { MailSidebar } from "./MailSidebar";
 import { DEFAULT_PAGE_SIZE, folderLabel } from "./mailFormat";
 
 type QuickFilter = { unread?: boolean; flagged?: boolean; attachment?: boolean };
+type ComposeInit = Pick<MailDraft, "to" | "cc" | "subject" | "body" | "attachments" | "threading">;
+const BLANK_DRAFT: ComposeInit = { to: "", cc: "", subject: "", body: "", attachments: [] };
 
 /**
  * 메일 창 (데스크톱 앱 전용, 별도 창으로 열린다). ERP 사이드바 없이 메일 화면만 크게 보여 준다.
@@ -62,6 +65,8 @@ function MailApp() {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [tick, setTick] = useState(0); // 값이 바뀌면 저장된 목록을 다시 읽는다
+  const [composing, setComposing] = useState<ComposeInit | null>(null);
+  const composeState = useRef<{ dirty: boolean; attachmentIds: string[] }>({ dirty: false, attachmentIds: [] });
   const detailReq = useRef(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
 
@@ -119,13 +124,46 @@ function MailApp() {
     };
   }, [bridge, syncFolder]);
 
+  /** 메일을 쓰는 중이면 버릴지 물어보고, 계속 나가도 되면 true */
+  async function leaveCompose(): Promise<boolean> {
+    if (!composing) return true;
+    if (composeState.current.dirty && !(await dialog.confirm("작성 중인 메일을 버릴까요?", { okLabel: "버리기", danger: true }))) return false;
+    await bridge.discardAttachments(composeState.current.attachmentIds);
+    setComposing(null);
+    return true;
+  }
+
+  /** 새 메일·내게쓰기·답장·전체답장·전달 화면 열기 */
+  async function openCompose(kind: "new" | MailDraftKind, id?: number) {
+    if (!(await leaveCompose())) return;
+    let init: ComposeInit = BLANK_DRAFT;
+    if (kind !== "new") {
+      const r = await bridge.composeDraft(kind, id);
+      if (!r.ok) {
+        dialog.notifyError(r.error);
+        return;
+      }
+      init = r.value;
+    }
+    composeState.current = { dirty: false, attachmentIds: init.attachments.map((a) => a.id) };
+    setComposing(init);
+  }
+
+  function onSent(result: MailSendResult) {
+    setComposing(null);
+    if (result.savedToSent === false) dialog.notifyError("메일을 보냈지만 보낸메일함에는 저장하지 못했습니다.");
+    else dialog.notify("메일을 보냈습니다.");
+    if (result.savedToSent === true) void syncFolder(folder); // 보낸메일함을 보고 있다면 새로 보낸 메일이 보이게
+  }
+
   function goList() {
     setReading(false);
     setDetail(null);
     setDetailError(null);
   }
 
-  function selectFolder(path: string) {
+  async function selectFolder(path: string) {
+    if (!(await leaveCompose())) return;
     setFolder(path);
     setPage(1);
     setSelected(new Set());
@@ -133,7 +171,8 @@ function MailApp() {
     void syncFolder(path);
   }
 
-  function toggleFilter(key: keyof QuickFilter) {
+  async function toggleFilter(key: keyof QuickFilter) {
+    if (!(await leaveCompose())) return;
     setFilter((f) => ({ ...f, [key]: !f[key] }));
     setPage(1);
     setSelected(new Set());
@@ -146,6 +185,7 @@ function MailApp() {
   }
 
   async function openMessage(id: number, images = false) {
+    if (!(await leaveCompose())) return;
     const req = ++detailReq.current;
     setReading(true);
     setLoadingDetail(true);
@@ -246,13 +286,28 @@ function MailApp() {
         email={account.email}
         folders={folders}
         folder={folder}
-        onSelectFolder={selectFolder}
+        onSelectFolder={(path) => void selectFolder(path)}
         filter={filter}
-        onToggleFilter={toggleFilter}
-        onSettings={() => setEditing(true)}
+        onToggleFilter={(key) => void toggleFilter(key)}
+        onSettings={() => void leaveCompose().then((ok) => ok && setEditing(true))}
+        onCompose={() => void openCompose("new")}
+        onComposeSelf={() => void openCompose("self")}
       />
       <main className="flex-1 min-w-0 h-full">
-        {reading ? (
+        {composing ? (
+          <ComposeView
+            key={composing.subject + composing.to + composing.attachments.map((a) => a.id).join()}
+            bridge={bridge}
+            fromName={user?.name ?? ""}
+            fromEmail={account.email}
+            initial={composing}
+            onState={(st) => {
+              composeState.current = st;
+            }}
+            onSent={onSent}
+            onClose={() => setComposing(null)}
+          />
+        ) : reading ? (
           <MailReader
             detail={detail}
             loading={loadingDetail}
@@ -277,6 +332,7 @@ function MailApp() {
               void toggleStar(detail.id, on);
             }}
             onAttachment={(k, i) => void attachment(k, i)}
+            onCompose={(k) => detail && void openCompose(k, detail.id)}
           />
         ) : (
           <MailListView

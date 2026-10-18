@@ -13,10 +13,11 @@ interface Props {
   onMarkUnread: () => void;
   onToggleStar: (on: boolean) => void;
   onAttachment: (kind: "open" | "save", index: number) => void;
+  onCompose: (kind: "reply" | "replyAll" | "forward") => void;
 }
 
 /** 메일 읽기 화면: 목록으로 돌아가는 버튼 + 머리글 + 본문 */
-export function MailReader({ detail, loading, error, allowImages, onBack, onShowImages, onMarkUnread, onToggleStar, onAttachment }: Props) {
+export function MailReader({ detail, loading, error, allowImages, onBack, onShowImages, onMarkUnread, onToggleStar, onAttachment, onCompose }: Props) {
   return (
     <div className="flex flex-col h-full min-w-0">
       <div className="flex items-center gap-2 px-6 pt-5 pb-3 border-b border-border">
@@ -25,6 +26,9 @@ export function MailReader({ detail, loading, error, allowImages, onBack, onShow
         </button>
         {detail && (
           <>
+            <button type="button" onClick={() => onCompose("reply")} className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-bg">답장</button>
+            <button type="button" onClick={() => onCompose("replyAll")} className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-bg">전체답장</button>
+            <button type="button" onClick={() => onCompose("forward")} className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-bg">전달</button>
             <button type="button" onClick={onMarkUnread} className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-bg">안 읽음으로 표시</button>
             <button
               type="button"

@@ -15,7 +15,9 @@ import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { type DeviceKey, type DeviceStatusName, type SecretStore, defaultDeviceName, loadOrCreateDeviceKey, registerDevice, verifySignature } from "./device";
 import { getLogger } from "./log";
 import { MailAccountStore } from "./mail/account";
-import { parseAttachmentIndex, parseFilter, parseFolderPath, parseMailId, parsePaging } from "./mail/args";
+import { parseAttachmentIndex, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parsePaging, parseSendPayload } from "./mail/args";
+import { MailComposer } from "./mail/compose";
+import { MailSender } from "./mail/send";
 import { MailService, isDangerousFilename, safeFilename } from "./mail/service";
 import { MailStore } from "./mail/store";
 import { MailSync } from "./mail/sync";
@@ -62,6 +64,7 @@ let deviceTimer: ReturnType<typeof setInterval> | null = null;
 let shellState: { mode: "setup" | "offline"; error?: string } = { mode: "setup" };
 let mailWin: BrowserWindow | null = null;
 let mail: MailService | null = null;
+let composer: MailComposer | null = null;
 let mailStore: MailStore | null = null;
 
 const configFile = () => path.join(app.getPath("userData"), "config.json");
@@ -296,6 +299,39 @@ function registerIpc(): void {
   // ---- 메일 (서버 화면에서만. 비밀번호는 저장할 때 한 번 들어오고, 어떤 응답에도 담기지 않는다) ----
   const MAIL_UNAVAILABLE = { ok: false as const, error: "메일 기능을 시작하지 못했습니다. 앱을 다시 실행해 주세요." };
 
+  // ---- 메일 쓰기·보내기 (서버 화면에서만) ----
+  ipcMain.handle("mail:compose-draft", async (e, kind: unknown, id: unknown) => {
+    if (!guard(e, "mail:compose-draft", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const k = parseDraftKind(kind);
+    if (!k) return { ok: false, error: "요청이 올바르지 않습니다." };
+    const n = id === undefined || id === null ? undefined : (parseMailId(id) ?? -1);
+    if (n === -1) return { ok: false, error: "메일 번호가 올바르지 않습니다." };
+    return composer ? composer.draft(k, n) : MAIL_UNAVAILABLE;
+  });
+
+  /** 첨부할 파일 고르기: 파일 선택 창은 앱이 띄우고, 화면에는 파일 경로가 아니라 준비된 첨부의 번호·이름·크기만 준다 */
+  ipcMain.handle("mail:pick-attachments", async (e) => {
+    if (!guard(e, "mail:pick-attachments", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    if (!composer) return MAIL_UNAVAILABLE;
+    const owner = BrowserWindow.fromWebContents(e.sender);
+    const picked = owner ? await dialog.showOpenDialog(owner, { title: "첨부할 파일 선택", properties: ["openFile", "multiSelections"] }) : { canceled: true, filePaths: [] as string[] };
+    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, error: "취소했습니다.", canceled: true };
+    return composer.stageFiles(picked.filePaths);
+  });
+
+  ipcMain.handle("mail:discard-attachments", (e, ids: unknown) => {
+    if (!guard(e, "mail:discard-attachments", ["server"])) return;
+    if (Array.isArray(ids) && ids.length <= 50 && ids.every((x) => typeof x === "string" && x.length <= 64)) composer?.discard(ids as string[]);
+  });
+
+  ipcMain.handle("mail:send", async (e, payload: unknown) => {
+    if (!guard(e, "mail:send", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const p = parseSendPayload(payload);
+    if (!p) return { ok: false, error: "보낼 내용의 형식이 올바르지 않습니다." };
+    return composer ? composer.send(p) : MAIL_UNAVAILABLE;
+  });
+
+
   ipcMain.handle("mail:open-window", (e) => {
     if (!guard(e, "mail:open-window", ["server"])) return;
     openMailWindow();
@@ -436,14 +472,18 @@ function startMail(): void {
     const dir = path.join(app.getPath("userData"), "mail");
     fs.mkdirSync(dir, { recursive: true });
     fs.rmSync(path.join(dir, "open-tmp"), { recursive: true, force: true }); // 지난번에 열어 본 첨부의 임시 사본 정리
+    fs.rmSync(path.join(dir, "compose-tmp"), { recursive: true, force: true }); // 보내다 만 메일의 전달용 첨부 임시 사본 정리
     const store = new MailStore(path.join(dir, "mail.db"));
     const accounts = new MailAccountStore(path.join(dir, "account.json"), secretStore, getLogger("Mail"));
     const sync = new MailSync({ store, credentials: () => accounts.credentials(), log: getLogger("Mail") });
     mailStore = store;
     mail = new MailService({ accounts, store, sync, log: getLogger("Mail") });
+    const sender = new MailSender({ credentials: () => accounts.credentials(), log: getLogger("Mail") });
+    composer = new MailComposer({ accounts, store, sync, sender, tempDir: path.join(dir, "compose-tmp"), log: getLogger("Mail") });
     log.info("[Mail] 로컬 메일 저장소 준비 완료");
   } catch (err) {
     mail = null;
+    composer = null;
     log.error(`[Mail] 메일 저장소를 준비하지 못했습니다: ${(err as Error).message}`);
   }
 }
@@ -563,8 +603,10 @@ async function runSmoke(): Promise<void> {
   const shellMail = (await w.webContents.executeJavaScript(`(async () => ({
     account: await window.benchClient.mail.account(), folders: await window.benchClient.mail.folders(),
     save: await window.benchClient.mail.saveAccount({ email: "a@b.co", password: "x" }),
-  }))()`)) as { account: unknown; folders: unknown[]; save: { ok: boolean } };
-  check("안내 화면에서는 메일 통로가 막혀 있다 (계정·폴더 없음, 저장 거절)", shellMail.account === null && shellMail.folders.length === 0 && shellMail.save.ok === false);
+    send: await window.benchClient.mail.send({ fromName: "x", to: "a@b.co", cc: "", bcc: "", subject: "s", body: "b", attachmentIds: [] }),
+    draft: await window.benchClient.mail.composeDraft("self"),
+  }))()`)) as { account: unknown; folders: unknown[]; save: { ok: boolean }; send: { ok: boolean }; draft: { ok: boolean } };
+  check("안내 화면에서는 메일 통로가 막혀 있다 (계정·폴더 없음, 저장·보내기·초안 거절)", shellMail.account === null && shellMail.folders.length === 0 && shellMail.save.ok === false && shellMail.send.ok === false && shellMail.draft.ok === false);
 
   // 2) 서버 화면(가짜 서버): 팝업·다운로드
   const pageHtml = "<!doctype html><title>smoke</title><body>smoke</body>";
@@ -649,9 +691,9 @@ async function runSmoke(): Promise<void> {
 
   // 2-2) 메일 종단 점검 (BENCH_SMOKE_MAIL 이 있을 때만): 암호화(TLS) 접속 + 인증서 검증을 켠 채로 가짜 IMAP 서버와 실제 앱 통로로 읽기까지
   if (process.env.BENCH_SMOKE_MAIL) {
-    const cfg = JSON.parse(process.env.BENCH_SMOKE_MAIL) as { host: string; port: number; user: string; pass: string };
+    const cfg = JSON.parse(process.env.BENCH_SMOKE_MAIL) as { host: string; port: number; smtpPort?: number; user: string; pass: string };
     const call = (code: string) => w.webContents.executeJavaScript(code) as Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-    const account = (password: string) => JSON.stringify({ email: "e2e@test.local", username: cfg.user, password, imapHost: cfg.host, imapPort: cfg.port, smtpHost: cfg.host, smtpPort: 465 });
+    const account = (password: string, saveToSent = false) => JSON.stringify({ email: "e2e@test.local", username: cfg.user, password, imapHost: cfg.host, imapPort: cfg.port, smtpHost: cfg.host, smtpPort: cfg.smtpPort ?? 465, saveToSent });
 
     const wrong = await call(`window.benchClient.mail.saveAccount(${account("틀린-비밀번호-E2E")})`);
     check("[메일] 틀린 비밀번호: 로그인 실패로 안내하고 계정은 저장되지 않는다", wrong.ok === false && String(wrong.error).includes("로그인에 실패") && !JSON.stringify(wrong).includes("틀린-비밀번호-E2E") && (await call("window.benchClient.mail.account()")) === null);
@@ -684,6 +726,39 @@ async function runSmoke(): Promise<void> {
 
     const after = await call(`window.benchClient.mail.list("INBOX", 0, 50)`);
     check("[메일] 열어 본 메일은 읽음으로 바뀐다", (after.items as { id: number; seen: boolean }[]).filter((m) => m.seen).length >= 2);
+
+    // 2-3) 메일 보내기 (BENCH_SMOKE_MAIL 의 smtpPort 가 있을 때): 같은 암호화(TLS)·인증서 검증으로 가짜 SMTP 서버에 보낸다
+    if (cfg.smtpPort) {
+      const reSaved = await call(`window.benchClient.mail.saveAccount(${account(cfg.pass, true)})`);
+      check("[메일 쓰기] 보낸메일함 직접 저장을 켠 계정으로 다시 저장된다", reSaved.ok === true && reSaved.value.saveToSent === true);
+
+      const self = await call(`window.benchClient.mail.composeDraft("self")`);
+      check("[메일 쓰기] 내게쓰기 초안의 받는 사람이 내 주소다", self.ok === true && self.value.to === "e2e@test.local");
+
+      const reply = await call(`window.benchClient.mail.composeDraft("reply", ${attMail.id})`);
+      check("[메일 쓰기] 답장 초안: 제목 Re:, 받는 사람, 대화 이어 붙이기 정보", reply.ok === true && reply.value.subject === "Re: 첨부 메일" && /sender@test.local/.test(reply.value.to) && /^<.+>$/.test(reply.value.threading?.inReplyTo ?? ""));
+
+      const fwd = await call(`window.benchClient.mail.composeDraft("forward", ${attMail.id})`);
+      check("[메일 쓰기] 전달 초안에 원본 첨부(견적서.pdf)가 준비된다", fwd.ok === true && fwd.value.subject === "Fwd: 첨부 메일" && fwd.value.attachments.length === 1 && fwd.value.attachments[0].filename === "견적서.pdf");
+
+      const sendFwd = await call(`window.benchClient.mail.send(${JSON.stringify({ fromName: "점검 담당", to: "dest@test.local", cc: "", bcc: "hidden@test.local", subject: fwd.value.subject, body: "전달합니다", attachmentIds: fwd.value.attachments.map((a: { id: string }) => a.id) })})`);
+      check("[메일 쓰기] 전달 메일이 TLS 로 발송되고 보낸메일함에도 저장된다", sendFwd.ok === true && sendFwd.value.savedToSent === true);
+
+      const sendReply = await call(`window.benchClient.mail.send(${JSON.stringify({ fromName: "점검 담당", to: reply.value.to, cc: "", bcc: "", subject: reply.value.subject, body: "회신합니다", attachmentIds: [], threading: reply.value.threading })})`);
+      check("[메일 쓰기] 답장 메일이 발송된다", sendReply.ok === true);
+
+      const rejected = await call(`window.benchClient.mail.send(${JSON.stringify({ fromName: "점검 담당", to: "nobody@test.local", cc: "", bcc: "", subject: "거절될 메일", body: "x", attachmentIds: [] })})`);
+      check("[메일 쓰기] 서버가 받는 사람을 거절하면 안내 문구를 받는다", rejected.ok === false && String(rejected.error).includes("받는 사람 주소"));
+
+      const invalid = await call(`window.benchClient.mail.send(${JSON.stringify({ fromName: "x", to: "bad-address", cc: "", bcc: "", subject: "s", body: "b", attachmentIds: [] })})`);
+      check("[메일 쓰기] 잘못된 주소는 서버에 보내기 전에 거절된다", invalid.ok === false && String(invalid.error).includes("올바르지 않은"));
+
+      const malformed = await call(`window.benchClient.mail.send({ to: 5 })`);
+      check("[메일 쓰기] 형식이 틀린 요청은 거절된다", malformed.ok === false);
+
+      const badAttach = await call(`window.benchClient.mail.send(${JSON.stringify({ fromName: "x", to: "a@test.local", cc: "", bcc: "", subject: "s", body: "b", attachmentIds: ["../../Windows/win.ini"] })})`);
+      check("[메일 쓰기] 앱이 준비하지 않은 첨부 번호(경로)는 쓸 수 없다", badAttach.ok === false && String(badAttach.error).includes("첨부 파일을 찾을 수 없습니다"));
+    }
   }
 
   // 3) 카드 모드: login(결과만 전달) / capture(번호 전달) / off(무반응)

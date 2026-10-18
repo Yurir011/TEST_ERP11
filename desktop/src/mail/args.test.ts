@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAttachmentIndex, parseFilter, parseFolderPath, parseMailId, parsePaging } from "./args";
+import { parseAttachmentIndex, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parsePaging, parseSendPayload } from "./args";
 
 describe("IPC 인자 검사", () => {
   it("메일 번호는 양의 정수만", () => {
@@ -24,6 +24,20 @@ describe("IPC 인자 검사", () => {
     expect(parseFilter({ unread: "true", flagged: 1, evil: true, query: "   " })).toEqual({});
     expect(parseFilter({ query: "x".repeat(300) }).query).toHaveLength(100);
     for (const v of [null, undefined, "x", 5]) expect(parseFilter(v)).toEqual({});
+  });
+
+  it("초안 종류는 정해진 네 가지만", () => {
+    for (const k of ["reply", "replyAll", "forward", "self"]) expect(parseDraftKind(k)).toBe(k);
+    for (const k of ["", "REPLY", "new", null, 1, undefined]) expect(parseDraftKind(k)).toBeNull();
+  });
+
+  it("보내기 요청의 형식을 검사한다", () => {
+    const ok = { fromName: "박소장", to: "a@b.co", cc: "", bcc: "", subject: "제목", body: "본문", attachmentIds: ["id-1"] };
+    expect(parseSendPayload(ok)).toEqual({ ...ok, threading: undefined });
+    expect(parseSendPayload({ ...ok, threading: { inReplyTo: "<a@b>", references: ["<a@b>"] } })?.threading).toEqual({ inReplyTo: "<a@b>", references: ["<a@b>"] });
+    for (const bad of [null, "x", { ...ok, to: 5 }, { ...ok, body: undefined }, { ...ok, attachmentIds: "id" }, { ...ok, attachmentIds: [1] }, { ...ok, attachmentIds: Array(51).fill("x") }, { ...ok, to: "a".repeat(20_001) }, { ...ok, threading: "x" }, { ...ok, threading: { references: "x" } }, { ...ok, threading: { inReplyTo: 3 } }]) {
+      expect(parseSendPayload(bad), JSON.stringify(bad).slice(0, 60)).toBeNull();
+    }
   });
 
   it("페이지 값은 보정된다", () => {

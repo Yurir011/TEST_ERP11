@@ -21,6 +21,7 @@ export function MailAccountForm({ bridge, onSaved, onCancel, initial }: Props) {
   const [imapPort, setImapPort] = useState(String(initial?.imapPort ?? DAUM_DEFAULTS.imapPort));
   const [smtpHost, setSmtpHost] = useState(initial?.smtpHost ?? DAUM_DEFAULTS.smtpHost);
   const [smtpPort, setSmtpPort] = useState(String(initial?.smtpPort ?? DAUM_DEFAULTS.smtpPort));
+  const [saveToSent, setSaveToSent] = useState(initial?.saveToSent ?? false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,6 +40,7 @@ export function MailAccountForm({ bridge, onSaved, onCancel, initial }: Props) {
         imapPort: Number(imapPort),
         smtpHost: smtpHost.trim(),
         smtpPort: Number(smtpPort),
+        saveToSent,
       });
       if (!r.ok) {
         setError(r.error);
@@ -97,6 +99,13 @@ export function MailAccountForm({ bridge, onSaved, onCancel, initial }: Props) {
               <input id="mail-smtp-port" inputMode="numeric" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} className={INPUT} />
             </div>
           </div>
+          <label className="flex items-start gap-2 text-sm pt-1">
+            <input type="checkbox" checked={saveToSent} onChange={(e) => setSaveToSent(e.target.checked)} className="mt-0.5 w-4 h-4 accent-primary" />
+            <span>
+              보낸 메일을 보낸메일함에도 직접 저장
+              <span className="block text-xs text-text-muted">서버가 보낸 메일을 자동으로 보관하면 켜지 마세요(중복 저장됩니다). 보낸메일함에 보낸 메일이 보이지 않을 때만 켜세요.</span>
+            </span>
+          </label>
         </div>
       )}
 

@@ -7,11 +7,14 @@ export interface MailAccountInfo {
   imapPort: number;
   smtpHost: string;
   smtpPort: number;
+  /** 보낸 메일을 보낸메일함에 이 앱이 직접 저장할지 (서버가 보낸 메일을 자동으로 저장하지 않을 때만 켠다) */
+  saveToSent: boolean;
 }
 
 /** 계정 저장 요청: 비밀번호는 저장 즉시 암호화되어 이 PC 에만 남는다 */
-export interface MailAccountInput extends Omit<MailAccountInfo, "username"> {
+export interface MailAccountInput extends Omit<MailAccountInfo, "username" | "saveToSent"> {
   username?: string;
+  saveToSent?: boolean;
   password: string;
 }
 

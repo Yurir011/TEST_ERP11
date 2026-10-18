@@ -12,6 +12,8 @@ interface Props {
   filter: Pick<MailFilter, "unread" | "flagged" | "attachment">;
   onToggleFilter: (key: "unread" | "flagged" | "attachment") => void;
   onSettings: () => void;
+  onCompose: () => void;
+  onComposeSelf: () => void;
 }
 
 function folderIcon(f: MailFolder): ReactNode {
@@ -39,7 +41,7 @@ const QUICK: { key: "unread" | "flagged" | "attachment"; label: string; icon: Re
 ];
 
 /** 왼쪽 패널: 내 정보, 빠른 조건(안읽음·중요·첨부), 메일쓰기, 폴더 목록 */
-export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings }: Props) {
+export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf }: Props) {
   const all: MailFolder = { path: ALL_MAIL_FOLDER, name: "전체메일", specialUse: null, unread: 0, total: 0 };
   const sorted = sortFolders(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 0, total: 0 }]);
   const list = [all, ...sorted];
@@ -78,9 +80,9 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
       </div>
 
       <div className="px-4 pb-4">
-        <div className="flex rounded-xl bg-primary/80 text-white text-sm font-semibold overflow-hidden opacity-60" title="메일 쓰기는 다음 단계에서 지원됩니다">
-          <button type="button" disabled className="flex-1 py-3 cursor-not-allowed border-r border-white/30">메일쓰기</button>
-          <button type="button" disabled className="flex-1 py-3 cursor-not-allowed">내게쓰기</button>
+        <div className="flex rounded-xl bg-primary text-white text-sm font-semibold overflow-hidden">
+          <button type="button" onClick={onCompose} className="flex-1 py-3 border-r border-white/30 hover:bg-primary-hover transition-colors">메일쓰기</button>
+          <button type="button" onClick={onComposeSelf} className="flex-1 py-3 hover:bg-primary-hover transition-colors">내게쓰기</button>
         </div>
       </div>
 

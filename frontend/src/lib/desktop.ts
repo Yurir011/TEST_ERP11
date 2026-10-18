@@ -26,11 +26,14 @@ export interface MailAccountInfo {
   imapPort: number;
   smtpHost: string;
   smtpPort: number;
+  /** 보낸 메일을 보낸메일함에 앱이 직접 저장할지 (서버가 자동 저장하지 않을 때만 켠다) */
+  saveToSent: boolean;
 }
 
 export interface MailAccountInput {
   email: string;
   username?: string;
+  saveToSent?: boolean;
   password: string;
   imapHost: string;
   imapPort: number;
@@ -87,6 +90,46 @@ export interface MailFilter {
 /** 모든 폴더의 메일을 한꺼번에 보는 가상 폴더("전체메일") */
 export const ALL_MAIL_FOLDER = "*";
 
+/** 메일 쓰기: 앱이 준비한 첨부 (파일 경로는 화면에 오지 않는다) */
+export interface MailStagedAttachment {
+  id: string;
+  filename: string;
+  size: number;
+}
+
+export interface MailThreading {
+  inReplyTo?: string;
+  references?: string[];
+}
+
+export type MailDraftKind = "reply" | "replyAll" | "forward" | "self";
+
+export interface MailDraft {
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+  attachments: MailStagedAttachment[];
+  threading?: MailThreading;
+}
+
+export interface MailSendPayload {
+  fromName: string;
+  to: string;
+  cc: string;
+  bcc: string;
+  subject: string;
+  body: string;
+  attachmentIds: string[];
+  threading?: MailThreading;
+}
+
+export interface MailSendResult {
+  messageId: string;
+  /** 보낸메일함에 저장했는가. 저장 설정이 꺼져 있으면 null */
+  savedToSent: boolean | null;
+}
+
 export type MailResult<T> = { ok: true; value: T } | { ok: false; error: string; canceled?: boolean };
 
 export interface MailBridge {
@@ -103,6 +146,10 @@ export interface MailBridge {
   setFlagged(id: number, flagged: boolean): Promise<void>;
   saveAttachment(id: number, index: number): Promise<MailResult<{ filename: string }>>;
   openAttachment(id: number, index: number): Promise<MailResult<{ filename: string }>>;
+  composeDraft(kind: MailDraftKind, id?: number): Promise<MailResult<MailDraft>>;
+  pickAttachments(): Promise<MailResult<MailStagedAttachment[]>>;
+  discardAttachments(ids: string[]): Promise<void>;
+  send(payload: MailSendPayload): Promise<MailResult<MailSendResult>>;
 }
 
 export interface BenchClient {

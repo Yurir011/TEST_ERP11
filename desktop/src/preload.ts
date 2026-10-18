@@ -49,6 +49,11 @@ const api = {
     setFlagged: (id: number, flagged: boolean): Promise<void> => ipcRenderer.invoke("mail:set-flagged", id, flagged),
     markSeen: (id: number, seen: boolean): Promise<void> => ipcRenderer.invoke("mail:mark-seen", id, seen),
     saveAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-save", id, index),
+    /** 메일 쓰기: 초안 만들기(새 메일 제외), 첨부 고르기(파일 선택 창은 앱이 띄움), 보내기 */
+    composeDraft: (kind: "reply" | "replyAll" | "forward" | "self", id?: number): Promise<unknown> => ipcRenderer.invoke("mail:compose-draft", kind, id),
+    pickAttachments: (): Promise<unknown> => ipcRenderer.invoke("mail:pick-attachments"),
+    discardAttachments: (ids: string[]): Promise<void> => ipcRenderer.invoke("mail:discard-attachments", ids),
+    send: (payload: unknown): Promise<unknown> => ipcRenderer.invoke("mail:send", payload),
     openAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-open", id, index),
   },
   shell: {

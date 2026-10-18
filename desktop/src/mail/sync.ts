@@ -28,7 +28,7 @@ export interface SyncDeps {
 }
 
 export class MailError extends Error {
-  constructor(message: string, readonly kind: "auth" | "network" | "tls" | "config" | "other" = "other") {
+  constructor(message: string, readonly kind: "auth" | "network" | "tls" | "config" | "recipient" | "size" | "other" = "other") {
     super(message);
   }
 }
@@ -243,6 +243,26 @@ export class MailSync {
     return this.setFlagOnServer(folderPath, uid, "\\Seen", seen);
   }
 
+  /**
+   * 보낸 메일을 서버의 보낸메일함에 저장한다(읽음 표시로). 보낸메일함 폴더를 찾지 못하면 저장하지 않고 false 를 돌려준다.
+   * 서버가 SMTP 로 보낸 메일을 자동으로 저장하는 경우에는 중복 저장이 되므로, 계정 설정의 "보낸 메일 저장"을 켠 때만 쓴다.
+   */
+  appendToSent(raw: Buffer): Promise<boolean> {
+    return this.serial(() =>
+      this.withClient(async (client) => {
+        const folders = await this.doSyncFolders(client);
+        const sent = findSentFolder(folders);
+        if (!sent) {
+          this.log.warn("[Mail] 보낸메일함 폴더를 찾지 못해 보낸 메일을 저장하지 못했습니다");
+          return false;
+        }
+        await client.append(sent.path, raw, ["\\Seen"], new Date());
+        this.log.info(`[Mail] 보낸 메일을 ${sent.path} 에 저장`);
+        return true;
+      }),
+    );
+  }
+
   /** 서버의 별표(중요) 표시를 바꾼다 */
   setFlaggedOnServer(folderPath: string, uid: number, flagged: boolean): Promise<void> {
     return this.setFlagOnServer(folderPath, uid, "\\Flagged", flagged);
@@ -261,6 +281,13 @@ export class MailSync {
       }),
     );
   }
+}
+
+const SENT_NAMES = /^(sent|sent items|sent mail|sent messages|보낸\s*메일함|보낸\s*편지함)$/i;
+
+/** 보낸메일함 폴더: 서버가 용도(\Sent)를 알려 주면 그것, 아니면 이름으로 짐작한다 */
+export function findSentFolder<T extends { path: string; name: string; specialUse: string | null }>(folders: T[]): T | undefined {
+  return folders.find((f) => f.specialUse === "\\Sent") ?? folders.find((f) => SENT_NAMES.test(f.name.trim()));
 }
 
 function hasAttachment(node: unknown): boolean {

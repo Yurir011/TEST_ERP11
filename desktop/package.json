@@ -23,6 +23,7 @@
     "better-sqlite3": "13.0.3",
     "imapflow": "2.2.1",
     "mailparser": "3.9.33",
+    "nodemailer": "10.0.14",
     "sanitize-html": "2.17.7",
     "serialport": "13.0.0"
   },
@@ -31,9 +32,11 @@
     "@types/mailparser": "3.9.0",
     "@types/node": "24.19.1",
     "@types/sanitize-html": "2.16.2",
+    "@types/smtp-server": "3.5.13",
     "electron": "44.5.1",
     "electron-builder": "26.15.3",
     "hoodiecrow-imap": "3.3.1",
+    "smtp-server": "3.19.17",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vitest": "5.0.3"

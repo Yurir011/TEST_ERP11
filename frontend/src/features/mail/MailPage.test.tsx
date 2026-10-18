@@ -5,13 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BenchClient, MailBridge, MailDetail, MailFolder, MailSummary } from "../../lib/desktop";
 
 const notifyError = vi.fn();
+const notify = vi.fn();
 const confirm = vi.fn();
-vi.mock("../../components/ui/dialog/useDialog", () => ({ useDialog: () => ({ notifyError, confirm }) }));
+vi.mock("../../components/ui/dialog/useDialog", () => ({ useDialog: () => ({ notifyError, notify, confirm }) }));
 vi.mock("../../context/useAuth", () => ({ useAuth: () => ({ user: { name: "박소장" } }) }));
 
 import { MailPage } from "./MailPage";
 
-const account = { email: "me@bench.co.kr", username: "me@bench.co.kr", imapHost: "imap.daum.net", imapPort: 993, smtpHost: "smtp.daum.net", smtpPort: 465 };
+const account = { email: "me@bench.co.kr", username: "me@bench.co.kr", imapHost: "imap.daum.net", imapPort: 993, smtpHost: "smtp.daum.net", smtpPort: 465, saveToSent: false };
 const folders: MailFolder[] = [
   { path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 2, total: 2 },
   { path: "Sent", name: "Sent", specialUse: "\\Sent", unread: 0, total: 0 },
@@ -46,6 +47,10 @@ function installMail(over: Partial<MailBridge> = {}) {
     setFlagged: vi.fn().mockResolvedValue(undefined),
     saveAttachment: vi.fn().mockResolvedValue({ ok: true, value: { filename: "견적서.pdf" } }),
     openAttachment: vi.fn().mockResolvedValue({ ok: true, value: { filename: "견적서.pdf" } }),
+    composeDraft: vi.fn().mockResolvedValue({ ok: true, value: { to: "김영업 <kim@t.l>", cc: "", subject: "Re: 견적서 송부", body: "\n\n원본 인용", attachments: [], threading: { inReplyTo: "<orig@t.l>", references: ["<orig@t.l>"] } } }),
+    pickAttachments: vi.fn().mockResolvedValue({ ok: true, value: [{ id: "att-1", filename: "자료.xlsx", size: 4096 }] }),
+    discardAttachments: vi.fn().mockResolvedValue(undefined),
+    send: vi.fn().mockResolvedValue({ ok: true, value: { messageId: "<new@bench.co.kr>", savedToSent: null } }),
     ...over,
   };
   window.benchClient = { mail: bridge } as unknown as BenchClient;
@@ -61,6 +66,7 @@ const renderPage = () =>
 
 beforeEach(() => {
   notifyError.mockReset();
+  notify.mockReset();
   confirm.mockReset();
 });
 
@@ -107,6 +113,7 @@ describe("계정 등록", () => {
       imapPort: 993,
       smtpHost: "smtp.daum.net",
       smtpPort: 465,
+      saveToSent: false,
     });
     expect(await screen.findByRole("navigation", { name: "메일 폴더" })).toBeTruthy();
   });
@@ -152,11 +159,11 @@ describe("화면 구성", () => {
     expect(within(list).getByRole("button", { name: "중요 표시" })).toBeTruthy();
   });
 
-  it("아직 지원하지 않는 버튼(삭제·스팸신고·전달·이동·메일쓰기·내게쓰기)은 눌리지 않는다", async () => {
+  it("아직 지원하지 않는 버튼(삭제·스팸신고·전달·이동)은 눌리지 않는다", async () => {
     installMail();
     renderPage();
     await screen.findByText("견적서 송부");
-    for (const name of ["삭제", "스팸신고", "전달", "이동", "메일쓰기", "내게쓰기"]) {
+    for (const name of ["삭제", "스팸신고", "전달", "이동"]) {
       const b = screen.getByRole("button", { name: new RegExp(name) }) as HTMLButtonElement;
       expect(b.disabled, name).toBe(true);
     }
@@ -342,6 +349,188 @@ describe("메일 읽기", () => {
     fireEvent.click(await screen.findByRole("button", { name: "메일 열기: 견적서 송부" }));
     fireEvent.click(await screen.findByRole("button", { name: "이 메일 중요 표시" }));
     await waitFor(() => expect(bridge.setFlagged).toHaveBeenCalledWith(1, true));
+  });
+});
+
+describe("메일 쓰기", () => {
+  const fill = async (id: string, value: string) => fireEvent.change(await screen.findByLabelText(id), { target: { value } });
+
+  it("[메일쓰기]를 누르면 빈 쓰기 화면이 열리고, 보내면 앱에 내용을 전달한다", async () => {
+    const bridge = installMail();
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    expect(await screen.findByRole("form", { name: "메일 쓰기" })).toBeTruthy();
+    expect(screen.getByText("박소장 <me@bench.co.kr>")).toBeTruthy(); // 보내는 사람은 내 계정
+    await fill("받는사람", "kim@t.l, lee@t.l");
+    await fill("제목", "견적서 송부");
+    await fill("본문", "안녕하세요");
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(bridge.send).toHaveBeenCalledTimes(1));
+    expect(bridge.send).toHaveBeenCalledWith({ fromName: "박소장", to: "kim@t.l, lee@t.l", cc: "", bcc: "", subject: "견적서 송부", body: "안녕하세요", attachmentIds: [], threading: undefined });
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("메일을 보냈습니다."));
+    expect(await screen.findByRole("list", { name: "메일 목록" })).toBeTruthy(); // 보낸 뒤 목록으로 돌아온다
+  });
+
+  it("참조·숨은참조 칸은 눌러야 나타나고 함께 전달된다", async () => {
+    const bridge = installMail();
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    expect(screen.queryByLabelText("참조")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "참조" }));
+    fireEvent.click(screen.getByRole("button", { name: "숨은참조" }));
+    await fill("받는사람", "a@t.l");
+    await fill("참조", "b@t.l");
+    await fill("숨은참조", "c@t.l");
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(bridge.send).toHaveBeenCalled());
+    expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ to: "a@t.l", cc: "b@t.l", bcc: "c@t.l" }));
+  });
+
+  it("[내게쓰기]는 받는 사람이 내 주소로 채워진다", async () => {
+    const bridge = installMail({ composeDraft: vi.fn().mockResolvedValue({ ok: true, value: { to: "me@bench.co.kr", cc: "", subject: "", body: "", attachments: [] } }) });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "내게쓰기" }));
+    await waitFor(() => expect(bridge.composeDraft).toHaveBeenCalledWith("self", undefined));
+    expect(((await screen.findByLabelText("받는사람")) as HTMLInputElement).value).toBe("me@bench.co.kr");
+  });
+
+  it("읽기 화면의 [답장]은 초안을 채워 열고, 보낼 때 대화 이어 붙이기 정보도 함께 보낸다", async () => {
+    const bridge = installMail();
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일 열기: 견적서 송부" }));
+    fireEvent.click(await screen.findByRole("button", { name: "답장" }));
+    await waitFor(() => expect(bridge.composeDraft).toHaveBeenCalledWith("reply", 1));
+    expect(((await screen.findByLabelText("받는사람")) as HTMLInputElement).value).toBe("김영업 <kim@t.l>");
+    expect((screen.getByLabelText("제목") as HTMLInputElement).value).toBe("Re: 견적서 송부");
+    expect((screen.getByLabelText("본문") as HTMLTextAreaElement).value).toContain("원본 인용");
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ threading: { inReplyTo: "<orig@t.l>", references: ["<orig@t.l>"] } })));
+  });
+
+  it("[전체답장]과 [전달]도 각각의 초안을 요청한다. 전달은 원본 첨부가 붙어 있다", async () => {
+    const bridge = installMail({
+      composeDraft: vi.fn().mockResolvedValue({ ok: true, value: { to: "", cc: "", subject: "Fwd: 견적서 송부", body: "전달 본문", attachments: [{ id: "fw-1", filename: "요청서.pdf", size: 2048 }] } }),
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일 열기: 견적서 송부" }));
+    fireEvent.click(await screen.findByRole("button", { name: "전체답장" }));
+    await waitFor(() => expect(bridge.composeDraft).toHaveBeenCalledWith("replyAll", 1));
+    fireEvent.click(screen.getByRole("button", { name: "취소" })); // 내용을 바꾸지 않았으니 바로 닫힌다
+    await waitFor(() => expect(screen.queryByRole("form", { name: "메일 쓰기" })).toBeNull());
+    fireEvent.click(await screen.findByRole("button", { name: "전달" })); // 취소하면 보던 메일 화면으로 돌아온다
+    await waitFor(() => expect(bridge.composeDraft).toHaveBeenCalledWith("forward", 1));
+    expect(within(await screen.findByRole("list", { name: "첨부할 파일" })).getByText("요청서.pdf")).toBeTruthy();
+  });
+
+  it("[파일 첨부]로 첨부를 추가하고 빼면 앱에 알린다. 보낼 때 첨부 번호가 간다", async () => {
+    const bridge = installMail();
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    fireEvent.click(await screen.findByRole("button", { name: /파일 첨부/ }));
+    expect(await screen.findByText("자료.xlsx")).toBeTruthy();
+    await fill("받는사람", "a@t.l");
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ["att-1"] })));
+  });
+
+  it("첨부를 빼면 앱에도 버리라고 알린다", async () => {
+    const bridge = installMail();
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    fireEvent.click(await screen.findByRole("button", { name: /파일 첨부/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "자료.xlsx 첨부 빼기" }));
+    await waitFor(() => expect(bridge.discardAttachments).toHaveBeenCalledWith(["att-1"]));
+    expect(screen.queryByText("자료.xlsx")).toBeNull();
+  });
+
+  it("파일 선택을 취소하면 아무 일도 없고, 실패하면 안내한다", async () => {
+    const pick = vi.fn().mockResolvedValueOnce({ ok: false, error: "취소했습니다.", canceled: true }).mockResolvedValueOnce({ ok: false, error: "파일이 너무 큽니다(최대 20MB): big.bin" });
+    installMail({ pickAttachments: pick });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    fireEvent.click(await screen.findByRole("button", { name: /파일 첨부/ }));
+    await waitFor(() => expect(pick).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /파일 첨부/ }));
+    expect((await screen.findByRole("alert")).textContent).toContain("너무 큽니다");
+  });
+
+  it("보내기에 실패하면 안내를 보여 주고 쓰던 내용은 그대로 둔다", async () => {
+    installMail({ send: vi.fn().mockResolvedValue({ ok: false, error: "받는 사람 주소를 서버가 받아들이지 않았습니다. 주소를 확인하세요." }) });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    await fill("받는사람", "x@t.l");
+    await fill("본문", "쓰던 내용");
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("받아들이지 않았습니다");
+    expect((screen.getByLabelText("본문") as HTMLTextAreaElement).value).toBe("쓰던 내용");
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("보내는 중에 [보내기]를 여러 번 눌러도 한 번만 보낸다", async () => {
+    let release: (v: unknown) => void = () => {};
+    const send = vi.fn().mockImplementation(() => new Promise((r) => (release = r)));
+    installMail({ send });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    await fill("받는사람", "a@t.l");
+    const btn = screen.getByRole("button", { name: "보내기" });
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    fireEvent.keyDown(screen.getByRole("form", { name: "메일 쓰기" }), { key: "Enter", ctrlKey: true });
+    expect(send).toHaveBeenCalledTimes(1);
+    release({ ok: true, value: { messageId: "<x@y>", savedToSent: null } });
+    await waitFor(() => expect(notify).toHaveBeenCalled());
+  });
+
+  it("보낸메일함에 저장하지 못했다면 보냈다는 말과 함께 알린다", async () => {
+    installMail({ send: vi.fn().mockResolvedValue({ ok: true, value: { messageId: "<x@y>", savedToSent: false } }) });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    await fill("받는사람", "a@t.l");
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith(expect.stringContaining("보낸메일함에는 저장하지 못했습니다")));
+  });
+
+  it("쓰던 내용이 있으면 [취소]에서 버릴지 묻고, 버리면 첨부 준비도 지운다", async () => {
+    const bridge = installMail();
+    confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    fireEvent.click(await screen.findByRole("button", { name: /파일 첨부/ }));
+    await screen.findByText("자료.xlsx");
+    await fill("본문", "쓰던 내용");
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("form", { name: "메일 쓰기" })).toBeTruthy(); // 계속 쓴다
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "메일 쓰기" })).toBeNull());
+    expect(bridge.discardAttachments).toHaveBeenCalledWith(["att-1"]);
+  });
+
+  it("쓰는 중에 다른 폴더로 가려 하면 버릴지 묻는다", async () => {
+    installMail();
+    confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    await fill("본문", "쓰던 내용");
+    fireEvent.click(screen.getByRole("button", { name: /보낸메일함/ }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("form", { name: "메일 쓰기" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /보낸메일함/ }));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "메일 쓰기" })).toBeNull());
+  });
+
+  it("계정 설정에서 [보낸 메일 직접 저장]을 켜면 앱에 전달된다", async () => {
+    const bridge = installMail();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    fireEvent.click(screen.getByRole("button", { name: "메일 계정 설정" }));
+    fireEvent.click(await screen.findByRole("button", { name: /서버 설정 보기/ }));
+    fireEvent.click(screen.getByLabelText(/보낸 메일을 보낸메일함에도 직접 저장/));
+    fireEvent.change(screen.getByLabelText("메일 비밀번호"), { target: { value: "비번" } });
+    fireEvent.click(screen.getByRole("button", { name: "등록" }));
+    await waitFor(() => expect(bridge.saveAccount).toHaveBeenCalledWith(expect.objectContaining({ saveToSent: true })));
   });
 });
 
