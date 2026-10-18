@@ -27,6 +27,7 @@ import { MailSync } from "./mail/sync";
 import { loginMessage, performNfcLogin } from "./nfcLogin";
 import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
+import { DEFAULT_ZOOM, stepZoom, zoomKeyAction } from "./zoom";
 import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, loadDefaultServer, normalizeServerUrl, saveConfig } from "./serverConfig";
 import { badgeImageName, badgeSummary, clampBadgeCount, combinedBadgeCount, loginItemSettings, parseConversationId, startsHidden } from "./startup";
 import { formatVersion } from "./version";
@@ -141,6 +142,28 @@ function hardenWindow(w: BrowserWindow): void {
     return { action: "deny" };
   });
   wc.on("did-create-window", (child) => hardenWindow(child));
+
+  // 브라우저처럼 Ctrl + / Ctrl - / Ctrl 0 으로 화면 확대·축소 (모든 창에 같은 배율, 다음 실행에도 유지)
+  wc.on("before-input-event", (event, input) => {
+    const action = zoomKeyAction(input);
+    if (!action) return;
+    event.preventDefault();
+    setZoom(stepZoom(config.zoomFactor ?? DEFAULT_ZOOM, action));
+  });
+  wc.on("did-finish-load", () => wc.setZoomFactor(config.zoomFactor ?? DEFAULT_ZOOM));
+}
+
+function setZoom(factor: number): void {
+  config = { ...config, zoomFactor: factor === DEFAULT_ZOOM ? undefined : factor };
+  for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.setZoomFactor(factor);
+  log.debug(`[Main] 화면 배율: ${Math.round(factor * 100)}%`);
+  if (!SMOKE) {
+    try {
+      saveConfig(configFile(), config);
+    } catch (err) {
+      log.warn(`[Main] 화면 배율을 저장하지 못했습니다: ${(err as Error).message}`);
+    }
+  }
 }
 
 function createWindow(): BrowserWindow {
@@ -1058,6 +1081,23 @@ async function runSmoke(): Promise<void> {
   sendOpenConversation(12);
   await sleep(200);
   check("알림을 누르면 서버 화면에 그 대화방을 열라는 신호가 간다", JSON.stringify(await w.webContents.executeJavaScript("window.__open")) === '[{"conversationId":7},{"conversationId":12}]');
+
+  // 5) 화면 확대·축소: Ctrl + / Ctrl - / Ctrl 0 (브라우저와 같은 단계)
+  const press = async (keyCode: string, ...modifiers: ("control" | "shift")[]) => {
+    w.webContents.sendInputEvent({ type: "keyDown", keyCode, modifiers });
+    w.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
+    await sleep(150);
+  };
+  await press("=", "control");
+  const zoomedIn = w.webContents.getZoomFactor();
+  await press("-", "control");
+  await press("-", "control");
+  const zoomedOut = w.webContents.getZoomFactor();
+  await press("0", "control");
+  const zoomReset = w.webContents.getZoomFactor();
+  check("[확대·축소] Ctrl + 로 확대(110%), Ctrl - 로 축소(90%), Ctrl 0 으로 100%", Math.abs(zoomedIn - 1.1) < 0.01 && Math.abs(zoomedOut - 0.9) < 0.01 && zoomReset === 1);
+  await press("=");
+  check("[확대·축소] Ctrl 없이 + 만 누르면 바뀌지 않는다", w.webContents.getZoomFactor() === 1);
   check("앱은 개발 실행에서는 자동 실행을 등록하지 않는다 (설치한 앱에서만)", !app.isPackaged ? !autoStartEnabled() : true);
 
   const shellGuard = await w.webContents.executeJavaScript("typeof window.benchClient.nfc.setMode");

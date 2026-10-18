@@ -70,6 +70,16 @@ describe("config 파일", () => {
     expect(loadConfig(path.join(dir, "bad.json"))).toEqual({});
   });
 
+  it("화면 배율을 저장했다 읽고, 이상한 값·100%는 저장하지 않는다", () => {
+    const file = path.join(tmp(), "config.json");
+    saveConfig(file, { zoomFactor: 1.25 });
+    expect(loadConfig(file)).toEqual({ zoomFactor: 1.25 });
+    for (const bad of [9, 0, -1, "1.5", 1]) {
+      fs.writeFileSync(file, JSON.stringify({ zoomFactor: bad }));
+      expect(loadConfig(file), String(bad)).toEqual({});
+    }
+  });
+
   it("파일에 이상한 주소가 있으면 버린다", () => {
     const file = path.join(tmp(), "config.json");
     fs.writeFileSync(file, JSON.stringify({ serverUrl: "javascript:alert(1)", nfcPort: 5 }));

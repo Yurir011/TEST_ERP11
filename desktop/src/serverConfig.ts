@@ -6,10 +6,12 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { type Logger, silentLogger } from "./log";
+import { sanitizeZoom } from "./zoom";
 
 export interface AppConfig {
   serverUrl?: string; // 예: http://192.168.0.10 (origin 만 저장)
   nfcPort?: string; // 자동으로 못 찾을 때 직접 지정한 포트
+  zoomFactor?: number; // Ctrl + / - 로 바꾼 화면 배율 (1 = 100%)
 }
 
 export type UrlCheck = { ok: true; url: string } | { ok: false; error: string };
@@ -40,6 +42,7 @@ export function loadConfig(file: string, log: Logger = silentLogger): AppConfig 
       if (check.ok) cfg.serverUrl = check.url;
     }
     if (typeof raw.nfcPort === "string" && raw.nfcPort.trim()) cfg.nfcPort = raw.nfcPort.trim();
+    if (typeof raw.zoomFactor === "number" && sanitizeZoom(raw.zoomFactor) === raw.zoomFactor && raw.zoomFactor !== 1) cfg.zoomFactor = raw.zoomFactor;
     return cfg;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") log.warn(`[Config] 설정 파일을 읽지 못해 기본값을 씁니다: ${(err as Error).message}`);

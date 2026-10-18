@@ -6,7 +6,7 @@
 """
 import re
 
-APP_VERSION = "0.71.2"
+APP_VERSION = "0.71.3"
 
 _PATTERN = re.compile(r"^\s*[vV]?\.?(\d+)\.(\d{1,2})\.(\d{1,3})\s*$")
 
