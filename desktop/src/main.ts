@@ -9,7 +9,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, safeStorage, session, shell } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, powerMonitor, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { ImapFlow } from "imapflow";
 
@@ -52,6 +52,7 @@ let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let reader: NfcReader | null = null;
 let quitting = false;
+let loggedOutOnQuit = false;
 let deviceKey: DeviceKey | null = null;
 /**
  * 카드가 닿았을 때 하는 일 (화면이 IPC 로 정한다):
@@ -294,6 +295,44 @@ async function handleCard(uid: string): Promise<void> {
   }
 }
 
+const cleanExitFile = (): string => path.join(app.getPath("userData"), "clean-exit");
+
+/**
+ * 앱이 정상 종료(로그아웃까지 끝남)하지 않고 꺼졌다면(PC 종료·로그오프·강제 종료·정전) 로그인 정보가 남아 있을 수 있다.
+ * 윈도우는 PC 를 끌 때 앱의 종료 처리를 기다려 주지 않기 때문에, 다음 실행 때 서버 화면을 열기 전에 로그인 정보를 지운다.
+ */
+async function logoutIfNotCleanExit(): Promise<void> {
+  if (!config.serverUrl) return;
+  const marker = cleanExitFile();
+  const clean = fs.existsSync(marker);
+  fs.rmSync(marker, { force: true });
+  if (clean) return;
+  try {
+    await session.defaultSession.clearStorageData({ origin: config.serverUrl, storages: ["localstorage"] });
+    await session.defaultSession.flushStorageData();
+    log.info("[Main] 정상 종료가 아니어서(PC 종료 등) 시작할 때 ERP 로그인 정보를 지웠습니다");
+  } catch (err) {
+    log.warn(`[Main] 시작 시 로그인 정보 삭제 실패: ${(err as Error).message}`);
+  }
+}
+
+/** ERP 로그인 정보(토큰)를 지운다. 창이 서버 화면이면 그 화면의 저장소에서 지우고, 아니면 서버 주소의 저장소를 비운다. 몇 초 안에 끝나지 않으면 포기한다 */
+async function logoutOnQuit(): Promise<void> {
+  const work = (async () => {
+    if (!config.serverUrl) return;
+    const wins = BrowserWindow.getAllWindows().filter((x) => !x.isDestroyed() && classifySender(x.webContents.getURL(), config.serverUrl, SHELL_FILE) === "server");
+    if (wins.length > 0) {
+      await wins[0].webContents.executeJavaScript(`localStorage.removeItem("erp_access_token")`); // 같은 서버 화면은 저장소를 함께 쓰므로 한 번이면 된다
+    } else {
+      await session.defaultSession.clearStorageData({ origin: config.serverUrl, storages: ["localstorage"] });
+    }
+    await session.defaultSession.flushStorageData();
+    fs.writeFileSync(cleanExitFile(), String(Date.now())); // "정상 종료 + 로그아웃 끝남" 표시 (다음 실행 때 확인한다)
+    log.info("[Main] 앱 종료: ERP 로그아웃(로그인 정보 삭제) 완료");
+  })();
+  await Promise.race([work.catch((err: Error) => log.warn(`[Main] 종료 시 로그아웃 실패: ${err.message}`)), new Promise<void>((r) => setTimeout(r, 3000))]);
+}
+
 function startNfc(): void {
   reader = new NfcReader(serialPortProvider({ preferred: config.nfcPort, log: getLogger("NFC") }), { log: getLogger("NFC") });
   reader.on("status", (s: NfcStatus) => {
@@ -301,6 +340,19 @@ function startNfc(): void {
   });
   reader.on("card", (t: { uid: string }) => void handleCard(t.uid));
   reader.start();
+
+  // PC 가 절전(대기) 모드로 들어가면 USB 전원이 꺼져 리더 포트가 끊긴다. 들어가기 전에 포트를 깨끗이 닫고, 깨어난 뒤 잠시(USB 가 다시 잡히도록) 기다렸다가 다시 연결한다.
+  let stopping: Promise<void> = Promise.resolve();
+  powerMonitor.on("suspend", () => {
+    log.info("[NFC] 절전 모드 진입: 리더 연결을 닫습니다");
+    stopping = reader?.stop() ?? Promise.resolve();
+  });
+  powerMonitor.on("resume", () => {
+    log.info("[NFC] 절전 모드에서 깨어남: 잠시 뒤 리더를 다시 연결합니다");
+    setTimeout(() => {
+      void stopping.then(() => reader?.start());
+    }, 3000);
+  });
 }
 
 /** 작업 표시줄·트레이 배지를 메신저+메일 합계로 새로 그린다 */
@@ -1098,6 +1150,21 @@ async function runSmoke(): Promise<void> {
   check("[확대·축소] Ctrl + 로 확대(110%), Ctrl - 로 축소(90%), Ctrl 0 으로 100%", Math.abs(zoomedIn - 1.1) < 0.01 && Math.abs(zoomedOut - 0.9) < 0.01 && zoomReset === 1);
   await press("=");
   check("[확대·축소] Ctrl 없이 + 만 누르면 바뀌지 않는다", w.webContents.getZoomFactor() === 1);
+
+  // 6) 앱을 끝낼 때 ERP 로그아웃: 로그인 정보(토큰)만 지우고 다른 저장 값은 남긴다
+  await w.webContents.executeJavaScript(`localStorage.setItem("erp_access_token", "smoke-token"); localStorage.setItem("other_pref", "keep")`);
+  await logoutOnQuit();
+  const afterQuit = await w.webContents.executeJavaScript(`[localStorage.getItem("erp_access_token"), localStorage.getItem("other_pref")]`);
+  check("[종료] 앱을 끝낼 때 ERP 로그인 정보가 지워진다 (다른 설정은 그대로)", afterQuit[0] === null && afterQuit[1] === "keep");
+
+  // 정상 종료 표시가 남았으면 다음 실행 때 로그인 정보를 건드리지 않고, 표시가 없으면(PC 종료·강제 종료) 지운다
+  const tokenNow = () => w.webContents.executeJavaScript(`localStorage.getItem("erp_access_token")`);
+  await w.webContents.executeJavaScript(`localStorage.setItem("erp_access_token", "again")`);
+  await logoutIfNotCleanExit(); // 방금 logoutOnQuit 이 정상 종료 표시를 남겼다 → 그대로 둔다
+  const keptAfterClean = await tokenNow();
+  await logoutIfNotCleanExit(); // 표시는 한 번 쓰면 사라진다 → 이번에는 정상 종료가 아닌 것으로 본다
+  const clearedAfterCrash = await tokenNow();
+  check("[종료] 정상 종료 뒤 시작에는 로그인이 유지되고, 정상 종료가 아니었으면(PC 종료 등) 시작할 때 지워진다", keptAfterClean === "again" && clearedAfterCrash === null);
   check("앱은 개발 실행에서는 자동 실행을 등록하지 않는다 (설치한 앱에서만)", !app.isPackaged ? !autoStartEnabled() : true);
 
   const shellGuard = await w.webContents.executeJavaScript("typeof window.benchClient.nfc.setMode");
@@ -1151,8 +1218,15 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", () => showWindow());
-  app.on("before-quit", () => {
+  app.on("before-quit", (event) => {
     quitting = true;
+    // 앱을 끝낼 때는 ERP 에서 로그아웃한다 (다음에 켜면 로그인 화면). 저장소를 비우는 동안 잠깐 끝내기를 미뤘다가 다시 끝낸다
+    if (!loggedOutOnQuit && !SMOKE) {
+      loggedOutOnQuit = true;
+      event.preventDefault();
+      void logoutOnQuit().finally(() => app.quit());
+      return;
+    }
     if (deviceTimer) clearInterval(deviceTimer);
     mailPoller?.stop();
     try {
@@ -1183,6 +1257,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (err) {
       log.error(`[Device] 기기 키를 준비하지 못했습니다: ${(err as Error).message}`);
     }
+    if (!SMOKE) await logoutIfNotCleanExit();
     win = createWindow();
     if (!SMOKE) createTray();
     startNfc();

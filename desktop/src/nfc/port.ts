@@ -40,6 +40,12 @@ export function serialPortProvider(opts: { preferred?: string; log?: Logger } = 
         port.open((err) => {
           if (err) return reject(err);
           log.debug(`[NFC] 포트 열림: ${path} ${BAUD_RATE}bps`);
+          // 케이블이 빠지거나 USB 가 잠깐 끊기면 포트가 'error' 를 알린다. 받는 곳이 없으면 앱 전체가 오류 창(Uncaught Exception)을 띄우므로
+          // 여기서 받아 기록하고 포트를 닫는다 → 리더가 '연결 끊김'으로 알고 잠시 뒤 다시 찾아 연결한다.
+          port.on("error", (e: Error) => {
+            log.warn(`[NFC] 포트 오류: ${e.message}`);
+            if (port.isOpen) port.close(() => undefined);
+          });
           resolve({
             path,
             transport: {
