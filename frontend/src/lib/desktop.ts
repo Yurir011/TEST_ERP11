@@ -18,6 +18,93 @@ export type NfcMode = "off" | "login" | "capture";
 
 export type DeviceApprovalStatus = "pending" | "approved" | "revoked" | "unknown";
 
+/** 메일 (앱 전용). 계정 비밀번호는 saveAccount 로 한 번 보내기만 하고 돌려받지 않는다 */
+export interface MailAccountInfo {
+  email: string;
+  username: string;
+  imapHost: string;
+  imapPort: number;
+  smtpHost: string;
+  smtpPort: number;
+}
+
+export interface MailAccountInput {
+  email: string;
+  username?: string;
+  password: string;
+  imapHost: string;
+  imapPort: number;
+  smtpHost: string;
+  smtpPort: number;
+}
+
+export interface MailFolder {
+  path: string;
+  name: string;
+  specialUse: string | null;
+  unread: number;
+  total: number;
+}
+
+export interface MailSummary {
+  id: number;
+  folder: string;
+  uid: number;
+  subject: string;
+  fromName: string;
+  fromAddr: string;
+  date: number;
+  seen: boolean;
+  flagged: boolean;
+  hasAttachments: boolean;
+}
+
+export interface MailAttachmentInfo {
+  index: number;
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
+export interface MailDetail extends MailSummary {
+  to: string;
+  cc: string;
+  text: string;
+  /** 앱이 안전하게 정리한 HTML. 없으면 null */
+  html: string | null;
+  remoteImagesBlocked: boolean;
+  attachments: MailAttachmentInfo[];
+}
+
+/** 목록 조건: 안 읽음·중요(별표)·첨부 있음, 제목/보낸 사람 검색어 */
+export interface MailFilter {
+  unread?: boolean;
+  flagged?: boolean;
+  attachment?: boolean;
+  query?: string;
+}
+
+/** 모든 폴더의 메일을 한꺼번에 보는 가상 폴더("전체메일") */
+export const ALL_MAIL_FOLDER = "*";
+
+export type MailResult<T> = { ok: true; value: T } | { ok: false; error: string; canceled?: boolean };
+
+export interface MailBridge {
+  /** 메일을 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로) */
+  openWindow(): Promise<void>;
+  account(): Promise<MailAccountInfo | null>;
+  saveAccount(input: MailAccountInput): Promise<MailResult<MailAccountInfo>>;
+  removeAccount(): Promise<void>;
+  folders(): Promise<MailFolder[]>;
+  sync(folder: string): Promise<MailResult<{ added: number; removed: number }>>;
+  list(folder: string, offset: number, limit: number, filter?: MailFilter): Promise<{ items: MailSummary[]; total: number }>;
+  get(id: number, allowRemoteImages: boolean): Promise<MailResult<MailDetail>>;
+  markSeen(id: number, seen: boolean): Promise<void>;
+  setFlagged(id: number, flagged: boolean): Promise<void>;
+  saveAttachment(id: number, index: number): Promise<MailResult<{ filename: string }>>;
+  openAttachment(id: number, index: number): Promise<MailResult<{ filename: string }>>;
+}
+
 export interface BenchClient {
   /** 앱 버전 (화면 표기 V.0.07.150) */
   getVersion(): Promise<string>;
@@ -39,6 +126,8 @@ export interface BenchClient {
   /** 알림을 눌렀을 때 그 대화방을 열라는 신호 */
   onOpenConversation(cb: (payload: { conversationId: number }) => void): () => void;
   setBadge(count: number): Promise<void>;
+  /** 메일 기능. 이 기능이 없는 예전 앱 버전에서는 undefined */
+  mail?: MailBridge;
 }
 
 declare global {

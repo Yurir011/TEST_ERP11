@@ -50,6 +50,7 @@ const DevicesPage = lazyPage(() => import("./features/settings/DevicesPage"), "D
 const AuditLogsPage = lazyPage(() => import("./features/settings/AuditLogsPage"), "AuditLogsPage");
 const UserFormPage = lazyPage(() => import("./features/settings/UserFormPage"), "UserFormPage");
 const MessengerPage = lazyPage(() => import("./features/messenger/MessengerPage"), "MessengerPage");
+const MailPage = lazyPage(() => import("./features/mail/MailPage"), "MailPage");
 const CalendarPage = lazyPage(() => import("./features/schedule/CalendarPage"), "CalendarPage");
 
 function usePrefetchPages(enabled: boolean) {
@@ -314,6 +315,14 @@ function App() {
         element={
           <ProtectedRoute requireAdmin siteAdminAllowed>
             <NoticeFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/mail"
+        element={
+          <ProtectedRoute siteAdminAllowed>
+            <MailPage />
           </ProtectedRoute>
         }
       />

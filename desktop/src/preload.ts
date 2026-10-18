@@ -35,6 +35,22 @@ const api = {
   notify: (title: string, body: string, conversationId?: number): Promise<void> => ipcRenderer.invoke("app:notify", title, body, conversationId),
   onOpenConversation: (cb: (payload: { conversationId: number }) => void): Unsubscribe => subscribe("app:open-conversation", cb),
   setBadge: (count: number): Promise<void> => ipcRenderer.invoke("app:badge", count),
+  /** 메일 (앱 전용). 비밀번호는 saveAccount 로 한 번 보내기만 하고 어디서도 돌려받지 않는다 */
+  mail: {
+    /** 메일을 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로) */
+    openWindow: (): Promise<void> => ipcRenderer.invoke("mail:open-window"),
+    account: (): Promise<unknown> => ipcRenderer.invoke("mail:account"),
+    saveAccount: (input: unknown): Promise<unknown> => ipcRenderer.invoke("mail:account-save", input),
+    removeAccount: (): Promise<void> => ipcRenderer.invoke("mail:account-remove"),
+    folders: (): Promise<unknown> => ipcRenderer.invoke("mail:folders"),
+    sync: (folder: string): Promise<unknown> => ipcRenderer.invoke("mail:sync", folder),
+    list: (folder: string, offset: number, limit: number, filter?: unknown): Promise<unknown> => ipcRenderer.invoke("mail:list", folder, offset, limit, filter),
+    get: (id: number, allowRemoteImages: boolean): Promise<unknown> => ipcRenderer.invoke("mail:get", id, allowRemoteImages),
+    setFlagged: (id: number, flagged: boolean): Promise<void> => ipcRenderer.invoke("mail:set-flagged", id, flagged),
+    markSeen: (id: number, seen: boolean): Promise<void> => ipcRenderer.invoke("mail:mark-seen", id, seen),
+    saveAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-save", id, index),
+    openAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-open", id, index),
+  },
   shell: {
     state: (): Promise<{ serverUrl?: string; mode: string; error?: string }> => ipcRenderer.invoke("shell:state"),
     saveServer: (url: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke("shell:save-server", url),

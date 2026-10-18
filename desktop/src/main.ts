@@ -9,11 +9,16 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { BrowserWindow, Menu, Notification, Tray, app, ipcMain, nativeImage, safeStorage, session, shell } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 
 import { type DeviceKey, type DeviceStatusName, type SecretStore, defaultDeviceName, loadOrCreateDeviceKey, registerDevice, verifySignature } from "./device";
 import { getLogger } from "./log";
+import { MailAccountStore } from "./mail/account";
+import { parseAttachmentIndex, parseFilter, parseFolderPath, parseMailId, parsePaging } from "./mail/args";
+import { MailService, isDangerousFilename, safeFilename } from "./mail/service";
+import { MailStore } from "./mail/store";
+import { MailSync } from "./mail/sync";
 import { loginMessage, performNfcLogin } from "./nfcLogin";
 import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
@@ -55,6 +60,9 @@ let loginBusy = false;
 let deviceState: { status: DeviceStatusName | "unknown"; error?: string } = { status: "unknown" };
 let deviceTimer: ReturnType<typeof setInterval> | null = null;
 let shellState: { mode: "setup" | "offline"; error?: string } = { mode: "setup" };
+let mailWin: BrowserWindow | null = null;
+let mail: MailService | null = null;
+let mailStore: MailStore | null = null;
 
 const configFile = () => path.join(app.getPath("userData"), "config.json");
 
@@ -146,6 +154,40 @@ function createWindow(): BrowserWindow {
     w.hide();
   });
   return w;
+}
+
+/**
+ * 메일 전용 창. 메인 창과 별개의 창으로 열고, 메일 기능(benchClient.mail)을 쓸 수 있도록 같은 preload 를 준다.
+ * 이미 열려 있으면 그 창을 앞으로 가져온다. PDF·이미지 새 창과 달리 서버 화면(/mail)만 불러온다.
+ */
+function openMailWindow(): void {
+  if (!config.serverUrl || !mail) {
+    log.warn("[Mail] 메일 창을 열 수 없습니다 (서버 주소 또는 메일 저장소 없음)");
+    return;
+  }
+  if (mailWin && !mailWin.isDestroyed()) {
+    if (mailWin.isMinimized()) mailWin.restore();
+    mailWin.show();
+    mailWin.focus();
+    return;
+  }
+  const w = new BrowserWindow({
+    width: 1360,
+    height: 880,
+    minWidth: 900,
+    minHeight: 560,
+    title: "BENCH 메일",
+    icon: ICON,
+    autoHideMenuBar: true,
+    webPreferences: { preload: PRELOAD, contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
+  });
+  hardenWindow(w);
+  w.on("closed", () => {
+    if (mailWin === w) mailWin = null;
+  });
+  mailWin = w;
+  void w.loadURL(`${config.serverUrl}/mail`);
+  log.info("[Mail] 메일 창 열기");
 }
 
 function safeOrigin(url: string): string {
@@ -251,6 +293,111 @@ function registerIpc(): void {
     }
   });
 
+  // ---- 메일 (서버 화면에서만. 비밀번호는 저장할 때 한 번 들어오고, 어떤 응답에도 담기지 않는다) ----
+  const MAIL_UNAVAILABLE = { ok: false as const, error: "메일 기능을 시작하지 못했습니다. 앱을 다시 실행해 주세요." };
+
+  ipcMain.handle("mail:open-window", (e) => {
+    if (!guard(e, "mail:open-window", ["server"])) return;
+    openMailWindow();
+  });
+
+  ipcMain.handle("mail:account", (e) => (guard(e, "mail:account", ["server"]) ? (mail?.accountInfo() ?? null) : null));
+
+  ipcMain.handle("mail:account-save", async (e, input: unknown) => {
+    if (!guard(e, "mail:account-save", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    return mail ? mail.saveAccount(input) : MAIL_UNAVAILABLE;
+  });
+
+  ipcMain.handle("mail:account-remove", (e) => {
+    if (!guard(e, "mail:account-remove", ["server"])) return;
+    mail?.removeAccount();
+  });
+
+  ipcMain.handle("mail:folders", (e) => (guard(e, "mail:folders", ["server"]) && mail ? mail.folders() : []));
+
+  ipcMain.handle("mail:sync", async (e, folder: unknown) => {
+    if (!guard(e, "mail:sync", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const f = parseFolderPath(folder);
+    if (!f) return { ok: false, error: "폴더 이름이 올바르지 않습니다." };
+    return mail ? mail.sync(f) : MAIL_UNAVAILABLE;
+  });
+
+  ipcMain.handle("mail:list", (e, folder: unknown, offset: unknown, limit: unknown, filter?: unknown) => {
+    const f = parseFolderPath(folder);
+    if (!guard(e, "mail:list", ["server"]) || !f || !mail) return { items: [], total: 0 };
+    const p = parsePaging(offset, limit);
+    return mail.list(f, p.offset, p.limit, parseFilter(filter));
+  });
+
+  ipcMain.handle("mail:get", async (e, id: unknown, allowRemoteImages: unknown) => {
+    if (!guard(e, "mail:get", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const n = parseMailId(id);
+    if (!n) return { ok: false, error: "메일 번호가 올바르지 않습니다." };
+    return mail ? mail.get(n, { allowRemoteImages: allowRemoteImages === true }) : MAIL_UNAVAILABLE;
+  });
+
+  ipcMain.handle("mail:set-flagged", async (e, id: unknown, flagged: unknown) => {
+    if (!guard(e, "mail:set-flagged", ["server"])) return;
+    const n = parseMailId(id);
+    if (n && mail && typeof flagged === "boolean") await mail.setFlagged(n, flagged);
+  });
+
+  ipcMain.handle("mail:mark-seen", async (e, id: unknown, seen: unknown) => {
+    if (!guard(e, "mail:mark-seen", ["server"])) return;
+    const n = parseMailId(id);
+    if (n && mail && typeof seen === "boolean") await mail.markSeen(n, seen);
+  });
+
+  /** 첨부 저장: 저장 위치는 사용자가 고른다 */
+  ipcMain.handle("mail:attachment-save", async (e, id: unknown, index: unknown) => {
+    if (!guard(e, "mail:attachment-save", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const n = parseMailId(id);
+    const i = parseAttachmentIndex(index);
+    if (!n || i === null || !mail) return MAIL_UNAVAILABLE;
+    const info = mail.attachmentInfo(n, i);
+    if (!info) return { ok: false, error: "첨부 파일을 찾을 수 없습니다." };
+    const target =
+      win && !win.isDestroyed()
+        ? await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath("downloads"), safeFilename(info.filename)) })
+        : { canceled: true, filePath: "" };
+    if (target.canceled || !target.filePath) return { ok: false, error: "취소했습니다.", canceled: true };
+    const r = await mail.writeAttachment(n, i, target.filePath);
+    if (r.ok) log.info(`[Mail] 첨부 저장: ${path.basename(target.filePath)}`);
+    return r;
+  });
+
+  /** 첨부 열기: 임시 폴더에 풀어서 연다. 실행 파일 종류는 한 번 더 확인한다 */
+  ipcMain.handle("mail:attachment-open", async (e, id: unknown, index: unknown) => {
+    if (!guard(e, "mail:attachment-open", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const n = parseMailId(id);
+    const i = parseAttachmentIndex(index);
+    if (!n || i === null || !mail) return MAIL_UNAVAILABLE;
+    const info = mail.attachmentInfo(n, i);
+    if (!info) return { ok: false, error: "첨부 파일을 찾을 수 없습니다." };
+    if (isDangerousFilename(info.filename)) {
+      const answer =
+        win && !win.isDestroyed()
+          ? await dialog.showMessageBox(win, {
+              type: "warning",
+              buttons: ["열지 않기", "그래도 열기"],
+              defaultId: 0,
+              cancelId: 0,
+              title: "위험할 수 있는 파일",
+              message: `'${safeFilename(info.filename)}' 은 프로그램을 실행하는 파일일 수 있습니다.`,
+              detail: "보낸 사람을 확인하지 못했다면 열지 마세요. 열면 컴퓨터가 감염될 수 있습니다.",
+            })
+          : { response: 0 };
+      if (answer.response !== 1) return { ok: false, error: "취소했습니다.", canceled: true };
+    }
+    const dir = path.join(app.getPath("userData"), "mail", "open-tmp", String(Date.now()));
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, safeFilename(info.filename));
+    const r = await mail.writeAttachment(n, i, file);
+    if (!r.ok) return r;
+    const err = await shell.openPath(file);
+    return err ? { ok: false, error: "이 파일을 열 수 있는 프로그램이 없습니다." } : { ok: true, value: { filename: info.filename } };
+  });
+
   ipcMain.handle("shell:state", (e) => {
     if (!guard(e, "shell:state", ["shell"])) return null;
     return { serverUrl: config.serverUrl, ...shellState };
@@ -282,6 +429,24 @@ const secretStore: SecretStore = {
   encrypt: (plain) => safeStorage.encryptString(plain.toString("base64")),
   decrypt: (cipher) => Buffer.from(safeStorage.decryptString(cipher), "base64"),
 };
+
+/** 로컬 메일 저장소와 서비스를 준비한다. 실패해도 앱의 다른 기능은 계속 쓸 수 있다. */
+function startMail(): void {
+  try {
+    const dir = path.join(app.getPath("userData"), "mail");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.rmSync(path.join(dir, "open-tmp"), { recursive: true, force: true }); // 지난번에 열어 본 첨부의 임시 사본 정리
+    const store = new MailStore(path.join(dir, "mail.db"));
+    const accounts = new MailAccountStore(path.join(dir, "account.json"), secretStore, getLogger("Mail"));
+    const sync = new MailSync({ store, credentials: () => accounts.credentials(), log: getLogger("Mail") });
+    mailStore = store;
+    mail = new MailService({ accounts, store, sync, log: getLogger("Mail") });
+    log.info("[Mail] 로컬 메일 저장소 준비 완료");
+  } catch (err) {
+    mail = null;
+    log.error(`[Mail] 메일 저장소를 준비하지 못했습니다: ${(err as Error).message}`);
+  }
+}
 
 function setDeviceState(next: typeof deviceState): void {
   const changed = next.status !== deviceState.status || next.error !== deviceState.error;
@@ -393,6 +558,14 @@ async function runSmoke(): Promise<void> {
   check("안내 화면: 통로 있음, require/process 없음, 버전 표기(V.0.07.150 형식)", shellInfo.bridge === "object" && shellInfo.hasRequire === "undefined" && shellInfo.hasProcess === "undefined" && shellInfo.shellState === "setup" && shellInfo.version === VERSION_LABEL && /^V\.\d+\.\d{2}\.\d{3}$/.test(VERSION_LABEL));
   check("다른 사이트로 이동 차단", !isAllowedNavigation("https://example.com/", config.serverUrl, SHELL_FILE));
 
+  // 1-1) 메일: 저장소(SQLite)가 준비되고, 안내 화면(서버 화면이 아닌 곳)에서는 메일 통로가 아무것도 돌려주지 않는다
+  check("메일 로컬 저장소(SQLite)가 준비된다 (설치한 앱에서도 네이티브 모듈이 불러와짐)", mail !== null);
+  const shellMail = (await w.webContents.executeJavaScript(`(async () => ({
+    account: await window.benchClient.mail.account(), folders: await window.benchClient.mail.folders(),
+    save: await window.benchClient.mail.saveAccount({ email: "a@b.co", password: "x" }),
+  }))()`)) as { account: unknown; folders: unknown[]; save: { ok: boolean } };
+  check("안내 화면에서는 메일 통로가 막혀 있다 (계정·폴더 없음, 저장 거절)", shellMail.account === null && shellMail.folders.length === 0 && shellMail.save.ok === false);
+
   // 2) 서버 화면(가짜 서버): 팝업·다운로드
   const pageHtml = "<!doctype html><title>smoke</title><body>smoke</body>";
   let registered: { name: string; public_key: string } | null = null;
@@ -443,6 +616,75 @@ async function runSmoke(): Promise<void> {
   check("기기 등록 요청이 서버에 전달됨(공개키 64자 + 이름만)", !!reg && /^[0-9a-f]{64}$/.test(reg.public_key) && !!reg.name && Object.keys(reg).length === 2);
   const devState = (await w.webContents.executeJavaScript("window.benchClient.device.state()")) as { status: string } | null;
   check("서버 화면에서 기기 상태(pending)를 읽을 수 있다", devState?.status === "pending");
+
+  // 2-1) 메일: 서버 화면에서는 쓸 수 있고, 접속에 실패하면 계정을 저장하지 않으며, 응답 어디에도 비밀번호가 없다
+  const mailProbe = (await w.webContents.executeJavaScript(`(async () => {
+    const before = await window.benchClient.mail.account();
+    const save = await window.benchClient.mail.saveAccount({ email: "smoke@test.local", password: "SMOKE-SECRET-PW", imapHost: "127.0.0.1", imapPort: 1, smtpHost: "127.0.0.1", smtpPort: 1 });
+    const after = await window.benchClient.mail.account();
+    const badFolder = await window.benchClient.mail.sync("a" + String.fromCharCode(10) + "b");
+    return { before, save, after, badFolder, list: await window.benchClient.mail.list("INBOX", 0, 10) };
+  })()`)) as { before: unknown; save: { ok: boolean; error?: string }; after: unknown; badFolder: { ok: boolean }; list: { items: unknown[]; total: number } };
+  check("서버 화면: 메일 접속 실패 시 안내 문구를 받고 계정은 저장되지 않는다", mailProbe.before === null && mailProbe.save.ok === false && !!mailProbe.save.error && mailProbe.after === null);
+  check("메일 응답에 비밀번호가 없다", !JSON.stringify(mailProbe).includes("SMOKE-SECRET-PW"));
+  check("잘못된 폴더 이름은 거절되고 빈 목록은 안전하게 돌려준다", mailProbe.badFolder.ok === false && mailProbe.list.total === 0 && mailProbe.list.items.length === 0);
+
+  // 2-1b) 메일은 별도 창으로 열린다: 한 번만 열리고(다시 누르면 같은 창), 그 창에서도 메일 통로를 쓸 수 있고, 안내 화면에서는 열 수 없다
+  const winsBefore = BrowserWindow.getAllWindows().length;
+  await w.webContents.executeJavaScript("window.benchClient.mail.openWindow()");
+  check("[메일 창] 별도 창이 열린다", await until(() => BrowserWindow.getAllWindows().length === winsBefore + 1));
+  const mailWindow = BrowserWindow.getAllWindows().find((x) => x !== w);
+  if (mailWindow) {
+    check("[메일 창] 서버의 /mail 화면을 불러온다", await until(() => mailWindow.webContents.getURL() === `${config.serverUrl}/mail`));
+    await new Promise<void>((resolve) => (mailWindow.webContents.isLoading() ? mailWindow.webContents.once("did-finish-load", () => resolve()) : resolve()));
+    const inMailWindow = (await mailWindow.webContents.executeJavaScript(`({ bridge: typeof window.benchClient, mail: typeof window.benchClient?.mail?.account, hasRequire: typeof require })`)) as Record<string, string>;
+    check("[메일 창] 메일 통로가 있고 require 는 없다", inMailWindow.bridge === "object" && inMailWindow.mail === "function" && inMailWindow.hasRequire === "undefined");
+    await w.webContents.executeJavaScript("window.benchClient.mail.openWindow()");
+    await sleep(300);
+    check("[메일 창] 다시 눌러도 창이 하나만 있다", BrowserWindow.getAllWindows().length === winsBefore + 1);
+    mailWindow.destroy();
+  } else {
+    check("[메일 창] 열린 창을 찾았다", false);
+  }
+
+  // 2-2) 메일 종단 점검 (BENCH_SMOKE_MAIL 이 있을 때만): 암호화(TLS) 접속 + 인증서 검증을 켠 채로 가짜 IMAP 서버와 실제 앱 통로로 읽기까지
+  if (process.env.BENCH_SMOKE_MAIL) {
+    const cfg = JSON.parse(process.env.BENCH_SMOKE_MAIL) as { host: string; port: number; user: string; pass: string };
+    const call = (code: string) => w.webContents.executeJavaScript(code) as Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const account = (password: string) => JSON.stringify({ email: "e2e@test.local", username: cfg.user, password, imapHost: cfg.host, imapPort: cfg.port, smtpHost: cfg.host, smtpPort: 465 });
+
+    const wrong = await call(`window.benchClient.mail.saveAccount(${account("틀린-비밀번호-E2E")})`);
+    check("[메일] 틀린 비밀번호: 로그인 실패로 안내하고 계정은 저장되지 않는다", wrong.ok === false && String(wrong.error).includes("로그인에 실패") && !JSON.stringify(wrong).includes("틀린-비밀번호-E2E") && (await call("window.benchClient.mail.account()")) === null);
+
+    const saved = await call(`window.benchClient.mail.saveAccount(${account(cfg.pass)})`);
+    check("[메일] 올바른 비밀번호로 TLS 접속·인증서 검증이 통과하고 계정이 저장된다", saved.ok === true && saved.value.email === "e2e@test.local" && !JSON.stringify(saved).includes(cfg.pass));
+
+    const accFile = path.join(app.getPath("userData"), "mail", "account.json");
+    const accRaw = fs.existsSync(accFile) ? fs.readFileSync(accFile, "utf8") : "";
+    check("[메일] 비밀번호가 파일에 평문으로 남지 않는다 (OS 암호화 저장)", accRaw.includes("passwordEnc") && !accRaw.includes(cfg.pass));
+
+    const synced = await call(`window.benchClient.mail.sync("INBOX")`);
+    check("[메일] 동기화로 서버의 메일을 받아 온다", synced.ok === true && synced.value.added >= 3);
+
+    const listing = await call(`window.benchClient.mail.list("INBOX", 0, 50)`);
+    const subjects = (listing.items as { subject: string }[]).map((m) => m.subject);
+    check("[메일] 한글 제목이 깨지지 않고 목록에 나온다", subjects.includes("한글 제목 메일") && subjects.includes("스크립트가 든 메일"));
+    const folders = await call(`window.benchClient.mail.folders()`);
+    check("[메일] 폴더 목록과 안 읽은 수가 나온다", folders.some((f: { path: string; unread: number }) => f.path === "INBOX" && f.unread >= 3));
+
+    const htmlMail = (listing.items as { id: number; subject: string }[]).find((m) => m.subject === "스크립트가 든 메일")!;
+    const opened = await call(`window.benchClient.mail.get(${htmlMail.id}, false)`);
+    check("[메일] 본문에서 스크립트와 원격 이미지가 걸러지고 차단 사실이 표시된다", opened.ok === true && !/script|alert\(|track\.test/i.test(opened.value.html) && opened.value.remoteImagesBlocked === true && opened.value.html.includes("안녕하세요"));
+    const withImages = await call(`window.benchClient.mail.get(${htmlMail.id}, true)`);
+    check("[메일] 사용자가 허용하면 이미지가 보이고 스크립트는 여전히 없다", withImages.ok === true && withImages.value.html.includes("track.test") && !/script|alert\(/i.test(withImages.value.html));
+
+    const attMail = (listing.items as { id: number; subject: string }[]).find((m) => m.subject === "첨부 메일")!;
+    const withAtt = await call(`window.benchClient.mail.get(${attMail.id}, false)`);
+    check("[메일] 첨부 파일 이름(한글)과 크기가 나온다", withAtt.ok === true && withAtt.value.attachments.length === 1 && withAtt.value.attachments[0].filename === "견적서.pdf");
+
+    const after = await call(`window.benchClient.mail.list("INBOX", 0, 50)`);
+    check("[메일] 열어 본 메일은 읽음으로 바뀐다", (after.items as { id: number; seen: boolean }[]).filter((m) => m.seen).length >= 2);
+  }
 
   // 3) 카드 모드: login(결과만 전달) / capture(번호 전달) / off(무반응)
   await w.webContents.executeJavaScript(`(() => {
@@ -540,6 +782,11 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", () => {
     quitting = true;
     if (deviceTimer) clearInterval(deviceTimer);
+    try {
+      mailStore?.close();
+    } catch {
+      /* 이미 닫힘 */
+    }
   });
   // 창이 모두 닫혀도(트레이로 내려가도) 앱은 끝내지 않는다
   app.on("window-all-closed", () => {});
@@ -557,6 +804,7 @@ if (!app.requestSingleInstanceLock()) {
       if (preset) config = { ...config, serverUrl: preset };
     }
     registerIpc();
+    startMail();
     try {
       deviceKey = loadOrCreateDeviceKey(path.join(app.getPath("userData"), "device-key.json"), secretStore, getLogger("Device"));
     } catch (err) {
@@ -567,7 +815,12 @@ if (!app.requestSingleInstanceLock()) {
     startNfc();
     if (SMOKE) {
       showShell("setup");
-      await runSmoke();
+      try {
+        await runSmoke();
+      } catch (err) {
+        log.error(`[Smoke] 점검 중 오류로 중단: ${(err as Error).message}`);
+        app.exit(1); // 오류가 나도 창이 남아 멈추지 않게 한다
+      }
     } else {
       await openServer();
       if (HIDDEN_START && !config.serverUrl) showWindow(); // 서버 주소를 아직 모르면 입력받아야 하므로 창을 띄운다

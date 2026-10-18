@@ -7,6 +7,7 @@ import {
   FileText,
   LayoutGrid,
   LogOut,
+  Mail,
   MessageCircle,
   Receipt,
   ScrollText,
@@ -19,6 +20,7 @@ import { useMessengerOptional } from "../../features/messenger/useMessenger";
 import { TodoPanel } from "../../features/todos/TodoPanel";
 import { apiGet } from "../../lib/api";
 import { hasMenuPermission, type MenuPermissionKey } from "../../lib/auth";
+import { getBenchClient } from "../../lib/desktop";
 import { logError } from "../../lib/logger";
 import { Logo } from "../ui/Logo";
 import { VersionLabel } from "./VersionLabel";
@@ -32,11 +34,14 @@ const menuItems: {
   end?: boolean;
   adminOnly: boolean;
   menuKey?: MenuPermissionKey;
+  /** 데스크톱 앱에서만 보이는 메뉴 (앱의 메일 기능이 있을 때) */
+  desktopMailOnly?: boolean;
   colorClass: string;
 }[] = [
   { to: "/", label: "대시보드", icon: LayoutGrid, end: true, adminOnly: false, colorClass: "" },
   { to: "/schedule", label: "일정관리", icon: CalendarDays, adminOnly: false, colorClass: "" },
   { to: "/messenger", label: "메신저", icon: MessageCircle, adminOnly: false, colorClass: "" },
+  { to: "/mail", label: "메일", icon: Mail, adminOnly: false, desktopMailOnly: true, colorClass: "" },
   { to: "/approval", label: "전자결재", icon: FileSignature, adminOnly: false, colorClass: "" },
   { to: "/projects", label: "프로젝트관리", icon: FileText, adminOnly: false, menuKey: "projects", colorClass: "" },
   { to: "/clients", label: "거래처관리", icon: Building2, adminOnly: false, menuKey: "clients", colorClass: "" },
@@ -52,7 +57,10 @@ export function Sidebar() {
   const location = useLocation();
   const [unreadCount, setUnreadCount] = useState(0);
   const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
+  const mailBridge = getBenchClient()?.mail;
+  const hasDesktopMail = typeof mailBridge?.openWindow === "function";
   const visibleItems = menuItems.filter((item) => {
+    if (item.desktopMailOnly && !hasDesktopMail) return false;
     if (item.adminOnly) return user?.role === "admin";
     if (item.menuKey) return hasMenuPermission(user, item.menuKey);
     return true;
@@ -81,7 +89,22 @@ export function Sidebar() {
 
       <p className="px-5 pt-2 pb-1 text-xs text-text-muted">Navigation</p>
       <nav className="px-3 space-y-1 shrink-0">
-        {visibleItems.map(({ to, label, icon: Icon, end, colorClass }) => (
+        {visibleItems.map(({ to, label, icon: Icon, end, colorClass, desktopMailOnly }) =>
+          desktopMailOnly ? (
+            // 메일은 메뉴 이동이 아니라 별도 창을 여는 버튼이다 (이미 열려 있으면 그 창을 앞으로)
+            <button
+              key={to}
+              type="button"
+              onClick={() => {
+                console.debug("[Sidebar] 메일 버튼 클릭 → 메일 창 열기");
+                void mailBridge?.openWindow();
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-text-muted hover:bg-surface/60 transition-colors text-left"
+            >
+              <Icon size={17} />
+              {label}
+            </button>
+          ) : (
           <NavLink
             key={to}
             to={to}
@@ -113,7 +136,8 @@ export function Sidebar() {
               </span>
             )}
           </NavLink>
-        ))}
+          ),
+        )}
       </nav>
 
       <div className="mt-14 flex-1 min-h-0 flex flex-col">
