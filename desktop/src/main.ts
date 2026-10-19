@@ -18,6 +18,7 @@ import { getLogger } from "./log";
 import { MailAccountStore } from "./mail/account";
 import { parseAttachmentIndex, parseDocumentCompose, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./mail/args";
 import { MailComposer, type StagedAttachment } from "./mail/compose";
+import { IdentityStore, parseIdentitySettings } from "./mail/identities";
 import { formatNewMailNotice } from "./mail/notify";
 import { MailPoller, type PollResult, resolvePollInterval } from "./mail/poller";
 import { MailSender } from "./mail/send";
@@ -70,6 +71,7 @@ let shellState: { mode: "setup" | "offline"; error?: string } = { mode: "setup" 
 let mailWin: BrowserWindow | null = null;
 let mail: MailService | null = null;
 let composer: MailComposer | null = null;
+let identities: IdentityStore | null = null;
 let mailPoller: MailPoller | null = null;
 /** 작업 표시줄 배지는 메신저 안 읽은 수와 메일 안 읽은 수를 합쳐 하나로 보여 준다 */
 let badgeMessenger = 0;
@@ -554,6 +556,19 @@ function registerIpc(): void {
     openMailWindow();
   });
 
+  // 보내는 사람 목록(쓰기 화면에서 고르는 이름·주소): 읽기와 저장
+  const NO_IDENTITIES = { items: [], defaultAddress: "" };
+  ipcMain.handle("mail:identities", (e) => (guard(e, "mail:identities", ["server"]) ? (identities?.load() ?? NO_IDENTITIES) : NO_IDENTITIES));
+  ipcMain.handle("mail:identities-save", (e, input: unknown) => {
+    if (!guard(e, "mail:identities-save", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    if (!identities) return MAIL_UNAVAILABLE;
+    const parsed = parseIdentitySettings(input);
+    if (!parsed.ok) return parsed;
+    identities.save(parsed.value);
+    log.info(`[Mail] 보내는 사람 목록 저장: ${parsed.value.items.length}개`);
+    return { ok: true, value: parsed.value };
+  });
+
   ipcMain.handle("mail:account", (e) => (guard(e, "mail:account", ["server"]) ? (mail?.accountInfo() ?? null) : null));
 
   ipcMain.handle("mail:account-save", async (e, input: unknown) => {
@@ -700,6 +715,7 @@ function startMail(): void {
     const accounts = new MailAccountStore(path.join(dir, "account.json"), secretStore, getLogger("Mail"));
     const sync = new MailSync({ store, credentials: () => accounts.credentials(), log: getLogger("Mail") });
     mailStore = store;
+    identities = new IdentityStore(path.join(dir, "identities.json"), getLogger("Mail"));
     mail = new MailService({ accounts, store, sync, log: getLogger("Mail") });
     const sender = new MailSender({ credentials: () => accounts.credentials(), log: getLogger("Mail") });
     composer = new MailComposer({ accounts, store, sync, sender, tempDir: path.join(dir, "compose-tmp"), log: getLogger("Mail") });
@@ -715,6 +731,7 @@ function startMail(): void {
   } catch (err) {
     mail = null;
     composer = null;
+    identities = null;
     mailPoller = null;
     log.error(`[Mail] 메일 저장소를 준비하지 못했습니다: ${(err as Error).message}`);
   }
@@ -1091,6 +1108,16 @@ async function runSmoke(): Promise<void> {
     const sentDoc = await docWindow.webContents.executeJavaScript(`window.benchClient.mail.send({ fromName: "점검", to: "client@test.local", cc: "", bcc: "", subject: "[견적서] 점검", body: "본문", attachmentIds: ${JSON.stringify((pendingDoc?.draft?.attachments ?? []).map((x: { id: string }) => x.id))} })`);
     check("[문서 메일] 초안 그대로 보내면 PDF 가 첨부되어 나간다", sentDoc.ok === true);
     docWindow.destroy();
+
+    // 2-6) 보내는 사람 목록 (이름·주소 선택)
+    const idStart = await call("window.benchClient.mail.identities()");
+    const idSave = await call(`window.benchClient.mail.saveIdentities({ items: [{ name: "정혜란", address: "yurir@epik-bio.com" }], defaultAddress: "yurir@epik-bio.com" })`);
+    const idAfter = await call("window.benchClient.mail.identities()");
+    const idBad = await call(`window.benchClient.mail.saveIdentities({ items: [{ name: "a", address: "not-an-email" }], defaultAddress: "" })`);
+    const idStill = await call("window.benchClient.mail.identities()");
+    check("[보내는 사람] 처음에는 비어 있고, 저장하면 다시 읽을 수 있다", idStart.items.length === 0 && idSave.ok === true && idAfter.items[0]?.address === "yurir@epik-bio.com" && idAfter.defaultAddress === "yurir@epik-bio.com");
+    check("[보내는 사람] 형식이 틀린 주소는 저장을 거절하고 기존 설정을 지킨다", idBad.ok === false && idStill.items.length === 1);
+    await call(`window.benchClient.mail.saveIdentities({ items: [], defaultAddress: "" })`);
   }
 
   // 3) 카드 모드: login(결과만 전달) / capture(번호 전달) / off(무반응)

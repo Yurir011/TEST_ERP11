@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { MailCredentials } from "./account";
 import { type FakeSmtp, startFakeSmtp } from "./fakeSmtp.testutil";
-import { MailSender, type OutgoingMail } from "./send";
+import { MailSender, type OutgoingMail, describeSmtpError } from "./send";
 import { MailError } from "./sync";
 
 let smtp: FakeSmtp | null = null;
@@ -141,5 +141,15 @@ describe("보내기 전 확인", () => {
   it("계정이 없으면 등록하라고 안내한다", async () => {
     const err = await new MailSender({ credentials: () => null }).send(mail()).catch((e) => e);
     expect(err.kind).toBe("config");
+  });
+});
+
+describe("보내는 사람 주소를 서버가 거절했을 때", () => {
+  it("MAIL FROM 단계의 거절은 '보내는 사람 주소' 안내로, 받는 사람 거절과 구분한다", () => {
+    const sender = describeSmtpError({ responseCode: 553, command: "MAIL FROM" });
+    expect(sender.kind).toBe("sender");
+    expect(sender.message).toContain("보내는 사람 주소");
+    expect(describeSmtpError({ responseCode: 550, command: "RCPT TO" }).kind).toBe("recipient");
+    expect(describeSmtpError({ responseCode: 535 }).kind).toBe("auth");
   });
 });

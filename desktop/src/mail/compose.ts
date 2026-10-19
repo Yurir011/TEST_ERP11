@@ -49,6 +49,8 @@ export interface Draft {
 
 export interface SendPayload {
   fromName: string;
+  /** 직접 입력한 보내는 사람 주소 (없으면 로그인한 계정 주소) */
+  fromAddress?: string;
   to: string;
   cc: string;
   bcc: string;
@@ -224,6 +226,13 @@ export class MailComposer {
     const account = this.deps.accounts.load();
     if (!account) return { ok: false, error: "메일 계정이 등록되어 있지 않습니다." };
 
+    let fromAddress: string | undefined;
+    if (payload.fromAddress !== undefined && payload.fromAddress.trim() !== "") {
+      const f = parseAddressList(payload.fromAddress, 1);
+      if (!f.ok || f.value.length !== 1) return { ok: false, error: "보내는 사람 주소가 올바르지 않습니다." };
+      fromAddress = f.value[0].address;
+    }
+
     const to = parseAddressList(payload.to, MAX_RECIPIENTS);
     if (!to.ok) return { ok: false, error: to.error };
     const cc = parseAddressList(payload.cc, MAX_RECIPIENTS);
@@ -257,6 +266,7 @@ export class MailComposer {
     try {
       const sent = await this.deps.sender.send({
         fromName,
+        fromAddress,
         // 같은 사람이 받는 사람·참조·숨은참조에 중복되면 받는 사람 칸을 우선한다
         to: dedupeAddresses(to.value),
         cc: dedupeAddresses(cc.value).filter((a) => !to.value.some((x) => x.address.toLowerCase() === a.address.toLowerCase())),

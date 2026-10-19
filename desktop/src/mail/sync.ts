@@ -28,7 +28,7 @@ export interface SyncDeps {
 }
 
 export class MailError extends Error {
-  constructor(message: string, readonly kind: "auth" | "network" | "tls" | "config" | "recipient" | "size" | "other" = "other") {
+  constructor(message: string, readonly kind: "auth" | "network" | "tls" | "config" | "recipient" | "sender" | "size" | "other" = "other") {
     super(message);
   }
 }

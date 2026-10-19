@@ -1,8 +1,10 @@
 import { Paperclip, Send, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
-import type { MailBridge, MailDraft, MailSendResult, MailStagedAttachment } from "../../lib/desktop";
+import type { MailBridge, MailDraft, MailIdentitySettings, MailSendResult, MailSenderIdentity, MailStagedAttachment } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
+import { SenderManager, SenderPicker } from "./SenderPicker";
+import { defaultSender, sameAddress, senderOptions } from "./senderIdentity";
 import { MAX_ATTACHMENT_BYTES, formatFileSize } from "./mailFormat";
 
 interface Props {
@@ -24,6 +26,11 @@ const LABEL = "w-20 shrink-0 text-sm text-text-muted";
 /** 메일 쓰기 화면: 새 메일·내게쓰기·답장·전체답장·전달이 모두 이 화면을 쓴다 */
 export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onClose, onState }: Props) {
   const dialog = useDialog();
+  const accountSender = useMemo<MailSenderIdentity>(() => ({ name: fromName, address: fromEmail }), [fromName, fromEmail]);
+  const [identities, setIdentities] = useState<MailIdentitySettings>({ items: [], defaultAddress: "" });
+  const [sender, setSender] = useState<MailSenderIdentity>(accountSender);
+  const [managing, setManaging] = useState(false);
+  const senderTouched = useRef(false);
   const [to, setTo] = useState(initial.to);
   const [cc, setCc] = useState(initial.cc);
   const [bcc, setBcc] = useState("");
@@ -35,6 +42,22 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sending = useRef(false);
+
+  // 저장된 보내는 사람 목록을 읽어 기본으로 정한 주소를 처음에 고른다 (그 사이 직접 고른 것이 있으면 바꾸지 않는다)
+  useEffect(() => {
+    let cancelled = false;
+    void bridge
+      .identities()
+      .then((s) => {
+        if (cancelled) return;
+        setIdentities(s);
+        if (!senderTouched.current) setSender(defaultSender(s, accountSender));
+      })
+      .catch((err) => logError("Mail", "보내는 사람 목록을 읽지 못했습니다", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge, accountSender]);
 
   const total = attachments.reduce((n, a) => n + a.size, 0);
   const dirty =
@@ -57,7 +80,7 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
     setError(null);
     logDebug("Mail", `메일 보내기 시도: 첨부 ${attachments.length}개`);
     try {
-      const r = await bridge.send({ fromName, to, cc, bcc, subject, body, attachmentIds: attachments.map((a) => a.id), threading: initial.threading });
+      const r = await bridge.send({ fromName: sender.name || fromName, fromAddress: sender.address, to, cc, bcc, subject, body, attachmentIds: attachments.map((a) => a.id), threading: initial.threading });
       if (!r.ok) {
         setError(r.error);
         return;
@@ -113,7 +136,15 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
       <div className="border-t border-border">
         <div className={ROW}>
           <span className={LABEL}>보내는 사람</span>
-          <span className="flex-1 min-w-0 py-2 text-sm truncate" title={fromEmail}>{fromName ? `${fromName} <${fromEmail}>` : fromEmail}</span>
+          <SenderPicker
+            options={senderOptions(identities, accountSender)}
+            value={sender}
+            onChange={(o) => {
+              senderTouched.current = true;
+              setSender(o);
+            }}
+            onManage={() => setManaging(true)}
+          />
         </div>
         <div className={ROW}>
           <label htmlFor="compose-to" className={LABEL}>받는사람</label>
@@ -171,6 +202,20 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
         className="flex-1 min-h-0 resize-none px-6 py-4 text-[15px] leading-relaxed outline-none bg-transparent"
         placeholder="내용을 입력하세요"
       />
+      {managing && (
+        <SenderManager
+          bridge={bridge}
+          settings={identities}
+          account={accountSender}
+          onClose={() => setManaging(false)}
+          onSaved={(saved) => {
+            setIdentities(saved);
+            // 고르고 있던 주소가 목록에서 사라졌으면 기본(또는 로그인 계정)으로 돌린다
+            if (!senderOptions(saved, accountSender).some((o) => sameAddress(o.address, sender.address))) setSender(defaultSender(saved, accountSender));
+            setManaging(false);
+          }}
+        />
+      )}
     </form>
   );
 }

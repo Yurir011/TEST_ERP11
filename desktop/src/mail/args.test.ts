@@ -49,7 +49,9 @@ describe("IPC 인자 검사", () => {
     const ok = { fromName: "박소장", to: "a@b.co", cc: "", bcc: "", subject: "제목", body: "본문", attachmentIds: ["id-1"] };
     expect(parseSendPayload(ok)).toEqual({ ...ok, threading: undefined });
     expect(parseSendPayload({ ...ok, threading: { inReplyTo: "<a@b>", references: ["<a@b>"] } })?.threading).toEqual({ inReplyTo: "<a@b>", references: ["<a@b>"] });
-    for (const bad of [null, "x", { ...ok, to: 5 }, { ...ok, body: undefined }, { ...ok, attachmentIds: "id" }, { ...ok, attachmentIds: [1] }, { ...ok, attachmentIds: Array(51).fill("x") }, { ...ok, to: "a".repeat(20_001) }, { ...ok, threading: "x" }, { ...ok, threading: { references: "x" } }, { ...ok, threading: { inReplyTo: 3 } }]) {
+    expect(parseSendPayload({ ...ok, fromAddress: "yurir@pik-bio.com" })?.fromAddress).toBe("yurir@pik-bio.com");
+    expect(parseSendPayload({ ...ok, fromAddress: null })?.fromAddress).toBeUndefined();
+    for (const bad of [null, "x", { ...ok, fromAddress: 5 }, { ...ok, fromAddress: "a".repeat(321) }, { ...ok, to: 5 }, { ...ok, body: undefined }, { ...ok, attachmentIds: "id" }, { ...ok, attachmentIds: [1] }, { ...ok, attachmentIds: Array(51).fill("x") }, { ...ok, to: "a".repeat(20_001) }, { ...ok, threading: "x" }, { ...ok, threading: { references: "x" } }, { ...ok, threading: { inReplyTo: 3 } }]) {
       expect(parseSendPayload(bad), JSON.stringify(bad).slice(0, 60)).toBeNull();
     }
   });

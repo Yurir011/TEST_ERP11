@@ -117,6 +117,8 @@ export interface MailDraft {
 
 export interface MailSendPayload {
   fromName: string;
+  /** 직접 입력한 보내는 사람 주소 (비우면 로그인한 계정 주소) */
+  fromAddress?: string;
   to: string;
   cc: string;
   bcc: string;
@@ -134,10 +136,24 @@ export interface MailSendResult {
 
 export type MailResult<T> = { ok: true; value: T } | { ok: false; error: string; canceled?: boolean };
 
+export interface MailSenderIdentity {
+  name: string;
+  address: string;
+}
+
+export interface MailIdentitySettings {
+  items: MailSenderIdentity[];
+  /** 기본으로 고를 주소 (빈 문자열이면 로그인한 계정) */
+  defaultAddress: string;
+}
+
 export interface MailBridge {
   /** 메일을 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로) */
   openWindow(): Promise<void>;
   account(): Promise<MailAccountInfo | null>;
+  /** 보내는 사람 목록(쓰기 화면에서 고르는 이름·주소). 이 PC 에만 저장된다 */
+  identities(): Promise<MailIdentitySettings>;
+  saveIdentities(settings: MailIdentitySettings): Promise<MailResult<MailIdentitySettings>>;
   saveAccount(input: MailAccountInput): Promise<MailResult<MailAccountInfo>>;
   removeAccount(): Promise<void>;
   folders(): Promise<MailFolder[]>;

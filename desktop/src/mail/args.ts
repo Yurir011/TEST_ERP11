@@ -54,6 +54,8 @@ export function parseSendPayload(v: unknown): SendPayload | null {
   if (typeof v !== "object" || v === null) return null;
   const o = v as Record<string, unknown>;
   const fromName = str(o.fromName, 200);
+  const fromAddress = o.fromAddress === undefined || o.fromAddress === null ? undefined : str(o.fromAddress, 320);
+  if (fromAddress === null) return null;
   const to = str(o.to, 20_000);
   const cc = str(o.cc, 20_000);
   const bcc = str(o.bcc, 20_000);
@@ -74,7 +76,7 @@ export function parseSendPayload(v: unknown): SendPayload | null {
     }
     threading = { inReplyTo, references };
   }
-  return { fromName, to, cc, bcc, subject, body, attachmentIds: o.attachmentIds as string[], threading };
+  return { fromName, fromAddress, to, cc, bcc, subject, body, attachmentIds: o.attachmentIds as string[], threading };
 }
 
 export interface DocumentComposeRequest {

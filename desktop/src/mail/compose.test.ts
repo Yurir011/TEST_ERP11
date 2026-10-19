@@ -184,6 +184,35 @@ describe("첨부 파일 준비", () => {
   });
 });
 
+describe("보내는 사람 주소", () => {
+  beforeEach(() => setup());
+
+  it("직접 입력한 주소가 머리글(From)과 봉투(MAIL FROM)에 쓰이고, 이름은 그대로 붙는다", async () => {
+    const r = await composer.send(payload({ fromAddress: "yurir@pik-bio.com" }));
+    expect(r.ok).toBe(true);
+    const got = smtp.messages[0];
+    expect(got.parsed.from?.value[0]).toMatchObject({ address: "yurir@pik-bio.com", name: "박소장" });
+    expect(got.envelope.from).toBe("yurir@pik-bio.com");
+    expect(got.parsed.messageId).toContain("@pik-bio.com>");
+    expect(got.raw.toString()).not.toContain("me@bench.co.kr"); // 계정 주소는 메일에 실리지 않는다
+  });
+
+  it("비우거나 없으면 로그인한 계정 주소로 나간다", async () => {
+    for (const fromAddress of [undefined, "", "   "]) {
+      expect((await composer.send(payload({ fromAddress }))).ok).toBe(true);
+    }
+    for (const m of smtp.messages) expect(m.parsed.from?.value[0].address).toBe("me@bench.co.kr");
+  });
+
+  it("주소 형식이 틀리거나 여러 개이거나 줄바꿈이 있으면 보내지 않는다", async () => {
+    for (const fromAddress of ["not-an-email", "a@x.com, b@x.com", "a@x.com"+String.fromCharCode(13,10)+"Bcc: z@z.com", "<>"]) {
+      const r = await composer.send(payload({ fromAddress }));
+      expect(r.ok, fromAddress).toBe(false);
+    }
+    expect(smtp.messages.length).toBe(0);
+  });
+});
+
 describe("ERP 문서(PDF) 첨부", () => {
   beforeEach(() => setup());
   const pdf = Buffer.from("%PDF-1.4 견적서");

@@ -40,6 +40,9 @@ const api = {
     /** 메일을 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로) */
     openWindow: (): Promise<void> => ipcRenderer.invoke("mail:open-window"),
     account: (): Promise<unknown> => ipcRenderer.invoke("mail:account"),
+    /** 보내는 사람 목록(쓰기 화면에서 고르는 이름·주소) 읽기·저장 */
+    identities: (): Promise<unknown> => ipcRenderer.invoke("mail:identities"),
+    saveIdentities: (input: unknown): Promise<unknown> => ipcRenderer.invoke("mail:identities-save", input),
     saveAccount: (input: unknown): Promise<unknown> => ipcRenderer.invoke("mail:account-save", input),
     removeAccount: (): Promise<void> => ipcRenderer.invoke("mail:account-remove"),
     folders: (): Promise<unknown> => ipcRenderer.invoke("mail:folders"),

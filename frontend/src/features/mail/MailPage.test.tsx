@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BenchClient, MailBridge, MailDetail, MailFolder, MailSummary } from "../../lib/desktop";
+import type { BenchClient, MailBridge, MailDetail, MailIdentitySettings, MailFolder, MailSummary } from "../../lib/desktop";
 
 const notifyError = vi.fn();
 const notify = vi.fn();
@@ -45,6 +45,8 @@ function installMail(over: Partial<MailBridge> = {}) {
   const bridge: MailBridge = {
     openWindow: vi.fn().mockResolvedValue(undefined),
     account: vi.fn().mockResolvedValue(account),
+    identities: vi.fn().mockResolvedValue({ items: [], defaultAddress: "" }),
+    saveIdentities: vi.fn((input: unknown) => Promise.resolve({ ok: true as const, value: input as MailIdentitySettings })),
     saveAccount: vi.fn().mockResolvedValue({ ok: true, value: account }),
     removeAccount: vi.fn().mockResolvedValue(undefined),
     folders: vi.fn().mockResolvedValue(folders),
@@ -399,15 +401,117 @@ describe("메일 쓰기", () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
     expect(await screen.findByRole("form", { name: "메일 쓰기" })).toBeTruthy();
-    expect(screen.getByText("박소장 <me@bench.co.kr>")).toBeTruthy(); // 보내는 사람은 내 계정
+    expect(screen.getByRole("button", { name: "보내는 사람 선택" }).textContent).toContain("박소장"); // 처음에는 ERP 사용자 이름 + 내 계정 주소
+    expect(screen.getByRole("button", { name: "보내는 사람 선택" }).textContent).toContain("me@bench.co.kr");
     await fill("받는사람", "kim@t.l, lee@t.l");
     await fill("제목", "견적서 송부");
     await fill("본문", "안녕하세요");
     fireEvent.click(screen.getByRole("button", { name: "보내기" }));
     await waitFor(() => expect(bridge.send).toHaveBeenCalledTimes(1));
-    expect(bridge.send).toHaveBeenCalledWith({ fromName: "박소장", to: "kim@t.l, lee@t.l", cc: "", bcc: "", subject: "견적서 송부", body: "안녕하세요", attachmentIds: [], threading: undefined });
+    expect(bridge.send).toHaveBeenCalledWith({ fromName: "박소장", fromAddress: "me@bench.co.kr", to: "kim@t.l, lee@t.l", cc: "", bcc: "", subject: "견적서 송부", body: "안녕하세요", attachmentIds: [], threading: undefined });
     await waitFor(() => expect(notify).toHaveBeenCalledWith("메일을 보냈습니다."));
     expect(await screen.findByRole("list", { name: "메일 목록" })).toBeTruthy(); // 보낸 뒤 목록으로 돌아온다
+  });
+
+  describe("보내는 사람 선택", () => {
+    const settings = {
+      items: [
+        { name: "정혜란", address: "yurir@epik-bio.com" },
+        { name: "", address: "alias@bench.co.kr" },
+      ],
+      defaultAddress: "",
+    };
+    const openList = async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+      fireEvent.click(await screen.findByRole("button", { name: "보내는 사람 선택" }));
+      return screen.findByRole("listbox", { name: "보내는 사람 목록" });
+    };
+
+    it("목록에서 고르면 그 이름·주소로 나간다 (이름이 비어 있으면 ERP 사용자 이름)", async () => {
+      const bridge = installMail({ identities: vi.fn().mockResolvedValue(settings) });
+      renderPage();
+      const list = await openList();
+      const names = within(list).getAllByRole("option").map((o) => o.textContent);
+      expect(names).toEqual(["박소장 <me@bench.co.kr>", "정혜란 <yurir@epik-bio.com>", "박소장 <alias@bench.co.kr>"]);
+      fireEvent.click(within(list).getByRole("option", { name: "정혜란 <yurir@epik-bio.com>" }));
+      expect(screen.queryByRole("listbox")).toBeNull(); // 고르면 닫힌다
+      await fill("받는사람", "a@t.l");
+      fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+      await waitFor(() => expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({ fromName: "정혜란", fromAddress: "yurir@epik-bio.com" })));
+    });
+
+    it("목록을 읽는 중에 직접 고른 주소는 늦게 도착한 기본값이 덮어쓰지 않는다", async () => {
+      let resolve: (v: typeof settings) => void = () => {};
+      const slow = new Promise<typeof settings>((r) => (resolve = r));
+      installMail({ identities: vi.fn().mockReturnValue(slow) });
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+      fireEvent.click(await screen.findByRole("button", { name: "보내는 사람 선택" })); // 아직 목록은 로그인 계정뿐
+      fireEvent.click(within(await screen.findByRole("listbox")).getByRole("option", { name: "박소장 <me@bench.co.kr>" }));
+      resolve({ ...settings, defaultAddress: "yurir@epik-bio.com" }); // 이제서야 기본값이 도착
+      await waitFor(() => expect(screen.getByRole("button", { name: "보내는 사람 선택" })).toBeTruthy());
+      await new Promise((r) => setTimeout(r, 30));
+      expect(screen.getByRole("button", { name: "보내는 사람 선택" }).textContent).toContain("me@bench.co.kr");
+    });
+
+    it("기본으로 정한 주소가 처음부터 골라져 있다", async () => {
+      installMail({ identities: vi.fn().mockResolvedValue({ ...settings, defaultAddress: "yurir@epik-bio.com" }) });
+      renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "보내는 사람 선택" }).textContent).toContain("yurir@epik-bio.com"));
+    });
+
+    it("[보내는 사람 추가 / 관리]에서 추가하고 기본으로 정해 저장하면 목록에 나타난다", async () => {
+      const bridge = installMail();
+      renderPage();
+      const list = await openList();
+      fireEvent.click(within(list).getByRole("button", { name: /보내는 사람 추가 \/ 관리/ }));
+      const dialog = await screen.findByRole("dialog", { name: "보내는 사람 관리" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "보내는 사람 추가" }));
+      fireEvent.change(within(dialog).getByLabelText("이름 1"), { target: { value: "정혜란" } });
+      fireEvent.change(within(dialog).getByLabelText("주소 1"), { target: { value: "yurir@epik-bio.com" } });
+      fireEvent.click(within(dialog).getByLabelText("yurir@epik-bio.com 를 기본으로"));
+      fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+      await waitFor(() => expect(bridge.saveIdentities).toHaveBeenCalledWith({ items: [{ name: "정혜란", address: "yurir@epik-bio.com" }], defaultAddress: "yurir@epik-bio.com" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      fireEvent.click(screen.getByRole("button", { name: "보내는 사람 선택" }));
+      expect(within(await screen.findByRole("listbox")).getByRole("option", { name: "정혜란 <yurir@epik-bio.com>" })).toBeTruthy();
+    });
+
+    it("저장이 거절되면 이유를 보여 주고 창을 닫지 않는다", async () => {
+      installMail({ identities: vi.fn().mockResolvedValue(settings), saveIdentities: vi.fn().mockResolvedValue({ ok: false, error: "올바르지 않은 메일 주소입니다: x" }) });
+      renderPage();
+      const list = await openList();
+      fireEvent.click(within(list).getByRole("button", { name: /보내는 사람 추가 \/ 관리/ }));
+      const dialog = await screen.findByRole("dialog", { name: "보내는 사람 관리" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+      expect(await within(dialog).findByRole("alert")).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: "보내는 사람 관리" })).toBeTruthy();
+    });
+
+    it("고르고 있던 주소를 목록에서 지우면 로그인 계정으로 돌아간다", async () => {
+      installMail({ identities: vi.fn().mockResolvedValue(settings) });
+      renderPage();
+      const list = await openList();
+      fireEvent.click(within(list).getByRole("option", { name: "정혜란 <yurir@epik-bio.com>" }));
+      fireEvent.click(screen.getByRole("button", { name: "보내는 사람 선택" }));
+      fireEvent.click(within(await screen.findByRole("listbox")).getByRole("button", { name: /보내는 사람 추가 \/ 관리/ }));
+      const dialog = await screen.findByRole("dialog", { name: "보내는 사람 관리" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "yurir@epik-bio.com 지우기" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(screen.getByRole("button", { name: "보내는 사람 선택" }).textContent).toContain("me@bench.co.kr");
+    });
+
+    it("보내는 사람만 바꾸고는 '작성 중' 으로 보지 않는다", async () => {
+      installMail({ identities: vi.fn().mockResolvedValue(settings) });
+      renderPage();
+      const list = await openList();
+      fireEvent.click(within(list).getByRole("option", { name: "정혜란 <yurir@epik-bio.com>" }));
+      fireEvent.click(screen.getByRole("button", { name: "취소" }));
+      await waitFor(() => expect(screen.queryByRole("form", { name: "메일 쓰기" })).toBeNull());
+      expect(confirm).not.toHaveBeenCalled();
+    });
   });
 
   it("참조·숨은참조 칸은 눌러야 나타나고 함께 전달된다", async () => {

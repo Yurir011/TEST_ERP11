@@ -19,6 +19,8 @@ export interface OutgoingAttachment {
 
 export interface OutgoingMail {
   fromName: string;
+  /** 보내는 사람 주소. 없으면 로그인한 계정의 주소. 서버가 허용하는 주소(내 계정·등록된 별칭)여야 실제로 나간다 */
+  fromAddress?: string;
   to: ParsedAddress[];
   cc: ParsedAddress[];
   bcc: ParsedAddress[];
@@ -56,6 +58,9 @@ export function describeSmtpError(err: unknown): MailError {
   if (rc === 552 || /exceed|too large|size limit/i.test(e?.message ?? "")) {
     return new MailError("메일 크기가 서버 한도를 넘었습니다. 첨부 파일을 줄여 주세요.", "size");
   }
+  if ((rc === 550 || rc === 551 || rc === 553 || rc === 554) && /MAIL FROM/i.test(e?.command ?? "")) {
+    return new MailError("서버가 보내는 사람 주소를 허용하지 않았습니다. 로그인한 계정 또는 서버에 등록된 별칭 주소만 보내는 사람으로 쓸 수 있습니다.", "sender");
+  }
   if (code === "EENVELOPE" || ((rc === 550 || rc === 551 || rc === 553 || rc === 554) && /RCPT/i.test(e?.command ?? ""))) {
     return new MailError("받는 사람 주소를 서버가 받아들이지 않았습니다. 주소를 확인하세요.", "recipient");
   }
@@ -78,10 +83,11 @@ export class MailSender {
 
   /** 보낼 메일 원문(MIME)을 만든다. Bcc 는 머리글에 넣지 않는다. */
   async build(creds: MailCredentials, mail: OutgoingMail): Promise<{ raw: Buffer; messageId: string }> {
-    const domain = creds.email.split("@")[1] ?? "localhost";
+    const fromAddress = mail.fromAddress ?? creds.email;
+    const domain = fromAddress.split("@")[1] ?? "localhost";
     const messageId = `<${cryptoRandom()}@${domain}>`;
     const composer = new MailComposer({
-      from: { name: mail.fromName, address: creds.email },
+      from: { name: mail.fromName, address: fromAddress },
       to: mail.to.map(addr),
       cc: mail.cc.map(addr),
       subject: mail.subject,
@@ -116,7 +122,7 @@ export class MailSender {
     });
     try {
       // 받는 사람(Bcc 포함)은 봉투(envelope)로 지정하고, 머리글에는 To·Cc 만 남는다
-      await transport.sendMail({ envelope: { from: creds.email, to: recipients }, raw });
+      await transport.sendMail({ envelope: { from: mail.fromAddress ?? creds.email, to: recipients }, raw });
       this.log.info(`[Mail] 메일 발송 완료: 받는 사람 ${recipients.length}명, 첨부 ${mail.attachments.length}개, 크기 ${Math.round(raw.length / 1024)}KB`);
       return { messageId, raw };
     } catch (err) {
