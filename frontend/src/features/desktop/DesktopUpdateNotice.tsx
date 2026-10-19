@@ -133,35 +133,40 @@ export function DesktopUpdateNotice() {
 
   const percent = ratio === null ? null : Math.round(ratio * 100);
   return (
-    <div role="status" aria-label="새 버전 안내" className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-tile-blue px-4 py-2.5 text-sm">
+    <div role="status" aria-label="새 버전 안내" className="mb-4 flex items-center gap-3 rounded-lg border-l-4 border-l-[#facc15] bg-[#1e293b] px-4 py-3 text-sm text-slate-50 shadow-md">
       <div className="min-w-0 flex-1">
         <span className="font-medium">새 버전 {latest.display}이 있습니다</span>
-        <span className="text-text-muted"> (현재 {formatVersion(current)})</span>
+        <span className="text-slate-300"> (현재 {formatVersion(current)})</span>
         {installing ? (
-          <p className="text-xs text-text-muted">설치 중입니다. 앱이 곧 종료되었다가 다시 시작됩니다...</p>
+          <p className="text-xs text-slate-300">설치 중입니다. 앱이 곧 종료되었다가 다시 시작됩니다...</p>
         ) : percent !== null && busy ? (
-          <p className="text-xs text-text-muted" aria-live="polite">
-            새 버전을 받는 중... {percent}%
-          </p>
+          <>
+            <p className="text-xs text-slate-300" aria-live="polite">
+              새 버전을 받는 중... {percent}%
+            </p>
+            <div className="mt-1.5 h-1 rounded-full bg-slate-50/25 overflow-hidden" role="progressbar" aria-label="새 버전 받는 중" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+              <div className="h-full bg-[#facc15] transition-[width]" style={{ width: `${percent}%` }} />
+            </div>
+          </>
         ) : (
           latest.notes && (
-            <p className="text-xs text-text-muted truncate" title={latest.notes}>
+            <p className="text-xs text-slate-300 truncate" title={latest.notes}>
               {latest.notes}
             </p>
           )
         )}
       </div>
       {direct ? (
-        <button type="button" onClick={() => void installNow()} disabled={busy} className="rounded-lg bg-primary text-white text-xs font-medium px-3 py-1.5 hover:bg-primary-hover disabled:opacity-60">
+        <button type="button" onClick={() => void installNow()} disabled={busy} className="rounded-lg bg-[#facc15] text-[#1e293b] text-xs font-bold px-3.5 py-1.5 hover:bg-[#fde047] disabled:opacity-70">
           {installing ? "설치 중..." : busy ? "받는 중..." : "지금 업데이트"}
         </button>
       ) : (
-        <button type="button" onClick={() => void download()} disabled={busy} className="rounded-lg bg-primary text-white text-xs font-medium px-3 py-1.5 hover:bg-primary-hover disabled:opacity-60">
+        <button type="button" onClick={() => void download()} disabled={busy} className="rounded-lg bg-[#facc15] text-[#1e293b] text-xs font-bold px-3.5 py-1.5 hover:bg-[#fde047] disabled:opacity-70">
           {busy ? "받는 중..." : "다운로드"}
         </button>
       )}
       {!busy && (
-        <button type="button" onClick={later} aria-label="나중에" title="나중에" className="p-1 text-text-muted hover:text-text">
+        <button type="button" onClick={later} aria-label="나중에" title="나중에" className="p-1 text-slate-300 hover:text-white">
           <X size={15} />
         </button>
       )}

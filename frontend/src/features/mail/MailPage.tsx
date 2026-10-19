@@ -437,6 +437,7 @@ function MailApp() {
         onComposeSelf={() => void openCompose("self")}
         onAddressBook={() => void leaveCompose().then((ok) => ok && setShowBook(true))}
         bookActive={showBook && !composing}
+        onBackToErp={getBenchClient()?.focusMain ? () => void getBenchClient()?.focusMain?.() : undefined}
       />
       <main className="flex-1 min-w-0 h-full">
         {composing ? (
@@ -456,7 +457,7 @@ function MailApp() {
             }}
           />
         ) : showBook ? (
-          <AddressBookView bridge={bridge} onCompose={(to) => void openComposeTo(to)} />
+          <AddressBookView bridge={bridge} onCompose={(to) => void openComposeTo(to)} onBack={() => setShowBook(false)} />
         ) : reading ? (
           <MailReader
             detail={detail}

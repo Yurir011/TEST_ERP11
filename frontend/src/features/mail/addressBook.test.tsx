@@ -48,7 +48,7 @@ describe("appendContacts (여러 사람 넣기)", () => {
 
 describe("주소록 화면", () => {
   it("이름·주소·메모를 목록으로 보여 주고, 이름이 없으면 안내한다", async () => {
-    render(<AddressBookView bridge={makeBridge()} onCompose={vi.fn()} />);
+    render(<AddressBookView bridge={makeBridge()} onCompose={vi.fn()} onBack={vi.fn()} />);
     expect(await screen.findByText("김영업")).toBeTruthy();
     expect(screen.getByText("kim@a.com")).toBeTruthy();
     expect(screen.getByText("한빛통신")).toBeTruthy();
@@ -57,7 +57,7 @@ describe("주소록 화면", () => {
 
   it("검색하면 이름·주소·메모에 맞는 사람만 남고, 없으면 안내한다", async () => {
     const bridge = makeBridge();
-    render(<AddressBookView bridge={bridge} onCompose={vi.fn()} />);
+    render(<AddressBookView bridge={bridge} onCompose={vi.fn()} onBack={vi.fn()} />);
     await screen.findByText("김영업");
     fireEvent.change(screen.getByLabelText("주소록 검색"), { target: { value: "한빛" } });
     await waitFor(() => expect(screen.queryByText("박대리")).toBeNull());
@@ -67,13 +67,13 @@ describe("주소록 화면", () => {
   });
 
   it("비어 있으면 추가 방법을 안내한다", async () => {
-    render(<AddressBookView bridge={makeBridge([])} onCompose={vi.fn()} />);
+    render(<AddressBookView bridge={makeBridge([])} onCompose={vi.fn()} onBack={vi.fn()} />);
     expect(await screen.findByText(/주소록이 비어 있습니다/)).toBeTruthy();
   });
 
   it("[연락처 추가]에서 입력해 저장하면 목록에 나타난다", async () => {
     const bridge = makeBridge();
-    render(<AddressBookView bridge={bridge} onCompose={vi.fn()} />);
+    render(<AddressBookView bridge={bridge} onCompose={vi.fn()} onBack={vi.fn()} />);
     await screen.findByText("김영업");
     fireEvent.click(screen.getByRole("button", { name: "연락처 추가" }));
     const dialog = await screen.findByRole("dialog", { name: "연락처 추가" });
@@ -88,7 +88,7 @@ describe("주소록 화면", () => {
   });
 
   it("저장이 거절되면 이유를 보여 주고 창을 닫지 않는다", async () => {
-    render(<AddressBookView bridge={makeBridge()} onCompose={vi.fn()} />);
+    render(<AddressBookView bridge={makeBridge()} onCompose={vi.fn()} onBack={vi.fn()} />);
     await screen.findByText("김영업");
     fireEvent.click(screen.getByRole("button", { name: "연락처 추가" }));
     const dialog = await screen.findByRole("dialog", { name: "연락처 추가" });
@@ -100,7 +100,7 @@ describe("주소록 화면", () => {
 
   it("[수정]은 기존 값을 채워 열고, 주소를 바꾸면 예전 주소를 함께 알린다", async () => {
     const bridge = makeBridge();
-    render(<AddressBookView bridge={bridge} onCompose={vi.fn()} />);
+    render(<AddressBookView bridge={bridge} onCompose={vi.fn()} onBack={vi.fn()} />);
     await screen.findByText("김영업");
     fireEvent.click(screen.getByRole("button", { name: "김영업 수정" }));
     const dialog = await screen.findByRole("dialog", { name: "연락처 수정" });
@@ -115,7 +115,7 @@ describe("주소록 화면", () => {
 
   it("[삭제]는 확인을 받은 뒤에만 지운다", async () => {
     const bridge = makeBridge();
-    render(<AddressBookView bridge={bridge} onCompose={vi.fn()} />);
+    render(<AddressBookView bridge={bridge} onCompose={vi.fn()} onBack={vi.fn()} />);
     await screen.findByText("김영업");
     confirm.mockResolvedValue(false);
     fireEvent.click(screen.getByRole("button", { name: "김영업 삭제" }));
@@ -129,7 +129,7 @@ describe("주소록 화면", () => {
 
   it("한 사람의 [메일쓰기]와 체크한 여러 사람 [메일쓰기]는 받는 사람 글을 만들어 넘긴다", async () => {
     const onCompose = vi.fn();
-    render(<AddressBookView bridge={makeBridge()} onCompose={onCompose} />);
+    render(<AddressBookView bridge={makeBridge()} onCompose={onCompose} onBack={vi.fn()} />);
     await screen.findByText("김영업");
     expect((screen.getByRole("button", { name: /선택한 0명에게 메일쓰기/ }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "박대리 에게 메일쓰기" }));
@@ -172,5 +172,15 @@ describe("메일쓰기의 주소록 고르기", () => {
     expect(await screen.findByText("주소록이 비어 있습니다.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("주소록 뒤로가기", () => {
+  it("[뒤로]를 누르면 돌아간다", async () => {
+    const onBack = vi.fn();
+    render(<AddressBookView bridge={makeBridge()} onCompose={vi.fn()} onBack={onBack} />);
+    await screen.findByText("김영업");
+    fireEvent.click(screen.getByRole("button", { name: "뒤로가기" }));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

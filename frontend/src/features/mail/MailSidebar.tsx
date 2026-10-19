@@ -1,4 +1,4 @@
-import { BookUser, FileEdit, Folder, Inbox, Layers, Paperclip, Send, SquarePen, Star, Mail as MailIcon, Settings, Trash2, ShieldAlert } from "lucide-react";
+import { ArrowLeft, BookUser, FileEdit, Folder, Inbox, Layers, Paperclip, Send, SquarePen, Star, Mail as MailIcon, Settings, Trash2, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { ALL_MAIL_FOLDER, type MailFilter, type MailFolder } from "../../lib/desktop";
 import { folderLabel, isSelfMailFolder, sortFolders } from "./mailFormat";
@@ -17,6 +17,8 @@ interface Props {
   onAddressBook: () => void;
   /** 주소록 화면을 보고 있는가 */
   bookActive: boolean;
+  /** ERP 메인 창으로 돌아가기 (앱이 지원할 때만) */
+  onBackToErp?: () => void;
 }
 
 function folderIcon(f: MailFolder): ReactNode {
@@ -44,14 +46,21 @@ const QUICK: { key: "unread" | "flagged" | "attachment"; label: string; icon: Re
 ];
 
 /** 왼쪽 패널: 내 정보, 빠른 조건(안읽음·중요·첨부), 메일쓰기, 폴더 목록 */
-export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive }: Props) {
+export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive, onBackToErp }: Props) {
   const all: MailFolder = { path: ALL_MAIL_FOLDER, name: "전체메일", specialUse: null, unread: 0, total: 0 };
   const sorted = sortFolders(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 0, total: 0 }]);
   const list = [all, ...sorted];
 
   return (
     <aside className="w-72 shrink-0 bg-surface border-r border-border flex flex-col h-full" aria-label="메일 메뉴">
-      <div className="flex items-center gap-3 px-5 pt-6 pb-4">
+      {onBackToErp && (
+        <div className="px-4 pt-4">
+          <button type="button" onClick={onBackToErp} className="flex items-center gap-1.5 text-xs text-text-muted hover:text-primary">
+            <ArrowLeft size={13} /> ERP 로 돌아가기
+          </button>
+        </div>
+      )}
+      <div className={`flex items-center gap-3 px-5 ${onBackToErp ? "pt-3" : "pt-6"} pb-4`}>
         <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center text-base font-semibold shrink-0" aria-hidden="true">
           {userName.slice(0, 1) || "?"}
         </div>

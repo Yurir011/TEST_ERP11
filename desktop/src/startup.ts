@@ -5,8 +5,12 @@
 /** 윈도우 시작 시 자동 실행으로 켜질 때 붙는 옵션: 창을 띄우지 않고 트레이에만 조용히 시작한다 */
 export const HIDDEN_FLAG = "--hidden";
 
+/** 설치 프로그램이 업데이트를 마치고 앱을 다시 켤 때 붙이는 옵션 */
+export const UPDATED_FLAG = "--updated";
+
+/** 업데이트 직후 다시 켜진 경우에는 (자동 실행 옵션이 함께 있어도) 창을 숨기지 않는다 */
 export function startsHidden(argv: readonly string[]): boolean {
-  return argv.includes(HIDDEN_FLAG);
+  return argv.includes(HIDDEN_FLAG) && !argv.includes(UPDATED_FLAG);
 }
 
 /**

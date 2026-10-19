@@ -3,13 +3,16 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { HIDDEN_FLAG, badgeImageName, clampBadgeCount, loginItemSettings, parseConversationId, startsHidden } from "./startup";
+import { HIDDEN_FLAG, UPDATED_FLAG, badgeImageName, clampBadgeCount, loginItemSettings, parseConversationId, startsHidden } from "./startup";
 
 describe("숨김 시작", () => {
   it("자동 실행으로 켜질 때만 창을 띄우지 않는다", () => {
     expect(startsHidden(["C:\\app\\BENCH ERP.exe", HIDDEN_FLAG])).toBe(true);
     expect(startsHidden(["C:\\app\\BENCH ERP.exe"])).toBe(false);
     expect(startsHidden([])).toBe(false);
+    // 업데이트 직후 설치 프로그램이 다시 켠 경우에는 자동 실행 옵션이 있어도 창을 보여 준다
+    expect(startsHidden(["C:\app\BENCH ERP.exe", HIDDEN_FLAG, UPDATED_FLAG])).toBe(false);
+    expect(startsHidden(["C:\app\BENCH ERP.exe", UPDATED_FLAG])).toBe(false);
   });
 });
 

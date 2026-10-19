@@ -93,6 +93,7 @@ describe("바로 업데이트 (앱이 업데이트를 지원할 때)", () => {
     await waitFor(() => expect(progressCb).toBeTruthy());
     act(() => progressCb?.({ ratio: 0.42 }));
     expect(await screen.findByText(/새 버전을 받는 중\.\.\. 42%/)).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "새 버전 받는 중" }).getAttribute("aria-valuenow")).toBe("42");
     expect((screen.getByRole("button", { name: "받는 중..." }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "나중에" })).toBeNull(); // 진행 중에는 닫을 수 없다
     await act(async () => finish({ ok: true, value: { display: LATEST.display } }));

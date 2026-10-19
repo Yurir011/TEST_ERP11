@@ -136,6 +136,12 @@ export interface MailSendResult {
 
 export type MailResult<T> = { ok: true; value: T } | { ok: false; error: string; canceled?: boolean };
 
+export interface NewMailItem {
+  id: number;
+  from: string;
+  subject: string;
+}
+
 export interface MailContact {
   name: string;
   address: string;
@@ -169,6 +175,9 @@ export interface MailIdentitySettings {
 export interface MailBridge {
   /** 메일을 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로) */
   openWindow(): Promise<void>;
+  /** 새 메일이 도착했을 때 호출된다 (보낸 사람·제목. 이 PC 안에서만 오간다) / 그 메일을 메일 창에서 연다 */
+  onNewMail(cb: (items: NewMailItem[]) => void): () => void;
+  openMessage(id: number): Promise<void>;
   account(): Promise<MailAccountInfo | null>;
   /** 받는 사람 자동완성: 메일을 보낸 적 있는 주소(최근 순, query 가 있으면 이름·주소에 맞는 것) / 주소록에서 지우기 */
   contacts(query: string, limit?: number): Promise<MailContact[]>;
@@ -279,6 +288,8 @@ export interface BenchClient {
   setBadge(count: number): Promise<void>;
   /** 메일 기능. 이 기능이 없는 예전 앱 버전에서는 undefined */
   mail?: MailBridge;
+  /** ERP 메인 창을 앞으로 가져온다 (메일 창에서 돌아가기). 예전 앱에는 없다 */
+  focusMain?(): Promise<void>;
   /** 앱 업데이트 (예전 앱에는 없다) */
   update?: UpdateBridge;
 }

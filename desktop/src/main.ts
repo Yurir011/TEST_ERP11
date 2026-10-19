@@ -32,7 +32,7 @@ import { NfcReader, type NfcStatus } from "./nfc/reader";
 import { INSTALLER_ARGS, checkForUpdate, describeUpdate, downloadInstaller } from "./updater";
 import { DEFAULT_ZOOM, stepZoom, zoomKeyAction } from "./zoom";
 import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, loadDefaultServer, normalizeServerUrl, saveConfig } from "./serverConfig";
-import { badgeImageName, badgeSummary, clampBadgeCount, combinedBadgeCount, loginItemSettings, parseConversationId, startsHidden } from "./startup";
+import { badgeImageName, badgeSummary, clampBadgeCount, combinedBadgeCount, loginItemSettings, parseConversationId, startsHidden, UPDATED_FLAG } from "./startup";
 import { formatVersion } from "./version";
 
 const log = getLogger("Main");
@@ -56,6 +56,8 @@ let tray: Tray | null = null;
 let reader: NfcReader | null = null;
 let quitting = false;
 let loggedOutOnQuit = false;
+const UPDATE_LOCK_WAIT_MS = 500;
+const UPDATE_LOCK_RETRIES = 40; // 최대 20초
 /** 앱 업데이트를 진행 중이면 true (다시 눌러도 한 번만 하고, 끝날 때 로그아웃하지 않는다) */
 let updating = false;
 let deviceKey: DeviceKey | null = null;
@@ -405,6 +407,8 @@ function handlePollResult(r: PollResult): void {
   applyBadge();
   const window = mailWin && !mailWin.isDestroyed() ? mailWin : null;
   if (r.changed && window) window.webContents.send("mail:changed");
+  // ERP 창 사이드바에 새 메일(보낸 사람·제목)을 보여 줄 수 있게 알린다 (메일 내용은 이 PC 안에서만 오간다)
+  if (r.newMail.length > 0 && win && !win.isDestroyed()) win.webContents.send("mail:new", r.newMail.map((m) => ({ id: m.id, from: m.from, subject: m.subject })));
   const notice = formatNewMailNotice(r.newMail);
   if (!notice) return;
   if (window && window.isFocused()) return; // 지금 메일 창을 보고 있으면 따로 알리지 않는다 (목록에 바로 나타난다)
@@ -555,6 +559,19 @@ function registerIpc(): void {
   });
 
 
+  /** ERP 사이드바의 새 메일 알림을 눌렀을 때: 메일 창을 열고 그 메일로 이동 */
+  ipcMain.handle("mail:open-message-window", (e, id: unknown) => {
+    if (!guard(e, "mail:open-message-window", ["server"])) return;
+    const n = parseMailId(id);
+    if (n !== null) openMessageInMailWindow(n);
+  });
+
+  /** 메일 창에서 ERP 메인 창으로 돌아가기 */
+  ipcMain.handle("app:focus-main", (e) => {
+    if (!guard(e, "app:focus-main", ["server"])) return;
+    showWindow();
+  });
+
   ipcMain.handle("mail:open-window", (e) => {
     if (!guard(e, "mail:open-window", ["server"])) return;
     openMailWindow();
@@ -633,6 +650,8 @@ function registerIpc(): void {
       setTimeout(() => {
         quitting = true;
         app.quit();
+        // 종료가 어떤 이유로 끝나지 않아도 이전 앱이 남아 새 앱을 막지 않게, 잠시 뒤 확실히 끝낸다
+        setTimeout(() => app.exit(0), 4000).unref();
       }, 800);
       return { ok: true, value: { display: info.latest.display } };
     } catch (err) {
@@ -1105,10 +1124,14 @@ async function runSmoke(): Promise<void> {
     if (base.ok) handlePollResult(base.value);
     check("[새 메일] 처음 확인에서는 이미 받아 둔 메일 때문에 알림이 뜨지 않는다", base.ok && base.value.newMail.length === 0 && notices.length === 0);
 
+    await w.webContents.executeJavaScript(`window.__newmail = []; void window.benchClient.mail.onNewMail((items) => window.__newmail.push(items))`); // 반환값(함수)은 복사할 수 없으므로 버린다
     await appendRaw("NOTIFY-TEST", "알림 시험 본문");
     const poll1 = await mail!.pollInbox();
     if (poll1.ok) handlePollResult(poll1.value);
     check("[새 메일] 새로 도착한 안 읽은 메일 한 통이 알림으로 전달된다 (보낸 사람 이름·제목)", poll1.ok && poll1.value.newMail.length === 1 && notices.length === 1 && notices[0].title === "Smoke Sender" && notices[0].body === "NOTIFY-TEST");
+    await sleep(150);
+    const sidebarNew = await w.webContents.executeJavaScript("window.__newmail");
+    check("[새 메일] ERP 창에도 새 메일(보낸 사람·제목)이 전달된다", sidebarNew.length === 1 && sidebarNew[0].length === 1 && sidebarNew[0][0].subject === "NOTIFY-TEST" && sidebarNew[0][0].from === "Smoke Sender" && typeof sidebarNew[0][0].id === "number");
     check("[새 메일] 작업 표시줄 배지가 메일 안 읽은 수를 따라간다", badgeMail === mail!.inboxUnread() && badgeMail >= 2);
 
     const poll2 = await mail!.pollInbox();
@@ -1340,11 +1363,32 @@ async function runSmoke(): Promise<void> {
   app.exit(ok ? 0 : 1);
 }
 
-if (!app.requestSingleInstanceLock()) {
-  log.info("[Main] 이미 실행 중이라 종료합니다");
-  app.quit();
-} else {
-  app.on("second-instance", () => showWindow());
+/**
+ * 이미 실행 중인 앱이 없을 때만 시작한다. 업데이트 직후 설치 프로그램이 앱을 다시 켜는 순간에는 이전 앱이 아직 끝나는 중일 수 있으므로,
+ * 그 경우(--updated)에는 이전 앱이 끝날 때까지 잠시 기다렸다가 시작한다 (바로 포기하면 아무 창도 뜨지 않은 채 끝나 버린다).
+ */
+async function acquireInstanceLock(): Promise<boolean> {
+  if (app.requestSingleInstanceLock()) return true;
+  if (!process.argv.includes(UPDATED_FLAG)) return false;
+  for (let i = 0; i < UPDATE_LOCK_RETRIES; i++) {
+    await new Promise((r) => setTimeout(r, UPDATE_LOCK_WAIT_MS));
+    if (app.requestSingleInstanceLock()) return true;
+  }
+  return false;
+}
+
+void acquireInstanceLock().then((ok) => {
+  if (ok) runApp();
+  else {
+    log.info("[Main] 이미 실행 중이라 종료합니다");
+    app.quit();
+  }
+});
+
+function runApp(): void {
+  app.on("second-instance", () => {
+    if (!quitting) showWindow(); // 끝나는 중인 앱의 창을 되살리지 않는다
+  });
   app.on("before-quit", (event) => {
     quitting = true;
     // 앱을 끝낼 때는 ERP 에서 로그아웃한다 (다음에 켜면 로그인 화면). 저장소를 비우는 동안 잠깐 끝내기를 미뤘다가 다시 끝낸다
@@ -1399,6 +1443,7 @@ if (!app.requestSingleInstanceLock()) {
       }
     } else {
       await openServer();
+      if (process.argv.includes(UPDATED_FLAG)) showWindow(); // 업데이트 뒤에는 창을 확실히 보여 준다 (트레이에만 숨지 않게)
       if (HIDDEN_START && !config.serverUrl) showWindow(); // 서버 주소를 아직 모르면 입력받아야 하므로 창을 띄운다
       void refreshDevice();
       deviceTimer = setInterval(() => void refreshDevice(), 60_000);

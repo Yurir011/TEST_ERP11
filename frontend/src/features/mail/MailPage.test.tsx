@@ -47,6 +47,8 @@ function installMail(over: Partial<MailBridge> = {}) {
     account: vi.fn().mockResolvedValue(account),
     contacts: vi.fn().mockResolvedValue([]),
     removeContact: vi.fn().mockResolvedValue(true),
+    onNewMail: vi.fn(() => () => {}),
+    openMessage: vi.fn().mockResolvedValue(undefined),
     addressBook: vi.fn().mockResolvedValue([]),
     saveContact: vi.fn((input: { name: string; address: string; memo: string }) => Promise.resolve({ ok: true as const, value: { ...input, manual: true, lastUsed: 0 } })),
     identities: vi.fn().mockResolvedValue({ items: [], defaultAddress: "" }),
@@ -969,6 +971,29 @@ describe("주소록", () => {
     fireEvent.click(screen.getByRole("button", { name: /받은메일함|INBOX/ }));
     expect(await screen.findByRole("list", { name: "메일 목록" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "주소록" })).toBeNull();
+  });
+
+  it("주소록의 [뒤로]는 메일 목록으로 돌아간다", async () => {
+    installMail({ addressBook: vi.fn().mockResolvedValue(book) });
+    renderPage();
+    await screen.findByText("견적서 송부");
+    fireEvent.click(screen.getByRole("button", { name: "주소록" }));
+    fireEvent.click(await screen.findByRole("button", { name: "뒤로가기" }));
+    expect(await screen.findByRole("list", { name: "메일 목록" })).toBeTruthy();
+  });
+
+  it("[ERP 로 돌아가기]는 ERP 메인 창을 앞으로 가져온다 (앱이 지원할 때만 보인다)", async () => {
+    const focusMain = vi.fn().mockResolvedValue(undefined);
+    installMail();
+    (window.benchClient as unknown as { focusMain: () => Promise<void> }).focusMain = focusMain;
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /ERP 로 돌아가기/ }));
+    expect(focusMain).toHaveBeenCalledTimes(1);
+    cleanup();
+    installMail(); // focusMain 이 없는 예전 앱
+    renderPage();
+    await screen.findByText("견적서 송부");
+    expect(screen.queryByRole("button", { name: /ERP 로 돌아가기/ })).toBeNull();
   });
 
   it("주소록에서 [메일쓰기]를 누르면 그 사람이 받는사람에 채워진 쓰기 화면이 열리고, 취소하면 주소록으로 돌아온다", async () => {

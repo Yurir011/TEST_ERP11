@@ -35,10 +35,15 @@ const api = {
   notify: (title: string, body: string, conversationId?: number): Promise<void> => ipcRenderer.invoke("app:notify", title, body, conversationId),
   onOpenConversation: (cb: (payload: { conversationId: number }) => void): Unsubscribe => subscribe("app:open-conversation", cb),
   setBadge: (count: number): Promise<void> => ipcRenderer.invoke("app:badge", count),
+  /** ERP 메인 창을 앞으로 가져온다 (메일 창에서 돌아가기) */
+  focusMain: (): Promise<void> => ipcRenderer.invoke("app:focus-main"),
   /** 메일 (앱 전용). 비밀번호는 saveAccount 로 한 번 보내기만 하고 어디서도 돌려받지 않는다 */
   mail: {
     /** 메일을 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로) */
     openWindow: (): Promise<void> => ipcRenderer.invoke("mail:open-window"),
+    /** 새 메일이 도착했을 때 (보낸 사람·제목, 이 PC 안에서만) / 그 메일을 메일 창에서 열기 */
+    onNewMail: (cb: (items: { id: number; from: string; subject: string }[]) => void): Unsubscribe => subscribe("mail:new", cb),
+    openMessage: (id: number): Promise<void> => ipcRenderer.invoke("mail:open-message-window", id),
     account: (): Promise<unknown> => ipcRenderer.invoke("mail:account"),
     /** 보내는 사람 목록(쓰기 화면에서 고르는 이름·주소) 읽기·저장 */
     /** 받는 사람 자동완성: 보낸 적 있는 주소 목록(입력한 글이 있으면 걸러서), 목록에서 지우기 */

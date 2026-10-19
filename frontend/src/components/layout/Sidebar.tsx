@@ -20,6 +20,8 @@ import { useMessengerOptional } from "../../features/messenger/useMessenger";
 import { TodoPanel } from "../../features/todos/TodoPanel";
 import { apiGet } from "../../lib/api";
 import { hasMenuPermission, type MenuPermissionKey } from "../../lib/auth";
+import { NewMailNotices } from "../../features/mail/NewMailNotices";
+import { useNewMailNotices } from "../../features/mail/useNewMailNotices";
 import { useMailUnread } from "../../features/mail/useMailUnread";
 import { getBenchClient } from "../../lib/desktop";
 import { logError } from "../../lib/logger";
@@ -61,7 +63,9 @@ export function Sidebar() {
   const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
   const mailBridge = getBenchClient()?.mail;
   const hasDesktopMail = typeof mailBridge?.openWindow === "function";
-  const mailUnread = useMailUnread(!!user) ?? 0;
+  const mailUnreadRaw = useMailUnread(!!user);
+  const mailUnread = mailUnreadRaw ?? 0;
+  const newMail = useNewMailNotices(mailUnreadRaw);
   const visibleItems = menuItems.filter((item) => {
     if (item.desktopMailOnly && !hasDesktopMail) return false;
     if (item.adminOnly) return user?.role === "admin";
@@ -95,8 +99,8 @@ export function Sidebar() {
         {visibleItems.map(({ to, label, icon: Icon, end, colorClass, desktopMailOnly }) =>
           desktopMailOnly ? (
             // 메일은 메뉴 이동이 아니라 별도 창을 여는 버튼이다 (이미 열려 있으면 그 창을 앞으로)
+            <div key={to}>
             <button
-              key={to}
               type="button"
               onClick={() => {
                 console.debug("[Sidebar] 메일 버튼 클릭 → 메일 창 열기");
@@ -112,6 +116,16 @@ export function Sidebar() {
                 </span>
               )}
             </button>
+            <NewMailNotices
+              items={newMail.items}
+              onOpen={(id) => {
+                newMail.dismiss(id);
+                void mailBridge?.openMessage(id);
+              }}
+              onDismiss={newMail.dismiss}
+              onClear={newMail.clear}
+            />
+            </div>
           ) : (
           <NavLink
             key={to}

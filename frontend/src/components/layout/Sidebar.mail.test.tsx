@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BenchClient } from "../../lib/desktop";
@@ -109,5 +109,80 @@ describe("안 읽은 메일 수", () => {
     renderSidebar();
     await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(4));
     expect(screen.queryByText("안 읽은 메일")).toBeNull();
+  });
+});
+
+describe("새 메일 알림 (사이드바)", () => {
+  function installWithNewMail(unread: number | null = 3) {
+    let push: (items: { id: number; from: string; subject: string }[]) => void = () => {};
+    let pushUnread: (p: { unread: number }) => void = () => {};
+    const openMessage = vi.fn().mockResolvedValue(undefined);
+    window.benchClient = {
+      mail: {
+        openWindow: vi.fn(),
+        unread: vi.fn().mockResolvedValue(unread),
+        onUnread: vi.fn((cb: typeof pushUnread) => {
+          pushUnread = cb;
+          return () => {};
+        }),
+        onNewMail: vi.fn((cb: typeof push) => {
+          push = cb;
+          return () => {};
+        }),
+        openMessage,
+      },
+    } as unknown as BenchClient;
+    return { openMessage, push: (items: Parameters<typeof push>[0]) => act(() => push(items)), pushUnread: (n: number) => act(() => pushUnread({ unread: n })) };
+  }
+
+  it("새 메일이 오면 [메일] 아래에 보낸 사람·제목이 나타난다 (이름 붙은 보낸 사람은 이름만)", async () => {
+    const h = installWithNewMail();
+    renderSidebar();
+    await screen.findByLabelText("안 읽은 메일 3통");
+    expect(screen.queryByRole("region", { name: "새 메일 알림" })).toBeNull();
+    h.push([{ id: 7, from: "김영업 <kim@a.com>", subject: "견적서 송부" }]);
+    const box = await screen.findByRole("region", { name: "새 메일 알림" });
+    expect(within(box).getByText("김영업")).toBeTruthy();
+    expect(within(box).getByText("견적서 송부")).toBeTruthy();
+  });
+
+  it("누르면 메일 창에서 그 메일을 열고 알림은 사라진다", async () => {
+    const h = installWithNewMail();
+    renderSidebar();
+    await screen.findByLabelText("안 읽은 메일 3통");
+    h.push([{ id: 7, from: "a@x.com", subject: "안녕" }]);
+    fireEvent.click(await screen.findByRole("button", { name: "a@x.com 안녕" }));
+    expect(h.openMessage).toHaveBeenCalledWith(7);
+    await waitFor(() => expect(screen.queryByRole("region", { name: "새 메일 알림" })).toBeNull());
+  });
+
+  it("최근 3통만 최신 순으로 보이고, 하나씩 닫거나 모두 지울 수 있다", async () => {
+    const h = installWithNewMail();
+    renderSidebar();
+    await screen.findByLabelText("안 읽은 메일 3통");
+    for (const id of [1, 2, 3, 4]) h.push([{ id, from: `u${id}@x.com`, subject: `제목${id}` }]);
+    const box = await screen.findByRole("region", { name: "새 메일 알림" });
+    expect(within(box).getAllByRole("listitem").map((li) => li.textContent)).toEqual([expect.stringContaining("제목4"), expect.stringContaining("제목3"), expect.stringContaining("제목2")]);
+    h.push([{ id: 4, from: "u4@x.com", subject: "제목4" }]); // 같은 메일은 중복해서 쌓지 않는다
+    expect(within(box).getAllByRole("listitem")).toHaveLength(3);
+    fireEvent.click(within(box).getByRole("button", { name: "u4@x.com 알림 닫기" }));
+    expect(within(box).getAllByRole("listitem")).toHaveLength(2);
+    fireEvent.click(within(box).getByRole("button", { name: "모두 지우기" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "새 메일 알림" })).toBeNull());
+  });
+
+  it("안 읽은 메일이 0통이 되면 알림도 사라진다", async () => {
+    const h = installWithNewMail();
+    renderSidebar();
+    await screen.findByLabelText("안 읽은 메일 3통");
+    h.push([{ id: 1, from: "a@x.com", subject: "s" }]);
+    await screen.findByRole("region", { name: "새 메일 알림" });
+    h.pushUnread(0);
+    await waitFor(() => expect(screen.queryByRole("region", { name: "새 메일 알림" })).toBeNull());
+  });
+
+  it("브라우저에는 알림이 없다", () => {
+    renderSidebar();
+    expect(screen.queryByRole("region", { name: "새 메일 알림" })).toBeNull();
   });
 });

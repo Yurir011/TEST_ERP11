@@ -1,4 +1,4 @@
-import { Pencil, Plus, Search, SquarePen, Trash2, X } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Search, SquarePen, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import type { AddressBookEntry, MailBridge } from "../../lib/desktop";
@@ -9,6 +9,8 @@ interface Props {
   bridge: MailBridge;
   /** 고른 연락처들에게 메일을 쓴다 (받는 사람 칸에 채워진 글) */
   onCompose: (to: string) => void;
+  /** 메일 목록으로 돌아간다 */
+  onBack: () => void;
 }
 
 interface Draft {
@@ -24,7 +26,7 @@ const FIELD = "w-full rounded-lg border border-border bg-transparent px-3 py-2 t
  * 주소록 화면: 직접 추가한 연락처와 메일을 보내며 자동으로 올라온 주소를 이름순으로 보여 주고, 검색·추가·수정·삭제하고,
  * 체크한 사람들에게 바로 메일을 쓸 수 있다. 이 PC 에만 저장된다.
  */
-export function AddressBookView({ bridge, onCompose }: Props) {
+export function AddressBookView({ bridge, onCompose, onBack }: Props) {
   const dialog = useDialog();
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<AddressBookEntry[]>([]);
@@ -104,6 +106,9 @@ export function AddressBookView({ bridge, onCompose }: Props) {
   return (
     <section className="flex flex-col h-full min-w-0" aria-label="주소록">
       <div className="flex items-center gap-3 px-6 pt-5 pb-3">
+        <button type="button" onClick={onBack} aria-label="뒤로가기" title="메일로 돌아가기" className="flex items-center gap-1 rounded-lg border border-border text-sm px-3 py-2.5 hover:bg-bg">
+          <ArrowLeft size={15} /> 뒤로
+        </button>
         <h1 className="text-lg font-semibold mr-2">주소록</h1>
         <button type="button" onClick={() => { setFormError(null); setDraft({ name: "", address: "", memo: "" }); }} className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5">
           <Plus size={15} /> 연락처 추가
