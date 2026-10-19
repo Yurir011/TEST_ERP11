@@ -2,6 +2,7 @@ import { Bell, Building2, CalendarCheck, CalendarDays, Clock, FileCheck, Megapho
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import { hasMenuPermission } from "../../lib/auth";
@@ -28,6 +29,7 @@ interface MenuTile {
 export function MobileHome() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const dialog = useDialog();
   useViewportLock();
   const [today, setToday] = useState<AttendanceRecord | null | undefined>(undefined);
   const [isBusy, setIsBusy] = useState(false);
@@ -64,6 +66,7 @@ export function MobileHome() {
 
   async function handleClock() {
     if (isBusy || isDone) return;
+    if (isWorking && !(await dialog.confirm("퇴근 처리할까요?\n퇴근하면 오늘은 다시 출근으로 되돌릴 수 없습니다.", { okLabel: "퇴근하기", danger: true }))) return;
     setError(null);
     setIsBusy(true);
     try {

@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import { formatDuration, formatTime } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
@@ -14,6 +15,7 @@ function dayLabel(iso: string) {
 }
 
 export function MobileAttendancePage() {
+  const dialog = useDialog();
   const now = new Date();
   const [today, setToday] = useState<AttendanceRecord | null | undefined>(undefined);
   const [year, setYear] = useState(now.getFullYear());
@@ -52,6 +54,7 @@ export function MobileAttendancePage() {
 
   async function handleClock() {
     if (isBusy || isDone) return;
+    if (isWorking && !(await dialog.confirm("퇴근 처리할까요?\n퇴근하면 오늘은 다시 출근으로 되돌릴 수 없습니다.", { okLabel: "퇴근하기", danger: true }))) return;
     setError(null);
     setIsBusy(true);
     try {

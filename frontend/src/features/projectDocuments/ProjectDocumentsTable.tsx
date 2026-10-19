@@ -1,4 +1,5 @@
 import { Download, Mail, Printer, Sheet, Trash2 } from "lucide-react";
+import { CLAMP_CELL, ClampText } from "../../components/ui/ClampText";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal } from "../proposals/types";
 import { formatDocAmount, isDocApproved, itemsSummary, itemsTotal, type DocListRow } from "./documentHelpers";
@@ -60,10 +61,10 @@ export function ProjectDocumentsTable({
               <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">팝빌</th>
             )}
             <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">날짜</th>
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center">프로젝트</th>
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center">거래처명</th>
+            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[22%]">프로젝트</th>
+            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[22%]">거래처명</th>
             <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">담당자</th>
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center">내용</th>
+            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[26%]">내용</th>
             <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">합계</th>
             <th className="w-px whitespace-nowrap"></th>
           </tr>
@@ -101,7 +102,9 @@ export function ProjectDocumentsTable({
                   <td className="py-2.5 px-4 text-center text-text-muted">-</td>
                   <td className="py-2.5 px-4 text-center text-text-muted">-</td>
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">{p.creator_name}</td>
-                  <td className="py-2.5 px-4 text-center">{p.title}</td>
+                  <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
+                    <ClampText>{p.title}</ClampText>
+                  </td>
                   <td className="py-2.5 px-4 text-right text-text-muted whitespace-nowrap">-</td>
                   <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1">
@@ -195,10 +198,16 @@ export function ProjectDocumentsTable({
                   {doc.issue_date}
                   {doc.doc_no && <p className="text-xs text-text-muted mt-0.5">No. {doc.doc_no}</p>}
                 </td>
-                <td className="py-2.5 px-4 text-center">{doc.project_name}</td>
-                <td className="py-2.5 px-4 text-center">{doc.client_name}</td>
+                <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
+                  <ClampText>{doc.project_name}</ClampText>
+                </td>
+                <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
+                  <ClampText>{doc.client_name}</ClampText>
+                </td>
                 <td className="py-2.5 px-4 text-center whitespace-nowrap">{doc.manager_name ?? "-"}</td>
-                <td className="py-2.5 px-4 text-center">{itemsSummary(doc)}</td>
+                <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
+                  <ClampText>{itemsSummary(doc)}</ClampText>
+                </td>
                 <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap">{formatDocAmount(doc, itemsTotal(doc))}</td>
                 <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-1">

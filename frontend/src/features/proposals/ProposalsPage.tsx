@@ -5,6 +5,7 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
+import { CLAMP_CELL, ClampText } from "../../components/ui/ClampText";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { ProposalDetailModal } from "./ProposalDetailModal";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal } from "./types";
@@ -190,7 +191,7 @@ export function ProposalsPage({
             <thead>
               <tr className="text-left text-text-muted border-b border-border">
                 <th className="py-2.5 px-4 font-medium">문서번호</th>
-                <th className="py-2.5 px-4 font-medium">제목</th>
+                <th className="py-2.5 px-4 font-medium w-[45%]">제목</th>
                 <th className="py-2.5 px-4 font-medium">기안자</th>
                 <th className="py-2.5 px-4 font-medium">기안일자</th>
                 <th className="py-2.5 px-4 font-medium">상태</th>
@@ -207,8 +208,8 @@ export function ProposalsPage({
                     className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
                   >
                     <td className="py-2.5 px-4">{p.doc_no}</td>
-                    <td className="py-2.5 px-4">
-                      {docTitle(p)} · {p.title}
+                    <td className={`py-2.5 px-4 ${CLAMP_CELL}`}>
+                      <ClampText>{`${docTitle(p)} · ${p.title}`}</ClampText>
                     </td>
                     <td className="py-2.5 px-4">{p.creator_name}</td>
                     <td className="py-2.5 px-4">{p.issue_date}</td>

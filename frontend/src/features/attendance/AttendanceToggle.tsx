@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "./types";
 
 export function AttendanceToggle() {
+  const dialog = useDialog();
   const [today, setToday] = useState<AttendanceRecord | null | undefined>(undefined);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +28,7 @@ export function AttendanceToggle() {
 
   async function handleToggle() {
     if (isBusy || isDone) return;
+    if (isWorking && !(await dialog.confirm("퇴근 처리할까요?\n퇴근하면 오늘은 다시 출근으로 되돌릴 수 없습니다.", { okLabel: "퇴근하기", danger: true }))) return;
     setError(null);
     setIsBusy(true);
     try {
