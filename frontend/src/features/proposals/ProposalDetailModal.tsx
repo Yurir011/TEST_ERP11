@@ -1,6 +1,7 @@
 import { Check, Download, ExternalLink, Paperclip, Pencil, Printer, Link as LinkIcon, Trash2, X } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { ApprovalHistory } from "../../components/approval/ApprovalHistory";
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
@@ -165,7 +166,7 @@ export function ProposalDetailModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="bg-surface rounded-2xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto">
+      <div className="bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold">
@@ -214,6 +215,18 @@ export function ProposalDetailModal({
           <p>1. 아래와 같이 {proposal.topic}을 진행하고자 하오니 검토하여 승인해 주십시오.</p>
           <p className="mt-3 whitespace-pre-line text-text-muted">{proposal.content}</p>
         </div>
+
+        <ApprovalHistory
+          creatorName={proposal.creator_name}
+          createdAt={proposal.created_at}
+          summary={proposal.title}
+          steps={proposal.steps}
+          currentStep={proposal.current_step}
+          status={proposal.status}
+          finalDecision={proposal.is_final_decision}
+          rejectReason={proposal.reject_reason}
+          deleteRequested={proposal.delete_requested}
+        />
 
         <div className="mb-4">
           <p className="text-xs text-text-muted mb-1.5">첨부파일 · 링크</p>

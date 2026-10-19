@@ -349,3 +349,9 @@ def test_tax_invoice_creation_requires_permission(client, staff, auth_headers):
         json=_payload(doc_type="tax_invoice", approver_ids=[staff["dept_head"].id]),
     )
     assert res.status_code == 403
+
+
+def test_document_response_includes_creator_name(client, staff, auth_headers):
+    """결재 히스토리의 '작성' 칸에 쓰이는 작성자 이름이 문서 응답에 들어 있다."""
+    doc = _create(client, auth_headers(staff["writer"]), approver_ids=[staff["dept_head"].id])
+    assert doc["creator_name"] == "작성자"

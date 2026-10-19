@@ -208,6 +208,7 @@ class ProjectDocumentOut(BaseModel):
     reject_reason: str | None
     client_contact_email: str | None
     created_by: int
+    creator_name: str = ""
     created_at: datetime
     popbill_issued: bool
     popbill_nts_confirm_num: str | None

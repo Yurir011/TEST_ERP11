@@ -38,6 +38,7 @@ _DOC_QUERY_OPTIONS = (
     joinedload(ProjectDocument.other_client).joinedload(Client.contacts),
     joinedload(ProjectDocument.items),
     joinedload(ProjectDocument.approver),
+    joinedload(ProjectDocument.creator),
     joinedload(ProjectDocument.images),
 )
 
@@ -80,6 +81,7 @@ def _to_out(doc: ProjectDocument, steps: list[ApprovalStep]) -> ProjectDocumentO
         reject_reason=doc.reject_reason,
         client_contact_email=_first_contact_email(doc.effective_client),
         created_by=doc.created_by,
+        creator_name=doc.creator.name if doc.creator else "",
         created_at=doc.created_at,
         popbill_issued=bool(doc.popbill_issued_at),
         popbill_nts_confirm_num=doc.popbill_nts_confirm_num,

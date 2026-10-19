@@ -87,6 +87,7 @@ export interface ProjectDocument {
   reject_reason: string | null;
   client_contact_email: string | null;
   created_by: number;
+  creator_name: string;
   created_at: string;
   popbill_issued: boolean;
   popbill_nts_confirm_num: string | null;

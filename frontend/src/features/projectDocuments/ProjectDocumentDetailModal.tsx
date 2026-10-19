@@ -1,9 +1,10 @@
+import { ApprovalHistory } from "../../components/approval/ApprovalHistory";
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
 import { Check, Download, Eye, Mail, Pencil, Printer, Send, Sheet, X } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
 import { lineAmount } from "../../lib/money";
 import { DocumentMailHistory } from "../mail/DocumentMailHistory";
-import { formatDocAmount, itemsTotal } from "./documentHelpers";
+import { formatDocAmount, itemsSummary, itemsTotal } from "./documentHelpers";
 import { TaxInvoiceImages } from "./TaxInvoiceImages";
 import {
   PROJECT_DOC_STATUS_LABELS,
@@ -57,7 +58,7 @@ export function ProjectDocumentDetailModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="bg-surface rounded-2xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto">
+      <div className="bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold">
@@ -130,6 +131,19 @@ export function ProjectDocumentDetailModal({
         </div>
 
         <p className="text-right text-sm font-semibold mb-4">합계 {formatDocAmount(doc, itemsTotal(doc))}</p>
+
+        <ApprovalHistory
+          creatorName={doc.creator_name}
+          createdAt={doc.created_at}
+          summary={`${itemsSummary(doc)} · 합계 ${formatDocAmount(doc, itemsTotal(doc))}`}
+          steps={doc.steps}
+          currentStep={doc.current_step}
+          status={doc.status}
+          finalDecision={doc.is_final_decision}
+          rejectReason={doc.reject_reason}
+          deleteRequested={doc.delete_requested}
+          decidedAt={doc.reviewed_at}
+        />
 
         {doc.delete_requested && (
           <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-4">
