@@ -213,6 +213,24 @@ export interface MailPendingCompose {
   doc: MailDocRef;
 }
 
+export interface UpdateRelease {
+  version: string;
+  display: string;
+  filename: string;
+  size: number;
+}
+
+export type UpdateCheck = { ok: true; latest: UpdateRelease | null; current: string; newer: boolean } | { ok: false; error: string };
+
+export interface UpdateBridge {
+  /** 서버에 더 새 버전이 올라와 있는지 확인한다 */
+  check(): Promise<UpdateCheck>;
+  /** 새 버전을 받아 설치한다. 성공하면 곧 앱이 종료되고 설치 뒤 다시 시작된다 */
+  install(): Promise<MailResult<{ display: string }>>;
+  /** 받는 중 진행률 (0~1) */
+  onProgress(cb: (payload: { ratio: number }) => void): () => void;
+}
+
 export interface BenchClient {
   /** 앱 버전 (화면 표기 V.0.07.150) */
   getVersion(): Promise<string>;
@@ -236,6 +254,8 @@ export interface BenchClient {
   setBadge(count: number): Promise<void>;
   /** 메일 기능. 이 기능이 없는 예전 앱 버전에서는 undefined */
   mail?: MailBridge;
+  /** 앱 업데이트 (예전 앱에는 없다) */
+  update?: UpdateBridge;
 }
 
 declare global {

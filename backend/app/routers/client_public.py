@@ -8,6 +8,7 @@
  - 요청에서 파일 이름이나 경로를 받지 않는다(받을 값이 없으니 ../ 로 다른 파일을 내려받게 할 수 없다).
  - 설치 파일에는 비밀번호·키가 들어 있지 않다(서버 주소만 들어 있고, 소스 저장소도 공개 상태다).
 """
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -35,6 +36,25 @@ class PublicReleaseOut(BaseModel):
     display: str  # 화면 표기 V.0.70.171
     filename: str
     size: int
+    sha256: str  # 파일 내용의 SHA-256 (앱이 받은 파일이 손상되지 않았는지 확인할 때 쓴다)
+
+
+_hash_cache: dict[tuple[str, int, float], str] = {}
+
+
+def _file_sha256(path: Path, size: int) -> str:
+    """설치 파일의 SHA-256. 파일이 바뀌지 않았으면(이름·크기·수정 시각이 같으면) 다시 계산하지 않는다."""
+    key = (str(path), size, path.stat().st_mtime)
+    cached = _hash_cache.get(key)
+    if cached:
+        return cached
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(block)
+    _hash_cache.clear()  # 최신 파일 하나만 기억한다
+    _hash_cache[key] = digest.hexdigest()
+    return _hash_cache[key]
 
 
 def _release_dirs() -> list[Path]:
@@ -74,7 +94,7 @@ def _find_public_release() -> tuple[PublicReleaseOut, Path] | None:
         return None
     version, path, size = best
     internal = f"{version[0]}.{version[1]}.{version[2]}"
-    release = PublicReleaseOut(version=internal, display=format_version(internal), filename=path.name, size=size)
+    release = PublicReleaseOut(version=internal, display=format_version(internal), filename=path.name, size=size, sha256=_file_sha256(path, size))
     return release, path
 
 

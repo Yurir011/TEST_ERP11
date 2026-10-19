@@ -1,4 +1,6 @@
 """설치 파일 공개 내려받기(로그인 없이): 로그인 화면·사이드바의 링크가 쓰는 API."""
+import hashlib
+
 import pytest
 
 from app.config import settings
@@ -43,7 +45,7 @@ def test_works_without_login(client, dirs):
 def test_latest_reports_both_notations_and_real_size(client, dirs):
     put(dirs[0], "BENCH-ERP_Setup_0.70.171.exe")
     r = client.get("/api/client/public/latest").json()
-    assert r == {"version": "0.70.171", "display": "V.0.70.171", "filename": "BENCH-ERP_Setup_0.70.171.exe", "size": len(BODY)}
+    assert r == {"version": "0.70.171", "display": "V.0.70.171", "filename": "BENCH-ERP_Setup_0.70.171.exe", "size": len(BODY), "sha256": hashlib.sha256(BODY).hexdigest()}
 
 
 def test_download_returns_the_installer_as_attachment(client, dirs):
@@ -119,3 +121,16 @@ def test_other_client_endpoints_still_require_login(client, dirs):
     # 공개로 연 것은 이 두 주소뿐이다. 기존 로그인 전용 주소는 그대로 막혀 있다.
     assert client.get("/api/client/latest").status_code == 401
     assert client.get("/api/client/download").status_code == 401
+
+
+def test_sha256_follows_the_file_content(client, dirs):
+    """같은 이름·크기여도 내용이 바뀌면(수정 시각이 달라지면) 해시도 새로 계산한다"""
+    import os
+
+    put(dirs[0], "BENCH-ERP_Setup_0.71.6.exe", b"MZ" + b"" * 300)
+    first = client.get("/api/client/public/latest").json()["sha256"]
+    assert first == hashlib.sha256(b"MZ" + b"" * 300).hexdigest()
+    path = dirs[0] / "BENCH-ERP_Setup_0.71.6.exe"
+    put(dirs[0], "BENCH-ERP_Setup_0.71.6.exe", b"MZ" + b"" * 300)  # 같은 크기, 다른 내용
+    os.utime(path, (1_900_000_000, 1_900_000_000))
+    assert client.get("/api/client/public/latest").json()["sha256"] == hashlib.sha256(b"MZ" + b"" * 300).hexdigest()

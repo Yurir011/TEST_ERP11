@@ -5,6 +5,7 @@
  * 실행 옵션: --smoke  창을 띄워 보안 설정과 화면 연결 통로만 확인하고 곧바로 종료한다 (종료 코드 0 = 정상).
  */
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -28,6 +29,7 @@ import { MailSync } from "./mail/sync";
 import { loginMessage, performNfcLogin } from "./nfcLogin";
 import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
+import { INSTALLER_ARGS, checkForUpdate, describeUpdate, downloadInstaller } from "./updater";
 import { DEFAULT_ZOOM, stepZoom, zoomKeyAction } from "./zoom";
 import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, loadDefaultServer, normalizeServerUrl, saveConfig } from "./serverConfig";
 import { badgeImageName, badgeSummary, clampBadgeCount, combinedBadgeCount, loginItemSettings, parseConversationId, startsHidden } from "./startup";
@@ -54,6 +56,8 @@ let tray: Tray | null = null;
 let reader: NfcReader | null = null;
 let quitting = false;
 let loggedOutOnQuit = false;
+/** 앱 업데이트를 진행 중이면 true (다시 눌러도 한 번만 하고, 끝날 때 로그아웃하지 않는다) */
+let updating = false;
 let deviceKey: DeviceKey | null = null;
 /**
  * 카드가 닿았을 때 하는 일 (화면이 IPC 로 정한다):
@@ -567,6 +571,53 @@ function registerIpc(): void {
     identities.save(parsed.value);
     log.info(`[Mail] 보내는 사람 목록 저장: ${parsed.value.items.length}개`);
     return { ok: true, value: parsed.value };
+  });
+
+  // ---- 앱 업데이트 (서버 화면에서만. 주소·파일 이름은 화면이 정하지 못한다) ----
+  ipcMain.handle("update:check", async (e) => {
+    if (!guard(e, "update:check", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    if (!config.serverUrl) return { ok: false, error: "서버 주소가 설정되어 있지 않습니다." };
+    return checkForUpdate(config.serverUrl, app.getVersion());
+  });
+
+  ipcMain.handle("update:install", async (e) => {
+    if (!guard(e, "update:install", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    if (!config.serverUrl) return { ok: false, error: "서버 주소가 설정되어 있지 않습니다." };
+    if (process.platform !== "win32" || !app.isPackaged) return { ok: false, error: "설치해서 쓰는 Windows 앱에서만 바로 업데이트할 수 있습니다." };
+    if (updating) return { ok: false, error: "이미 업데이트를 진행 중입니다." };
+    updating = true;
+    try {
+      const info = await checkForUpdate(config.serverUrl, app.getVersion());
+      if (!info.ok) return info;
+      if (!info.latest || !info.newer) return { ok: false, error: "이미 최신 버전입니다." };
+      log.info(`[Update] 업데이트 시작: ${app.getVersion()} → ${describeUpdate(info.latest)}`);
+      const dir = path.join(app.getPath("temp"), "bench-update");
+      const done = await downloadInstaller(config.serverUrl, info.latest, dir, (ratio) => {
+        if (!e.sender.isDestroyed()) e.sender.send("update:progress", { ratio });
+      }, fetch, log);
+      if (!done.ok) {
+        updating = false;
+        return done;
+      }
+      // 업데이트로 끝나는 것이므로 로그인은 유지한다 (정상 종료 표시를 남겨 다음 실행 때 로그인 정보를 지우지 않게)
+      fs.writeFileSync(cleanExitFile(), String(Date.now()));
+      const child = spawn(done.file, [...INSTALLER_ARGS], { detached: true, stdio: "ignore" });
+      child.on("error", (err) => {
+        log.error(`[Update] 설치 프로그램을 실행하지 못했습니다: ${err.message}`);
+        updating = false;
+      });
+      child.unref();
+      log.info("[Update] 설치 프로그램 실행: 앱을 종료합니다");
+      setTimeout(() => {
+        quitting = true;
+        app.quit();
+      }, 800);
+      return { ok: true, value: { display: info.latest.display } };
+    } catch (err) {
+      updating = false;
+      log.error(`[Update] 업데이트 실패: ${(err as Error).message}`);
+      return { ok: false, error: "업데이트하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+    }
   });
 
   ipcMain.handle("mail:account", (e) => (guard(e, "mail:account", ["server"]) ? (mail?.accountInfo() ?? null) : null));
@@ -1109,6 +1160,11 @@ async function runSmoke(): Promise<void> {
     check("[문서 메일] 초안 그대로 보내면 PDF 가 첨부되어 나간다", sentDoc.ok === true);
     docWindow.destroy();
 
+    // 2-7) 앱 업데이트 통로: 서버에 새 버전 정보가 없어도 오류 없이 답하고, 설치하지 않은 앱(개발 실행)에서는 설치를 시작하지 않는다
+    const upCheck = await call("window.benchClient.update.check()");
+    const upInstall = await call("window.benchClient.update.install()");
+    check("[업데이트] 서버에 새 버전 정보가 없으면 오류로 알리고(앱은 멈추지 않는다), 설치하지 않은 앱에서는 바로 업데이트를 거절한다", upCheck.ok === false && upInstall.ok === false && String(upInstall.error).includes("설치해서"));
+
     // 2-6) 보내는 사람 목록 (이름·주소 선택)
     const idStart = await call("window.benchClient.mail.identities()");
     const idSave = await call(`window.benchClient.mail.saveIdentities({ items: [{ name: "정혜란", address: "yurir@epik-bio.com" }], defaultAddress: "yurir@epik-bio.com" })`);
@@ -1248,7 +1304,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", (event) => {
     quitting = true;
     // 앱을 끝낼 때는 ERP 에서 로그아웃한다 (다음에 켜면 로그인 화면). 저장소를 비우는 동안 잠깐 끝내기를 미뤘다가 다시 끝낸다
-    if (!loggedOutOnQuit && !SMOKE) {
+    if (!loggedOutOnQuit && !SMOKE && !updating) {
       loggedOutOnQuit = true;
       event.preventDefault();
       void logoutOnQuit().finally(() => app.quit());
@@ -1284,6 +1340,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (err) {
       log.error(`[Device] 기기 키를 준비하지 못했습니다: ${(err as Error).message}`);
     }
+    fs.rmSync(path.join(app.getPath("temp"), "bench-update"), { recursive: true, force: true }); // 지난번 업데이트에 쓴 설치 파일 정리
     if (!SMOKE) await logoutIfNotCleanExit();
     win = createWindow();
     if (!SMOKE) createTray();

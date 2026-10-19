@@ -76,6 +76,12 @@ const api = {
     consumePendingOpen: (): Promise<number | null> => ipcRenderer.invoke("mail:consume-pending-open"),
     openAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-open", id, index),
   },
+  /** 앱 업데이트: 서버에 더 새 버전이 있는지 확인하고, 바로 받아 설치한다 (설치되면 앱이 다시 시작된다) */
+  update: {
+    check: (): Promise<unknown> => ipcRenderer.invoke("update:check"),
+    install: (): Promise<unknown> => ipcRenderer.invoke("update:install"),
+    onProgress: (cb: (payload: { ratio: number }) => void): Unsubscribe => subscribe("update:progress", cb),
+  },
   shell: {
     state: (): Promise<{ serverUrl?: string; mode: string; error?: string }> => ipcRenderer.invoke("shell:state"),
     saveServer: (url: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke("shell:save-server", url),
