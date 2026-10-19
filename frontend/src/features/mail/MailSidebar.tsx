@@ -1,4 +1,4 @@
-import { FileEdit, Folder, Inbox, Layers, Paperclip, Send, SquarePen, Star, Mail as MailIcon, Settings, Trash2, ShieldAlert } from "lucide-react";
+import { BookUser, FileEdit, Folder, Inbox, Layers, Paperclip, Send, SquarePen, Star, Mail as MailIcon, Settings, Trash2, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { ALL_MAIL_FOLDER, type MailFilter, type MailFolder } from "../../lib/desktop";
 import { folderLabel, isSelfMailFolder, sortFolders } from "./mailFormat";
@@ -14,6 +14,9 @@ interface Props {
   onSettings: () => void;
   onCompose: () => void;
   onComposeSelf: () => void;
+  onAddressBook: () => void;
+  /** 주소록 화면을 보고 있는가 */
+  bookActive: boolean;
 }
 
 function folderIcon(f: MailFolder): ReactNode {
@@ -41,7 +44,7 @@ const QUICK: { key: "unread" | "flagged" | "attachment"; label: string; icon: Re
 ];
 
 /** 왼쪽 패널: 내 정보, 빠른 조건(안읽음·중요·첨부), 메일쓰기, 폴더 목록 */
-export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf }: Props) {
+export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive }: Props) {
   const all: MailFolder = { path: ALL_MAIL_FOLDER, name: "전체메일", specialUse: null, unread: 0, total: 0 };
   const sorted = sortFolders(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 0, total: 0 }]);
   const list = [all, ...sorted];
@@ -86,14 +89,26 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
         </div>
       </div>
 
+      <div className="px-2 pb-2">
+        <button
+          type="button"
+          onClick={onAddressBook}
+          aria-current={bookActive ? "true" : undefined}
+          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-left transition-colors ${bookActive ? "bg-primary/10 text-text font-semibold" : "text-text hover:bg-bg"}`}
+        >
+          <span className={bookActive ? "text-text" : "text-text-muted"}><BookUser size={17} /></span>
+          주소록
+        </button>
+      </div>
+
       <nav aria-label="메일 폴더" className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
         {list.map((f) => (
           <button
             key={f.path}
             type="button"
-            aria-current={f.path === folder ? "true" : undefined}
+            aria-current={f.path === folder && !bookActive ? "true" : undefined}
             onClick={() => onSelectFolder(f.path)}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-left transition-colors ${f.path === folder ? "bg-primary/10 text-text font-semibold" : "text-text hover:bg-bg"}`}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-left transition-colors ${f.path === folder && !bookActive ? "bg-primary/10 text-text font-semibold" : "text-text hover:bg-bg"}`}
           >
             <span className={f.path === folder ? "text-text" : "text-text-muted"}>{folderIcon(f)}</span>
             <span className="truncate flex-1">{folderLabel(f)}</span>

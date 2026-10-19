@@ -141,6 +141,20 @@ export interface MailContact {
   address: string;
 }
 
+export interface AddressBookEntry extends MailContact {
+  memo: string;
+  /** 직접 추가하거나 고친 연락처인가 (아니면 보낸 메일에서 자동으로 올라온 것) */
+  manual: boolean;
+  lastUsed: number;
+}
+
+export interface ContactInput {
+  name: string;
+  address: string;
+  memo: string;
+  oldAddress?: string;
+}
+
 export interface MailSenderIdentity {
   name: string;
   address: string;
@@ -159,6 +173,9 @@ export interface MailBridge {
   /** 받는 사람 자동완성: 메일을 보낸 적 있는 주소(최근 순, query 가 있으면 이름·주소에 맞는 것) / 주소록에서 지우기 */
   contacts(query: string, limit?: number): Promise<MailContact[]>;
   removeContact(address: string): Promise<boolean>;
+  /** 주소록 화면: 전체 목록(이름순, query 가 있으면 이름·주소·메모에 맞는 것만) / 연락처 추가·수정(oldAddress 가 있으면 수정) */
+  addressBook(query: string): Promise<AddressBookEntry[]>;
+  saveContact(input: ContactInput): Promise<MailResult<AddressBookEntry>>;
   /** 보내는 사람 목록(쓰기 화면에서 고르는 이름·주소). 이 PC 에만 저장된다 */
   identities(): Promise<MailIdentitySettings>;
   saveIdentities(settings: MailIdentitySettings): Promise<MailResult<MailIdentitySettings>>;

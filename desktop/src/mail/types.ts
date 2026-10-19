@@ -86,3 +86,11 @@ export interface MailContact {
   name: string;
   address: string;
 }
+
+/** 주소록 화면의 한 건 */
+export interface AddressBookEntry extends MailContact {
+  memo: string;
+  /** 직접 추가하거나 고친 연락처인가 (아니면 보낸 메일에서 자동으로 올라온 것) */
+  manual: boolean;
+  lastUsed: number;
+}

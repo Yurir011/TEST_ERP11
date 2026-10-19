@@ -43,6 +43,9 @@ const api = {
     /** 보내는 사람 목록(쓰기 화면에서 고르는 이름·주소) 읽기·저장 */
     /** 받는 사람 자동완성: 보낸 적 있는 주소 목록(입력한 글이 있으면 걸러서), 목록에서 지우기 */
     contacts: (query: string, limit?: number): Promise<unknown> => ipcRenderer.invoke("mail:contacts", query, limit),
+    /** 주소록 화면: 전체 목록(이름순, 검색어가 있으면 걸러서)과 연락처 추가·수정 */
+    addressBook: (query: string): Promise<unknown> => ipcRenderer.invoke("mail:addressbook", query),
+    saveContact: (input: unknown): Promise<unknown> => ipcRenderer.invoke("mail:contact-save", input),
     removeContact: (address: string): Promise<boolean> => ipcRenderer.invoke("mail:contact-remove", address),
     identities: (): Promise<unknown> => ipcRenderer.invoke("mail:identities"),
     saveIdentities: (input: unknown): Promise<unknown> => ipcRenderer.invoke("mail:identities-save", input),

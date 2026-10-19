@@ -6,7 +6,7 @@ import Database from "better-sqlite3";
 
 import { ALL_MAIL_FOLDER, type MailAttachmentInfo, type MailFilter, type MailFolder, type MailSummary } from "./types";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export interface FolderRecord {
   path: string;
@@ -126,6 +126,13 @@ export class MailStore {
         );
       `);
     }
+    if (current < 3) {
+      // 주소록 관리: 직접 추가·고친 연락처(manual)와 메모
+      this.db.exec(`
+        ALTER TABLE contacts ADD COLUMN memo TEXT NOT NULL DEFAULT '';
+        ALTER TABLE contacts ADD COLUMN manual INTEGER NOT NULL DEFAULT 0;
+      `);
+    }
     this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
   }
 
@@ -137,7 +144,7 @@ export class MailStore {
       `INSERT INTO contacts (address, name, last_used, use_count, hidden) VALUES (@address, @name, @now, 1, 0)
        ON CONFLICT(address) DO UPDATE SET
          address = excluded.address,
-         name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE contacts.name END,
+         name = CASE WHEN contacts.manual = 1 AND contacts.name <> '' THEN contacts.name WHEN excluded.name <> '' THEN excluded.name ELSE contacts.name END,
          last_used = excluded.last_used, use_count = contacts.use_count + 1, hidden = 0`,
     );
     this.db.transaction((rows: { name: string; address: string }[]) => {
@@ -146,8 +153,19 @@ export class MailStore {
   }
 
   /** 주소록(지우지 않은 것) 전체 */
-  contactRows(): { address: string; name: string; lastUsed: number; useCount: number }[] {
-    return (this.db.prepare("SELECT address, name, last_used AS lastUsed, use_count AS useCount FROM contacts WHERE hidden = 0").all() as { address: string; name: string; lastUsed: number; useCount: number }[]);
+  contactRows(): { address: string; name: string; memo: string; manual: boolean; lastUsed: number; useCount: number }[] {
+    const rows = this.db.prepare("SELECT address, name, memo, manual, last_used AS lastUsed, use_count AS useCount FROM contacts WHERE hidden = 0").all() as { address: string; name: string; memo: string; manual: number; lastUsed: number; useCount: number }[];
+    return rows.map((r) => ({ ...r, manual: r.manual === 1 }));
+  }
+
+  /** 연락처를 직접 추가하거나 고친다 (이름·메모는 그대로 저장하고, 지웠던 주소도 다시 나타난다) */
+  saveContact(c: { address: string; name: string; memo: string }, now: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO contacts (address, name, memo, manual, last_used, use_count, hidden) VALUES (@address, @name, @memo, 1, @now, 0, 0)
+         ON CONFLICT(address) DO UPDATE SET address = excluded.address, name = excluded.name, memo = excluded.memo, manual = 1, hidden = 0`,
+      )
+      .run({ ...c, now });
   }
 
   /** 주소록에서 지운 주소들 (보낸메일함에서 뽑은 후보에서도 뺀다) */

@@ -143,3 +143,104 @@ describe("저장소 버전 올림", () => {
     again.close();
   });
 });
+
+describe("주소록 화면 (전체 목록·추가·수정·삭제)", () => {
+  it("직접 추가한 연락처와 자동으로 올라온 주소를 이름순으로 합쳐 보여 준다", () => {
+    store.insertMessages([sentMsg(1, "다람쥐 <dd@x.com>", 1_000)]);
+    store.recordContacts([{ name: "나비", address: "nabi@x.com" }], 2_000);
+    expect(service.saveContact({ name: "가나다", address: "ga@x.com", memo: "거래처 대표" }).ok).toBe(true);
+    const book = service.addressBook("");
+    expect(book.map((e) => e.name)).toEqual(["가나다", "나비", "다람쥐"]);
+    expect(book.find((e) => e.address === "ga@x.com")).toMatchObject({ manual: true, memo: "거래처 대표" });
+    expect(book.find((e) => e.address === "nabi@x.com")).toMatchObject({ manual: false, memo: "" });
+  });
+
+  it("검색은 이름·주소·메모에 맞는 것을 찾는다", () => {
+    service.saveContact({ name: "박영업", address: "park@a.com", memo: "한빛통신 담당" });
+    service.saveContact({ name: "이대리", address: "lee@b.com", memo: "" });
+    expect(service.addressBook("한빛").map((e) => e.address)).toEqual(["park@a.com"]);
+    expect(service.addressBook("LEE@").map((e) => e.address)).toEqual(["lee@b.com"]);
+    expect(service.addressBook("영업").map((e) => e.address)).toEqual(["park@a.com"]);
+    expect(service.addressBook("없는말")).toEqual([]);
+  });
+
+  it("보낸 메일로 이름이 자동으로 바뀌어도 직접 입력한 이름·메모는 그대로다", () => {
+    service.saveContact({ name: "내가 정한 이름", address: "a@x.com", memo: "메모" });
+    store.recordContacts([{ name: "서버가 준 이름", address: "a@x.com" }], 9_000);
+    store.insertMessages([sentMsg(1, "또 다른 이름 <a@x.com>", 5_000)]);
+    expect(service.addressBook("")).toEqual([expect.objectContaining({ name: "내가 정한 이름", memo: "메모", manual: true })]);
+  });
+
+  it("수정하면 이름·메모가 바뀌고, 주소를 바꾸면 예전 주소는 목록에서 빠진다", () => {
+    service.saveContact({ name: "에이", address: "old@x.com", memo: "" });
+    const r = service.saveContact({ name: "에이(수정)", address: "new@x.com", memo: "새 메모", oldAddress: "old@x.com" });
+    expect(r).toMatchObject({ ok: true, value: { address: "new@x.com", manual: true } });
+    expect(service.addressBook("")).toEqual([expect.objectContaining({ name: "에이(수정)", address: "new@x.com", memo: "새 메모" })]);
+    // 주소는 그대로 이름만 고치면 같은 한 건
+    service.saveContact({ name: "에이2", address: "NEW@x.com", memo: "새 메모", oldAddress: "new@x.com" });
+    expect(service.addressBook("").map((e) => e.name)).toEqual(["에이2"]);
+  });
+
+  it("보낸메일함에서 뽑힌 주소도 고치면 직접 입력한 연락처가 된다", () => {
+    store.insertMessages([sentMsg(1, "자동 <auto@x.com>", 1_000)]);
+    service.saveContact({ name: "자동(정리됨)", address: "auto@x.com", memo: "중요 거래처" });
+    expect(service.addressBook("")).toEqual([expect.objectContaining({ name: "자동(정리됨)", memo: "중요 거래처", manual: true })]);
+  });
+
+  it("지운 연락처는 사라지고, 같은 주소를 다시 추가하면 돌아온다", () => {
+    service.saveContact({ name: "에이", address: "a@x.com", memo: "" });
+    expect(service.removeContact("a@x.com")).toBe(true);
+    expect(service.addressBook("")).toEqual([]);
+    service.saveContact({ name: "에이", address: "a@x.com", memo: "" });
+    expect(service.addressBook("")).toHaveLength(1);
+  });
+
+  it("내 계정 주소는 주소록에 나오지 않는다", () => {
+    service.saveContact({ name: "나", address: "ME@bench.co.kr", memo: "" });
+    expect(service.addressBook("")).toEqual([]);
+  });
+
+  it("잘못된 입력은 이유와 함께 거절하고 아무것도 저장하지 않는다", () => {
+    const bad = [
+      { name: "a", address: "", memo: "" },
+      { name: "a", address: "not-an-email", memo: "" },
+      { name: "a", address: "a@x.com" + String.fromCharCode(13, 10) + "Bcc: z@z.com", memo: "" },
+      { name: "a<b>", address: "a@x.com", memo: "" },
+      { name: 'a"b', address: "a@x.com", memo: "" },
+      { name: "가".repeat(101), address: "a@x.com", memo: "" },
+      { name: "a", address: "a@x.com", memo: "가".repeat(201) },
+      { name: "a", address: "a@x.com", memo: "줄" + String.fromCharCode(10) + "바꿈" },
+      { name: "a", address: "a@x.com", memo: "", oldAddress: "bad-old" },
+    ];
+    for (const input of bad) {
+      const r = service.saveContact(input);
+      expect(r.ok, JSON.stringify(input).slice(0, 60)).toBe(false);
+    }
+    expect(service.addressBook("")).toEqual([]);
+  });
+
+  it("앞뒤 공백은 정리해서 저장한다", () => {
+    expect(service.saveContact({ name: "  에이 ", address: " a@x.com ", memo: " 메모 " })).toMatchObject({ ok: true, value: { name: "에이", address: "a@x.com", memo: "메모" } });
+  });
+});
+
+describe("저장소 버전 올림 (주소록 메모 추가)", () => {
+  it("메모·직접 추가 열이 없던 예전 주소록 표도 그대로 열린다", async () => {
+    const file = path.join(dir, "v2.db");
+    const { default: Database } = await import("better-sqlite3");
+    const db = new Database(file);
+    db.exec(`
+      CREATE TABLE folders (path TEXT PRIMARY KEY, name TEXT NOT NULL, special_use TEXT, uid_validity TEXT);
+      CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, folder TEXT NOT NULL REFERENCES folders(path) ON DELETE CASCADE, uid INTEGER NOT NULL, subject TEXT NOT NULL DEFAULT '', from_name TEXT NOT NULL DEFAULT '', from_addr TEXT NOT NULL DEFAULT '', to_text TEXT NOT NULL DEFAULT '', date INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0, flagged INTEGER NOT NULL DEFAULT 0, has_attachments INTEGER NOT NULL DEFAULT 0, body_text TEXT, body_html TEXT, cc_text TEXT, attachments_json TEXT, UNIQUE (folder, uid));
+      CREATE TABLE contacts (address TEXT PRIMARY KEY COLLATE NOCASE, name TEXT NOT NULL DEFAULT '', last_used INTEGER NOT NULL, use_count INTEGER NOT NULL DEFAULT 1, hidden INTEGER NOT NULL DEFAULT 0);
+      INSERT INTO contacts (address, name, last_used) VALUES ('old@x.com', '예전', 1000);
+      PRAGMA user_version = 2;
+    `);
+    db.close();
+    const upgraded = new MailStore(file);
+    expect(upgraded.contactRows()).toEqual([expect.objectContaining({ address: "old@x.com", name: "예전", memo: "", manual: false })]);
+    upgraded.saveContact({ address: "new@x.com", name: "새", memo: "m" }, 2000);
+    expect(upgraded.contactRows()).toHaveLength(2);
+    upgraded.close();
+  });
+});

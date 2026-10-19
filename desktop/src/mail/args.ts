@@ -105,3 +105,15 @@ export function parseDocumentCompose(v: unknown): DocumentComposeRequest | null 
   if (!data) return null;
   return { to, subject, body, doc: { type: "project_document", id }, filename, data };
 }
+
+/** 주소록 저장 요청의 형식 검사 (내용 검사는 서비스가 한다). 형식이 틀리면 null */
+export function parseContactInput(v: unknown): { name: string; address: string; memo: string; oldAddress?: string } | null {
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  const name = str(o.name, 300);
+  const address = str(o.address, 400);
+  const memo = str(o.memo, 600);
+  const oldAddress = o.oldAddress === undefined || o.oldAddress === null ? undefined : str(o.oldAddress, 400);
+  if (name === null || address === null || memo === null || oldAddress === null) return null;
+  return { name, address, memo, oldAddress };
+}

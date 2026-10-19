@@ -29,3 +29,16 @@ export function extractEmails(...fields: string[]): string[] {
   }
   return out;
 }
+
+/** 여러 연락처를 입력 글 끝에 덧붙인다 ("이름 <주소>, " 형태). 이미 들어 있는 주소는 건너뛴다 */
+export function appendContacts(text: string, contacts: MailContact[]): string {
+  const have = new Set(extractEmails(text).map((a) => a.toLowerCase()));
+  let out = text.trim() === "" ? "" : text.replace(/[\s,;]+$/, "") + ", ";
+  for (const c of contacts) {
+    if (have.has(c.address.toLowerCase())) continue;
+    have.add(c.address.toLowerCase());
+    const name = c.name.replace(/[<>",;]/g, "").trim();
+    out += `${name ? `${name} <${c.address}>` : c.address}, `;
+  }
+  return out;
+}

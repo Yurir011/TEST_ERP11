@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAttachmentIndex, parseDocumentCompose, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./args";
+import { parseAttachmentIndex, parseContactInput, parseDocumentCompose, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./args";
 
 describe("IPC 인자 검사", () => {
   it("메일 번호는 양의 정수만", () => {
@@ -89,5 +89,20 @@ describe("문서 메일 보내기 인자 검사", () => {
     ];
     for (const patch of bad) expect(parseDocumentCompose({ ...ok(), ...patch }), JSON.stringify(Object.keys(patch))).toBeNull();
     expect(parseDocumentCompose(null)).toBeNull();
+  });
+});
+
+describe("주소록 저장 요청 인자 검사", () => {
+  it("형식이 맞으면 받고, 예전 주소(수정)는 있어도 없어도 된다", () => {
+    expect(parseContactInput({ name: "에이", address: "a@x.com", memo: "" })).toEqual({ name: "에이", address: "a@x.com", memo: "", oldAddress: undefined });
+    expect(parseContactInput({ name: "에이", address: "a@x.com", memo: "m", oldAddress: "o@x.com" })?.oldAddress).toBe("o@x.com");
+    expect(parseContactInput({ name: "에이", address: "a@x.com", memo: "", oldAddress: null })?.oldAddress).toBeUndefined();
+  });
+
+  it("글자가 아니거나 너무 길면 거절한다", () => {
+    const ok = { name: "에이", address: "a@x.com", memo: "" };
+    for (const bad of [null, "x", { ...ok, name: 5 }, { ...ok, address: undefined }, { ...ok, memo: {} }, { ...ok, oldAddress: 3 }, { ...ok, name: "가".repeat(301) }, { ...ok, address: "a".repeat(401) }, { ...ok, memo: "가".repeat(601) }]) {
+      expect(parseContactInput(bad), JSON.stringify(bad)?.slice(0, 50)).toBeNull();
+    }
   });
 });

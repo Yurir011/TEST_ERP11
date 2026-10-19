@@ -5,6 +5,7 @@ import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
 import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailDocRef, type MailDetail, type MailDraft, type MailDraftKind, type MailFolder, type MailSendResult, type MailSummary, getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
+import { AddressBookView } from "./AddressBookView";
 import { ComposeView } from "./ComposeView";
 import { reportDocumentMailSent } from "./documentMail";
 import { MailAccountForm } from "./MailAccountForm";
@@ -70,6 +71,7 @@ function MailApp() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [tick, setTick] = useState(0); // 값이 바뀌면 저장된 목록을 다시 읽는다
   const [composing, setComposing] = useState<ComposeInit | null>(null);
+  const [showBook, setShowBook] = useState(false); // 주소록 화면
   const composeState = useRef<{ dirty: boolean; attachmentIds: string[] }>({ dirty: false, attachmentIds: [] });
   /** 쓰고 있는 메일이 ERP 문서에서 시작된 것이면 그 문서 (보낸 뒤 발송 이력을 남긴다) */
   const composeDoc = useRef<MailDocRef | null>(null);
@@ -160,6 +162,7 @@ function MailApp() {
   async function openCompose(kind: "new" | MailDraftKind, id?: number) {
     if (!(await leaveCompose())) return;
     composeDoc.current = null;
+    setShowBook(false);
     let init: ComposeInit = BLANK_DRAFT;
     if (kind !== "new") {
       const r = await bridge.composeDraft(kind, id);
@@ -171,6 +174,14 @@ function MailApp() {
     }
     composeState.current = { dirty: false, attachmentIds: init.attachments.map((a) => a.id) };
     setComposing(init);
+  }
+
+  /** 주소록에서 고른 사람들에게 쓰기 (끝나면 주소록으로 돌아온다) */
+  async function openComposeTo(to: string) {
+    if (!(await leaveCompose())) return;
+    composeDoc.current = null;
+    composeState.current = { dirty: false, attachmentIds: [] };
+    setComposing({ ...BLANK_DRAFT, to });
   }
 
   function onSent(result: MailSendResult, sent: { to: string; cc: string; bcc: string; subject: string }) {
@@ -206,6 +217,7 @@ function MailApp() {
 
   async function selectFolder(path: string) {
     if (!(await leaveCompose())) return;
+    setShowBook(false);
     setFolder(path);
     setQuery("");
     setBodyIds(null);
@@ -218,6 +230,7 @@ function MailApp() {
 
   async function toggleFilter(key: keyof QuickFilter) {
     if (!(await leaveCompose())) return;
+    setShowBook(false);
     setFilter((f) => ({ ...f, [key]: !f[key] }));
     setPage(1);
     setSelected(new Set());
@@ -232,6 +245,7 @@ function MailApp() {
   async function openMessage(id: number, images = false) {
     if (!(await leaveCompose())) return;
     const req = ++detailReq.current;
+    setShowBook(false);
     setReading(true);
     setLoadingDetail(true);
     setDetailError(null);
@@ -421,6 +435,8 @@ function MailApp() {
         onSettings={() => void leaveCompose().then((ok) => ok && setEditing(true))}
         onCompose={() => void openCompose("new")}
         onComposeSelf={() => void openCompose("self")}
+        onAddressBook={() => void leaveCompose().then((ok) => ok && setShowBook(true))}
+        bookActive={showBook && !composing}
       />
       <main className="flex-1 min-w-0 h-full">
         {composing ? (
@@ -439,6 +455,8 @@ function MailApp() {
               setComposing(null);
             }}
           />
+        ) : showBook ? (
+          <AddressBookView bridge={bridge} onCompose={(to) => void openComposeTo(to)} />
         ) : reading ? (
           <MailReader
             detail={detail}

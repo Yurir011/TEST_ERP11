@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import type { MailBridge, MailDraft, MailIdentitySettings, MailSendResult, MailSenderIdentity, MailStagedAttachment } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
+import { ContactPicker, type RecipientField } from "./ContactPicker";
 import { RecipientInput } from "./RecipientInput";
+import { appendContacts } from "./recipientText";
 import { SenderManager, SenderPicker } from "./SenderPicker";
 import { defaultSender, sameAddress, senderOptions } from "./senderIdentity";
 import { MAX_ATTACHMENT_BYTES, formatFileSize } from "./mailFormat";
@@ -31,6 +33,7 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
   const [identities, setIdentities] = useState<MailIdentitySettings>({ items: [], defaultAddress: "" });
   const [sender, setSender] = useState<MailSenderIdentity>(accountSender);
   const [managing, setManaging] = useState(false);
+  const [picking, setPicking] = useState(false);
   const senderTouched = useRef(false);
   const [to, setTo] = useState(initial.to);
   const [cc, setCc] = useState(initial.cc);
@@ -151,6 +154,7 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
           <label htmlFor="compose-to" className={LABEL}>받는사람</label>
           <RecipientInput id="compose-to" bridge={bridge} value={to} onChange={setTo} autoFocus={!initial.to} className={`${INPUT} w-full`} placeholder="여러 명은 쉼표(,)로 구분" />
           <div className="flex gap-2 text-xs shrink-0">
+            <button type="button" onClick={() => setPicking(true)} className="text-primary hover:underline">주소록</button>
             {!showCc && <button type="button" onClick={() => setShowCc(true)} className="text-primary hover:underline">참조</button>}
             {!showBcc && <button type="button" onClick={() => setShowBcc(true)} className="text-primary hover:underline">숨은참조</button>}
           </div>
@@ -203,6 +207,23 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
         className="flex-1 min-h-0 resize-none px-6 py-4 text-[15px] leading-relaxed outline-none bg-transparent"
         placeholder="내용을 입력하세요"
       />
+      {picking && (
+        <ContactPicker
+          bridge={bridge}
+          onClose={() => setPicking(false)}
+          onPick={(field: RecipientField, list) => {
+            if (field === "to") setTo((t) => appendContacts(t, list));
+            else if (field === "cc") {
+              setShowCc(true);
+              setCc((t) => appendContacts(t, list));
+            } else {
+              setShowBcc(true);
+              setBcc((t) => appendContacts(t, list));
+            }
+            setPicking(false);
+          }}
+        />
+      )}
       {managing && (
         <SenderManager
           bridge={bridge}

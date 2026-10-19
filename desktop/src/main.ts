@@ -17,7 +17,7 @@ import { ImapFlow } from "imapflow";
 import { type DeviceKey, type DeviceStatusName, type SecretStore, defaultDeviceName, loadOrCreateDeviceKey, registerDevice, verifySignature } from "./device";
 import { getLogger } from "./log";
 import { MailAccountStore } from "./mail/account";
-import { parseAttachmentIndex, parseDocumentCompose, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./mail/args";
+import { parseAttachmentIndex, parseContactInput, parseDocumentCompose, parseDraftKind, parseFilter, parseFolderPath, parseMailId, parseMailIds, parsePaging, parseSendPayload } from "./mail/args";
 import { MailComposer, type StagedAttachment } from "./mail/compose";
 import { IdentityStore, parseIdentitySettings } from "./mail/identities";
 import { formatNewMailNotice } from "./mail/notify";
@@ -579,6 +579,16 @@ function registerIpc(): void {
     const q = typeof query === "string" && query.length <= 200 ? query : "";
     const n = typeof limit === "number" && Number.isFinite(limit) ? Math.trunc(limit) : 8;
     return mail.contacts(q, n);
+  });
+  ipcMain.handle("mail:addressbook", (e, query: unknown) => {
+    if (!guard(e, "mail:addressbook", ["server"]) || !mail) return [];
+    return mail.addressBook(typeof query === "string" && query.length <= 200 ? query : "");
+  });
+  ipcMain.handle("mail:contact-save", (e, input: unknown) => {
+    if (!guard(e, "mail:contact-save", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    const parsed = parseContactInput(input);
+    if (!parsed) return { ok: false, error: "연락처 형식이 올바르지 않습니다." };
+    return mail ? mail.saveContact(parsed) : MAIL_UNAVAILABLE;
   });
   ipcMain.handle("mail:contact-remove", (e, address: unknown) => {
     if (!guard(e, "mail:contact-remove", ["server"]) || !mail) return false;
@@ -1186,6 +1196,18 @@ async function runSmoke(): Promise<void> {
     const badContactRemove = await call(`window.benchClient.mail.removeContact("not-an-email")`);
     const bookAfter = await call(`window.benchClient.mail.contacts("", 8)`);
     check("[주소록] 목록에서 지우면 사라지고, 형식이 틀린 주소는 지우지 않는다", removed === true && badContactRemove === false && !bookAfter.some((c: { address: string }) => c.address === "client@test.local"));
+
+    // 2-6b) 주소록 관리: 직접 추가·수정·삭제, 잘못된 입력 거절
+    const addSaved = await call(`window.benchClient.mail.saveContact({ name: "정혜란", address: "yurir@epik-bio.com", memo: "대표" })`);
+    const bookNow = await call(`window.benchClient.mail.addressBook("")`);
+    const renamed = await call(`window.benchClient.mail.saveContact({ name: "정혜란", address: "hr@epik-bio.com", memo: "대표", oldAddress: "yurir@epik-bio.com" })`);
+    const bookRenamed = await call(`window.benchClient.mail.addressBook("epik")`);
+    const badSave = await call(`window.benchClient.mail.saveContact({ name: "a", address: "not-an-email", memo: "" })`);
+    const badShape = await call(`window.benchClient.mail.saveContact({ name: 5 })`);
+    await call(`window.benchClient.mail.removeContact("hr@epik-bio.com")`);
+    const bookEnd = await call(`window.benchClient.mail.addressBook("epik")`);
+    check("[주소록] 연락처를 직접 추가하면 목록에 나오고(메모 포함), 주소를 고치면 예전 주소는 빠진다", addSaved.ok === true && bookNow.some((c: { address: string; memo: string; manual: boolean }) => c.address === "yurir@epik-bio.com" && c.memo === "대표" && c.manual) && renamed.ok === true && bookRenamed.length === 1 && bookRenamed[0].address === "hr@epik-bio.com");
+    check("[주소록] 잘못된 주소·형식은 거절하고, 지운 연락처는 목록에서 사라진다", badSave.ok === false && badShape.ok === false && bookEnd.length === 0);
 
     // 2-6) 보내는 사람 목록 (이름·주소 선택)
     const idStart = await call("window.benchClient.mail.identities()");

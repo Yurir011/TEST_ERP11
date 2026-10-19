@@ -13,7 +13,7 @@ import { extractAddresses, isValidEmail } from "./address";
 import { sanitizeEmailHtml } from "./html";
 import { MailError, MailSync, findJunkFolder, findSentFolder, findTrashFolder } from "./sync";
 import type { CachedBody, MailStore } from "./store";
-import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailAttachmentInfo, type MailContact, type MailDetail, type MailFilter, type MailFolder, type MailResult, type MailSummary, type NewMailInfo } from "./types";
+import { ALL_MAIL_FOLDER, type MailAccountInfo, type AddressBookEntry, type MailAttachmentInfo, type MailContact, type MailDetail, type MailFilter, type MailFolder, type MailResult, type MailSummary, type NewMailInfo } from "./types";
 
 const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const MAX_INLINE_IMAGE_BYTES = 1_000_000;
@@ -45,6 +45,30 @@ function addressText(a: AddressObject | AddressObject[] | undefined): string {
 
 interface ParsedMail {
   body: CachedBody;
+}
+
+export interface ContactInput {
+  name: string;
+  address: string;
+  memo: string;
+  oldAddress?: string;
+}
+
+const hasControl = (s: string): boolean => {
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) < 32 || s.charCodeAt(i) === 127) return true;
+  return false;
+};
+
+/** 연락처 입력 검사: 이름 100자(제어 문자·꺾쇠·따옴표 없음), 주소 형식, 메모 200자 */
+export function validateContactInput(v: ContactInput): MailResult<{ name: string; address: string; memo: string }> {
+  const name = v.name.trim();
+  const address = v.address.trim();
+  const memo = v.memo.trim();
+  if (name.length > 100 || hasControl(name) || /[<>"]/.test(name)) return { ok: false, error: "이름에 사용할 수 없는 문자가 있거나 너무 깁니다(100자까지)." };
+  if (!address) return { ok: false, error: "메일 주소를 입력해 주세요." };
+  if (address.length > 254 || !isValidEmail(address)) return { ok: false, error: `올바르지 않은 메일 주소입니다: ${address.slice(0, 80)}` };
+  if (memo.length > 200 || hasControl(memo)) return { ok: false, error: "메모에 사용할 수 없는 문자가 있거나 너무 깁니다(200자까지)." };
+  return { ok: true, value: { name, address, memo } };
 }
 
 export interface MailServiceDeps {
@@ -96,6 +120,49 @@ export class MailService {
       .sort((x, y) => rank(x) - rank(y) || y.at - x.at)
       .slice(0, Math.max(1, Math.min(limit, 50)))
       .map(({ name, address }) => ({ name, address }));
+  }
+
+  /** 주소록 화면용: 직접 추가한 연락처와 자동으로 올라온 주소(보낸메일함 포함) 전체를 이름순으로. query 가 있으면 이름·주소·메모에 맞는 것만 */
+  addressBook(query: string): AddressBookEntry[] {
+    const q = query.trim().toLowerCase();
+    const me = this.deps.accounts.load()?.email.toLowerCase();
+    const hidden = this.deps.store.hiddenContacts();
+    const found = new Map<string, AddressBookEntry>();
+    const add = (e: AddressBookEntry) => {
+      const key = e.address.toLowerCase();
+      if (key === me || hidden.has(key)) return;
+      const old = found.get(key);
+      if (!old) {
+        found.set(key, e);
+        return;
+      }
+      const manual = old.manual || e.manual;
+      // 직접 입력한 이름·메모가 있으면 그것을 우선하고, 없으면 자동으로 올라온 이름을 쓴다
+      const name = old.manual && old.name ? old.name : e.manual && e.name ? e.name : old.name || e.name;
+      found.set(key, { name, address: old.manual ? old.address : e.manual ? e.address : old.address, memo: old.memo || e.memo, manual, lastUsed: Math.max(old.lastUsed, e.lastUsed) });
+    };
+    for (const r of this.deps.store.contactRows()) add({ name: r.name, address: r.address, memo: r.memo, manual: r.manual, lastUsed: r.lastUsed });
+    const sent = findSentFolder(this.deps.store.folders());
+    if (sent) for (const row of this.deps.store.sentRecipientTexts(sent.path, 2000)) for (const a of extractAddresses(row.toText)) add({ name: a.name, address: a.address, memo: "", manual: false, lastUsed: row.date });
+    const label = (e: AddressBookEntry) => (e.name || e.address).toLowerCase();
+    return [...found.values()]
+      .filter((e) => !q || e.name.toLowerCase().includes(q) || e.address.toLowerCase().includes(q) || e.memo.toLowerCase().includes(q))
+      .sort((a, b) => label(a).localeCompare(label(b), "ko") || a.address.localeCompare(b.address))
+      .slice(0, 5000);
+  }
+
+  /** 연락처 추가·수정. oldAddress 가 있고 다르면 주소를 바꾸는 것이다(예전 주소는 목록에서 뺀다). 입력은 검사해서 이유를 돌려준다 */
+  saveContact(input: ContactInput): MailResult<AddressBookEntry> {
+    const v = validateContactInput(input);
+    if (!v.ok) return v;
+    const { name, address, memo } = v.value;
+    const old = input.oldAddress?.trim();
+    if (old && old.toLowerCase() !== address.toLowerCase()) {
+      if (!isValidEmail(old)) return { ok: false, error: "고치려는 연락처의 주소가 올바르지 않습니다." };
+      this.deps.store.hideContact(old, Date.now());
+    }
+    this.deps.store.saveContact({ address, name, memo }, Date.now());
+    return { ok: true, value: { name, address, memo, manual: true, lastUsed: Date.now() } };
   }
 
   /** 주소록에서 지운다 (다시 보내면 다시 나타난다) */

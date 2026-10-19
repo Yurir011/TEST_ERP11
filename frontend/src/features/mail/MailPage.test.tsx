@@ -47,6 +47,8 @@ function installMail(over: Partial<MailBridge> = {}) {
     account: vi.fn().mockResolvedValue(account),
     contacts: vi.fn().mockResolvedValue([]),
     removeContact: vi.fn().mockResolvedValue(true),
+    addressBook: vi.fn().mockResolvedValue([]),
+    saveContact: vi.fn((input: { name: string; address: string; memo: string }) => Promise.resolve({ ok: true as const, value: { ...input, manual: true, lastUsed: 0 } })),
     identities: vi.fn().mockResolvedValue({ items: [], defaultAddress: "" }),
     saveIdentities: vi.fn((input: unknown) => Promise.resolve({ ok: true as const, value: input as MailIdentitySettings })),
     saveAccount: vi.fn().mockResolvedValue({ ok: true, value: account }),
@@ -947,6 +949,52 @@ describe("문서에서 시작한 메일", () => {
     await waitFor(() => expect(handlers.compose).toBeTruthy());
     unmount();
     expect(handlers.compose).toBeNull();
+  });
+});
+
+describe("주소록", () => {
+  const book = [
+    { name: "김영업", address: "kim@a.com", memo: "한빛통신", manual: true, lastUsed: 0 },
+    { name: "박대리", address: "park@b.com", memo: "", manual: false, lastUsed: 0 },
+  ];
+
+  it("왼쪽 [주소록]을 누르면 주소록 화면이 열리고, 폴더를 누르면 메일 목록으로 돌아간다", async () => {
+    installMail({ addressBook: vi.fn().mockResolvedValue(book) });
+    renderPage();
+    await screen.findByText("견적서 송부");
+    fireEvent.click(screen.getByRole("button", { name: "주소록" }));
+    expect(await screen.findByRole("region", { name: "주소록" })).toBeTruthy();
+    expect(await screen.findByText("김영업")).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "메일 목록" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /받은메일함|INBOX/ }));
+    expect(await screen.findByRole("list", { name: "메일 목록" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "주소록" })).toBeNull();
+  });
+
+  it("주소록에서 [메일쓰기]를 누르면 그 사람이 받는사람에 채워진 쓰기 화면이 열리고, 취소하면 주소록으로 돌아온다", async () => {
+    installMail({ addressBook: vi.fn().mockResolvedValue(book) });
+    renderPage();
+    await screen.findByText("견적서 송부");
+    fireEvent.click(screen.getByRole("button", { name: "주소록" }));
+    fireEvent.click(await screen.findByRole("button", { name: "김영업 에게 메일쓰기" }));
+    expect((await screen.findByLabelText("받는사람") as HTMLInputElement).value).toBe("김영업 <kim@a.com>, ");
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    expect(await screen.findByRole("region", { name: "주소록" })).toBeTruthy();
+  });
+
+  it("쓰기 화면의 [주소록]에서 여러 명을 골라 참조에 넣으면 참조 칸이 열리며 채워진다", async () => {
+    installMail({ addressBook: vi.fn().mockResolvedValue(book) });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일쓰기" }));
+    const compose = await screen.findByRole("form", { name: "메일 쓰기" });
+    expect(screen.queryByLabelText("참조")).toBeNull();
+    fireEvent.click(within(compose).getByRole("button", { name: "주소록" }));
+    const dialog = await screen.findByRole("dialog", { name: "주소록에서 받는 사람 고르기" });
+    fireEvent.click(await within(dialog).findByLabelText("김영업 선택"));
+    fireEvent.click(within(dialog).getByLabelText("박대리 선택"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "참조에 추가" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect((screen.getByLabelText("참조") as HTMLInputElement).value).toBe("김영업 <kim@a.com>, 박대리 <park@b.com>, ");
   });
 });
 
