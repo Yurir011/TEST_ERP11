@@ -2,13 +2,12 @@ import { Check, Download, ExternalLink, Paperclip, Pencil, Printer, Link as Link
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApprovalHistory } from "../../components/approval/ApprovalHistory";
-import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
-import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal, type ProposalAttachment } from "./types";
+import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal, type ProposalAttachment } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
 function docTitle(p: Proposal): string {
@@ -185,20 +184,7 @@ export function ProposalDetailModal({
           <span className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[proposal.status]}`}>
             {PROPOSAL_STATUS_LABELS[proposal.status]}
           </span>
-          {proposal.status === "pending" && currentStep && (
-            <span className="text-xs text-text-muted">
-              현재 결재 대기: {PROPOSAL_TITLE_LABELS[currentStep.title]} {currentStep.approver_name}
-            </span>
-          )}
         </div>
-
-        {proposal.is_final_decision && (
-          <div className="mb-4 rounded-xl border border-primary/30 bg-tile-blue px-4 py-3 text-sm text-tile-blue-fg">
-            전결로 즉시 승인된 문서입니다. (결재자: {proposal.creator_name})
-          </div>
-        )}
-
-        <ApprovalStampTable steps={proposal.steps} currentStep={proposal.current_step} docStatus={proposal.status} finalDecision={proposal.is_final_decision} />
 
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
           <div>

@@ -1,5 +1,4 @@
 import { ApprovalHistory } from "../../components/approval/ApprovalHistory";
-import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
 import { Check, Download, Eye, Mail, Pencil, Printer, Send, Sheet, X } from "lucide-react";
 import { useAuth } from "../../context/useAuth";
 import { lineAmount } from "../../lib/money";
@@ -79,28 +78,10 @@ export function ProjectDocumentDetailModal({
           >
             {PROJECT_DOC_STATUS_LABELS[doc.status]}
           </span>
-          {doc.approver_name && (
-            <span className="text-xs text-text-muted">
-              결재권자: {doc.approver_name}
-              {doc.is_final_decision && <span className="text-primary font-medium"> (전결)</span>}
-              {!doc.is_final_decision && doc.steps.length > 1 && (
-                <span> · {doc.current_step}/{doc.steps.length}단계</span>
-              )}
-            </span>
-          )}
-          {doc.reviewed_at && (
-            <span className="text-xs text-text-muted">· {doc.reviewed_at.slice(0, 10)}</span>
-          )}
           {doc.doc_type === "tax_invoice" && (
             <span className="text-xs text-text-muted">· 작성목적: {doc.purpose_type}</span>
           )}
         </div>
-
-        {doc.status === "rejected" && doc.reject_reason && (
-          <p className="text-xs text-danger bg-red-50 rounded-lg px-3 py-2 mb-4">반려 사유: {doc.reject_reason}</p>
-        )}
-
-        <ApprovalStampTable steps={doc.steps} currentStep={doc.current_step} docStatus={doc.status} finalDecision={doc.is_final_decision} />
 
         {doc.manager_name && <p className="text-xs text-text-muted mb-2">담당자: {doc.manager_name}</p>}
         {doc.remark && <p className="text-xs text-text-muted mb-2 whitespace-pre-wrap">REMARK: {doc.remark}</p>}
