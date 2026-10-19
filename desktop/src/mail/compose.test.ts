@@ -359,6 +359,22 @@ describe("보낸메일함 저장", () => {
     expect(await countInSent()).toBe(1);
   });
 
+  it("설정이 꺼져 있어도 다른 보내는 사람 주소(별칭)로 보낸 메일은 보낸메일함에 저장한다 (서버가 자동으로 남기지 않는다)", async () => {
+    await setup({ saveToSent: false });
+    const r = await composer.send(payload({ fromAddress: "yurir@epik-bio.com" }));
+    expect(r).toMatchObject({ ok: true, value: { savedToSent: true } });
+    expect(await countInSent()).toBe(1);
+  });
+
+  it("설정이 꺼져 있고 계정 주소로 보내면(대소문자만 달라도) 앱이 저장하지 않는다 (서버가 남긴다)", async () => {
+    await setup({ saveToSent: false });
+    for (const fromAddress of [undefined, "ME@bench.co.kr"]) {
+      const r = await composer.send(payload({ fromAddress }));
+      expect(r).toMatchObject({ ok: true, value: { savedToSent: null } });
+    }
+    expect(await countInSent()).toBe(0);
+  });
+
   it("보낸메일함 폴더가 없으면 저장하지 못했다고 알리되 메일은 보낸 것으로 처리한다", async () => {
     await setup({ saveToSent: true, sentFolder: false });
     const r = await composer.send(payload());

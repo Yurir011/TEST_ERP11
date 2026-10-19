@@ -279,7 +279,9 @@ export class MailComposer {
       });
 
       let savedToSent: boolean | null = null;
-      if (account.saveToSent) {
+      // 서버는 보통 로그인한 계정 주소로 보낸 메일만 보낸메일함에 자동으로 남긴다. 다른 주소(별칭)로 보낸 메일은 남지 않으므로 설정과 상관없이 앱이 직접 저장한다.
+      const otherSender = fromAddress !== undefined && fromAddress.toLowerCase() !== account.email.toLowerCase();
+      if (account.saveToSent || otherSender) {
         try {
           savedToSent = await this.deps.sync.appendToSent(sent.raw);
         } catch {
