@@ -289,6 +289,11 @@ export class MailComposer {
           this.log.warn("[Mail] 보낸 메일은 보냈지만 보낸메일함에 저장하지 못했습니다");
         }
       }
+      try {
+        this.deps.store.recordContacts(recipients, Date.now()); // 보낸 적 있는 받는 사람을 주소록에 올린다
+      } catch {
+        this.log.warn("[Mail] 주소록에 올리지 못했습니다 (메일은 보냈습니다)");
+      }
       this.discard(payload.attachmentIds);
       return { ok: true, value: { messageId: sent.messageId, savedToSent } };
     } catch (e) {

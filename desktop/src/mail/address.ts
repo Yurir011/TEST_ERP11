@@ -80,3 +80,15 @@ export function dedupeAddresses(list: ParsedAddress[]): ParsedAddress[] {
     return true;
   });
 }
+
+/** 저장된 "받는 사람" 글("홍길동 <a@x.com>, b@y.com")에서 이름과 주소를 느슨하게 뽑는다 (주소록 만들기용). 올바르지 않은 주소는 버린다 */
+export function extractAddresses(text: string): ParsedAddress[] {
+  const out: ParsedAddress[] = [];
+  for (const part of splitList(text.replace(/\r\n|\r/g, "\n"))) {
+    const m = /^(.*?)<\s*([^<>]+?)\s*>$/.exec(part);
+    const name = (m ? m[1] : "").trim().replace(/^"(.*)"$/, "$1").trim();
+    const address = (m ? m[2] : part).trim();
+    if (isValidEmail(address) && !hasControlChars(name) && name.length <= 200) out.push({ name, address });
+  }
+  return out;
+}

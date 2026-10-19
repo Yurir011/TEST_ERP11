@@ -6,7 +6,7 @@ import Database from "better-sqlite3";
 
 import { ALL_MAIL_FOLDER, type MailAttachmentInfo, type MailFilter, type MailFolder, type MailSummary } from "./types";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export interface FolderRecord {
   path: string;
@@ -113,8 +113,58 @@ export class MailStore {
         );
         CREATE INDEX idx_messages_folder_date ON messages (folder, date DESC);
       `);
-      this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
     }
+    if (current < 2) {
+      // 주소록: 메일을 보낸 적 있는 받는 사람 (hidden 은 사용자가 목록에서 지운 주소 → 보낸메일함에서 다시 뽑아도 나타나지 않는다)
+      this.db.exec(`
+        CREATE TABLE contacts (
+          address TEXT PRIMARY KEY COLLATE NOCASE,
+          name TEXT NOT NULL DEFAULT '',
+          last_used INTEGER NOT NULL,
+          use_count INTEGER NOT NULL DEFAULT 1,
+          hidden INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+    }
+    this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
+  }
+
+  // ---- 주소록 ----
+
+  /** 보낸 메일의 받는 사람들을 주소록에 올린다 (이미 있으면 이름·마지막 사용 시각·횟수를 갱신하고, 지웠던 주소도 다시 나타난다) */
+  recordContacts(list: { name: string; address: string }[], now: number): void {
+    const upsert = this.db.prepare(
+      `INSERT INTO contacts (address, name, last_used, use_count, hidden) VALUES (@address, @name, @now, 1, 0)
+       ON CONFLICT(address) DO UPDATE SET
+         address = excluded.address,
+         name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE contacts.name END,
+         last_used = excluded.last_used, use_count = contacts.use_count + 1, hidden = 0`,
+    );
+    this.db.transaction((rows: { name: string; address: string }[]) => {
+      for (const r of rows) upsert.run({ address: r.address, name: r.name, now });
+    })(list);
+  }
+
+  /** 주소록(지우지 않은 것) 전체 */
+  contactRows(): { address: string; name: string; lastUsed: number; useCount: number }[] {
+    return (this.db.prepare("SELECT address, name, last_used AS lastUsed, use_count AS useCount FROM contacts WHERE hidden = 0").all() as { address: string; name: string; lastUsed: number; useCount: number }[]);
+  }
+
+  /** 주소록에서 지운 주소들 (보낸메일함에서 뽑은 후보에서도 뺀다) */
+  hiddenContacts(): Set<string> {
+    return new Set((this.db.prepare("SELECT address FROM contacts WHERE hidden = 1").all() as { address: string }[]).map((r) => r.address.toLowerCase()));
+  }
+
+  /** 주소록에서 지운다 (지운 표시를 남겨 다시 나타나지 않게 한다) */
+  hideContact(address: string, now: number): void {
+    this.db
+      .prepare(`INSERT INTO contacts (address, name, last_used, use_count, hidden) VALUES (?, '', ?, 0, 1) ON CONFLICT(address) DO UPDATE SET hidden = 1`)
+      .run(address, now);
+  }
+
+  /** 보낸메일함 메일의 받는 사람 글(최근 것부터) */
+  sentRecipientTexts(sentFolder: string, limit: number): { toText: string; date: number }[] {
+    return this.db.prepare("SELECT to_text AS toText, date FROM messages WHERE folder = ? AND to_text <> '' ORDER BY date DESC LIMIT ?").all(sentFolder, limit) as { toText: string; date: number }[];
   }
 
   // ---- 폴더 ----

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import type { MailBridge, MailDraft, MailIdentitySettings, MailSendResult, MailSenderIdentity, MailStagedAttachment } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
+import { RecipientInput } from "./RecipientInput";
 import { SenderManager, SenderPicker } from "./SenderPicker";
 import { defaultSender, sameAddress, senderOptions } from "./senderIdentity";
 import { MAX_ATTACHMENT_BYTES, formatFileSize } from "./mailFormat";
@@ -148,7 +149,7 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
         </div>
         <div className={ROW}>
           <label htmlFor="compose-to" className={LABEL}>받는사람</label>
-          <input id="compose-to" value={to} onChange={(e) => setTo(e.target.value)} autoFocus={!initial.to} className={INPUT} placeholder="여러 명은 쉼표(,)로 구분" autoComplete="off" />
+          <RecipientInput id="compose-to" bridge={bridge} value={to} onChange={setTo} autoFocus={!initial.to} className={`${INPUT} w-full`} placeholder="여러 명은 쉼표(,)로 구분" />
           <div className="flex gap-2 text-xs shrink-0">
             {!showCc && <button type="button" onClick={() => setShowCc(true)} className="text-primary hover:underline">참조</button>}
             {!showBcc && <button type="button" onClick={() => setShowBcc(true)} className="text-primary hover:underline">숨은참조</button>}
@@ -157,13 +158,13 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
         {showCc && (
           <div className={ROW}>
             <label htmlFor="compose-cc" className={LABEL}>참조</label>
-            <input id="compose-cc" value={cc} onChange={(e) => setCc(e.target.value)} className={INPUT} autoComplete="off" />
+            <RecipientInput id="compose-cc" bridge={bridge} value={cc} onChange={setCc} className={`${INPUT} w-full`} />
           </div>
         )}
         {showBcc && (
           <div className={ROW}>
             <label htmlFor="compose-bcc" className={LABEL}>숨은참조</label>
-            <input id="compose-bcc" value={bcc} onChange={(e) => setBcc(e.target.value)} className={INPUT} autoComplete="off" />
+            <RecipientInput id="compose-bcc" bridge={bridge} value={bcc} onChange={setBcc} className={`${INPUT} w-full`} />
           </div>
         )}
         <div className={ROW}>

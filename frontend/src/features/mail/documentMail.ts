@@ -1,6 +1,9 @@
 import { apiPost, fetchFileBytes } from "../../lib/api";
 import type { MailBridge, MailDocRef } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
+import { extractEmails } from "./recipientText";
+
+export { extractEmails };
 
 export type DocumentMailResult = { ok: true } | { ok: false; error: string };
 
@@ -32,23 +35,6 @@ export async function openDocumentMail(input: DocumentMailInput): Promise<Docume
     logError("Mail", "문서 메일 쓰기를 열지 못했습니다", err);
     return { ok: false, error: "문서를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." };
   }
-}
-
-/** 주소 문자열("홍길동 <a@x.com>, b@y.com")에서 이메일 주소만 뽑는다 (중복 제거, 소문자 비교) */
-export function extractEmails(...fields: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const field of fields) {
-    for (const m of field.matchAll(/[^\s<>,;"']+@[^\s<>,;"']+/g)) {
-      const addr = m[0].replace(/^[([]+|[)\].]+$/g, "");
-      const key = addr.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push(addr);
-      }
-    }
-  }
-  return out;
 }
 
 /** 문서 메일을 보낸 직후 서버에 발송 이력(받는 사람·제목)만 알린다. 실패해도 메일 발송 자체에는 영향이 없다 */

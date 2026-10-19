@@ -184,6 +184,25 @@ describe("첨부 파일 준비", () => {
   });
 });
 
+describe("주소록 자동 등록", () => {
+  beforeEach(() => setup());
+
+  it("메일을 보내면 받는 사람·참조·숨은참조가 이름과 함께 주소록에 올라간다", async () => {
+    const r = await composer.send(payload({ to: "김영업 <kim@sender.test>", cc: "cc@x.test", bcc: "hidden@x.test" }));
+    expect(r.ok).toBe(true);
+    const rows = store.contactRows().sort((a, b) => a.address.localeCompare(b.address));
+    expect(rows.map((x) => x.address)).toEqual(["cc@x.test", "hidden@x.test", "kim@sender.test"]);
+    expect(rows.find((x) => x.address === "kim@sender.test")?.name).toBe("김영업");
+  });
+
+  it("보내지 못한 메일의 받는 사람은 올리지 않는다", async () => {
+    accounts.save({ email: "me@bench.co.kr", username: "testuser", password: "틀린비밀번호", imapHost: "127.0.0.1", imapPort: imap.port, smtpHost: "127.0.0.1", smtpPort: smtp.port, saveToSent: false });
+    const r = await composer.send(payload({ to: "kim@sender.test" }));
+    expect(r.ok).toBe(false);
+    expect(store.contactRows()).toEqual([]);
+  });
+});
+
 describe("보내는 사람 주소", () => {
   beforeEach(() => setup());
 

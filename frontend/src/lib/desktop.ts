@@ -136,6 +136,11 @@ export interface MailSendResult {
 
 export type MailResult<T> = { ok: true; value: T } | { ok: false; error: string; canceled?: boolean };
 
+export interface MailContact {
+  name: string;
+  address: string;
+}
+
 export interface MailSenderIdentity {
   name: string;
   address: string;
@@ -151,6 +156,9 @@ export interface MailBridge {
   /** 메일을 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로) */
   openWindow(): Promise<void>;
   account(): Promise<MailAccountInfo | null>;
+  /** 받는 사람 자동완성: 메일을 보낸 적 있는 주소(최근 순, query 가 있으면 이름·주소에 맞는 것) / 주소록에서 지우기 */
+  contacts(query: string, limit?: number): Promise<MailContact[]>;
+  removeContact(address: string): Promise<boolean>;
   /** 보내는 사람 목록(쓰기 화면에서 고르는 이름·주소). 이 PC 에만 저장된다 */
   identities(): Promise<MailIdentitySettings>;
   saveIdentities(settings: MailIdentitySettings): Promise<MailResult<MailIdentitySettings>>;

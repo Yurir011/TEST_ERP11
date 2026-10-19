@@ -45,6 +45,8 @@ function installMail(over: Partial<MailBridge> = {}) {
   const bridge: MailBridge = {
     openWindow: vi.fn().mockResolvedValue(undefined),
     account: vi.fn().mockResolvedValue(account),
+    contacts: vi.fn().mockResolvedValue([]),
+    removeContact: vi.fn().mockResolvedValue(true),
     identities: vi.fn().mockResolvedValue({ items: [], defaultAddress: "" }),
     saveIdentities: vi.fn((input: unknown) => Promise.resolve({ ok: true as const, value: input as MailIdentitySettings })),
     saveAccount: vi.fn().mockResolvedValue({ ok: true, value: account }),

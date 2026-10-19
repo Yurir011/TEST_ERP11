@@ -80,3 +80,9 @@ export interface MailFilter {
 export type MailResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 export const DAUM_DEFAULTS = { imapHost: "imap.daum.net", imapPort: 993, smtpHost: "smtp.daum.net", smtpPort: 465 } as const;
+
+/** 주소록(받는 사람 자동완성) 한 건 */
+export interface MailContact {
+  name: string;
+  address: string;
+}

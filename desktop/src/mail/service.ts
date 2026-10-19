@@ -9,10 +9,11 @@ import { type AddressObject, simpleParser } from "mailparser";
 
 import { type Logger, silentLogger } from "../log";
 import { type MailAccountStore, validateAccountInput } from "./account";
+import { extractAddresses, isValidEmail } from "./address";
 import { sanitizeEmailHtml } from "./html";
-import { MailError, MailSync, findJunkFolder, findTrashFolder } from "./sync";
+import { MailError, MailSync, findJunkFolder, findSentFolder, findTrashFolder } from "./sync";
 import type { CachedBody, MailStore } from "./store";
-import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailAttachmentInfo, type MailDetail, type MailFilter, type MailFolder, type MailResult, type MailSummary, type NewMailInfo } from "./types";
+import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailAttachmentInfo, type MailContact, type MailDetail, type MailFilter, type MailFolder, type MailResult, type MailSummary, type NewMailInfo } from "./types";
 
 const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const MAX_INLINE_IMAGE_BYTES = 1_000_000;
@@ -58,6 +59,50 @@ export class MailService {
 
   constructor(private readonly deps: MailServiceDeps) {
     this.log = deps.log ?? silentLogger;
+  }
+
+  // ---- 주소록 (받는 사람 자동완성) ----
+
+  /**
+   * 메일을 보낸 적 있는 받는 사람들. 앱에서 보낸 메일(주소록 표)과, 이 PC 에 받아 둔 보낸메일함의 받는 사람을 합쳐 최근에 쓴 것부터 돌려준다.
+   * 입력한 글이 있으면 이름이나 주소에 들어 있는 것만(시작하는 것을 먼저). 내 계정 주소와 목록에서 지운 주소는 뺀다.
+   */
+  contacts(query: string, limit: number): MailContact[] {
+    const q = query.trim().toLowerCase();
+    const me = this.deps.accounts.load()?.email.toLowerCase();
+    const hidden = this.deps.store.hiddenContacts();
+    const found = new Map<string, { name: string; address: string; at: number }>();
+    const add = (name: string, address: string, at: number) => {
+      const key = address.toLowerCase();
+      if (key === me || hidden.has(key)) return;
+      const old = found.get(key);
+      if (!old) found.set(key, { name, address, at });
+      else if (at > old.at) found.set(key, { name: name || old.name, address, at });
+      else if (!old.name && name) old.name = name;
+    };
+    for (const r of this.deps.store.contactRows()) add(r.name, r.address, r.lastUsed);
+    const sent = findSentFolder(this.deps.store.folders());
+    if (sent) for (const row of this.deps.store.sentRecipientTexts(sent.path, 2000)) for (const a of extractAddresses(row.toText)) add(a.name, a.address, row.date);
+
+    const rank = (c: { name: string; address: string }): number => {
+      if (!q) return 0;
+      const n = c.name.toLowerCase();
+      const a = c.address.toLowerCase();
+      if (n.startsWith(q) || a.startsWith(q)) return 0;
+      return n.includes(q) || a.includes(q) ? 1 : 2;
+    };
+    return [...found.values()]
+      .filter((c) => rank(c) < 2)
+      .sort((x, y) => rank(x) - rank(y) || y.at - x.at)
+      .slice(0, Math.max(1, Math.min(limit, 50)))
+      .map(({ name, address }) => ({ name, address }));
+  }
+
+  /** 주소록에서 지운다 (다시 보내면 다시 나타난다) */
+  removeContact(address: string): boolean {
+    if (!isValidEmail(address)) return false;
+    this.deps.store.hideContact(address, Date.now());
+    return true;
   }
 
   // ---- 계정 ----

@@ -573,6 +573,18 @@ function registerIpc(): void {
     return { ok: true, value: parsed.value };
   });
 
+  // 주소록(받는 사람 자동완성): 목록 읽기와 지우기
+  ipcMain.handle("mail:contacts", (e, query: unknown, limit: unknown) => {
+    if (!guard(e, "mail:contacts", ["server"]) || !mail) return [];
+    const q = typeof query === "string" && query.length <= 200 ? query : "";
+    const n = typeof limit === "number" && Number.isFinite(limit) ? Math.trunc(limit) : 8;
+    return mail.contacts(q, n);
+  });
+  ipcMain.handle("mail:contact-remove", (e, address: unknown) => {
+    if (!guard(e, "mail:contact-remove", ["server"]) || !mail) return false;
+    return typeof address === "string" && address.length <= 254 ? mail.removeContact(address) : false;
+  });
+
   // ---- 앱 업데이트 (서버 화면에서만. 주소·파일 이름은 화면이 정하지 못한다) ----
   ipcMain.handle("update:check", async (e) => {
     if (!guard(e, "update:check", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
@@ -1164,6 +1176,16 @@ async function runSmoke(): Promise<void> {
     const upCheck = await call("window.benchClient.update.check()");
     const upInstall = await call("window.benchClient.update.install()");
     check("[업데이트] 서버에 새 버전 정보가 없으면 오류로 알리고(앱은 멈추지 않는다), 설치하지 않은 앱에서는 바로 업데이트를 거절한다", upCheck.ok === false && upInstall.ok === false && String(upInstall.error).includes("설치해서"));
+
+    // 2-6a) 주소록(받는 사람 자동완성): 위에서 보낸 문서 메일의 받는 사람이 올라가 있고, 입력한 글로 걸러지며, 지울 수 있다
+    const bookAll = await call(`window.benchClient.mail.contacts("", 8)`);
+    const bookFiltered = await call(`window.benchClient.mail.contacts("CLIENT@", 8)`);
+    const bookNone = await call(`window.benchClient.mail.contacts("zzz-없는-사람", 8)`);
+    check("[주소록] 메일을 보낸 받는 사람이 자동으로 올라가 있고(내 주소는 없다), 입력한 글로 걸러진다", bookAll.some((c: { address: string }) => c.address === "client@test.local") && !bookAll.some((c: { address: string }) => c.address === "e2e@test.local") && bookFiltered.length === 1 && bookNone.length === 0);
+    const removed = await call(`window.benchClient.mail.removeContact("client@test.local")`);
+    const badContactRemove = await call(`window.benchClient.mail.removeContact("not-an-email")`);
+    const bookAfter = await call(`window.benchClient.mail.contacts("", 8)`);
+    check("[주소록] 목록에서 지우면 사라지고, 형식이 틀린 주소는 지우지 않는다", removed === true && badContactRemove === false && !bookAfter.some((c: { address: string }) => c.address === "client@test.local"));
 
     // 2-6) 보내는 사람 목록 (이름·주소 선택)
     const idStart = await call("window.benchClient.mail.identities()");
