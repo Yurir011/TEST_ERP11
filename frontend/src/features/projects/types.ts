@@ -71,7 +71,7 @@ export interface SalesDocumentSet {
   statement: SalesDocument;
 }
 
-export const MAX_PROGRESS_STAGES = 5;
+export const MAX_PROGRESS_STAGES = 10;
 
 export interface ProgressStage {
   id: number;

@@ -5,7 +5,13 @@ import { logDebug, logError } from "../../lib/logger";
 import { PercentPickerPopover } from "./PercentPickerPopover";
 import { PROGRESS_ROW_STYLES } from "./progressRowStyles";
 import { MAX_PROGRESS_STAGES, type Project, type ProgressStage } from "./types";
-import { TIMELINE_LABEL_WIDTH, diffDays, parseDate, stageWeekRange, todayFraction } from "./timeline";
+import { TIMELINE_LABEL_WIDTH, diffDays, formatMonthDay, parseDate, stageDayRange, todayFraction } from "./timeline";
+
+// 항목 이름 칸 + 간격 뒤부터 연필·삭제 버튼 앞까지가 날짜 그래프가 그려지는 영역이다 (주 눈금·오늘 선·바가 같은 영역을 기준으로 맞춘다).
+const TRACK_LEFT = `calc(${TIMELINE_LABEL_WIDTH} + 0.5rem)`;
+const TRACK_RIGHT = "40px";
+// 바가 이 비율보다 좁으면 진행율 글자를 오른쪽 정렬 대신 가운데에 둔다
+const MIN_INSIDE_LABEL_WIDTH = 0.09;
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
 // "진행상황" — 주차 그리드에 정렬된 구간 바(무채색 트랙 + 진행율만큼 컬러 채움). 클릭으로 진행율 기록, 연필로 기간 수정.
@@ -107,7 +113,7 @@ export function ProgressSectionCard({
     <div className="bg-surface border border-border rounded-2xl p-6 mb-6">
       <h2 className="text-sm font-semibold mb-1">진행상황</h2>
       <p className="text-xs text-text-muted mb-4">
-        항목을 등록하고 기간을 정하면 그 주차만큼만 바가 표시됩니다. 바를 클릭해 진행율을 기록하고, 연필 아이콘으로
+        항목을 등록하고 기간을 정하면 실제 날짜 위치에 맞춰 바가 표시됩니다. 바를 클릭해 진행율을 기록하고, 연필 아이콘으로
         기간을 바꿀 수 있습니다. (최대 {MAX_PROGRESS_STAGES}개)
       </p>
 
@@ -128,20 +134,24 @@ export function ProgressSectionCard({
 
       {stages !== null && stages.length > 0 && (
         <div className="relative mb-4">
-          {hasSchedule && fraction !== null && (
-            <div
-              className="absolute top-0 bottom-0 w-px bg-danger z-20 pointer-events-none"
-              style={{ left: `calc(${TIMELINE_LABEL_WIDTH} + (100% - ${TIMELINE_LABEL_WIDTH}) * ${fraction})` }}
-            >
-              <span className="absolute -top-4 -translate-x-1/2 text-[9px] text-danger font-medium whitespace-nowrap">
-                오늘
-              </span>
+          {hasSchedule && (
+            <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: TRACK_LEFT, right: TRACK_RIGHT }}>
+              {Array.from({ length: totalWeeks + 1 }, (_, i) => (
+                <i key={i} className="absolute top-0 bottom-0 w-px bg-border/70" style={{ left: `${(i / totalWeeks) * 100}%` }} />
+              ))}
+              {fraction !== null && (
+                <div className="absolute top-0 bottom-0 w-px bg-danger z-20" style={{ left: `${fraction * 100}%` }}>
+                  <span className="absolute -top-4 -translate-x-1/2 text-[9px] text-danger font-medium whitespace-nowrap">
+                    오늘
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
           {hasSchedule && (
             <div className="flex mb-1.5">
-              <div style={{ width: TIMELINE_LABEL_WIDTH }} className="shrink-0" />
+              <div style={{ width: TRACK_LEFT }} className="shrink-0" />
               <div className="flex-1 grid text-[10px] text-text-muted" style={gridStyle}>
                 {weeks.map((w) => (
                   <div key={w} className="text-center">
@@ -149,13 +159,14 @@ export function ProgressSectionCard({
                   </div>
                 ))}
               </div>
+              <div style={{ width: TRACK_RIGHT }} className="shrink-0" />
             </div>
           )}
 
           <div className="space-y-2.5">
             {stages.map((stage, i) => {
               const style = PROGRESS_ROW_STYLES[i % PROGRESS_ROW_STYLES.length];
-              const range = hasSchedule ? stageWeekRange(stage, project.start_date!, totalWeeks) : null;
+              const range = hasSchedule ? stageDayRange(stage, project.start_date!, totalWeeks) : null;
               return (
                 <div key={stage.id} className="flex items-center gap-2 group/stage">
                   <div
@@ -168,36 +179,56 @@ export function ProgressSectionCard({
                   </div>
 
                   {hasSchedule ? (
-                    <div className="flex-1 grid h-8" style={gridStyle}>
+                    <div className="flex-1 relative h-8">
                       {range ? (
-                        <div className="relative h-full" style={{ gridColumn: `${range[0]} / ${range[1] + 1}` }}>
+                        <>
                           <div
-                            onClick={() => setOpenPickerId(stage.id)}
-                            className="absolute inset-0 rounded-full bg-bg border border-border overflow-hidden cursor-pointer"
-                            title="클릭하여 진행율 기록"
+                            className="absolute inset-y-0"
+                            style={{ left: `${range.left * 100}%`, width: `${range.width * 100}%`, minWidth: 14 }}
                           >
                             <div
-                              className={`absolute inset-y-0 left-0 rounded-full transition-all ${style.bar}`}
-                              style={{ width: `${stage.progress_percent}%` }}
-                            />
-                            <span className="relative z-10 h-full flex items-center justify-end pr-2 text-[10px] font-semibold text-text">
+                              onClick={() => setOpenPickerId(stage.id)}
+                              className="absolute inset-0 rounded-full bg-bg border border-border overflow-hidden cursor-pointer"
+                              title="클릭하여 진행율 기록"
+                            >
+                              <div
+                                className={`absolute inset-y-0 left-0 rounded-full transition-all ${style.bar}`}
+                                style={{ width: `${stage.progress_percent}%` }}
+                              />
+                            </div>
+                            {/* 진행율은 바 안쪽에만 적는다. 바가 좁으면 가운데에 두어 글자가 바 밖으로 조금 넘쳐도 읽히게 한다 */}
+                            <span
+                              className={`absolute inset-0 flex items-center text-[10px] font-semibold text-text whitespace-nowrap pointer-events-none ${
+                                range.width > MIN_INSIDE_LABEL_WIDTH ? "justify-end pr-2" : "justify-center"
+                              }`}
+                            >
                               {stage.progress_percent}%
                             </span>
+                            {openPickerId === stage.id && (
+                              <PercentPickerPopover
+                                value={stage.progress_percent}
+                                onSelect={(v) => handleSetProgress(stage, v)}
+                                onClose={() => setOpenPickerId(null)}
+                              />
+                            )}
                           </div>
-                          {openPickerId === stage.id && (
-                            <PercentPickerPopover
-                              value={stage.progress_percent}
-                              onSelect={(v) => handleSetProgress(stage, v)}
-                              onClose={() => setOpenPickerId(null)}
-                            />
-                          )}
-                        </div>
+                          {/* 정확한 날짜를 바로 읽을 수 있게 기간과 일수를 바 옆에 적는다 (오른쪽 끝에 가까우면 왼쪽에) */}
+                          <span
+                            className="absolute top-1/2 -translate-y-1/2 text-[11px] text-text-muted whitespace-nowrap tabular-nums pointer-events-none"
+                            style={
+                              range.left + range.width > 0.62
+                                ? { right: `${(1 - range.left) * 100}%`, marginRight: 6 }
+                                : { left: `${(range.left + range.width) * 100}%`, marginLeft: 6 }
+                            }
+                          >
+                            {formatMonthDay(stage.start_date!)} ~ {formatMonthDay(stage.end_date!)} ({range.days}일)
+                          </span>
+                        </>
                       ) : (
                         <div
                           onClick={() => setEditingId(editingId === stage.id ? null : stage.id)}
                           title="클릭하여 기간 수정"
-                          style={{ gridColumn: `1 / ${totalWeeks + 1}` }}
-                          className="flex items-center cursor-pointer"
+                          className="absolute inset-0 flex items-center cursor-pointer"
                         >
                           <span className="text-[11px] text-text-muted hover:text-primary">기간을 설정해주세요</span>
                         </div>

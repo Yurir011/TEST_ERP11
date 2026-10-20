@@ -10,7 +10,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.project import Project
 
-MAX_PROGRESS_STAGES = 5
+MAX_PROGRESS_STAGES = 10
 
 
 class PurchaseStepKey(str, enum.Enum):
