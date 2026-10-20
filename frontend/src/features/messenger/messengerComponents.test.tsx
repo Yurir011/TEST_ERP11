@@ -72,13 +72,50 @@ describe("MessageInput", () => {
     expect(onSend).toHaveBeenCalledWith("버튼");
   });
 
-  it("파일을 고르면 알리고, 같은 파일을 다시 고를 수 있게 비운다", () => {
+  it("파일을 고르면 바로 보내지 않고 보낼 파일로 올려 두며, [보내기]를 눌러야 전송된다", () => {
     const onAttach = vi.fn();
-    render(<MessageInput onSend={vi.fn()} onAttach={onAttach} />);
+    const onSend = vi.fn();
+    render(<MessageInput onSend={onSend} onAttach={onAttach} />);
     const input = screen.getByLabelText("첨부할 파일") as HTMLInputElement;
     const file = new File(["x"], "a.png", { type: "image/png" });
     fireEvent.change(input, { target: { files: [file] } });
-    expect(onAttach).toHaveBeenCalledWith(file);
+    expect(onAttach).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("보낼 파일").textContent).toContain("a.png");
+    expect((screen.getByLabelText("보내기") as HTMLButtonElement).disabled).toBe(false); // 글이 없어도 파일만으로 보낼 수 있다
+    fireEvent.click(screen.getByLabelText("보내기"));
+    expect(onAttach).toHaveBeenCalledWith(file, "");
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("보낼 파일")).toBeNull();
+  });
+
+  it("파일과 함께 쓴 글은 설명으로 같이 가고, Enter 로도 보낼 수 있다", () => {
+    const onAttach = vi.fn();
+    render(<MessageInput onSend={vi.fn()} onAttach={onAttach} />);
+    const file = new File(["x"], "b.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("첨부할 파일"), { target: { files: [file] } });
+    fireEvent.change(box(), { target: { value: "  견적서입니다  " } });
+    fireEvent.keyDown(box(), { key: "Enter" });
+    expect(onAttach).toHaveBeenCalledWith(file, "견적서입니다");
+    expect(box().value).toBe("");
+  });
+
+  it("보낼 파일을 빼면 전송되지 않고, 글이 없으면 [보내기]가 꺼진다", () => {
+    const onAttach = vi.fn();
+    render(<MessageInput onSend={vi.fn()} onAttach={onAttach} />);
+    fireEvent.change(screen.getByLabelText("첨부할 파일"), { target: { files: [new File(["x"], "c.png", { type: "image/png" })] } });
+    fireEvent.click(screen.getByLabelText("보낼 파일 빼기"));
+    expect(screen.queryByLabelText("보낼 파일")).toBeNull();
+    expect((screen.getByLabelText("보내기") as HTMLButtonElement).disabled).toBe(true);
+    expect(onAttach).not.toHaveBeenCalled();
+  });
+
+  it("20MB 가 넘는 파일은 올려 두지 않고 안내한다", () => {
+    render(<MessageInput onSend={vi.fn()} onAttach={vi.fn()} />);
+    const big = new File(["x"], "큰파일.zip", { type: "application/zip" });
+    Object.defineProperty(big, "size", { value: 21 * 1024 * 1024 });
+    fireEvent.change(screen.getByLabelText("첨부할 파일"), { target: { files: [big] } });
+    expect(screen.getByRole("alert").textContent).toMatch(/20\.0MB를 넘을 수 없습니다/);
+    expect(screen.queryByLabelText("보낼 파일")).toBeNull();
   });
 
   it("<form> 안에 있지 않다 (앱 전체의 Enter=다음 칸 규칙과 부딪히지 않는다)", () => {

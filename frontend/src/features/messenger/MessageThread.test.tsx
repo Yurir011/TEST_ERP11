@@ -242,7 +242,11 @@ describe("보내기", () => {
 });
 
 describe("파일 보내기", () => {
-  const attach = (file: File) => fireEvent.change(screen.getByLabelText("첨부할 파일"), { target: { files: [file] } });
+  // 파일을 고른 뒤 [보내기]를 눌러야 전송된다
+  const attach = (file: File) => {
+    fireEvent.change(screen.getByLabelText("첨부할 파일"), { target: { files: [file] } });
+    fireEvent.click(screen.getByLabelText("보내기"));
+  };
 
   it("20MB 가 넘으면 서버로 보내지 않고 안내한다", async () => {
     setup();

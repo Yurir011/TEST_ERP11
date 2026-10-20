@@ -210,12 +210,12 @@ export function MessageThread({ conversation, meId }: { conversation: Conversati
     void deliver({ ...p, failed: false });
   }
 
-  function attach(file: File) {
+  function attach(file: File, caption: string) {
     if (file.size > MAX_ATTACHMENT_BYTES) {
       dialog.notifyError(`파일 크기는 ${formatBytes(MAX_ATTACHMENT_BYTES)}를 넘을 수 없습니다. (${file.name}: ${formatBytes(file.size)})`);
       return;
     }
-    enqueue({ body: "", fileName: file.name, file });
+    enqueue({ body: caption, fileName: file.name, file });
   }
 
   // ── 대화방 설정 ──
