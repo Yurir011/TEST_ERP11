@@ -27,6 +27,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  NavigationType,
   Navigate,
   UNSAFE_LocationContext,
   UNSAFE_NavigationContext,
@@ -131,8 +132,8 @@ function TabRouter({ tab, dispatch, children }: { tab: Tab; dispatch: (a: Parame
     }),
     [dispatch, id],
   );
-  const navigationValue = useMemo(() => ({ basename: "/", navigator, static: false }), [navigator]);
-  const locationValue = useMemo(() => ({ location, navigationType: "POP" as const }), [location]);
+  const navigationValue = useMemo(() => ({ basename: "/", navigator, static: false, useTransitions: undefined, future: {} }), [navigator]);
+  const locationValue = useMemo(() => ({ location, navigationType: NavigationType.Pop }), [location]);
   const routeValue = useMemo(() => ({ outlet: null, matches: [], isDataRoute: false }), []);
   const shellValue = useMemo(
     () => ({ tabId: id, setTitle: (title: string) => dispatch({ type: "title", id, title }) }),
