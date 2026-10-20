@@ -7,7 +7,6 @@ import { useTabMenu } from "./TabShellContext";
 vi.mock("../../../context/useAuth", () => ({
   useAuth: () => ({ user: { id: 1, name: "박소장", role: "admin", title: null, menu_permissions: [] }, logout: vi.fn() }),
 }));
-vi.mock("../../../features/attendance/AttendanceToggle", () => ({ AttendanceToggle: () => null }));
 vi.mock("../../../features/desktop/DesktopUpdateNotice", () => ({ DesktopUpdateNotice: () => null }));
 vi.mock("../SiteAdminSidebar", () => ({ SiteAdminSidebar: () => null }));
 vi.mock("../Sidebar", () => ({

@@ -131,6 +131,98 @@ describe("PresenceSelect", () => {
     await waitFor(() => expect(value.changeMyStatus).toHaveBeenCalledWith("outside"));
   });
 
+  describe("출근·퇴근을 고르면 근태 기록도 남긴다", () => {
+    const record = (over: object = {}) => ({ id: 1, user_id: 1, user_name: "나", work_date: "2026-10-20", clock_in: null, clock_out: null, ...over });
+
+    it("출근: 오늘 기록이 없으면 출근을 기록하고 상태를 바꾼다", async () => {
+      api.apiGet.mockResolvedValue(null);
+      api.apiPost.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00" }));
+      const value = ctx({ myStatus: "absent" });
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "working" } });
+      await waitFor(() => expect(value.changeMyStatus).toHaveBeenCalledWith("working"));
+      expect(api.apiPost).toHaveBeenCalledWith("/api/attendance/clock-in");
+    });
+
+    it("출근: 이미 출근 기록이 있으면 다시 기록하지 않는다", async () => {
+      api.apiGet.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00" }));
+      const value = ctx({ myStatus: "meeting" });
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "working" } });
+      await waitFor(() => expect(value.changeMyStatus).toHaveBeenCalledWith("working"));
+      expect(api.apiPost).not.toHaveBeenCalled();
+    });
+
+    it("출근: 이미 퇴근했다가 다시 출근을 고르면 확인 후 퇴근을 취소하고 출근으로 기록한다 (마지막 선택이 기록)", async () => {
+      api.apiGet.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00", clock_out: "2026-10-20T18:00:00" }));
+      api.apiPost.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00" }));
+      const value = ctx({ myStatus: "off" });
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "working" } });
+      fireEvent.click(await screen.findByRole("button", { name: "다시 출근" }));
+      await waitFor(() => expect(value.changeMyStatus).toHaveBeenCalledWith("working"));
+      expect(api.apiPost).toHaveBeenCalledWith("/api/attendance/clock-in");
+    });
+
+    it("출근: 퇴근 취소 확인에서 취소하면 아무것도 바꾸지 않는다", async () => {
+      api.apiGet.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00", clock_out: "2026-10-20T18:00:00" }));
+      const value = ctx({ myStatus: "off" });
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "working" } });
+      fireEvent.click(await screen.findByRole("button", { name: "취소" }));
+      expect(value.changeMyStatus).not.toHaveBeenCalled();
+      expect(api.apiPost).not.toHaveBeenCalled();
+    });
+
+    it("퇴근: 이미 퇴근 기록이 있으면 다시 기록하지 않고 상태만 맞춘다", async () => {
+      api.apiGet.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00", clock_out: "2026-10-20T18:00:00" }));
+      const value = ctx({ myStatus: "meeting" });
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "off" } });
+      await waitFor(() => expect(value.changeMyStatus).toHaveBeenCalledWith("off"));
+      expect(api.apiPost).not.toHaveBeenCalled();
+    });
+
+    it("퇴근: 확인창에서 퇴근하면 퇴근을 기록하고 상태를 바꾼다", async () => {
+      api.apiGet.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00" }));
+      api.apiPost.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00", clock_out: "2026-10-20T18:00:00" }));
+      const value = ctx();
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "off" } });
+      fireEvent.click(await screen.findByRole("button", { name: "퇴근하기" }));
+      await waitFor(() => expect(value.changeMyStatus).toHaveBeenCalledWith("off"));
+      expect(api.apiPost).toHaveBeenCalledWith("/api/attendance/clock-out");
+    });
+
+    it("퇴근: 확인창에서 취소하면 아무것도 바꾸지 않는다", async () => {
+      api.apiGet.mockResolvedValue(record({ clock_in: "2026-10-20T09:00:00" }));
+      const value = ctx();
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "off" } });
+      fireEvent.click(await screen.findByRole("button", { name: "취소" }));
+      expect(value.changeMyStatus).not.toHaveBeenCalled();
+      expect(api.apiPost).not.toHaveBeenCalled();
+    });
+
+    it("퇴근: 출근 기록이 없으면 먼저 출근을 선택하라고 알린다", async () => {
+      api.apiGet.mockResolvedValue(null);
+      const value = ctx({ myStatus: "absent" });
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "off" } });
+      expect(await screen.findByText(/먼저 '출근'을 선택해 주세요/)).toBeTruthy();
+      expect(value.changeMyStatus).not.toHaveBeenCalled();
+    });
+
+    it("회의중 같은 다른 상태는 근태 기록을 건드리지 않는다", async () => {
+      const value = ctx();
+      render(wrap(value));
+      fireEvent.change(select(), { target: { value: "meeting" } });
+      await waitFor(() => expect(value.changeMyStatus).toHaveBeenCalledWith("meeting"));
+      expect(api.apiGet).not.toHaveBeenCalled();
+      expect(api.apiPost).not.toHaveBeenCalled();
+    });
+  });
+
   it("서버가 거절하면 그 문구를 알린다", async () => {
     const { ApiError } = await import("../../lib/api");
     const value = ctx({ changeMyStatus: vi.fn().mockRejectedValue(new ApiError(422, "허용되지 않는 상태입니다.")) });

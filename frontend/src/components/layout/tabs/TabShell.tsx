@@ -37,8 +37,9 @@ import {
   type Navigator,
 } from "react-router-dom";
 import { useAuth } from "../../../context/useAuth";
-import { AttendanceToggle } from "../../../features/attendance/AttendanceToggle";
 import { DesktopUpdateNotice } from "../../../features/desktop/DesktopUpdateNotice";
+import { PresenceSelect } from "../../../features/messenger/PresenceSelect";
+import { useMessengerOptional } from "../../../features/messenger/useMessenger";
 import { shouldUseMobile } from "../../../features/mobile/mobileMode";
 import { TITLE_LABELS } from "../../../lib/auth";
 import { Sidebar } from "../Sidebar";
@@ -106,6 +107,16 @@ const SECTION_STYLE: Record<string, { icon: LucideIcon; color: TabColor }> = {
   "project-documents": { icon: FileText, color: "orange" },
 };
 const DEFAULT_SECTION_STYLE = { icon: FileText, color: "blue" as TabColor };
+
+/** 오른쪽 위의 내 상태 콤보박스(메신저와 같은 값). 상태와 실시간 변경을 받으려면 메신저의 직원 목록 구독이 필요해 켜 둔다. */
+function TopBarStatus() {
+  const messenger = useMessengerOptional();
+  const ensureDirectory = messenger?.ensureDirectory;
+  useEffect(() => {
+    ensureDirectory?.();
+  }, [ensureDirectory]);
+  return messenger ? <PresenceSelect /> : null;
+}
 
 const pageFallback =<p className="p-8 text-sm text-text-muted">불러오는 중...</p>;
 
@@ -212,7 +223,11 @@ export function TabShell({ routes }: { routes: ReactNode }) {
         {user?.role === "site_admin" ? <SiteAdminSidebar /> : <Sidebar />}
         <div className="flex-1 min-w-0">
           <div className="sticky top-0 z-30 flex items-end gap-3 bg-sidebar border-b border-border pl-3 pr-6 pt-2.5">
-            <div role="tablist" className="flex items-end gap-1 min-w-0 flex-1 overflow-x-auto">
+            <div
+              role="tablist"
+              className="flex items-end gap-1 min-w-0 flex-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: "none" }} // 탭이 많으면 가로로 밀어서 볼 수 있지만 스크롤바는 보이지 않게 한다
+            >
               {state.tabs.map((tab) => {
                 const isActive = tab.id === state.activeId;
                 // 메뉴마다 아이콘과 색이 달라 탭이 여러 개여도 한눈에 구분된다. 보고 있는 탭은 그 색으로 채워진다.
@@ -271,7 +286,7 @@ export function TabShell({ routes }: { routes: ReactNode }) {
                   <span className="text-sm text-text whitespace-nowrap">
                     {user.name} <span className="text-text-muted">{user.title ? TITLE_LABELS[user.title] : "사원"}</span>
                   </span>
-                  <AttendanceToggle />
+                  <TopBarStatus />
                   <span className="w-px h-4 bg-border" />
                   <button
                     onClick={logout}

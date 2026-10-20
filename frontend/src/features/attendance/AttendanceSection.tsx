@@ -129,7 +129,7 @@ export function AttendanceSection() {
       <div className="bg-surface border border-border rounded-2xl p-5 mb-6">
         <p className="text-sm font-medium">오늘 근태</p>
         <p className="text-sm text-text-muted mt-1">{todayLabel(today)}</p>
-        <p className="text-xs text-text-muted mt-2">출근·퇴근 체크는 화면 오른쪽 위 이름 옆 스위치를 이용해주세요.</p>
+        <p className="text-xs text-text-muted mt-2">출근·퇴근 체크는 화면 오른쪽 위 '내 상태'에서 출근 또는 퇴근을 선택해주세요.</p>
       </div>
 
       <div className="flex items-center justify-between mb-3">

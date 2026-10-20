@@ -98,12 +98,16 @@ def clock_in(db: Session = Depends(get_db), current_user: User = Depends(get_cur
     logger.debug(f"[Attendance] 출근 기록 시도: user_id={current_user.id}, date={today}")
 
     record = db.query(Attendance).filter(Attendance.user_id == current_user.id, Attendance.work_date == today).first()
-    if record and record.clock_in is not None:
+    if record and record.clock_in is not None and record.clock_out is None:
         logger.debug(f"[Attendance] 이미 출근 처리됨: user_id={current_user.id}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="오늘 이미 출근 처리되었습니다.")
 
     now = datetime.now(timezone.utc)
-    if record is None:
+    if record is not None and record.clock_in is not None:
+        # 퇴근 처리한 뒤 다시 '출근'을 고른 경우: 마지막 선택이 기록이 되도록 퇴근을 취소하고, 처음 출근 시각은 그대로 둔다.
+        logger.debug(f"[Attendance] 퇴근 취소(다시 출근): user_id={current_user.id}, clock_in={record.clock_in.isoformat()}")
+        record.clock_out = None
+    elif record is None:
         record = Attendance(user_id=current_user.id, work_date=today, clock_in=now)
         db.add(record)
     else:

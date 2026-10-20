@@ -149,3 +149,16 @@ def test_clock_in_out_flow_and_duplicates(client, make_user, auth_headers):
 
 def test_attendance_requires_login(client):
     assert client.post("/api/attendance/clock-in").status_code == 401
+
+
+def test_clock_in_after_clock_out_reopens_today(client, make_user, auth_headers):
+    """퇴근 처리 후 다시 '출근'을 고르면 퇴근이 취소되고 처음 출근 시각은 유지된다 (마지막 선택이 기록)."""
+    h = auth_headers(make_user())
+    first = client.post("/api/attendance/clock-in", headers=h).json()
+    assert client.post("/api/attendance/clock-out", headers=h).status_code == 200
+    again = client.post("/api/attendance/clock-in", headers=h)
+    assert again.status_code == 200, again.text
+    body = again.json()
+    assert body["clock_out"] is None and body["clock_in"] == first["clock_in"]
+    assert client.post("/api/attendance/clock-in", headers=h).status_code == 400  # 출근 중에 또 출근은 여전히 불가
+    assert client.post("/api/attendance/clock-out", headers=h).status_code == 200  # 다시 퇴근할 수 있다
