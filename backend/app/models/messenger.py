@@ -55,6 +55,8 @@ class Message(Base):
     body: Mapped[str] = mapped_column(Text, default="")
     client_msg_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # 보낸 사람이 지운 시각. 지우면 내용(body)과 첨부파일은 실제로 없애고 행만 남겨 대화창에 "삭제된 메시지입니다"로 보여 준다.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     sender: Mapped["User | None"] = relationship()
     attachments: Mapped[list["MessageAttachment"]] = relationship(order_by="MessageAttachment.id", cascade="all, delete-orphan")

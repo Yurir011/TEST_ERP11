@@ -104,8 +104,8 @@ export function MessengerProvider({ children }: { children: ReactNode }) {
         const r = applyReadEvent(list, event, me);
         apply(r.list);
         if (r.needsRefetch) void refresh();
-      } else if (event.type === "conversation.updated") {
-        void refresh();
+      } else if (event.type === "conversation.updated" || event.type === "message.deleted") {
+        void refresh(); // 지워진 메시지는 목록의 미리보기와 안 읽은 수가 달라진다
       } else if (event.type === "presence.updated") {
         if (!directoryWanted.current) return;
         setDirectory((prev) => (prev ? withStatus(prev, event.user_id, event.status) : prev));

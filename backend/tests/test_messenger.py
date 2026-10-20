@@ -485,3 +485,63 @@ def test_deleting_a_user_keeps_messages_with_unknown_sender(api, users, db):
     db.flush()
     row = db.query(Message).one()
     assert row.sender_id is None and row.body == "남은 메시지"
+
+
+# ── 보낸 메시지 삭제 ───────────────────────────────────────────────
+
+def test_sender_can_delete_message_and_it_stays_as_tombstone(api, users):
+    conv = api.direct(users["a"], users["b"])
+    msg = api.post(users["a"], f"/conversations/{conv['id']}/messages", json={"body": "지울 말"}).json()
+
+    r = api.delete(users["a"], f"/conversations/{conv['id']}/messages/{msg['id']}")
+    assert r.status_code == 200, r.text
+    assert r.json()["body"] == "" and r.json()["attachments"] == [] and r.json()["deleted_at"] is not None
+
+    # 상대가 보는 목록에도 "지워진 메시지"로 남고, 내용은 내려가지 않는다
+    page = api.get(users["b"], f"/conversations/{conv['id']}/messages").json()
+    (only,) = page["messages"]
+    assert only["id"] == msg["id"] and only["body"] == "" and only["deleted_at"] is not None
+
+    # 대화방 목록 미리보기와 안 읽은 수
+    summary = api.get(users["b"], "/conversations").json()[0]
+    assert summary["last_message"]["preview"] == "삭제된 메시지입니다"
+    assert summary["unread_count"] == 0  # 지워진 메시지는 안 읽은 메시지로 세지 않는다
+
+    # 같은 메시지를 또 지워도 오류가 아니다
+    assert api.delete(users["a"], f"/conversations/{conv['id']}/messages/{msg['id']}").status_code == 200
+
+
+def test_delete_message_removes_attachment_file(api, users, db):
+    conv = api.direct(users["a"], users["b"])
+    msg = api.post(users["a"], f"/conversations/{conv['id']}/attachments", files={"file": ("사진.png", PNG, "image/png")}, data={"body": "설명"}).json()
+    stored = db.query(MessageAttachment).filter(MessageAttachment.id == msg["attachments"][0]["id"]).one().stored_path
+    assert os.path.exists(stored)
+
+    assert api.delete(users["a"], f"/conversations/{conv['id']}/messages/{msg['id']}").status_code == 200
+    assert not os.path.exists(stored)
+    assert db.query(MessageAttachment).filter(MessageAttachment.message_id == msg["id"]).count() == 0
+    assert api.get(users["b"], f"/attachments/{msg['attachments'][0]['id']}").status_code == 404
+
+
+def test_only_sender_can_delete_and_non_members_cannot(api, users):
+    conv = api.direct(users["a"], users["b"])
+    msg = api.post(users["a"], f"/conversations/{conv['id']}/messages", json={"body": "내 글"}).json()
+    url = f"/conversations/{conv['id']}/messages/{msg['id']}"
+    assert api.delete(users["b"], url).status_code == 403  # 상대는 지울 수 없다
+    assert api.delete(users["ceo"], url).status_code in (403, 404)  # 대화방 밖의 사람
+    assert api.delete(users["a"], f"/conversations/{conv['id']}/messages/999999").status_code == 404
+    assert api.get(users["b"], f"/conversations/{conv['id']}/messages").json()["messages"][0]["body"] == "내 글"  # 그대로
+
+
+def test_delete_is_broadcast_to_members(api, users, monkeypatch):
+    from app.routers import messenger
+
+    sent = []
+    monkeypatch.setattr(messenger.hub, "publish", lambda ids, ev: sent.append((sorted(ids), ev)))
+    conv = api.direct(users["a"], users["b"])
+    msg = api.post(users["a"], f"/conversations/{conv['id']}/messages", json={"body": "알림"}).json()
+    sent.clear()
+    api.delete(users["a"], f"/conversations/{conv['id']}/messages/{msg['id']}")
+    ((ids, event),) = sent
+    assert ids == sorted([users["a"].id, users["b"].id])
+    assert event["type"] == "message.deleted" and event["message"]["id"] == msg["id"] and event["message"]["body"] == ""

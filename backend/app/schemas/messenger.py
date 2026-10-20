@@ -91,6 +91,7 @@ class MessageOut(BaseModel):
     created_at: datetime
     client_msg_id: str | None
     attachments: list[AttachmentOut]
+    deleted_at: datetime | None = None  # 보낸 사람이 지운 메시지이면 그 시각 (내용·첨부는 비어 있다)
 
 
 class MessagePage(BaseModel):

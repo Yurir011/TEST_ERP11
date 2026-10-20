@@ -1,4 +1,4 @@
-import { FileText, Paperclip } from "lucide-react";
+import { FileText, Paperclip, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ApiError, downloadFile, openFile } from "../../lib/api";
 import { getToken } from "../../lib/auth";
@@ -100,12 +100,15 @@ interface BubbleProps {
   showTime: boolean;
   /** 이 메시지를 아직 읽지 않은 사람 수 (0 이면 표시하지 않는다) */
   unreadCount: number;
+  /** 내가 보낸 메시지를 지운다 (없으면 삭제 버튼을 보이지 않는다) */
+  onDelete?: () => void;
 }
 
-export function MessageBubble({ message, mine, showSender, showTime, unreadCount }: BubbleProps) {
+export function MessageBubble({ message, mine, showSender, showTime, unreadCount, onDelete }: BubbleProps) {
+  const deleted = !!message.deleted_at;
   const time = <span className="text-[11px] text-text-muted shrink-0 self-end pb-0.5">{showTime ? timeLabel(message.created_at) : ""}</span>;
   const unread =
-    unreadCount > 0 ? (
+    unreadCount > 0 && !deleted ? (
       <span className="text-[11px] font-bold text-tile-orange-fg shrink-0 self-end leading-none" aria-label={`아직 읽지 않은 사람 ${unreadCount}명`} title={`아직 읽지 않은 사람 ${unreadCount}명`}>
         {unreadCount}
       </span>
@@ -113,12 +116,27 @@ export function MessageBubble({ message, mine, showSender, showTime, unreadCount
   return (
     <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
       {showSender && <span className="text-xs text-text-muted mb-1 px-1">{message.sender_name ?? "(알 수 없음)"}</span>}
-      <div className={`flex gap-1.5 max-w-[75%] ${mine ? "flex-row-reverse" : ""}`}>
-        <div className={`min-w-0 rounded-2xl px-3.5 py-2 text-sm space-y-2 ${mine ? "bg-primary text-white rounded-tr-md" : "bg-bg border border-border rounded-tl-md"}`}>
-          {message.attachments.map((a) => (isImage(a.content_type) && isInlineViewable(a.content_type) ? <ImageAttachment key={a.id} a={a} /> : <FileAttachment key={a.id} a={a} />))}
-          {message.body && <MessageText text={message.body} />}
-        </div>
+      <div className={`group flex gap-1.5 max-w-[75%] ${mine ? "flex-row-reverse" : ""}`}>
+        {deleted ? (
+          <div className="min-w-0 rounded-2xl px-3.5 py-2 text-sm italic text-text-muted bg-bg border border-dashed border-border">삭제된 메시지입니다.</div>
+        ) : (
+          <div className={`min-w-0 rounded-2xl px-3.5 py-2 text-sm space-y-2 ${mine ? "bg-primary text-white rounded-tr-md" : "bg-bg border border-border rounded-tl-md"}`}>
+            {message.attachments.map((a) => (isImage(a.content_type) && isInlineViewable(a.content_type) ? <ImageAttachment key={a.id} a={a} /> : <FileAttachment key={a.id} a={a} />))}
+            {message.body && <MessageText text={message.body} />}
+          </div>
+        )}
         <div className={`flex flex-col justify-end ${mine ? "items-end" : "items-start"}`}>
+          {onDelete && !deleted && (
+            <button
+              type="button"
+              onClick={onDelete}
+              aria-label="메시지 삭제"
+              title="삭제"
+              className="self-end mb-0.5 rounded p-1 text-text-muted opacity-0 transition-opacity hover:bg-bg hover:text-danger group-hover:opacity-100 focus:opacity-100"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
           {unread}
           {time}
         </div>

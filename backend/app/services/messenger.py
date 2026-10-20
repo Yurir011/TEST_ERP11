@@ -57,10 +57,11 @@ def message_out(m: Message) -> MessageOut:
         conversation_id=m.conversation_id,
         sender_id=m.sender_id,
         sender_name=m.sender.name if m.sender else None,
-        body=m.body,
+        body="" if m.deleted_at else m.body,
         created_at=m.created_at,
         client_msg_id=m.client_msg_id,
-        attachments=[{"id": a.id, "file_name": a.file_name, "size": a.size, "content_type": a.content_type} for a in m.attachments],
+        attachments=[] if m.deleted_at else [{"id": a.id, "file_name": a.file_name, "size": a.size, "content_type": a.content_type} for a in m.attachments],
+        deleted_at=m.deleted_at,
     )
 
 
@@ -73,7 +74,12 @@ def load_message(db: Session, message_id: int) -> Message:
     )
 
 
+DELETED_PREVIEW = "삭제된 메시지입니다"
+
+
 def _preview(m: Message) -> str:
+    if m.deleted_at:
+        return DELETED_PREVIEW
     if m.body:
         return m.body[:PREVIEW_LENGTH]
     if m.attachments:
@@ -89,7 +95,11 @@ def unread_counts(db: Session, user_id: int, conversation_ids: list[int] | None 
             ConversationMember,
             and_(ConversationMember.conversation_id == Message.conversation_id, ConversationMember.user_id == user_id, ConversationMember.left_at.is_(None)),
         )
-        .filter(Message.id > func.coalesce(ConversationMember.last_read_message_id, 0), Message.sender_id.is_distinct_from(user_id))
+        .filter(
+            Message.id > func.coalesce(ConversationMember.last_read_message_id, 0),
+            Message.sender_id.is_distinct_from(user_id),
+            Message.deleted_at.is_(None),  # 지워진 메시지는 안 읽은 메시지로 세지 않는다
+        )
     )
     if conversation_ids is not None:
         q = q.filter(Message.conversation_id.in_(conversation_ids))
@@ -148,7 +158,7 @@ def conversation_summaries(db: Session, user_id: int, only_ids: list[int] | None
                         sender_id=last.sender_id,
                         sender_name=last.sender.name if last.sender else None,
                         preview=_preview(last),
-                        has_attachment=bool(last.attachments),
+                        has_attachment=bool(last.attachments) and not last.deleted_at,
                         created_at=last.created_at,
                     )
                     if last

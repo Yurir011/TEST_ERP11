@@ -50,6 +50,8 @@ export interface ChatMessage {
   created_at: string;
   client_msg_id: string | null;
   attachments: Attachment[];
+  /** 보낸 사람이 지운 메시지이면 그 시각 (내용·첨부는 비어 있고 "삭제된 메시지입니다"로 보인다) */
+  deleted_at?: string | null;
 }
 
 export interface MessagePage {
@@ -71,6 +73,7 @@ export interface PendingMessage {
 
 export type RealtimeEvent =
   | { type: "message.created"; message: ChatMessage }
+  | { type: "message.deleted"; message: ChatMessage }
   | { type: "conversation.read"; conversation_id: number; user_id: number; message_id: number }
   | { type: "conversation.updated"; conversation_id: number }
   | { type: "presence.updated"; user_id: number; status: string }

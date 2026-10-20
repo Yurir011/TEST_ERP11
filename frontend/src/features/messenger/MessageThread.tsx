@@ -114,8 +114,8 @@ export function MessageThread({ conversation, meId }: { conversation: Conversati
   useEffect(
     () =>
       subscribe((event) => {
-        if (event.type !== "message.created" || event.message.conversation_id !== id) return;
-        const m = event.message;
+        if ((event.type !== "message.created" && event.type !== "message.deleted") || event.message.conversation_id !== id) return;
+        const m = event.message; // 삭제 알림도 같은 번호의 메시지를 "지워진 메시지"로 바꿔 끼운다
         if (!loaded.current) {
           early.current.push(m);
           return;
@@ -210,6 +210,23 @@ export function MessageThread({ conversation, meId }: { conversation: Conversati
     void deliver({ ...p, failed: false });
   }
 
+  async function deleteMessage(m: ChatMessage) {
+    const ok = await dialog.confirm("이 메시지를 삭제할까요? 대화방의 모든 사람에게 \"삭제된 메시지입니다\"로 보이며, 첨부파일도 함께 지워집니다.", {
+      okLabel: "삭제",
+      danger: true,
+    });
+    if (!ok) return;
+    logDebug("Messenger", `메시지 삭제 시도: conversation_id=${id}, message_id=${m.id}`);
+    try {
+      const deleted = await apiDelete<ChatMessage>(`/api/messenger/conversations/${id}/messages/${m.id}`);
+      setMessages((prev) => mergeMessages(prev ?? [], [deleted]));
+      void refresh(); // 목록의 미리보기
+    } catch (err) {
+      logError("Messenger", "메시지 삭제 실패", err);
+      dialog.notifyError(err instanceof ApiError ? err.message : "메시지를 삭제하지 못했습니다.");
+    }
+  }
+
   function attach(file: File, caption: string) {
     if (file.size > MAX_ATTACHMENT_BYTES) {
       dialog.notifyError(`파일 크기는 ${formatBytes(MAX_ATTACHMENT_BYTES)}를 넘을 수 없습니다. (${file.name}: ${formatBytes(file.size)})`);
@@ -294,6 +311,7 @@ export function MessageThread({ conversation, meId }: { conversation: Conversati
                 showSender={isGroup && !it.mine && !it.continued}
                 showTime={!!it.showTime}
                 unreadCount={unreadReaders(it.message!, conversation.members)}
+                onDelete={it.mine && !it.message!.deleted_at ? () => void deleteMessage(it.message!) : undefined}
               />
             </div>
           ),

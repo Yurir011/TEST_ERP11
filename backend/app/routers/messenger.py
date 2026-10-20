@@ -293,6 +293,41 @@ def send_message(
     return svc.message_out(svc.load_message(db, m.id))
 
 
+@router.delete("/conversations/{conversation_id}/messages/{message_id}", response_model=MessageOut)
+def delete_message(
+    conversation_id: int, message_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """내가 보낸 메시지를 지운다. 내용과 첨부파일을 실제로 없애고, 대화방 사람들에게는 "삭제된 메시지입니다"로 보인다."""
+    conv, _me = svc.get_membership(db, conversation_id, current_user.id)
+    m = (
+        db.query(Message)
+        .options(selectinload(Message.attachments))
+        .filter(Message.id == message_id, Message.conversation_id == conv.id)
+        .first()
+    )
+    if m is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="메시지를 찾을 수 없습니다.")
+    if m.sender_id != current_user.id:
+        logger.warning(f"[Messenger] 남의 메시지 삭제 시도 거부: message_id={message_id}, by={current_user.id}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="내가 보낸 메시지만 삭제할 수 있습니다.")
+    if m.deleted_at is None:
+        paths = [a.stored_path for a in m.attachments]
+        m.deleted_at = svc.now()
+        m.body = ""
+        m.attachments.clear()  # 첨부 행 삭제 (delete-orphan)
+        db.commit()
+        for path in paths:  # 파일은 커밋 뒤에 지운다 (실패해도 메시지 삭제는 유지)
+            try:
+                os.remove(path)
+            except OSError:
+                logger.warning(f"[Messenger] 삭제한 메시지의 첨부파일을 지우지 못했습니다: {path}")
+        logger.debug(f"[Messenger] 메시지 삭제: conversation_id={conv.id}, message_id={m.id}, 첨부={len(paths)}개, by={current_user.id}")
+        out = svc.message_out(svc.load_message(db, m.id))
+        hub.publish(svc.active_member_ids(db, conv.id), {"type": "message.deleted", "message": out.model_dump(mode="json")})
+        return out
+    return svc.message_out(svc.load_message(db, m.id))  # 이미 지워진 메시지: 그대로 돌려준다
+
+
 _UNSAFE_NAME = re.compile(r"[\x00-\x1f\x7f]")
 
 

@@ -282,6 +282,54 @@ describe("파일 보내기", () => {
   });
 });
 
+describe("보낸 메시지 삭제", () => {
+  const deletedOf = (m: ChatMessage): ChatMessage => ({ ...m, body: "", attachments: [], deleted_at: "2026-10-20T10:00:00" });
+
+  it("내 메시지에만 삭제 버튼이 있고, 확인하면 서버에 지우고 \"삭제된 메시지입니다\"로 바뀐다", async () => {
+    const mine = msg(2, { sender_id: ME, sender_name: "나", body: "내 글" });
+    api.apiDelete.mockResolvedValue(deletedOf(mine));
+    setup({ page: { messages: [msg(1), mine], has_more: false } });
+    await screen.findByText("내 글");
+    expect(screen.getAllByLabelText("메시지 삭제")).toHaveLength(1); // 남의 메시지에는 없다
+
+    fireEvent.click(screen.getByLabelText("메시지 삭제"));
+    fireEvent.click(await screen.findByRole("button", { name: "삭제" })); // 확인 창
+    await waitFor(() => expect(api.apiDelete).toHaveBeenCalledWith(`/api/messenger/conversations/${CID}/messages/2`));
+    expect(await screen.findByText("삭제된 메시지입니다.")).toBeTruthy();
+    expect(screen.queryByText("내 글")).toBeNull();
+    expect(screen.queryByLabelText("메시지 삭제")).toBeNull();
+  });
+
+  it("확인 창에서 취소하면 지우지 않는다", async () => {
+    setup({ page: { messages: [msg(2, { sender_id: ME, sender_name: "나", body: "내 글" })], has_more: false } });
+    await screen.findByText("내 글");
+    fireEvent.click(screen.getByLabelText("메시지 삭제"));
+    fireEvent.click(await screen.findByRole("button", { name: "취소" }));
+    expect(api.apiDelete).not.toHaveBeenCalled();
+    expect(screen.getByText("내 글")).toBeTruthy();
+  });
+
+  it("상대가 지운 메시지는 실시간 알림으로 \"삭제된 메시지입니다\"로 바뀐다", async () => {
+    const theirs = msg(1, { body: "곧 지워질 글" });
+    const { emit } = setup({ page: { messages: [theirs], has_more: false } });
+    await screen.findByText("곧 지워질 글");
+    emit({ type: "message.deleted", message: deletedOf(theirs) });
+    expect(await screen.findByText("삭제된 메시지입니다.")).toBeTruthy();
+    expect(screen.queryByText("곧 지워질 글")).toBeNull();
+  });
+
+  it("삭제에 실패하면 안내하고 메시지는 그대로 둔다", async () => {
+    const { ApiError } = await import("../../lib/api");
+    api.apiDelete.mockRejectedValue(new ApiError(403, "내가 보낸 메시지만 삭제할 수 있습니다."));
+    setup({ page: { messages: [msg(2, { sender_id: ME, sender_name: "나", body: "내 글" })], has_more: false } });
+    await screen.findByText("내 글");
+    fireEvent.click(screen.getByLabelText("메시지 삭제"));
+    fireEvent.click(await screen.findByRole("button", { name: "삭제" }));
+    expect(await screen.findByText(/내가 보낸 메시지만 삭제할 수 있습니다/)).toBeTruthy();
+    expect(screen.getByText("내 글")).toBeTruthy();
+  });
+});
+
 describe("읽음 표시", () => {
   const readUrl = `/api/messenger/conversations/${CID}/read`;
 
