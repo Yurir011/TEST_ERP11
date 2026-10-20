@@ -34,6 +34,7 @@ ALLOWED_ATTACHMENT_TYPES = {
 
 
 MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024  # 15MB
+MAX_ATTACHMENT_FILES = 7  # 품의서 한 건에 올릴 수 있는 첨부 "파일" 수 (링크는 세지 않는다)
 
 
 _QUERY_OPTIONS = (

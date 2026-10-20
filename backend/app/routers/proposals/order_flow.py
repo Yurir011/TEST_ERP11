@@ -28,7 +28,8 @@ def _check_actor_and_kind(p: Proposal, current_user: User) -> None:
 def set_order_sent(
     proposal_id: int, payload: OrderFlowToggle, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    """발주서를 거래처에 보냈음을 확인한다. 승인된 발주서가 1건 이상 있어야 하고, 입고 확인 후에는 취소할 수 없다."""
+    """발주서를 거래처에 보냈음을 확인한다. 승인된 발주서가 1건 이상 있어야 하고(온라인 주문은 online=true 로 발주서 없이 발주 완료 처리),
+    입고 확인 후에는 취소할 수 없다."""
     p = _get_or_404(db, proposal_id)
     _check_actor_and_kind(p, current_user)
     logger.debug(f"[Proposals] 발송 확인 변경 시도: id={proposal_id}, sent={payload.value}, by={current_user.id}")
@@ -42,7 +43,7 @@ def set_order_sent(
             )
             .count()
         )
-        if approved_orders == 0:
+        if approved_orders == 0 and not payload.online:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재가 승인된 발주서가 있어야 발송 확인을 할 수 있습니다.")
         p.order_sent_at = p.order_sent_at or datetime.now(timezone.utc)
         p.order_sent_by = p.order_sent_by or current_user.id

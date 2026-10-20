@@ -24,6 +24,10 @@ export interface PurchaseFlow {
   orderLabel: FlowChip;
   /** 승인된 발주서가 있어 거래처에 보낼 수 있는 상태인지 */
   orderApproved: boolean;
+  /** 발주 단계가 끝났는지: 승인된 발주서가 있거나, 온라인 주문처럼 발주서 없이 "발주 완료"로 처리한 경우 */
+  orderDone: boolean;
+  /** 발주서 없이 "발주 완료"로 처리한 온라인 주문 */
+  onlineOrdered: boolean;
   /** 이 품의서에서 만든 발주서 중 반려되지 않은 것 */
   activeOrders: ProjectDocument[];
   /** 발송 확인 버튼을 보여 줄지 (승인된 발주서가 있고 아직 발송 확인 전) */
@@ -62,13 +66,17 @@ export function computePurchaseFlow(proposal: Proposal, orders: ProjectDocument[
   if (proposal.delete_requested) approval.push({ label: "삭제 결재 중", tone: "red" });
 
   const orderApproved = activeOrders.some((d) => d.status === "approved");
+  const sent = proposal.order_sent_at !== null;
+  // 발주서 없이 발주 완료로 처리하면 발송 확인 시각만 채워진다 (온라인 주문: 결제까지 온라인에서 끝나 보낼 문서가 없다)
+  const onlineOrdered = approved && sent && activeOrders.length === 0;
+  const orderDone = orderApproved || onlineOrdered;
   let orderLabel: FlowChip;
   if (!approved) orderLabel = { label: "발주 대기", tone: "gray" };
+  else if (onlineOrdered) orderLabel = { label: "발주 완료", tone: "green", title: "온라인 주문 (발주서 없음)" };
   else if (activeOrders.length === 0) orderLabel = { label: "미발주", tone: "red" };
   else if (orderApproved) orderLabel = { label: "발주 완료", tone: "green" };
   else orderLabel = { label: "발주서 확인중", tone: "blue" };
 
-  const sent = proposal.order_sent_at !== null;
   const received = proposal.received_at !== null;
   const receiveLabel: FlowChip = received
     ? { label: "입고 완료", tone: "green" }
@@ -81,6 +89,8 @@ export function computePurchaseFlow(proposal: Proposal, orders: ProjectDocument[
     canOrder: approved,
     orderLabel,
     orderApproved,
+    orderDone,
+    onlineOrdered,
     activeOrders,
     canConfirmSent: approved && orderApproved && !sent,
     sent,

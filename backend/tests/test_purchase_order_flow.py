@@ -104,3 +104,17 @@ def test_non_purchase_proposal_cannot_use_order_flow(client, staff, auth_headers
     h = auth_headers(staff["writer"])
     p = _proposal(client, h, kind="출장")
     assert client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True}, headers=h).status_code == 400
+
+
+def test_online_order_can_be_marked_done_without_purchase_order(client, staff, auth_headers):
+    h = auth_headers(staff["writer"])
+    p = _proposal(client, h)
+    # 발주서도 없고 online 도 아니면 불가
+    assert client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True}, headers=h).status_code == 400
+    # 온라인 주문: 발주서 없이 발주 완료 → 입고까지 진행
+    done = client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True, "online": True}, headers=h)
+    assert done.status_code == 200 and done.json()["order_sent_at"] is not None
+    assert client.put(f"/api/proposals/{p['id']}/received", json={"value": True}, headers=h).status_code == 200
+    # 승인 전 품의서에서는 불가
+    pending = _proposal(client, h, final=False, end_title="dept_head", approver_ids=[staff["dept_head"].id])
+    assert client.put(f"/api/proposals/{pending['id']}/order-sent", json={"value": True, "online": True}, headers=h).status_code == 400

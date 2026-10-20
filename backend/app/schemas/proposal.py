@@ -68,6 +68,7 @@ class OrderFlowToggle(BaseModel):
     """발송 확인·입고 확인을 켜거나(true) 취소(false)한다."""
 
     value: bool
+    online: bool = False  # 발송 확인에서만 사용: 온라인 주문처럼 발주서 없이 "발주 완료"로 처리한다
 
 
 class ProposalOut(BaseModel):

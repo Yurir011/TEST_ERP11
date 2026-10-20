@@ -23,6 +23,7 @@ EXPECTED_OPERATIONS = [
     ('DELETE', '/api/proposals/{proposal_id}/attachments/{attachment_id}', 'delete_attachment_api_proposals__proposal_id__attachments__attachment_id__delete', ['200', '422']),
     ('GET', '/api/proposals', 'list_proposals_api_proposals_get', ['200', '422']),
     ('GET', '/api/proposals/{proposal_id}/attachments/{attachment_id}/file', 'download_attachment_file_api_proposals__proposal_id__attachments__attachment_id__file_get', ['200', '422']),
+    ('GET', '/api/proposals/{proposal_id}/excel', 'download_proposal_excel_api_proposals__proposal_id__excel_get', ['200', '422']),
     ('GET', '/api/proposals/{proposal_id}/pdf', 'download_proposal_pdf_api_proposals__proposal_id__pdf_get', ['200', '422']),
     ('POST', '/api/proposals', 'create_proposal_api_proposals_post', ['201', '422']),
     ('POST', '/api/proposals/{proposal_id}/attachments/file', 'upload_attachment_file_api_proposals__proposal_id__attachments_file_post', ['201', '422']),
@@ -201,3 +202,42 @@ def test_delete_rules(client, staff, auth_headers):
     assert client.delete(f"/api/proposals/{p['id']}", headers=auth_headers(staff["other"])).status_code == 403  # 작성자만
     _approve(client, auth_headers(staff["dept_head"]), p["id"])
     assert client.delete(f"/api/proposals/{p['id']}", headers=writer_h).status_code == 400  # 승인된 품의서는 삭제 결재 필요
+
+
+def test_attachment_file_limit_is_seven(client, staff, auth_headers, tmp_path, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "proposal_attachments_dir", str(tmp_path / "att"))
+    h = auth_headers(staff["writer"])
+    p = _create(client, h, final=True)
+    pdf = b"%PDF-1.7\n" + b"0" * 64
+    for i in range(7):
+        r = client.post(f"/api/proposals/{p['id']}/attachments/file", files={"file": (f"f{i}.pdf", pdf, "application/pdf")}, headers=h)
+        assert r.status_code == 201, r.text
+    over = client.post(f"/api/proposals/{p['id']}/attachments/file", files={"file": ("f8.pdf", pdf, "application/pdf")}, headers=h)
+    assert over.status_code == 400 and "7개" in over.json()["detail"]
+    # 링크는 파일 수에 세지 않는다
+    assert client.post(f"/api/proposals/{p['id']}/attachments/link", json={"url": "https://example.com"}, headers=h).status_code == 201
+    # 허용하지 않는 형식
+    bad = client.post(f"/api/proposals/{p['id']}/attachments/file", files={"file": ("a.zip", b"PK\x03\x04", "application/zip")}, headers=h)
+    assert bad.status_code == 400
+
+
+def test_proposal_excel_download(client, staff, auth_headers):
+    """승인된 품의서는 엑셀로 내려받을 수 있고, 승인 전에는 막힌다."""
+    import io
+
+    import openpyxl
+
+    h = auth_headers(staff["writer"])
+    approved = _create(client, h, final=True)
+    res = client.get(f"/api/proposals/{approved['id']}/excel", headers=h)
+    assert res.status_code == 200, res.text
+    assert res.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    assert "filename*=UTF-8''" in res.headers["content-disposition"]
+    ws = openpyxl.load_workbook(io.BytesIO(res.content)).active
+    cells = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
+    assert approved["doc_no"] in cells and "장비 구매" in cells and "전결" in cells
+
+    pending = _create(client, h, [staff["dept_head"].id], end_title="dept_head")
+    assert client.get(f"/api/proposals/{pending['id']}/excel", headers=h).status_code == 403

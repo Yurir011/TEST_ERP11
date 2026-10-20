@@ -68,6 +68,17 @@ describe("구매 품의서 진행 상태", () => {
     expect(got.receiveLabel).toEqual({ label: "입고 완료", tone: "green" });
   });
 
+  it("온라인 주문은 발주서 없이 발주 완료 처리하면 바로 입고를 할 수 있다", () => {
+    const f = computePurchaseFlow(proposal({ status: "approved", order_sent_at: "2026-10-22T01:00:00Z" }), []);
+    expect(f.onlineOrdered).toBe(true);
+    expect(f.orderDone).toBe(true);
+    expect(f.orderLabel.label).toBe("발주 완료");
+    expect(f.canReceive).toBe(true);
+    expect(f.canConfirmSent).toBe(false);
+    // 발주서가 있으면 온라인 주문이 아니다
+    expect(computePurchaseFlow(proposal({ status: "approved", order_sent_at: "x" }), [order()]).onlineOrdered).toBe(false);
+  });
+
   it("카드 오른쪽 요약은 발주서가 생겨야 나오고, 여러 장이면 합산한다", () => {
     expect(summarizeOrders([])).toBeNull();
     const one = summarizeOrders([order()])!;

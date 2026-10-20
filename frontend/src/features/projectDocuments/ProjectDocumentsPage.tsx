@@ -20,8 +20,10 @@ import { logDebug, logError } from "../../lib/logger";
 import { canComposeDocumentMail, openDocumentMail } from "../mail/documentMail";
 import { ProposalsPage } from "../proposals/ProposalsPage";
 import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
+import { OrderChoiceModal } from "../proposals/OrderChoiceModal";
+import { ProposalAttachmentsModal } from "../proposals/ProposalAttachmentsModal";
 import { PurchaseProposalCard } from "../proposals/PurchaseProposalCard";
-import { isPurchaseProposal } from "../proposals/purchaseFlow";
+import { computePurchaseFlow, isPurchaseProposal } from "../proposals/purchaseFlow";
 import type { Proposal } from "../proposals/types";
 import { HometaxImportModal } from "../transactions/HometaxImportModal";
 import { ApproverPickerModal } from "./ApproverPickerModal";
@@ -119,6 +121,9 @@ export function ProjectDocumentsPage({
   // 구매 품의서 카드(품의 → 발주 → 입고): "전체"와 "품의서" 탭 위쪽에 카드로 보여 준다.
   const [purchaseProposals, setPurchaseProposals] = useState<Proposal[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<ProjectDocument[]>([]);
+  const [deleteRequestProposal, setDeleteRequestProposal] = useState<Proposal | null>(null);
+  const [orderChoiceId, setOrderChoiceId] = useState<number | null>(null);
+  const [attachmentsId, setAttachmentsId] = useState<number | null>(null);
   const openTargetId = useOpenTarget(openId);
   const openedTargetRef = useRef(false);
   const listTopRef = useRef<HTMLDivElement>(null);
@@ -489,7 +494,7 @@ export function ProjectDocumentsPage({
   async function handleToggleSent(p: Proposal, sent: boolean) {
     const message = sent
       ? "발주서를 거래처에 보냈습니까? 발송 확인 후에 입고 처리를 할 수 있습니다."
-      : "발송 확인을 취소할까요?";
+      : "발송 확인(발주 완료)을 취소할까요?";
     if (!(await confirm(message, { okLabel: sent ? "발송 확인" : "취소" }))) return;
     logDebug("ProjectDocuments", `발송 확인 변경: proposal_id=${p.id}, sent=${sent}`);
     setBusyId(p.id);
@@ -520,6 +525,70 @@ export function ProjectDocumentsPage({
     }
   }
 
+  // 구매 품의서 카드의 삭제: 승인 전에는 바로 지우고, 승인된 품의서는 결재선을 지정해 삭제 결재를 요청한다.
+  async function handleProposalDeleteClick(p: Proposal) {
+    if (p.status === "approved") {
+      if (!(await confirm("승인된 품의서는 결재를 거쳐야 삭제됩니다. 삭제 결재를 요청할까요?", { okLabel: "삭제 결재 요청" }))) return;
+      setDeleteRequestProposal(p);
+      return;
+    }
+    if (!(await confirm("이 품의서를 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
+    logDebug("ProjectDocuments", `구매 품의서 삭제: id=${p.id}`);
+    setBusyId(p.id);
+    try {
+      await apiDelete(`/api/proposals/${p.id}`);
+      reloadAll();
+    } catch (err) {
+      logError("ProjectDocuments", "구매 품의서 삭제 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "삭제 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleRequestProposalDelete(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
+    if (!deleteRequestProposal) return;
+    const target = deleteRequestProposal;
+    setBusyId(target.id);
+    try {
+      await apiPost(`/api/proposals/${target.id}/request-delete`, {
+        end_title: endTitle,
+        approver_ids: approverIds,
+        is_final_decision: isFinalDecision,
+      });
+      logDebug("ProjectDocuments", `구매 품의서 삭제 결재 요청 성공: id=${target.id}`);
+      setDeleteRequestProposal(null);
+      reloadAll();
+      notify(isFinalDecision ? "삭제되었습니다." : "삭제 결재 요청이 완료되었습니다. 최종 승인되면 삭제됩니다.");
+    } catch (err) {
+      logError("ProjectDocuments", "구매 품의서 삭제 결재 요청 실패", err);
+      setDeleteRequestProposal(null);
+      notifyError(err instanceof ApiError ? err.message : "삭제 결재 요청 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // 발주 선택 팝업의 "발주 완료": 온라인 주문처럼 발주서 없이 주문·결제를 마친 경우
+  async function handleOnlineOrderDone(p: Proposal) {
+    if (!(await confirm("온라인 주문 등으로 발주서 없이 '발주 완료' 처리할까요? 처리하면 입고 버튼을 누를 수 있습니다.", { okLabel: "발주 완료" }))) return;
+    logDebug("ProjectDocuments", `발주 완료(온라인 주문): proposal_id=${p.id}`);
+    setBusyId(p.id);
+    try {
+      await apiPut(`/api/proposals/${p.id}/order-sent`, { value: true, online: true });
+      setOrderChoiceId(null);
+      loadPurchaseCards();
+    } catch (err) {
+      logError("ProjectDocuments", "발주 완료 처리 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "발주 완료 처리 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const orderChoiceProposal = purchaseProposals.find((p) => p.id === orderChoiceId) ?? null;
+  const attachmentsProposal = purchaseProposals.find((p) => p.id === attachmentsId) ?? null;
+
   const purchaseCards = purchaseProposals.length > 0 && (
     <div className="mb-6">
       <h3 className="text-sm font-medium text-text-muted mb-2.5">구매 품의 진행 ({purchaseProposals.length})</h3>
@@ -532,16 +601,26 @@ export function ProjectDocumentsPage({
             canManage={!!user && (p.created_by === user.id || isAdminRole(user.role))}
             busy={busyId === p.id}
             onOpen={() => setProposalDetail(p)}
-            onOrder={() => {
-              logDebug("ProjectDocuments", `구매 품의서에서 발주서 작성: proposal_id=${p.id}`);
-              navigate(`/project-documents/new?type=purchase_order&proposal=${p.id}`);
-            }}
-            onOpenOrder={setDetailDoc}
+            onOrder={() => setOrderChoiceId(p.id)}
             onToggleSent={(sent) => handleToggleSent(p, sent)}
             onToggleReceived={(received) => handleToggleReceived(p, received)}
-            onAttach={() => setProposalDetail(p)}
-            onDownload={() => handleProposalDownload(p)}
-            onPrint={() => handleProposalPrint(p)}
+            onAttach={() => setAttachmentsId(p.id)}
+            onDownloadProposal={() => handleProposalDownload(p)}
+            onDownloadProposalExcel={() => handleProposalExcelDownload(p)}
+            onPrintProposal={() => handleProposalPrint(p)}
+            onDownloadOrder={handleDownload}
+            onPrintOrder={handlePrint}
+            onDownloadOrderExcel={handleDownloadExcel}
+            onSendOrder={handleSend}
+            onDownloadAttachment={(a) => {
+              logDebug("ProjectDocuments", `첨부 저장: proposal_id=${p.id}, attachment_id=${a.id}`);
+              downloadFile(`/api/proposals/${p.id}/attachments/${a.id}/file`, a.label).catch((err) => {
+                logError("ProjectDocuments", "첨부 저장 실패", err);
+                notifyError("첨부파일을 저장하지 못했습니다.");
+              });
+            }}
+            onDelete={() => void handleProposalDeleteClick(p)}
+            canDelete={!p.delete_requested && !!user && (p.created_by === user.id || (p.status === "approved" && isAdminRole(user.role)))}
           />
         ))}
       </div>
@@ -556,6 +635,16 @@ export function ProjectDocumentsPage({
       logError("ProjectDocuments", "품의서 PDF 다운로드 실패", err);
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function handleProposalExcelDownload(p: Proposal) {
+    logDebug("ProjectDocuments", `품의서 엑셀 저장: id=${p.id}`);
+    try {
+      await downloadFile(`/api/proposals/${p.id}/excel`, `품의서_${p.issue_date}.xlsx`);
+    } catch (err) {
+      logError("ProjectDocuments", "품의서 엑셀 저장 실패", err);
+      notifyError("품의서 엑셀을 저장하지 못했습니다.");
     }
   }
 
@@ -851,6 +940,48 @@ export function ProjectDocumentsPage({
         </>
       )}
       </>
+      )}
+
+      {orderChoiceProposal && (() => {
+        const flow = computePurchaseFlow(orderChoiceProposal, purchaseOrders);
+        const target = orderChoiceProposal;
+        return (
+          <OrderChoiceModal
+            proposal={target}
+            orders={flow.activeOrders}
+            onlineOrdered={flow.onlineOrdered}
+            canManage={!!user && (target.created_by === user.id || isAdminRole(user.role))}
+            busy={busyId === target.id}
+            onCreateOrder={() => {
+              logDebug("ProjectDocuments", `구매 품의서에서 발주서 작성: proposal_id=${target.id}`);
+              setOrderChoiceId(null);
+              navigate(`/project-documents/new?type=purchase_order&proposal=${target.id}`);
+            }}
+            onOnlineDone={() => void handleOnlineOrderDone(target)}
+            onOpenOrder={(doc) => {
+              setOrderChoiceId(null);
+              setDetailDoc(doc);
+            }}
+            onClose={() => setOrderChoiceId(null)}
+          />
+        );
+      })()}
+
+      {attachmentsProposal && (
+        <ProposalAttachmentsModal
+          proposal={attachmentsProposal}
+          canEdit={!!user && attachmentsProposal.created_by === user.id}
+          onChanged={(updated) => setPurchaseProposals((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))}
+          onClose={() => setAttachmentsId(null)}
+        />
+      )}
+
+      {deleteRequestProposal && (
+        <ApproverPickerModal
+          isSubmitting={busyId === deleteRequestProposal.id}
+          onConfirm={handleRequestProposalDelete}
+          onCancel={() => setDeleteRequestProposal(null)}
+        />
       )}
 
       {deleteRequestDoc && (

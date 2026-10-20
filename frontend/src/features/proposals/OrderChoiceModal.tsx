@@ -1,0 +1,118 @@
+import { FileText, ShoppingBag, X } from "lucide-react";
+import { useEffect } from "react";
+import type { ProjectDocument } from "../projectDocuments/types";
+import { PROJECT_DOC_STATUS_LABELS } from "../projectDocuments/types";
+import type { Proposal } from "./types";
+
+interface OrderChoiceModalProps {
+  proposal: Proposal;
+  /** 이 품의서에서 만든 발주서(반려 제외) */
+  orders: ProjectDocument[];
+  /** 이미 "발주 완료"(온라인 주문)로 처리됨 */
+  onlineOrdered: boolean;
+  canManage: boolean;
+  busy: boolean;
+  onCreateOrder: () => void;
+  onOnlineDone: () => void;
+  onOpenOrder: (doc: ProjectDocument) => void;
+  onClose: () => void;
+}
+
+/** 발주 버튼을 눌렀을 때: 발주서를 작성할지, 발주서 없이 "발주 완료"로 처리할지(온라인 주문 등) 고른다. */
+export function OrderChoiceModal({ proposal, orders, onlineOrdered, canManage, busy, onCreateOrder, onOnlineDone, onOpenOrder, onClose }: OrderChoiceModalProps) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const hasOrders = orders.length > 0;
+  const onlineDisabled = busy || !canManage || hasOrders || onlineOrdered;
+  const onlineHint = hasOrders
+    ? "이미 발주서가 작성되어 있습니다."
+    : onlineOrdered
+      ? "이미 발주 완료로 처리되었습니다."
+      : !canManage
+        ? "작성자 또는 관리자만 처리할 수 있습니다."
+        : "온라인 주문처럼 발주서 없이 주문·결제를 마친 경우에 선택합니다.";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="발주 방법 선택"
+        className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold">발주 방법 선택</h2>
+            <p className="text-xs text-text-muted mt-0.5 truncate" title={proposal.title}>
+              {proposal.title}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="닫기" className="p-1 rounded text-text-muted hover:bg-bg hover:text-text">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-2.5">
+          <button
+            type="button"
+            onClick={onCreateOrder}
+            disabled={busy}
+            className="flex items-start gap-3 rounded-xl border border-border px-4 py-3 text-left hover:border-primary/50 hover:bg-tile-blue disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span className="mt-0.5 grid place-items-center w-9 h-9 rounded-full bg-primary text-white shrink-0">
+              <FileText size={17} />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold">발주서 작성</span>
+              <span className="block text-xs text-text-muted mt-0.5">발주서를 작성해 거래처에 보냅니다. 작성 후 카드에서 발송 확인을 눌러 주세요.</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOnlineDone}
+            disabled={onlineDisabled}
+            className="flex items-start gap-3 rounded-xl border border-border px-4 py-3 text-left hover:border-tile-green-fg/50 hover:bg-tile-green disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-border"
+          >
+            <span className="mt-0.5 grid place-items-center w-9 h-9 rounded-full bg-tile-green-fg text-white shrink-0">
+              <ShoppingBag size={17} />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold">발주 완료</span>
+              <span className="block text-xs text-text-muted mt-0.5">{onlineHint}</span>
+            </span>
+          </button>
+        </div>
+
+        {hasOrders && (
+          <div className="mt-4">
+            <p className="text-xs text-text-muted mb-1.5">작성한 발주서</p>
+            <ul className="flex flex-col gap-1">
+              {orders.map((d) => (
+                <li key={d.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenOrder(d)}
+                    className="w-full flex items-center justify-between gap-2 rounded-lg bg-bg px-3 py-2 text-sm hover:bg-tile-blue"
+                  >
+                    <span className="truncate">
+                      {d.issue_date} · {d.client_name}
+                    </span>
+                    <span className="text-xs text-text-muted shrink-0">{PROJECT_DOC_STATUS_LABELS[d.status]}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

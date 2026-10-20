@@ -1,18 +1,20 @@
 """품의서 PDF 다운로드, 첨부(파일·링크) 추가·다운로드·삭제."""
 import os
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.deps import get_current_user
 from app.database import get_db
-from app.models.proposal import ProposalAttachment, ProposalAttachmentKind
+from app.models.proposal import ProposalAttachment, ProposalAttachmentKind, ProposalStatus
 from app.models.user import User
 from app.routers.proposals._common import (
     ALLOWED_ATTACHMENT_TYPES,
+    MAX_ATTACHMENT_FILES,
     MAX_ATTACHMENT_SIZE,
     PREFIX,
     _get_or_404,
@@ -21,6 +23,7 @@ from app.routers.proposals._common import (
 )
 from app.schemas.proposal import ProposalLinkAttachmentIn, ProposalOut
 from app.services import proposal_files
+from app.services.proposal_excel import generate_proposal_excel
 from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
@@ -36,6 +39,21 @@ def download_proposal_pdf(proposal_id: int, db: Session = Depends(get_db), curre
     return FileResponse(p.file_path, media_type="application/pdf", filename=filename)
 
 
+@router.get("/{proposal_id}/excel")
+def download_proposal_excel(proposal_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """승인된 품의서를 엑셀로 내려받는다 (저장해 두지 않고 요청할 때 만든다)."""
+    p = _get_or_404(db, proposal_id)
+    if p.status != ProposalStatus.approved:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="결재 승인 후에 저장할 수 있습니다.")
+    logger.debug(f"[Proposals] 엑셀 다운로드: id={proposal_id}, by={current_user.id}")
+    filename = quote(f"품의서_{p.issue_date.isoformat()}.xlsx")
+    return Response(
+        content=generate_proposal_excel(p),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
 @router.post("/{proposal_id}/attachments/file", response_model=ProposalOut, status_code=status.HTTP_201_CREATED)
 def upload_attachment_file(
     proposal_id: int,
@@ -47,7 +65,9 @@ def upload_attachment_file(
     if p.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 첨부파일을 추가할 수 있습니다.")
     if file.content_type not in ALLOWED_ATTACHMENT_TYPES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="지원하지 않는 파일 형식입니다.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="지원하지 않는 파일 형식입니다. (PNG·JPG·PDF·XLS·XLSX·DOC·DOCX·PPT·PPTX·TXT)")
+    if sum(1 for a in p.attachments if a.kind == ProposalAttachmentKind.file) >= MAX_ATTACHMENT_FILES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"첨부파일은 최대 {MAX_ATTACHMENT_FILES}개까지 올릴 수 있습니다.")
 
     content = read_upload(file, ATTACHMENT_TYPES, MAX_ATTACHMENT_SIZE)
 
