@@ -32,6 +32,7 @@ EXPECTED_OPERATIONS = [
     ('PUT', '/api/proposals/{proposal_id}', 'update_proposal_api_proposals__proposal_id__put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/order-sent', 'set_order_sent_api_proposals__proposal_id__order_sent_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/received', 'set_received_api_proposals__proposal_id__received_put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/attachments/{attachment_id}/kind', 'set_attachment_kind_api_proposals__proposal_id__attachments__attachment_id__kind_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/approve', 'approve_proposal_api_proposals__proposal_id__approve_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/reject', 'reject_proposal_api_proposals__proposal_id__reject_put', ['200', '422']),
 ]
@@ -276,3 +277,52 @@ def test_pdf_download_falls_back_to_stored_file_when_regeneration_fails(client, 
     monkeypatch.setattr(proposal_files, "regenerate_pdf", boom)
     res = client.get(f"/api/proposals/{p['id']}/pdf", headers=h)
     assert res.status_code == 200 and res.content.endswith(b"old file")
+
+
+def test_attachment_doc_kind_upload_and_change(client, staff, auth_headers, tmp_path, monkeypatch):
+    """첨부 파일에 서류 종류(거래명세서·세금계산서)를 정해 올리고, 나중에 바꿀 수 있다."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "proposal_attachments_dir", str(tmp_path / "att"))
+    h = auth_headers(staff["writer"])
+    p = _create(client, h, final=True)
+    pdf = b"%PDF-1.7\n" + b"0" * 64
+
+    def upload(name, **data):
+        return client.post(f"/api/proposals/{p['id']}/attachments/file", files={"file": (name, pdf, "application/pdf")}, data=data, headers=h)
+
+    statement = upload("거래명세서.pdf", doc_kind="statement")
+    assert statement.status_code == 201, statement.text
+    plain = upload("기타.pdf")  # 종류를 안 정하면 기타(None)
+    other = upload("기타2.pdf", doc_kind="other")
+    assert plain.status_code == 201 and other.status_code == 201
+    kinds = {a["label"]: a["doc_kind"] for a in other.json()["attachments"]}
+    assert kinds == {"거래명세서.pdf": "statement", "기타.pdf": None, "기타2.pdf": None}
+
+    assert upload("x.pdf", doc_kind="receipt").status_code == 400  # 알 수 없는 종류
+
+    att_id = next(a["id"] for a in other.json()["attachments"] if a["label"] == "기타.pdf")
+    changed = client.put(f"/api/proposals/{p['id']}/attachments/{att_id}/kind", json={"doc_kind": "tax_invoice"}, headers=h)
+    assert changed.status_code == 200
+    assert {a["label"]: a["doc_kind"] for a in changed.json()["attachments"]}["기타.pdf"] == "tax_invoice"
+    cleared = client.put(f"/api/proposals/{p['id']}/attachments/{att_id}/kind", json={"doc_kind": None}, headers=h)
+    assert {a["label"]: a["doc_kind"] for a in cleared.json()["attachments"]}["기타.pdf"] is None
+    assert client.put(f"/api/proposals/{p['id']}/attachments/{att_id}/kind", json={"doc_kind": "bogus"}, headers=h).status_code == 400
+
+
+def test_attachment_doc_kind_permissions_and_links(client, staff, auth_headers, tmp_path, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "proposal_attachments_dir", str(tmp_path / "att"))
+    h = auth_headers(staff["writer"])
+    p = _create(client, h, final=True)
+    pdf = b"%PDF-1.7\n" + b"0" * 64
+    up = client.post(f"/api/proposals/{p['id']}/attachments/file", files={"file": ("a.pdf", pdf, "application/pdf")}, headers=h).json()
+    att_id = up["attachments"][0]["id"]
+    # 작성자가 아니면 바꿀 수 없다
+    assert client.put(f"/api/proposals/{p['id']}/attachments/{att_id}/kind", json={"doc_kind": "statement"}, headers=auth_headers(staff["other"])).status_code == 403
+    # 링크 첨부는 서류 종류를 정할 수 없다
+    link = client.post(f"/api/proposals/{p['id']}/attachments/link", json={"url": "https://example.com"}, headers=h).json()
+    link_id = next(a["id"] for a in link["attachments"] if a["kind"] == "link")
+    assert client.put(f"/api/proposals/{p['id']}/attachments/{link_id}/kind", json={"doc_kind": "statement"}, headers=h).status_code == 400
+    assert client.put(f"/api/proposals/{p['id']}/attachments/999999/kind", json={"doc_kind": "statement"}, headers=h).status_code == 404

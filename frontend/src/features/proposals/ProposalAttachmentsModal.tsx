@@ -1,9 +1,9 @@
 import { Download, ExternalLink, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
-import { ApiError, apiDelete, apiUpload, downloadFile, openFile } from "../../lib/api";
+import { ApiError, apiDelete, apiPut, apiUploadForm, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
-import type { Proposal, ProposalAttachment } from "./types";
+import { ATTACHMENT_DOC_KIND_LABELS, type AttachmentDocKind, type Proposal, type ProposalAttachment } from "./types";
 
 /** 품의서 한 건에 올릴 수 있는 첨부 파일 수 (서버와 같은 값: backend/app/routers/proposals/_common.py) */
 export const MAX_PROPOSAL_FILES = 7;
@@ -14,6 +14,19 @@ export const PROPOSAL_FILE_ACCEPT = ".png,.jpg,.jpeg,.pdf,.xls,.xlsx,.doc,.docx,
 const ALLOWED_EXTENSIONS = PROPOSAL_FILE_ACCEPT.split(",").map((e) => e.slice(1));
 
 export const fileCountOf = (p: Proposal) => p.attachments.filter((a) => a.kind === "file").length;
+
+/** 올릴 때 고르는 서류 종류. other 는 종류 없음(기타)이다. */
+export type UploadKind = AttachmentDocKind | "other";
+
+/** 올릴 때 기본으로 골라 두는 서류 종류: 아직 없는 서류(거래명세서 → 세금계산서)를 먼저, 둘 다 있으면 기타 */
+export function defaultUploadKind(p: Proposal): UploadKind {
+  const has = (k: AttachmentDocKind) => p.attachments.some((a) => a.kind === "file" && a.doc_kind === k);
+  if (!has("statement")) return "statement";
+  if (!has("tax_invoice")) return "tax_invoice";
+  return "other";
+}
+
+const hasDocKind = (p: Proposal, k: AttachmentDocKind) => p.attachments.some((a) => a.kind === "file" && a.doc_kind === k);
 
 const extensionOf = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
 
@@ -48,6 +61,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
+  const [uploadKind, setUploadKind] = useState<UploadKind>(() => defaultUploadKind(proposal));
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -72,7 +86,10 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
       setUploading(`${file.name} (${i + 1}/${accepted.length})`);
       logDebug("ProposalAttachments", `첨부 업로드: proposal_id=${proposal.id}, filename=${file.name}`);
       try {
-        current = await apiUpload<Proposal>(`/api/proposals/${proposal.id}/attachments/file`, file);
+        const form = new FormData();
+        form.append("file", file);
+        form.append("doc_kind", uploadKind === "other" ? "" : uploadKind);
+        current = await apiUploadForm<Proposal>(`/api/proposals/${proposal.id}/attachments/file`, form);
         onChanged(current);
       } catch (err) {
         logError("ProposalAttachments", "첨부 업로드 실패", err);
@@ -81,6 +98,20 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
     }
     setUploading(null);
     setProblems(failed);
+    setUploadKind(defaultUploadKind(current)); // 올린 뒤에는 다음으로 빠진 서류를 기본으로
+  }
+
+  /** 이미 올린 파일의 서류 종류(거래명세서·세금계산서·기타)를 바꾼다 */
+  async function handleChangeKind(a: ProposalAttachment, value: string) {
+    setProblems([]);
+    try {
+      const updated = await apiPut<Proposal>(`/api/proposals/${proposal.id}/attachments/${a.id}/kind`, { doc_kind: value === "" ? null : value });
+      onChanged(updated);
+      setUploadKind(defaultUploadKind(updated));
+    } catch (err) {
+      logError("ProposalAttachments", "서류 종류 변경 실패", err);
+      setProblems([err instanceof ApiError ? err.message : "서류 종류를 바꾸지 못했습니다."]);
+    }
   }
 
   async function handleDelete(a: ProposalAttachment) {
@@ -137,6 +168,16 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
             <X size={16} />
           </button>
         </div>
+        <div className="mb-2 flex flex-wrap items-center gap-1.5" aria-label="서류 등록 현황">
+          {(["statement", "tax_invoice"] as const).map((k) => {
+            const on = hasDocKind(proposal, k);
+            return (
+              <span key={k} className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${on ? "bg-tile-green text-tile-green-fg" : "bg-[#fef2f2] text-danger"}`}>
+                {ATTACHMENT_DOC_KIND_LABELS[k]} {on ? "등록됨 ✓" : "미등록"}
+              </span>
+            );
+          })}
+        </div>
         <p className="text-xs text-text-muted mb-3">거래명세서·세금계산서 등 관련 서류를 올려 주세요. PNG, JPG, PDF, XLS, XLSX, DOC, DOCX, PPT, PPTX, TXT · 파일당 15MB · 최대 {MAX_PROPOSAL_FILES}개</p>
 
         <div className="flex items-center justify-between mb-2">
@@ -145,6 +186,19 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
           </span>
           {canEdit ? (
             <>
+              <label className="flex items-center gap-1.5 text-xs text-text-muted">
+                서류 종류
+                <select
+                  aria-label="올릴 서류 종류"
+                  value={uploadKind}
+                  onChange={(e) => setUploadKind(e.target.value as UploadKind)}
+                  className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-text outline-none focus:border-primary"
+                >
+                  <option value="statement">거래명세서</option>
+                  <option value="tax_invoice">세금계산서</option>
+                  <option value="other">기타</option>
+                </select>
+              </label>
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
@@ -188,6 +242,21 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
                   >
                     {a.label}
                   </button>
+                  {a.kind === "file" &&
+                    (canEdit ? (
+                      <select
+                        aria-label={`${a.label} 서류 종류`}
+                        value={a.doc_kind ?? ""}
+                        onChange={(e) => void handleChangeKind(a, e.target.value)}
+                        className="shrink-0 rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs outline-none focus:border-primary"
+                      >
+                        <option value="">기타</option>
+                        <option value="statement">거래명세서</option>
+                        <option value="tax_invoice">세금계산서</option>
+                      </select>
+                    ) : (
+                      <span className="shrink-0 text-xs text-text-muted">{a.doc_kind ? ATTACHMENT_DOC_KIND_LABELS[a.doc_kind] : "기타"}</span>
+                    ))}
                   {a.kind === "link" ? (
                     <ExternalLink size={14} className="shrink-0 text-text-muted" aria-hidden />
                   ) : (

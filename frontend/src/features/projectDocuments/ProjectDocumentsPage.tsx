@@ -950,6 +950,7 @@ export function ProjectDocumentsPage({
             proposal={target}
             orders={flow.activeOrders}
             onlineOrdered={flow.onlineOrdered}
+            orderDone={flow.orderDone}
             canManage={!!user && (target.created_by === user.id || isAdminRole(user.role))}
             busy={busyId === target.id}
             onCreateOrder={() => {

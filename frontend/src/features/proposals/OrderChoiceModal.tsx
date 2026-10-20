@@ -10,6 +10,8 @@ interface OrderChoiceModalProps {
   orders: ProjectDocument[];
   /** 이미 "발주 완료"(온라인 주문)로 처리됨 */
   onlineOrdered: boolean;
+  /** 발주 단계가 끝남 (승인된 발주서가 있거나 온라인 주문으로 발주 완료 처리). 끝나면 발주서를 새로 작성할 수 없고 보기만 한다. */
+  orderDone: boolean;
   canManage: boolean;
   busy: boolean;
   onCreateOrder: () => void;
@@ -19,7 +21,7 @@ interface OrderChoiceModalProps {
 }
 
 /** 발주 버튼을 눌렀을 때: 발주서를 작성할지, 발주서 없이 "발주 완료"로 처리할지(온라인 주문 등) 고른다. */
-export function OrderChoiceModal({ proposal, orders, onlineOrdered, canManage, busy, onCreateOrder, onOnlineDone, onOpenOrder, onClose }: OrderChoiceModalProps) {
+export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, canManage, busy, onCreateOrder, onOnlineDone, onOpenOrder, onClose }: OrderChoiceModalProps) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -29,6 +31,7 @@ export function OrderChoiceModal({ proposal, orders, onlineOrdered, canManage, b
   }, [onClose]);
 
   const hasOrders = orders.length > 0;
+  const createDisabled = busy || orderDone;
   const onlineDisabled = busy || !canManage || hasOrders || onlineOrdered;
   const onlineHint = hasOrders
     ? "이미 발주서가 작성되어 있습니다."
@@ -63,15 +66,17 @@ export function OrderChoiceModal({ proposal, orders, onlineOrdered, canManage, b
           <button
             type="button"
             onClick={onCreateOrder}
-            disabled={busy}
-            className="flex items-start gap-3 rounded-xl border border-border px-4 py-3 text-left hover:border-primary/50 hover:bg-tile-blue disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={createDisabled}
+            className="flex items-start gap-3 rounded-xl border border-border px-4 py-3 text-left hover:border-primary/50 hover:bg-tile-blue disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-border"
           >
             <span className="mt-0.5 grid place-items-center w-9 h-9 rounded-full bg-primary text-white shrink-0">
               <FileText size={17} />
             </span>
             <span>
               <span className="block text-sm font-semibold">발주서 작성</span>
-              <span className="block text-xs text-text-muted mt-0.5">발주서를 작성해 거래처에 보냅니다. 작성 후 카드에서 발송 확인을 눌러 주세요.</span>
+              <span className="block text-xs text-text-muted mt-0.5">
+                {orderDone ? "이미 발주 완료되어 발주서를 새로 작성할 수 없습니다. 아래에서 발주서를 확인하세요." : "발주서를 작성해 거래처에 보냅니다. 작성 후 카드에서 발송 확인을 눌러 주세요."}
+              </span>
             </span>
           </button>
 
@@ -91,25 +96,29 @@ export function OrderChoiceModal({ proposal, orders, onlineOrdered, canManage, b
           </button>
         </div>
 
-        {hasOrders && (
+        {(hasOrders || orderDone) && (
           <div className="mt-4">
-            <p className="text-xs text-text-muted mb-1.5">작성한 발주서</p>
-            <ul className="flex flex-col gap-1">
-              {orders.map((d) => (
-                <li key={d.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenOrder(d)}
-                    className="w-full flex items-center justify-between gap-2 rounded-lg bg-bg px-3 py-2 text-sm hover:bg-tile-blue"
-                  >
-                    <span className="truncate">
-                      {d.issue_date} · {d.client_name}
-                    </span>
-                    <span className="text-xs text-text-muted shrink-0">{PROJECT_DOC_STATUS_LABELS[d.status]}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <p className="text-xs text-text-muted mb-1.5">발주서 보기</p>
+            {hasOrders ? (
+              <ul className="flex flex-col gap-1">
+                {orders.map((d) => (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenOrder(d)}
+                      className="w-full flex items-center justify-between gap-2 rounded-lg bg-bg px-3 py-2 text-sm hover:bg-tile-blue"
+                    >
+                      <span className="truncate">
+                        {d.issue_date} · {d.client_name}
+                      </span>
+                      <span className="text-xs text-text-muted shrink-0">{PROJECT_DOC_STATUS_LABELS[d.status]}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-lg bg-bg px-3 py-2 text-sm text-text-muted">발주서 없음 (온라인 주문으로 발주 완료 처리됨)</p>
+            )}
           </div>
         )}
       </div>

@@ -42,6 +42,12 @@ class ProposalLinkAttachmentIn(BaseModel):
     label: str | None = None
 
 
+class AttachmentDocKindIn(BaseModel):
+    """첨부 파일의 서류 종류를 정하거나(statement / tax_invoice) 비운다(null = 기타)."""
+
+    doc_kind: str | None = None
+
+
 class ProposalAttachmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,6 +55,7 @@ class ProposalAttachmentOut(BaseModel):
     kind: ProposalAttachmentKind
     label: str
     url: str | None
+    doc_kind: str | None = None  # 서류 종류: statement(거래명세서) / tax_invoice(세금계산서) / None(기타)
     created_by: int
     created_at: datetime
 

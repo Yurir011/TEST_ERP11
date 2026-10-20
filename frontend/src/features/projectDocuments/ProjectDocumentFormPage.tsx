@@ -7,6 +7,8 @@ import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPi
 import { useAuth } from "../../context/useAuth";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
+import { ProposalReferencePanel } from "../proposals/ProposalReferencePanel";
+import { ReferenceProposalPicker } from "../proposals/ReferenceProposalPicker";
 import { isPurchaseProposal } from "../proposals/purchaseFlow";
 import type { Proposal } from "../proposals/types";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload, downloadFile } from "../../lib/api";
@@ -67,6 +69,11 @@ export function ProjectDocumentFormPage() {
   const [managerName, setManagerName] = useState("");
   const [remark, setRemark] = useState(""); // 발주서 REMARK 칸
   const [sourceProposal, setSourceProposal] = useState<Proposal | null>(null);
+  // 근거 품의서를 보면서 작성할 수 있게 하는 참조용 품의서 (새로 쓸 때는 sourceProposal 과 같고, 수정할 때는 연결된 품의서)
+  const [referenceProposal, setReferenceProposal] = useState<Proposal | null>(null);
+  const [showReference, setShowReference] = useState(false);
+  // 품의서와 연결되지 않은 일반 발주서에서 고를 수 있는 승인된 구매 품의서 (참조 전용)
+  const [referenceOptions, setReferenceOptions] = useState<Proposal[]>([]);
   const [currency, setCurrency] = useState<DocCurrency>("KRW");
   const [purposeType, setPurposeType] = useState<TaxInvoicePurpose>("청구");
   const [items, setItems] = useState<ProjectDocumentItemFormValues[]>([{ ...EMPTY_PROJECT_DOC_ITEM }]);
@@ -131,6 +138,12 @@ export function ProjectDocumentFormPage() {
         setIsPaper(target.is_paper);
         setOriginalAttachments(target.images);
         setExistingAttachments(target.images);
+        if (target.doc_type === "purchase_order" && target.proposal_id !== null) {
+          // 수정 화면에서도 근거 품의서를 참조할 수 있게 불러온다 (참조 전용이라 저장 동작에는 영향 없음)
+          apiGet<Proposal[]>("/api/proposals")
+            .then((proposals) => setReferenceProposal(proposals.find((x) => x.id === target.proposal_id) ?? null))
+            .catch((err) => logError("ProjectDocumentForm", "참조 품의서 조회 실패", err));
+        }
         setItems(toItemFormValues(target.items));
       })
       .catch((err) => {
@@ -151,6 +164,7 @@ export function ProjectDocumentFormPage() {
           return;
         }
         setSourceProposal(target);
+        setReferenceProposal(target);
         // 발주서 하단 REMARK 칸에 근거 품의서 번호를 미리 적어 준다 (비어 있을 때만).
         setRemark((prev) => prev || `품의서 No. ${target.doc_no}`);
       })
@@ -158,6 +172,19 @@ export function ProjectDocumentFormPage() {
         logError("ProjectDocumentForm", "구매 품의서 조회 실패", err);
         setError("구매 품의서를 불러오지 못했습니다.");
       });
+    // 화면이 열릴 때 한 번만 조회한다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (docType !== "purchase_order" || proposalParam) return;
+    apiGet<Proposal[]>("/api/proposals")
+      .then((list) =>
+        setReferenceOptions(
+          list.filter((p) => isPurchaseProposal(p) && p.status === "approved").sort((a, b) => b.issue_date.localeCompare(a.issue_date) || b.id - a.id),
+        ),
+      )
+      .catch((err) => logError("ProjectDocumentForm", "참조할 구매 품의서 목록 조회 실패", err));
     // 화면이 열릴 때 한 번만 조회한다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -446,9 +473,43 @@ export function ProjectDocumentFormPage() {
         {sourceProposal && (
           <div className="flex items-start gap-2 bg-tile-orange text-tile-orange-fg rounded-xl px-4 py-3 text-xs">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <p>
+            <p className="flex-1">
               구매 품의서 <b>No. {sourceProposal.doc_no}</b> ({sourceProposal.title})에 대한 발주서입니다. 품의가 이미 승인되었으므로 별도 결재 없이 바로 작성되고, 품의서 카드에 발주서로 연결됩니다.
             </p>
+            <button
+              type="button"
+              onClick={() => setShowReference((v) => !v)}
+              className="shrink-0 rounded-lg border border-tile-orange-fg/40 bg-surface px-2.5 py-1 text-xs font-medium text-text hover:border-primary hover:text-primary"
+            >
+              {showReference ? "참조 닫기" : "품의서 참조"}
+            </button>
+          </div>
+        )}
+        {docType === "purchase_order" && !sourceProposal && !(isEdit && referenceProposal) && referenceOptions.length > 0 && (
+          <ReferenceProposalPicker
+            options={referenceOptions}
+            value={referenceProposal?.id ?? null}
+            onChange={(id) => {
+              setReferenceProposal(referenceOptions.find((p) => p.id === id) ?? null);
+              if (id === null) setShowReference(false);
+            }}
+            open={showReference}
+            onToggle={() => setShowReference((v) => !v)}
+          />
+        )}
+        {!sourceProposal && isEdit && referenceProposal && (
+          <div className="flex items-start gap-2 bg-tile-orange text-tile-orange-fg rounded-xl px-4 py-3 text-xs">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <p className="flex-1">
+              이 발주서는 구매 품의서 <b>No. {referenceProposal.doc_no}</b> ({referenceProposal.title})에서 작성되었습니다.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowReference((v) => !v)}
+              className="shrink-0 rounded-lg border border-tile-orange-fg/40 bg-surface px-2.5 py-1 text-xs font-medium text-text hover:border-primary hover:text-primary"
+            >
+              {showReference ? "참조 닫기" : "품의서 참조"}
+            </button>
           </div>
         )}
 
@@ -639,6 +700,8 @@ export function ProjectDocumentFormPage() {
           </button>
         </div>
       </form>
+
+      {showReference && referenceProposal && <ProposalReferencePanel proposal={referenceProposal} onClose={() => setShowReference(false)} />}
 
       {showApproverPicker && (
         <ApproverPickerModal

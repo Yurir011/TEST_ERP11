@@ -12,7 +12,7 @@ const order = { id: 10, issue_date: "2026-10-20", client_name: "한솔전자", s
 
 function renderModal(over: Partial<Parameters<typeof OrderChoiceModal>[0]> = {}) {
   const h = { onCreateOrder: vi.fn(), onOnlineDone: vi.fn(), onOpenOrder: vi.fn(), onClose: vi.fn() };
-  render(<OrderChoiceModal proposal={proposal} orders={[]} onlineOrdered={false} canManage busy={false} {...h} {...over} />);
+  render(<OrderChoiceModal proposal={proposal} orders={[]} onlineOrdered={false} orderDone={false} canManage busy={false} {...h} {...over} />);
   return h;
 }
 
@@ -32,6 +32,30 @@ describe("발주 방법 선택 팝업", () => {
     expect(screen.getByText("이미 발주서가 작성되어 있습니다.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /한솔전자/ }));
     expect(h.onOpenOrder).toHaveBeenCalledWith(order);
+  });
+
+  it("발주가 완료되면 발주서 작성은 꺼지고 발주서 보기가 나온다", () => {
+    const h = renderModal({ orders: [order], orderDone: true });
+    const create = screen.getByRole("button", { name: /^발주서 작성/ }) as HTMLButtonElement;
+    expect(create.disabled).toBe(true);
+    expect(screen.getByText(/이미 발주 완료되어 발주서를 새로 작성할 수 없습니다/)).toBeTruthy();
+    fireEvent.click(create);
+    expect(h.onCreateOrder).not.toHaveBeenCalled();
+    expect(screen.getByText("발주서 보기")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /한솔전자/ }));
+    expect(h.onOpenOrder).toHaveBeenCalledWith(order);
+  });
+
+  it("온라인 주문으로 발주 완료된 경우에도 발주서 작성은 꺼지고 발주서가 없다고 안내한다", () => {
+    renderModal({ orders: [], onlineOrdered: true, orderDone: true });
+    expect((screen.getByRole("button", { name: /^발주서 작성/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/발주서 없음 \(온라인 주문으로 발주 완료 처리됨\)/)).toBeTruthy();
+  });
+
+  it("발주서가 결재 중이라 아직 발주 완료 전이면 발주서 작성은 켜져 있다", () => {
+    const h = renderModal({ orders: [{ ...order, status: "pending" } as unknown as ProjectDocument], orderDone: false });
+    fireEvent.click(screen.getByRole("button", { name: /^발주서 작성/ }));
+    expect(h.onCreateOrder).toHaveBeenCalledTimes(1);
   });
 
   it("이미 발주 완료로 처리했거나 권한이 없으면 발주 완료를 고를 수 없다", () => {

@@ -63,6 +63,13 @@ describe("구매 품의서 카드", () => {
     expect(h.onToggleReceived).toHaveBeenCalledWith(true);
   });
 
+  it("품의 과정(구매품의서·결재 상태 배지)을 누르면 품의서를 바로 열고, 카드 전체 클릭과 겹쳐 두 번 열리지 않는다", () => {
+    const h = renderCard(proposal());
+    fireEvent.click(screen.getByRole("button", { name: "품의서 보기" }));
+    expect(h.onOpen).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull(); // 발주서 보기는 여기에 없다 (발주 단계의 팝업에서 본다)
+  });
+
   it("온라인 주문으로 발주 완료 처리하면 발주서 없이도 입고를 할 수 있고, 취소할 수 있다", () => {
     const h = renderCard(proposal({ order_sent_at: "2026-10-22T01:00:00Z" }), []);
     expect(screen.getByText("발주 완료")).toBeTruthy();
@@ -72,16 +79,31 @@ describe("구매 품의서 카드", () => {
     expect(h.onToggleSent).toHaveBeenCalledWith(false);
   });
 
-  it("첨부 칸에는 올린 파일 수가 n/7 로 보인다", () => {
-    renderCard(
-      proposal({
-        attachments: [
-          { id: 1, kind: "file", label: "a.pdf", url: null, created_by: 1, created_at: "x" },
-          { id: 2, kind: "link", label: "링크", url: "https://x.y", created_by: 1, created_at: "x" },
-        ],
-      }),
-    );
-    expect(screen.getByText("1/7")).toBeTruthy(); // 링크는 세지 않는다
+  const docFile = (id: number, doc_kind: "statement" | "tax_invoice" | null) => ({ id, kind: "file" as const, label: `서류${id}.pdf`, url: null, doc_kind, created_by: 1, created_at: "x" });
+
+  it("입고 전에는 명세서·계산서 칩이 회색(입고 후 등록)이다", () => {
+    renderCard(proposal());
+    expect(screen.getByLabelText("명세서 입고 후 등록")).toBeTruthy();
+    expect(screen.getByLabelText("계산서 입고 후 등록")).toBeTruthy();
+  });
+
+  it("입고 후에는 등록된 서류는 등록됨, 빠진 서류는 미등록으로 보인다", () => {
+    renderCard(proposal({ order_sent_at: "2026-10-22T01:00:00Z", received_at: "2026-10-23T01:00:00Z", attachments: [docFile(1, "statement")] }));
+    expect(screen.getByLabelText("명세서 등록됨")).toBeTruthy();
+    expect(screen.getByLabelText("계산서 미등록")).toBeTruthy();
+  });
+
+  it("둘 다 등록되면 두 칩 모두 등록됨이다", () => {
+    renderCard(proposal({ order_sent_at: "x", received_at: "y", attachments: [docFile(1, "statement"), docFile(2, "tax_invoice")] }));
+    expect(screen.getByLabelText("명세서 등록됨")).toBeTruthy();
+    expect(screen.getByLabelText("계산서 등록됨")).toBeTruthy();
+  });
+
+  it("종류를 정하지 않은 기타 파일은 서류로 세지 않는다 (파일 수는 첨부 아이콘 안내에 나온다)", () => {
+    renderCard(proposal({ order_sent_at: "x", received_at: "y", attachments: [docFile(1, null)] }));
+    expect(screen.getByLabelText("명세서 미등록")).toBeTruthy();
+    expect(screen.getByLabelText("계산서 미등록")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "첨부" }).getAttribute("title")).toContain("파일 1/7");
   });
 
   it("작성자나 관리자가 아니면 발송·입고 확인을 할 수 없다", () => {

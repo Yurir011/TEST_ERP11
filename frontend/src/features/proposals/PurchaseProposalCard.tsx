@@ -107,11 +107,6 @@ function ActionMenuButton({
         className={ICON_BUTTON}
       >
         {icon}
-        {items.length > 1 && (
-          <span className="absolute -right-1 -bottom-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-primary text-white text-[9px] font-semibold grid place-items-center">
-            {items.length}
-          </span>
-        )}
       </button>
 
       {open && (
@@ -153,6 +148,38 @@ function ActionMenuButton({
       )}
 
     </div>
+  );
+}
+
+/** 품의 과정(구매품의서 · 결재 상태 배지)을 누르면 품의서를 바로 연다. 발주서는 발주 단계(발주 버튼의 팝업)에서 본다. */
+function ProposalViewButton({ chips, onOpenProposal }: { chips: FlowChip[]; onOpenProposal: () => void }) {
+  return (
+    <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={onOpenProposal}
+        aria-label="품의서 보기"
+        title="눌러서 품의서 보기"
+        className="-m-1 flex flex-wrap items-center gap-1.5 rounded-lg p-1 text-left hover:bg-bg"
+      >
+        <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>구매품의서</span>
+        {chips.map((chip, i) => (
+          <Badge key={i} chip={chip} />
+        ))}
+      </button>
+    </div>
+  );
+}
+
+/** 입고 후 등록해야 하는 서류(거래명세서·세금계산서) 한 장의 등록 여부 칩. 입고 전에는 회색, 입고 후에는 등록됨(초록)/미등록(빨강). */
+function DocChip({ name, registered, received }: { name: string; registered: boolean; received: boolean }) {
+  const tone = !received ? "bg-[#f1f2f4] text-text-muted" : registered ? "bg-tile-green text-tile-green-fg" : "bg-[#fef2f2] text-danger";
+  const text = !received ? "·" : registered ? "✓" : "미등록";
+  const title = !received ? `${name}: 입고 완료 후 등록합니다` : registered ? `${name} 등록됨` : `${name}이(가) 아직 등록되지 않았습니다`;
+  return (
+    <span title={title} aria-label={`${name} ${!received ? "입고 후 등록" : registered ? "등록됨" : "미등록"}`} className={`rounded-full px-2 py-px text-[11px] font-semibold whitespace-nowrap ${tone}`}>
+      {name} {text}
+    </span>
   );
 }
 
@@ -290,7 +317,9 @@ export function PurchaseProposalCard({
   return (
     <div
       onClick={onOpen}
-      className="bg-surface border border-border rounded-2xl px-4 py-3 flex flex-wrap items-start gap-x-4 gap-y-3 cursor-pointer hover:border-primary/40 transition-colors"
+      className={`bg-surface border border-border rounded-2xl px-4 py-3 flex flex-wrap items-start gap-x-4 gap-y-3 cursor-pointer hover:border-primary/40 transition-colors ${
+        flow.docsMissing ? "shadow-[inset_4px_0_0_0_var(--color-tile-orange-fg)]" : ""
+      }`}
     >
       {/* 제목 · 배지 · 날짜 */}
       <div className="flex items-start gap-3 w-[250px] shrink-0">
@@ -301,12 +330,7 @@ export function PurchaseProposalCard({
           <p className="text-[15px] font-semibold text-text truncate" title={proposal.title}>
             {proposal.title}
           </p>
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-            <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>구매품의서</span>
-            {flow.approval.map((chip, i) => (
-              <Badge key={i} chip={chip} />
-            ))}
-          </div>
+          <ProposalViewButton chips={flow.approval} onOpenProposal={onOpen} />
           <p className="text-xs text-text mt-1.5">{proposal.issue_date}</p>
           <p className="text-[11px] text-text-muted">No. {proposal.doc_no}</p>
         </div>
@@ -370,10 +394,13 @@ export function PurchaseProposalCard({
           icon={<Paperclip size={20} />}
           label="첨부"
           state="plain"
-          title="거래명세서·세금계산서 등 관련 서류 올리기"
+          title={`거래명세서·세금계산서 등 관련 서류 올리기 (파일 ${fileCountOf(proposal)}/${MAX_PROPOSAL_FILES})`}
           onClick={onAttach}
         >
-          <Badge chip={{ label: `${fileCountOf(proposal)}/${MAX_PROPOSAL_FILES}`, tone: "gray" }} />
+          <div className="flex flex-col items-center gap-0.5">
+            <DocChip name="명세서" registered={flow.statementRegistered} received={flow.received} />
+            <DocChip name="계산서" registered={flow.taxInvoiceRegistered} received={flow.received} />
+          </div>
         </FlowButton>
         <div className="w-px self-stretch bg-border mx-1.5" />
       </div>

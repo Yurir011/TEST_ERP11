@@ -37,6 +37,11 @@ export interface PurchaseFlow {
   canReceive: boolean;
   received: boolean;
   receiveLabel: FlowChip;
+  /** 입고 후 등록해야 하는 서류의 등록 여부: 거래명세서·세금계산서 파일이 각각 1장 이상 올라와 있는가 */
+  statementRegistered: boolean;
+  taxInvoiceRegistered: boolean;
+  /** 입고가 끝났는데 두 서류 중 빠진 것이 있다 (카드에 주황 띠로 알린다) */
+  docsMissing: boolean;
 }
 
 /** 품의서와 그 품의서에서 만든 발주서들로 카드의 진행 상태를 계산한다. */
@@ -84,6 +89,10 @@ export function computePurchaseFlow(proposal: Proposal, orders: ProjectDocument[
       ? { label: "입고 대기", tone: "orange" }
       : { label: "발송 대기", tone: "gray" };
 
+  const hasDoc = (kind: "statement" | "tax_invoice") => proposal.attachments.some((a) => a.kind === "file" && a.doc_kind === kind);
+  const statementRegistered = hasDoc("statement");
+  const taxInvoiceRegistered = hasDoc("tax_invoice");
+
   return {
     approval,
     canOrder: approved,
@@ -97,6 +106,9 @@ export function computePurchaseFlow(proposal: Proposal, orders: ProjectDocument[
     canReceive: approved && sent,
     received,
     receiveLabel,
+    statementRegistered,
+    taxInvoiceRegistered,
+    docsMissing: approved && received && !(statementRegistered && taxInvoiceRegistered),
   };
 }
 

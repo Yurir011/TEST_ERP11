@@ -6,7 +6,7 @@ import type { Proposal, ProposalStep } from "./types";
 const proposal = (over: Partial<Proposal> = {}): Proposal =>
   ({
     id: 1, kind: "구매", status: "pending", steps: [], is_final_decision: false, delete_requested: false, reject_reason: null,
-    order_sent_at: null, received_at: null, ...over,
+    order_sent_at: null, received_at: null, attachments: [], ...over,
   }) as unknown as Proposal;
 
 const order = (over: Partial<ProjectDocument> = {}): ProjectDocument =>
@@ -77,6 +77,26 @@ describe("구매 품의서 진행 상태", () => {
     expect(f.canConfirmSent).toBe(false);
     // 발주서가 있으면 온라인 주문이 아니다
     expect(computePurchaseFlow(proposal({ status: "approved", order_sent_at: "x" }), [order()]).onlineOrdered).toBe(false);
+  });
+
+  const file = (id: number, doc_kind: "statement" | "tax_invoice" | null, kind: "file" | "link" = "file") =>
+    ({ id, kind, label: `서류${id}`, url: null, doc_kind, created_by: 1, created_at: "x" }) as Proposal["attachments"][number];
+
+  it("거래명세서·세금계산서 등록 여부는 종류가 정해진 파일이 1장 이상 있는지로 판단하고, 기타·링크는 세지 않는다", () => {
+    const none = computePurchaseFlow(proposal({ status: "approved", attachments: [file(1, null), file(2, "statement", "link")] }), []);
+    expect([none.statementRegistered, none.taxInvoiceRegistered]).toEqual([false, false]);
+    const one = computePurchaseFlow(proposal({ status: "approved", attachments: [file(1, "statement"), file(2, "statement")] }), []);
+    expect([one.statementRegistered, one.taxInvoiceRegistered]).toEqual([true, false]);
+    const both = computePurchaseFlow(proposal({ status: "approved", attachments: [file(1, "statement"), file(2, "tax_invoice")] }), []);
+    expect([both.statementRegistered, both.taxInvoiceRegistered]).toEqual([true, true]);
+  });
+
+  it("입고가 끝났는데 서류가 빠졌을 때만 서류 부족으로 본다", () => {
+    const base = { status: "approved" as const, order_sent_at: "x" };
+    expect(computePurchaseFlow(proposal({ ...base }), []).docsMissing).toBe(false); // 입고 전에는 아직
+    expect(computePurchaseFlow(proposal({ ...base, received_at: "y" }), []).docsMissing).toBe(true);
+    expect(computePurchaseFlow(proposal({ ...base, received_at: "y", attachments: [file(1, "statement")] }), []).docsMissing).toBe(true);
+    expect(computePurchaseFlow(proposal({ ...base, received_at: "y", attachments: [file(1, "statement"), file(2, "tax_invoice")] }), []).docsMissing).toBe(false);
   });
 
   it("카드 오른쪽 요약은 발주서가 생겨야 나오고, 여러 장이면 합산한다", () => {

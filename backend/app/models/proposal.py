@@ -79,6 +79,11 @@ class Proposal(Base):
     )
 
 
+# 구매 품의서에서 입고 후 등록해야 하는 서류 종류. 카드의 "명세서·계산서" 배지가 이 값으로 등록 여부를 판단한다.
+# 종류가 없는 첨부(기존 첨부, 기타 서류)는 None 으로 둔다.
+ATTACHMENT_DOC_KINDS = ("statement", "tax_invoice")  # 거래명세서, 세금계산서
+
+
 class ProposalAttachmentKind(str, enum.Enum):
     file = "file"  # 업로드한 파일
     link = "link"  # 외부 URL 링크
@@ -93,6 +98,8 @@ class ProposalAttachment(Base):
     proposal_id: Mapped[int] = mapped_column(ForeignKey("proposals.id", ondelete="CASCADE"), index=True)
     kind: Mapped[ProposalAttachmentKind] = mapped_column(Enum(ProposalAttachmentKind, name="proposalattachmentkind"))
     label: Mapped[str] = mapped_column(String(200))  # 파일 원본 이름 또는 링크 설명
+    # 서류 종류: "statement"(거래명세서) / "tax_invoice"(세금계산서) / None(종류 없음·기타). 파일 첨부에만 쓴다.
+    doc_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
     file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))

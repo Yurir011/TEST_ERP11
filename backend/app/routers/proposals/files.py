@@ -3,14 +3,14 @@ import os
 import uuid
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.deps import get_current_user
 from app.database import get_db
-from app.models.proposal import ProposalAttachment, ProposalAttachmentKind, ProposalStatus
+from app.models.proposal import ATTACHMENT_DOC_KINDS, ProposalAttachment, ProposalAttachmentKind, ProposalStatus
 from app.models.user import User
 from app.routers.proposals._common import (
     ALLOWED_ATTACHMENT_TYPES,
@@ -21,7 +21,7 @@ from app.routers.proposals._common import (
     _to_out,
     logger,
 )
-from app.schemas.proposal import ProposalLinkAttachmentIn, ProposalOut
+from app.schemas.proposal import AttachmentDocKindIn, ProposalLinkAttachmentIn, ProposalOut
 from app.services import proposal_files
 from app.services.proposal_excel import generate_proposal_excel
 from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
@@ -48,6 +48,15 @@ def download_proposal_pdf(proposal_id: int, db: Session = Depends(get_db), curre
     return FileResponse(p.file_path, media_type="application/pdf", filename=filename)
 
 
+def _normalize_doc_kind(value: str | None) -> str | None:
+    """서류 종류 값 검사: 거래명세서(statement)·세금계산서(tax_invoice)만 저장하고, 비었거나 "other"는 종류 없음(None)으로 둔다."""
+    if value is None or value.strip() in ("", "other"):
+        return None
+    if value not in ATTACHMENT_DOC_KINDS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="서류 종류가 올바르지 않습니다. (거래명세서·세금계산서·기타)")
+    return value
+
+
 @router.get("/{proposal_id}/excel")
 def download_proposal_excel(proposal_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """승인된 품의서를 엑셀로 내려받는다 (저장해 두지 않고 요청할 때 만든다)."""
@@ -67,10 +76,12 @@ def download_proposal_excel(proposal_id: int, db: Session = Depends(get_db), cur
 def upload_attachment_file(
     proposal_id: int,
     file: UploadFile = File(...),
+    doc_kind: str | None = Form(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     p = _get_or_404(db, proposal_id)
+    kind_value = _normalize_doc_kind(doc_kind)
     if p.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 첨부파일을 추가할 수 있습니다.")
     if file.content_type not in ALLOWED_ATTACHMENT_TYPES:
@@ -92,6 +103,7 @@ def upload_attachment_file(
         kind=ProposalAttachmentKind.file,
         label=file.filename or stored_name,
         file_path=file_path,
+        doc_kind=kind_value,
         created_by=current_user.id,
     )
     db.add(attachment)
@@ -149,6 +161,29 @@ def download_attachment_file(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="첨부파일을 찾을 수 없습니다.")
     logger.debug(f"[Proposals] 첨부파일 다운로드: proposal_id={proposal_id}, attachment_id={attachment_id}, by={current_user.id}")
     return FileResponse(attachment.file_path, filename=attachment.label)
+
+
+@router.put("/{proposal_id}/attachments/{attachment_id}/kind", response_model=ProposalOut)
+def set_attachment_kind(
+    proposal_id: int,
+    attachment_id: int,
+    payload: AttachmentDocKindIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """이미 올린 첨부 파일의 서류 종류(거래명세서·세금계산서·기타)를 바꾼다. 작성자만, 파일 첨부에만 할 수 있다."""
+    p = _get_or_404(db, proposal_id)
+    if p.created_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 서류 종류를 바꿀 수 있습니다.")
+    attachment = next((a for a in p.attachments if a.id == attachment_id), None)
+    if attachment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="첨부파일을 찾을 수 없습니다.")
+    if attachment.kind != ProposalAttachmentKind.file:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 첨부만 서류 종류를 정할 수 있습니다.")
+    attachment.doc_kind = _normalize_doc_kind(payload.doc_kind)
+    db.commit()
+    logger.debug(f"[Proposals] 첨부 서류 종류 변경: proposal_id={proposal_id}, attachment_id={attachment_id}, doc_kind={attachment.doc_kind}, by={current_user.id}")
+    return _to_out(_get_or_404(db, proposal_id))
 
 
 @router.delete("/{proposal_id}/attachments/{attachment_id}", response_model=ProposalOut)

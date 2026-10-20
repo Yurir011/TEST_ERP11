@@ -2,11 +2,13 @@
 채워 넣어 엑셀을 만든다. 임의로 새 워크북을 그리지 않고, 서식이 이미 갖춰진 원본 파일을 그대로 사용한다."""
 import os
 from dataclasses import dataclass
+from io import BytesIO
 from datetime import date
 from pathlib import Path
 
 import openpyxl
 from openpyxl.styles import Alignment, Font
+from PIL import Image
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
 from sqlalchemy.orm import Session
@@ -55,6 +57,51 @@ def _set_horizontal(cell, horizontal: str) -> None:
         shrink_to_fit=a.shrink_to_fit,
         indent=a.indent,
     )
+
+
+def _white_to_transparent(png_bytes: bytes) -> bytes:
+    """흰 바탕의 이미지에서 흰색을 투명으로 바꾼다(직인용). 흰색에 가까울수록 투명하게, 진한 부분은 그대로 두고,
+    흰 바탕과 섞여 연해진 가장자리 색은 원래 색으로 되돌려 테두리가 하얗게 남지 않게 한다."""
+    im = Image.open(BytesIO(png_bytes)).convert("RGBA")
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, _a = px[x, y]
+            m = min(r, g, b)
+            if m >= 245:  # 흰색(과 압축 잡티)은 완전히 투명
+                px[x, y] = (r, g, b, 0)
+                continue
+            alpha = 255 - m
+            k = alpha / 255
+            back = 255 * (1 - k)  # 흰 바탕 성분
+            px[x, y] = (
+                max(0, min(255, round((r - back) / k))),
+                max(0, min(255, round((g - back) / k))),
+                max(0, min(255, round((b - back) / k))),
+                alpha,
+            )
+    out = BytesIO()
+    im.save(out, format="PNG")
+    return out.getvalue()
+
+
+def _make_seals_transparent(ws) -> None:
+    """양식에 들어 있는 직인 이미지의 배경을 투명하게 한다. 배경이 흰색으로 채워진 직인은 아래 글씨를 가리기 때문이다.
+    직인은 거의 정사각형이라, 가로로 긴 로고 이미지와 이미 투명 배경인 이미지는 건드리지 않는다."""
+    for img in ws._images:
+        try:
+            img.ref.seek(0)
+            data = img.ref.read()
+            src = Image.open(BytesIO(data))
+            has_alpha = src.mode in ("RGBA", "LA") or "transparency" in src.info
+            squareish = 0.75 <= src.width / src.height <= 1.33
+            if has_alpha or not squareish:
+                img.ref.seek(0)
+                continue
+            img.ref = BytesIO(_white_to_transparent(data))
+            logger.debug(f"[ProjectDocumentTemplate] 직인 이미지 배경을 투명으로 변경: {src.width}x{src.height}")
+        except Exception:  # noqa: BLE001 - 이미지 처리에 실패해도 문서 작성은 계속한다
+            logger.exception("[ProjectDocumentTemplate] 직인 이미지 투명 처리 실패 (원본 그대로 사용)")
 
 
 def _fit_to_page_width(ws) -> None:
@@ -128,6 +175,27 @@ def _wrap_rows(ws, rows: range, columns: tuple[str, ...]) -> None:
             max_lines = max(max_lines, lines)
         base = ws.row_dimensions[row].height or 20.25
         ws.row_dimensions[row].height = max(base, max_lines * font_size * 1.45 + 5)
+
+
+def _wrap_cells(ws, refs) -> None:
+    """거래처·담당자처럼 한 칸짜리 머리글 칸에 긴 글이 들어오면 글자를 줄이지 않고 줄바꿈하고, 줄 수만큼 그 행의 높이를 늘린다.
+    (글자 크기를 줄이는 방식은 긴 이름이 읽기 힘들 만큼 작아져서 쓰지 않는다.) 병합된 칸은 엑셀이 높이를 맞춰 주지 않으므로 글자 수로 계산한다."""
+    for ref in refs:
+        cell = ws[ref]
+        if type(cell).__name__ == "MergedCell":
+            continue
+        a = cell.alignment
+        cell.alignment = Alignment(
+            horizontal=a.horizontal, vertical=a.vertical or "center", wrap_text=True, shrink_to_fit=False, indent=a.indent
+        )
+        text = str(cell.value) if cell.value is not None else ""
+        if not text:
+            continue
+        font_size = float(cell.font.sz or 10)
+        usable = max(_merged_width(ws, ref) - 1.5, 4.0)  # 좌우 여백만큼 덜어 계산
+        lines = sum(max(1, -(-int(_text_units(part) * 10) // int(usable * 10))) for part in text.split("\n"))
+        base = ws.row_dimensions[cell.row].height or 20.25
+        ws.row_dimensions[cell.row].height = max(base, lines * font_size * 1.45 + 5)
 
 
 def _wrap_block(ws, ref: str, text_rows: range) -> None:
@@ -430,6 +498,7 @@ def _fill_purchase_order_template(doc: ProjectDocument) -> str:
     _wrap_rows(ws, range(PO_ITEM_START_ROW, PO_ITEM_END_ROW + 1), ("B", "H"))
     _wrap_block(ws, PO_REMARK_CELL, range(31, 35))
     _shrink_cells(ws, (PO_CLIENT_CELL, PO_MANAGER_CELL))
+    _make_seals_transparent(ws)
     _fit_to_page_width(ws)
 
     os.makedirs(settings.project_documents_dir, exist_ok=True)
@@ -510,11 +579,12 @@ def fill_project_document_template(doc: ProjectDocument) -> str:
     ws[layout.total_words_cell] = CURRENCY_SUFFIX_WORD[doc.currency]
     # 내용/비고가 길면 줄이 자동으로 바뀌고 행 높이가 늘어난다.
     _wrap_rows(ws, range(layout.item_start_row, layout.item_end_row + 1), ("B", "I"))
-    # 거래처/담당자처럼 짧은 칸에 긴 글자가 들어오면 칸 안에서 글자 크기를 줄인다.
-    _shrink_cells(ws, (layout.client_cell, layout.manager_cell))
+    # 거래처/담당자 칸에 긴 글자가 들어오면 글자 크기를 줄이지 않고 줄이 자동으로 바뀌며 행 높이가 늘어난다.
+    _wrap_cells(ws, (layout.client_cell, layout.manager_cell))
     # "일금 ___ 원정" 칸(C열)은 한글 숫자 서식이라 금액이 크면 '###'으로 깨진다. 칸에 맞춰 글자를 줄여 항상 보이게 한다.
     words = ws[f"C{ws[layout.top_total_cell].row}"]
     words.alignment = Alignment(horizontal=words.alignment.horizontal, vertical=words.alignment.vertical, shrink_to_fit=True)
+    _make_seals_transparent(ws)
     _fit_to_page_width(ws)
 
     os.makedirs(settings.project_documents_dir, exist_ok=True)

@@ -26,11 +26,21 @@ export const PROPOSAL_TITLE_LABELS: Record<ProposalApproverTitle, string> = {
 
 export type ProposalAttachmentKind = "file" | "link";
 
+/** 구매 품의서에서 입고 후 등록해야 하는 서류 종류 (서버: ATTACHMENT_DOC_KINDS). 종류 없음(null)은 기타 서류. */
+export type AttachmentDocKind = "statement" | "tax_invoice";
+
+export const ATTACHMENT_DOC_KIND_LABELS: Record<AttachmentDocKind, string> = {
+  statement: "거래명세서",
+  tax_invoice: "세금계산서",
+};
+
 export interface ProposalAttachment {
   id: number;
   kind: ProposalAttachmentKind;
   label: string;
   url: string | null;
+  /** 서류 종류 (파일 첨부만). 없으면 기타 */
+  doc_kind?: AttachmentDocKind | null;
   created_by: number;
   created_at: string;
 }

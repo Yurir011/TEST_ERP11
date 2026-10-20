@@ -2,10 +2,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DialogProvider } from "../../components/ui/dialog/DialogProvider";
-import { MAX_PROPOSAL_FILES, ProposalAttachmentsModal, pickUploadable } from "./ProposalAttachmentsModal";
+import { MAX_PROPOSAL_FILES, ProposalAttachmentsModal, defaultUploadKind, pickUploadable } from "./ProposalAttachmentsModal";
 import type { Proposal } from "./types";
 
-const api = vi.hoisted(() => ({ apiUpload: vi.fn(), apiDelete: vi.fn(), downloadFile: vi.fn(), openFile: vi.fn() }));
+const api = vi.hoisted(() => ({ apiUploadForm: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn(), downloadFile: vi.fn(), openFile: vi.fn() }));
 vi.mock("../../lib/api", () => ({
   ...api,
   ApiError: class ApiError extends Error {
@@ -96,11 +96,11 @@ describe("첨부 파일 팝업", () => {
 
   it("고른 파일을 하나씩 올리고, 형식이 맞지 않는 파일은 올리지 않고 알린다", async () => {
     const p = proposal(0);
-    api.apiUpload.mockResolvedValue({ ...p, attachments: [att(1)] });
+    api.apiUploadForm.mockResolvedValue({ ...p, attachments: [att(1)] });
     const { onChanged } = renderModal(p);
     fireEvent.change(screen.getByLabelText("올릴 파일"), { target: { files: [file("거래명세서.xlsx"), file("악성.exe")] } });
-    await waitFor(() => expect(api.apiUpload).toHaveBeenCalledTimes(1));
-    expect(api.apiUpload.mock.calls[0][0]).toBe("/api/proposals/1/attachments/file");
+    await waitFor(() => expect(api.apiUploadForm).toHaveBeenCalledTimes(1));
+    expect(api.apiUploadForm.mock.calls[0][0]).toBe("/api/proposals/1/attachments/file");
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
     expect((await screen.findByRole("alert")).textContent).toContain("악성.exe: 올릴 수 없는 형식입니다.");
   });
@@ -112,7 +112,7 @@ describe("첨부 파일 팝업", () => {
 
   it("서버가 거절하면 그 문구를 보여 준다", async () => {
     const { ApiError } = await import("../../lib/api");
-    api.apiUpload.mockRejectedValue(new ApiError(400, "첨부파일은 최대 7개까지 올릴 수 있습니다."));
+    api.apiUploadForm.mockRejectedValue(new ApiError(400, "첨부파일은 최대 7개까지 올릴 수 있습니다."));
     renderModal(proposal(0));
     fireEvent.change(screen.getByLabelText("올릴 파일"), { target: { files: [file("a.pdf")] } });
     expect((await screen.findByRole("alert")).textContent).toContain("최대 7개까지 올릴 수 있습니다.");
@@ -133,5 +133,65 @@ describe("첨부 파일 팝업", () => {
     fireEvent.click(await screen.findByRole("button", { name: "삭제" }));
     await waitFor(() => expect(api.apiDelete).toHaveBeenCalledWith("/api/proposals/1/attachments/1"));
     expect(onChanged).toHaveBeenCalled();
+  });
+});
+
+describe("서류 종류 (거래명세서·세금계산서)", () => {
+  const withKinds = (...kinds: ("statement" | "tax_invoice" | null)[]): Proposal =>
+    ({ id: 1, title: "샘플", attachments: kinds.map((k, i) => ({ ...att(i + 1), doc_kind: k })) }) as unknown as Proposal;
+
+  it("올릴 때 기본 종류는 아직 없는 서류 순서(거래명세서 → 세금계산서 → 기타)이다", () => {
+    expect(defaultUploadKind(withKinds())).toBe("statement");
+    expect(defaultUploadKind(withKinds("statement"))).toBe("tax_invoice");
+    expect(defaultUploadKind(withKinds("statement", "tax_invoice"))).toBe("other");
+    expect(defaultUploadKind(withKinds(null))).toBe("statement"); // 기타 파일은 서류로 세지 않는다
+  });
+
+  it("고른 서류 종류로 올리고, 올린 뒤에는 다음으로 빠진 서류가 기본으로 바뀐다", async () => {
+    const p = withKinds();
+    api.apiUploadForm.mockResolvedValue({ ...p, attachments: [{ ...att(1), doc_kind: "statement" }] });
+    renderModal(p);
+    const select = screen.getByLabelText("올릴 서류 종류") as HTMLSelectElement;
+    expect(select.value).toBe("statement");
+    fireEvent.change(screen.getByLabelText("올릴 파일"), { target: { files: [file("거래명세서.pdf")] } });
+    await waitFor(() => expect(api.apiUploadForm).toHaveBeenCalledTimes(1));
+    const form = api.apiUploadForm.mock.calls[0][1] as FormData;
+    expect(form.get("doc_kind")).toBe("statement");
+    expect((form.get("file") as File).name).toBe("거래명세서.pdf");
+    await waitFor(() => expect((screen.getByLabelText("올릴 서류 종류") as HTMLSelectElement).value).toBe("tax_invoice"));
+  });
+
+  it("기타를 고르면 종류 없이(빈 값) 올린다", async () => {
+    const p = withKinds();
+    api.apiUploadForm.mockResolvedValue(p);
+    renderModal(p);
+    fireEvent.change(screen.getByLabelText("올릴 서류 종류"), { target: { value: "other" } });
+    fireEvent.change(screen.getByLabelText("올릴 파일"), { target: { files: [file("참고.pdf")] } });
+    await waitFor(() => expect(api.apiUploadForm).toHaveBeenCalledTimes(1));
+    expect((api.apiUploadForm.mock.calls[0][1] as FormData).get("doc_kind")).toBe("");
+  });
+
+  it("등록 현황을 보여 준다: 종류가 정해진 파일이 있으면 등록됨, 없으면 미등록", () => {
+    renderModal(withKinds("statement", null));
+    const box = screen.getByLabelText("서류 등록 현황");
+    expect(box.textContent).toContain("거래명세서 등록됨 ✓");
+    expect(box.textContent).toContain("세금계산서 미등록");
+  });
+
+  it("이미 올린 파일의 종류를 바꿀 수 있다", async () => {
+    const p = withKinds(null);
+    api.apiPut.mockResolvedValue({ ...p, attachments: [{ ...att(1), doc_kind: "tax_invoice" }] });
+    const { onChanged } = renderModal(p);
+    fireEvent.change(screen.getByLabelText("서류1.pdf 서류 종류"), { target: { value: "tax_invoice" } });
+    await waitFor(() => expect(api.apiPut).toHaveBeenCalledWith("/api/proposals/1/attachments/1/kind", { doc_kind: "tax_invoice" }));
+    expect(onChanged).toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("서류1.pdf 서류 종류"), { target: { value: "" } });
+    await waitFor(() => expect(api.apiPut).toHaveBeenLastCalledWith("/api/proposals/1/attachments/1/kind", { doc_kind: null }));
+  });
+
+  it("작성자가 아니면 종류를 바꿀 수 없고 글자로만 보인다", () => {
+    renderModal(withKinds("statement"), false);
+    expect(screen.queryByLabelText("서류1.pdf 서류 종류")).toBeNull();
+    expect(screen.getAllByText("거래명세서").length).toBeGreaterThan(0);
   });
 });
