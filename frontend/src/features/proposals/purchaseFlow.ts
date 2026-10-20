@@ -1,5 +1,5 @@
 import { formatDocAmount, itemsSummary, itemsTotal } from "../projectDocuments/documentHelpers";
-import type { ProjectDocument } from "../projectDocuments/types";
+import { DOC_CURRENCY_SYMBOLS, type ProjectDocument } from "../projectDocuments/types";
 import type { Proposal } from "./types";
 
 /** 구매 품의서: 승인 후 발주서 작성 → 발송 확인 → 입고 확인까지 한 장의 카드로 이어서 관리하는 품의서 종류 이름 (서버와 같은 값) */
@@ -112,12 +112,30 @@ export function computePurchaseFlow(proposal: Proposal, orders: ProjectDocument[
   };
 }
 
+/** 품의서에 적은 금액을 통화 기호와 천 단위 구분으로 보여 준다 (금액이 없으면 null) */
+export function formatProposalAmount(p: Pick<Proposal, "amount" | "currency">): string | null {
+  if (p.amount === null || p.amount === undefined) return null;
+  return `${DOC_CURRENCY_SYMBOLS[p.currency ?? "KRW"]}${p.amount.toLocaleString()}`;
+}
+
+/** 발주서가 아직 없을 때 카드에 보여 줄 품의서의 거래처·내용(진행 내용)·금액. 거래처·금액을 안 적었으면 비어 있다. */
+export function summarizeProposal(p: Proposal): { client: string; content: string; total: string | null; vat: string | null } | null {
+  const client = p.vendor_name?.trim();
+  const total = formatProposalAmount(p);
+  if (!client && !total) return null;
+  const symbol = DOC_CURRENCY_SYMBOLS[p.currency ?? "KRW"];
+  const vat = p.amount === null || p.amount === undefined ? null : `${symbol}${Math.round(p.amount * 0.1).toLocaleString()}`;
+  return { client: client || "-", content: p.topic, total, vat };
+}
+
 /** 카드 오른쪽에 보여 줄 거래처·내용·합계 (발주서가 생기면 그 값, 아직 없으면 null). 발주서가 여러 장이면 합산한다. */
-export function summarizeOrders(orders: ProjectDocument[]): { client: string; content: string; total: string | null } | null {
+export function summarizeOrders(orders: ProjectDocument[]): { client: string; content: string; total: string | null; vat: string | null } | null {
   if (orders.length === 0) return null;
   const clients = Array.from(new Set(orders.map((d) => d.client_name)));
   const content = orders.length === 1 ? itemsSummary(orders[0]) : `${itemsSummary(orders[0])} 외 발주서 ${orders.length - 1}건`;
   const sameCurrency = orders.every((d) => d.currency === orders[0].currency);
-  const total = sameCurrency ? formatDocAmount(orders[0], orders.reduce((sum, d) => sum + itemsTotal(d), 0)) : null;
-  return { client: clients.length === 1 ? clients[0] : `${clients[0]} 외 ${clients.length - 1}곳`, content, total };
+  const supply = orders.reduce((sum, d) => sum + itemsTotal(d), 0);
+  const total = sameCurrency ? formatDocAmount(orders[0], supply) : null;
+  const vat = sameCurrency ? formatDocAmount(orders[0], Math.round(supply * 0.1)) : null;
+  return { client: clients.length === 1 ? clients[0] : `${clients[0]} 외 ${clients.length - 1}곳`, content, total, vat };
 }

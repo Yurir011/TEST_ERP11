@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.approval import validate_chain_approvers
 from app.core.deps import get_current_user
 from app.database import get_db
+from app.models.project import Project
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.proposal import DEPARTMENT_CODE, DEPARTMENT_NAME, Proposal, ProposalStatus
 from app.models.user import User
@@ -26,6 +27,15 @@ from app.services.approval_notice import create_decision_notification
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
 
 
+def _valid_project_id(db: Session, project_id: int | None) -> int | None:
+    """선택한 프로젝트가 있는지 확인한다 (비어 있으면 일반 구매)."""
+    if project_id is None:
+        return None
+    if db.get(Project, project_id) is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 프로젝트입니다.")
+    return project_id
+
+
 @router.post("", response_model=ProposalOut, status_code=status.HTTP_201_CREATED)
 def create_proposal(payload: ProposalCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     issue_date = payload.issue_date or date.today()
@@ -35,6 +45,10 @@ def create_proposal(payload: ProposalCreate, db: Session = Depends(get_db), curr
         title=payload.title,
         topic=payload.topic,
         content=payload.content,
+        vendor_name=(payload.vendor_name or "").strip() or None,
+        project_id=_valid_project_id(db, payload.project_id),
+        amount=payload.amount,
+        currency=payload.currency,
         issue_date=issue_date,
         department_code=DEPARTMENT_CODE,
         department_name=DEPARTMENT_NAME,
@@ -109,6 +123,10 @@ def update_proposal(
     p.title = payload.title
     p.topic = payload.topic
     p.content = payload.content
+    p.vendor_name = (payload.vendor_name or "").strip() or None
+    p.project_id = _valid_project_id(db, payload.project_id)
+    p.amount = payload.amount
+    p.currency = payload.currency
     if payload.issue_date:
         p.issue_date = payload.issue_date
     p.is_final_decision = payload.is_final_decision

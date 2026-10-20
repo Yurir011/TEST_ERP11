@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -12,6 +13,10 @@ class ProposalCreate(BaseModel):
     title: str
     topic: str
     content: str
+    vendor_name: str | None = None  # 거래처명 (구매 품의서)
+    project_id: int | None = None  # 속한 프로젝트 (없으면 일반 구매)
+    amount: float | None = Field(default=None, ge=0)  # 금액
+    currency: Literal["KRW", "USD", "JPY"] = "KRW"
     issue_date: date | None = None  # 기안일자. 비우면 오늘
     is_final_decision: bool = False
     end_title: JobTitle | None = None  # 결재선 종료 단계 (부서장/팀장/대표). 전결이면 불필요
@@ -71,11 +76,20 @@ class ProposalStepOut(BaseModel):
     decided_at: datetime | None
 
 
+class OrderPaymentIn(BaseModel):
+    """발주 건의 결제 확인: 입금(deposit) / 법인카드(card + 카드 종류) / 둘 다 아니면 미입금(null)."""
+
+    payment_method: Literal["deposit", "card"] | None = None
+    payment_card: Literal["bc", "kb_kookmin"] | None = None
+
+
 class OrderFlowToggle(BaseModel):
     """발송 확인·입고 확인을 켜거나(true) 취소(false)한다."""
 
     value: bool
     online: bool = False  # 발송 확인에서만 사용: 온라인 주문처럼 발주서 없이 "발주 완료"로 처리한다
+    payment_method: Literal["deposit", "card"] | None = None  # 발송 확인에서만 사용: 입금 / 법인카드 / (없으면 미입금)
+    payment_card: Literal["bc", "kb_kookmin"] | None = None
 
 
 class ProposalOut(BaseModel):
@@ -87,6 +101,11 @@ class ProposalOut(BaseModel):
     title: str
     topic: str
     content: str
+    vendor_name: str | None = None
+    project_id: int | None = None
+    project_name: str | None = None
+    amount: float | None = None
+    currency: str = "KRW"
     department_name: str
     issue_date: date
     status: ProposalStatus
@@ -100,5 +119,7 @@ class ProposalOut(BaseModel):
     reject_reason: str | None
     delete_requested: bool = False
     order_sent_at: datetime | None = None
+    payment_method: str | None = None
+    payment_card: str | None = None
     received_at: datetime | None = None
     created_at: datetime

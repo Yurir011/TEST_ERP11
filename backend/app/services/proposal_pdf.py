@@ -63,6 +63,18 @@ class _BenchLogo(Flowable):
         c.restoreState()
 
 
+CURRENCY_SYMBOLS = {"KRW": "₩", "USD": "$", "JPY": "¥"}
+
+
+def format_proposal_amount(amount, currency: str) -> str:
+    """품의서 금액을 통화 기호와 천 단위 구분으로 보여 준다 (비어 있으면 '-')."""
+    if amount is None:
+        return "-"
+    value = float(amount)
+    text = f"{int(value):,}" if value == int(value) else f"{value:,.2f}"
+    return f"{CURRENCY_SYMBOLS.get(currency, '')}{text}"
+
+
 def _doc_title(proposal: Proposal) -> str:
     return f"{proposal.kind}품의서" if proposal.kind else "품의서"
 
@@ -177,6 +189,8 @@ def generate_proposal_pdf(proposal: Proposal) -> bytes:
         ["문서번호", proposal.doc_no, "기안일자", proposal.issue_date.isoformat()],
         ["기안자", proposal.creator.name, "기안부서", proposal.department_name],
     ]
+    if proposal.vendor_name or proposal.amount is not None:
+        info_rows.append(["거래처", escape(proposal.vendor_name or "-"), "금액", escape(format_proposal_amount(proposal.amount, proposal.currency))])
     info_table = Table(
         [[Paragraph(c, info_label_style if i % 2 == 0 else info_value_style) for i, c in enumerate(row)] for row in info_rows],
         colWidths=[25 * mm, 60 * mm, 25 * mm, 60 * mm],

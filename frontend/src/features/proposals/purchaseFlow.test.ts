@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectDocument } from "../projectDocuments/types";
-import { computePurchaseFlow, isPurchaseProposal, summarizeOrders } from "./purchaseFlow";
+import { computePurchaseFlow, formatProposalAmount, isPurchaseProposal, summarizeOrders, summarizeProposal } from "./purchaseFlow";
 import type { Proposal, ProposalStep } from "./types";
 
 const proposal = (over: Partial<Proposal> = {}): Proposal =>
@@ -102,9 +102,17 @@ describe("구매 품의서 진행 상태", () => {
   it("카드 오른쪽 요약은 발주서가 생겨야 나오고, 여러 장이면 합산한다", () => {
     expect(summarizeOrders([])).toBeNull();
     const one = summarizeOrders([order()])!;
-    expect(one).toEqual({ client: "한솔전자", content: "PCB", total: "₩10,000" });
+    expect(one).toEqual({ client: "한솔전자", content: "PCB", total: "₩10,000", vat: "₩1,000" });
     const two = summarizeOrders([order(), order({ id: 12, client_name: "대성RF" })])!;
     expect(two.client).toBe("한솔전자 외 1곳");
     expect(two.total).toBe("₩20,000");
+  });
+
+  it("품의서에 적은 거래처·금액은 발주서가 없을 때 카드 요약으로 쓴다", () => {
+    expect(summarizeProposal(proposal())).toBeNull();
+    const s = summarizeProposal(proposal({ vendor_name: "대성RF", amount: 1234567, currency: "KRW", topic: "계측기 구매" }))!;
+    expect(s).toEqual({ client: "대성RF", content: "계측기 구매", total: "₩1,234,567", vat: "₩123,457" });
+    expect(formatProposalAmount({ amount: 12.5, currency: "USD" })).toBe("$12.5");
+    expect(formatProposalAmount({ amount: null, currency: "KRW" })).toBeNull();
   });
 });

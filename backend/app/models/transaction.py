@@ -39,6 +39,8 @@ class Transaction(Base):
     settled_payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id", ondelete="SET NULL"), nullable=True)
     # 부분 수금/지급으로 이미 받은(준) 금액. 외상 잔액(미결제 금액)은 total_amount - paid_amount 이고, 전액이 채워지면 settled=True가 된다.
     paid_amount: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    # 구매 품의서에서 발주가 진행되면 자동으로 만들어지는 매입이면 그 품의서 (직접 입력한 내역은 None)
+    proposal_id: Mapped[int | None] = mapped_column(ForeignKey("proposals.id", ondelete="SET NULL"), nullable=True, index=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

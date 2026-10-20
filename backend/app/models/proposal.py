@@ -1,8 +1,9 @@
 import enum
 from datetime import date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, and_
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, and_
 from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 from sqlalchemy.sql import false, func
 
@@ -10,6 +11,7 @@ from app.database import Base
 from app.models.approval_step import ApprovalStep, ApprovalTargetType
 
 if TYPE_CHECKING:
+    from app.models.project import Project
     from app.models.user import User
 
 # 부서 필드가 아직 없어 우선 고정값을 사용한다 (전 직원 연구개발팀 소속으로 간주).
@@ -40,6 +42,12 @@ class Proposal(Base):
     title: Mapped[str] = mapped_column(String(200))  # 제목
     topic: Mapped[str] = mapped_column(String(200))  # "1. 아래와 같이 [topic]을 진행하고자..." 문장의 빈칸
     content: Mapped[str] = mapped_column(Text)  # 자유 서술 본문
+    # 구매 품의서에서 쓰는 거래처·예상 금액. 발주서를 만들 때 이 값을 이어받는다. 구매 외 품의서는 비워 둔다.
+    vendor_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), default="KRW", server_default="KRW")
+    # 이 구매가 속한 프로젝트. 비어 있으면 프로젝트와 상관없는 일반 구매(사무용품 등)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
     department_code: Mapped[str] = mapped_column(String(20), default=DEPARTMENT_CODE)
     department_name: Mapped[str] = mapped_column(String(100), default=DEPARTMENT_NAME)
     issue_date: Mapped[date] = mapped_column(Date)
@@ -57,12 +65,16 @@ class Proposal(Base):
     # 구매 품의서의 발주·입고 진행(사용자가 직접 확인 처리). 발송 확인 후에만 입고 확인을 할 수 있다.
     order_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     order_sent_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # 발주 완료 때 확인하는 결제 방법: "deposit"(입금) / "card"(법인카드, payment_card 에 카드 종류) / None(미입금)
+    payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    payment_card: Mapped[str | None] = mapped_column(String(20), nullable=True)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     received_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+    project: Mapped["Project | None"] = relationship()
     # 결재 단계는 다른 문서와 같은 공용 테이블(approval_steps, 대상 종류 'proposal')에 저장한다 (2026-10-16 통합, 리비전 0005).
     # 대상 종류는 관계가 자동으로 채우지 못하므로 단계를 만들 때 target_type=ApprovalTargetType.proposal 을 직접 넣는다.
     steps: Mapped[list["ApprovalStep"]] = relationship(

@@ -61,6 +61,11 @@ export interface Proposal {
   title: string;
   topic: string;
   content: string;
+  vendor_name?: string | null; // 거래처명 (구매 품의서)
+  project_id?: number | null; // 속한 프로젝트 (없으면 일반 구매)
+  project_name?: string | null;
+  amount?: number | null; // 금액 (공급가액)
+  currency?: "KRW" | "USD" | "JPY";
   department_name: string;
   issue_date: string;
   status: ProposalStatus;
@@ -74,6 +79,8 @@ export interface Proposal {
   reject_reason: string | null;
   delete_requested: boolean; // 승인된 품의서의 삭제 결재가 진행 중
   order_sent_at: string | null; // 구매 품의서: 발주서 발송 확인 시각
+  payment_method?: "deposit" | "card" | null; // 발주 완료 때 확인한 결제 방법 (없으면 미입금)
+  payment_card?: "bc" | "kb_kookmin" | null;
   received_at: string | null; // 구매 품의서: 입고 확인 시각
   created_at: string;
 }

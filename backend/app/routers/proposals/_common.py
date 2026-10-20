@@ -39,6 +39,7 @@ MAX_ATTACHMENT_FILES = 7  # 품의서 한 건에 올릴 수 있는 첨부 "파�
 
 _QUERY_OPTIONS = (
     joinedload(Proposal.creator),
+    joinedload(Proposal.project),
     joinedload(Proposal.steps).joinedload(ApprovalStep.approver),
     joinedload(Proposal.attachments),
 )
@@ -61,6 +62,11 @@ def _to_out(p: Proposal) -> ProposalOut:
         title=p.title,
         topic=p.topic,
         content=p.content,
+        vendor_name=p.vendor_name,
+        project_id=p.project_id,
+        project_name=p.project.name if p.project is not None else None,
+        amount=float(p.amount) if p.amount is not None else None,
+        currency=p.currency,
         department_name=p.department_name,
         issue_date=p.issue_date,
         status=p.status,
@@ -84,6 +90,8 @@ def _to_out(p: Proposal) -> ProposalOut:
         reject_reason=p.reject_reason,
         delete_requested=bool(p.delete_requested),
         order_sent_at=p.order_sent_at,
+        payment_method=p.payment_method,
+        payment_card=p.payment_card,
         received_at=p.received_at,
         created_at=p.created_at,
     )

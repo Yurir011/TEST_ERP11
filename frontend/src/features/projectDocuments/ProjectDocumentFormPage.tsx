@@ -167,6 +167,16 @@ export function ProjectDocumentFormPage() {
         setReferenceProposal(target);
         // 발주서 하단 REMARK 칸에 근거 품의서 번호를 미리 적어 준다 (비어 있을 때만).
         setRemark((prev) => prev || `품의서 No. ${target.doc_no}`);
+        // 품의서에 적은 거래처·통화·금액을 이어받는다 (품목은 진행 내용 한 줄, 수량 1, 단가=금액. 작성 중 고칠 수 있다).
+        if (target.vendor_name) setClientName((prev) => prev || target.vendor_name!);
+        if (target.currency) setCurrency(target.currency);
+        if (target.amount !== null && target.amount !== undefined) {
+          setItems((prev) =>
+            prev.length === 1 && !prev[0].content && !prev[0].unit_price
+              ? [{ ...EMPTY_PROJECT_DOC_ITEM, content: target.topic, quantity: "1", unit_price: String(target.amount) }]
+              : prev,
+          );
+        }
       })
       .catch((err) => {
         logError("ProjectDocumentForm", "구매 품의서 조회 실패", err);

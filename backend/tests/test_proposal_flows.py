@@ -30,6 +30,7 @@ EXPECTED_OPERATIONS = [
     ('POST', '/api/proposals/{proposal_id}/attachments/link', 'add_attachment_link_api_proposals__proposal_id__attachments_link_post', ['201', '422']),
     ('POST', '/api/proposals/{proposal_id}/request-delete', 'request_delete_proposal_api_proposals__proposal_id__request_delete_post', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}', 'update_proposal_api_proposals__proposal_id__put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/order-payment', 'set_order_payment_api_proposals__proposal_id__order_payment_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/order-sent', 'set_order_sent_api_proposals__proposal_id__order_sent_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/received', 'set_received_api_proposals__proposal_id__received_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/attachments/{attachment_id}/kind', 'set_attachment_kind_api_proposals__proposal_id__attachments__attachment_id__kind_put', ['200', '422']),
@@ -326,3 +327,137 @@ def test_attachment_doc_kind_permissions_and_links(client, staff, auth_headers, 
     link_id = next(a["id"] for a in link["attachments"] if a["kind"] == "link")
     assert client.put(f"/api/proposals/{p['id']}/attachments/{link_id}/kind", json={"doc_kind": "statement"}, headers=h).status_code == 400
     assert client.put(f"/api/proposals/{p['id']}/attachments/999999/kind", json={"doc_kind": "statement"}, headers=h).status_code == 404
+
+
+def test_proposal_vendor_and_amount_saved_edited_and_in_documents(client, db, staff, auth_headers):
+    """구매 품의서의 거래처명·금액·통화를 저장·수정하고, PDF·엑셀에도 나온다."""
+    import io
+
+    import openpyxl
+
+    h = auth_headers(staff["writer"])
+    body = {
+        "kind": "구매", "title": "장비 구매", "topic": "계측기", "content": "구매 요청", "issue_date": "2026-10-16",
+        "vendor_name": " 대성RF ", "amount": 1234567, "currency": "KRW", "is_final_decision": True,
+    }
+    created = client.post("/api/proposals", headers=h, json=body)
+    assert created.status_code == 201, created.text
+    p = created.json()
+    assert (p["vendor_name"], p["amount"], p["currency"]) == ("대성RF", 1234567, "KRW")
+
+    # 비워서 올리면 거래처·금액 없음 (기존 품의서와 같은 모양)
+    blank = client.post("/api/proposals", headers=h, json={**body, "vendor_name": "", "amount": None}).json()
+    assert blank["vendor_name"] is None and blank["amount"] is None
+    assert client.post("/api/proposals", headers=h, json={**body, "amount": -1}).status_code == 422
+
+    xlsx = client.get(f"/api/proposals/{p['id']}/excel", headers=h)
+    assert xlsx.status_code == 200
+    cells = [c.value for row in openpyxl.load_workbook(io.BytesIO(xlsx.content)).active.iter_rows() for c in row]
+    assert "대성RF" in cells and "₩1,234,567" in cells
+
+    from app.services.proposal_pdf import format_proposal_amount
+
+    assert format_proposal_amount(None, "KRW") == "-"
+    assert format_proposal_amount(12.5, "USD") == "$12.50"
+    from app.models.proposal import Proposal as ProposalModel
+    from app.services.proposal_pdf import generate_proposal_pdf
+    import pymupdf
+
+    row = db.get(ProposalModel, p["id"])
+    text_out = "".join(page.get_text() for page in pymupdf.open(stream=generate_proposal_pdf(row), filetype="pdf"))
+    assert "대성RF" in text_out and "1,234,567" in text_out
+
+
+def _purchase(client, h, amount=1000000):
+    body = {
+        "kind": "구매", "title": "소모품 구입", "topic": "소모품 구입", "content": "x", "issue_date": "2026-10-16",
+        "vendor_name": "대성RF", "amount": amount, "currency": "KRW", "is_final_decision": True,
+    }
+    res = client.post("/api/proposals", headers=h, json=body)
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+@pytest.fixture
+def ledger_on(monkeypatch):
+    from app.services import purchase_ledger
+
+    monkeypatch.setattr(purchase_ledger, "LEDGER_SYNC_ENABLED", True)
+
+
+def _ledger(db, proposal_id):
+    from app.models.transaction import Transaction
+
+    db.expire_all()
+    return db.query(Transaction).filter(Transaction.proposal_id == proposal_id).all()
+
+
+def test_order_done_creates_unpaid_purchase_transaction(ledger_on, client, db, staff, auth_headers):
+    """발주 완료에서 입금·법인카드를 고르지 않으면 미입금(외상매입)으로 매입에 잡힌다."""
+    h = auth_headers(staff["writer"])
+    p = _purchase(client, h)
+    assert _ledger(db, p["id"]) == []
+    res = client.put(f"/api/proposals/{p['id']}/order-sent", headers=h, json={"value": True, "online": True})
+    assert res.status_code == 200, res.text
+    assert res.json()["payment_method"] is None
+    (tx,) = _ledger(db, p["id"])
+    assert (tx.type.value, tx.counterparty, tx.supply_amount, tx.vat_amount, tx.total_amount) == ("purchase", "대성RF", 1000000, 100000, 1100000)
+    assert tx.settled is False and tx.paid_amount == 0 and "미입금" in tx.memo
+    # 발송 확인을 취소하면 매입도 사라진다
+    assert client.put(f"/api/proposals/{p['id']}/order-sent", headers=h, json={"value": False}).status_code == 200
+    assert _ledger(db, p["id"]) == []
+
+
+def test_order_done_with_deposit_or_card_is_settled(ledger_on, client, db, staff, auth_headers):
+    h = auth_headers(staff["writer"])
+    p = _purchase(client, h)
+    res = client.put(f"/api/proposals/{p['id']}/order-sent", headers=h, json={"value": True, "online": True, "payment_method": "card", "payment_card": "bc"})
+    assert res.status_code == 200 and (res.json()["payment_method"], res.json()["payment_card"]) == ("card", "bc")
+    (tx,) = _ledger(db, p["id"])
+    assert tx.settled is True and tx.paid_amount == tx.total_amount and "BC카드" in tx.memo
+
+    # 나중에 입금으로 바꾸고, 다시 미입금으로 돌릴 수 있다
+    res = client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "deposit"})
+    assert res.status_code == 200 and res.json()["payment_card"] is None
+    (tx,) = _ledger(db, p["id"])
+    assert tx.settled is True and "입금" in tx.memo and "미입금" not in tx.memo
+    client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={})
+    (tx,) = _ledger(db, p["id"])
+    assert tx.settled is False and tx.paid_amount == 0 and tx.settled_date is None
+    # 법인카드는 카드를 골라야 한다
+    assert client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "card"}).status_code == 400
+
+
+def test_order_payment_needs_order_done_and_writer(client, staff, auth_headers):
+    h = auth_headers(staff["writer"])
+    p = _purchase(client, h)
+    assert client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "deposit"}).status_code == 400
+    client.put(f"/api/proposals/{p['id']}/order-sent", headers=h, json={"value": True, "online": True})
+    assert client.put(f"/api/proposals/{p['id']}/order-payment", headers=auth_headers(staff["other"]), json={"payment_method": "deposit"}).status_code == 403
+
+
+def test_proposal_project_selection(client, db, staff, auth_headers):
+    """구매 품의서에 프로젝트를 고를 수 있고(기본은 일반 = 없음), 없는 프로젝트는 거절한다."""
+    from app.models.client import Client
+    from app.models.project import Project
+
+    h = auth_headers(staff["writer"])
+    customer = Client(name="고객사", created_by=staff["writer"].id)
+    db.add(customer)
+    db.flush()
+    project = Project(name="신규 모뎀 개발", client_id=customer.id, created_by=staff["writer"].id)
+    db.add(project)
+    db.commit()
+    body = {"kind": "구매", "title": "부품 구입", "topic": "부품", "content": "x", "issue_date": "2026-10-16", "is_final_decision": True}
+
+    general = client.post("/api/proposals", headers=h, json=body).json()
+    assert general["project_id"] is None and general["project_name"] is None
+
+    chosen = client.post("/api/proposals", headers=h, json={**body, "project_id": project.id})
+    assert chosen.status_code == 201, chosen.text
+    assert (chosen.json()["project_id"], chosen.json()["project_name"]) == (project.id, "신규 모뎀 개발")
+
+    assert client.post("/api/proposals", headers=h, json={**body, "project_id": 999999}).status_code == 400
+    # 수정으로 일반으로 되돌릴 수 있다
+    edited = client.put(f"/api/proposals/{chosen.json()['id']}", headers=h, json={**body, "project_id": None, "is_final_decision": True})
+    assert edited.status_code == 200 and edited.json()["project_id"] is None

@@ -8,6 +8,7 @@ import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PURCHASE_KIND } from "./purchaseFlow";
+import { PROJECT_STATUS_LABELS, type Project } from "../projects/types";
 import type { Proposal } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
@@ -34,6 +35,12 @@ export function ProposalFormPage() {
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
   const [content, setContent] = useState("");
+  const [vendorName, setVendorName] = useState("");
+  // 속한 프로젝트 ("" = 일반: 프로젝트와 상관없는 구매, 예: 사무용품). 기본은 일반.
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<"KRW" | "USD" | "JPY">("KRW");
   const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
   const [approverIds, setApproverIds] = useState<string[]>([]);
   const [isFinalDecision, setIsFinalDecision] = useState(false);
@@ -41,6 +48,7 @@ export function ProposalFormPage() {
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
 
+  const isPurchase = kind.trim() === PURCHASE_KIND;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +71,10 @@ export function ProposalFormPage() {
         setTitle(target.title);
         setTopic(target.topic);
         setContent(target.content);
+        setVendorName(target.vendor_name ?? "");
+        setProjectId(target.project_id ? String(target.project_id) : "");
+        setAmount(target.amount === null || target.amount === undefined ? "" : String(target.amount));
+        setCurrency(target.currency ?? "KRW");
       })
       .catch((err) => {
         logError("Proposals", "수정 불러오기 실패", err);
@@ -70,6 +82,15 @@ export function ProposalFormPage() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, editId, user?.id]);
+
+  // 진행 중인 프로젝트 목록 (프로젝트 관리). 수정 중인 품의서가 이미 고른 프로젝트는 끝났더라도 목록에 남긴다.
+  useEffect(() => {
+    apiGet<Project[]>("/api/projects")
+      .then((list) => setProjects(list.filter((p) => (p.status !== "completed" && p.status !== "discarded") || String(p.id) === projectId)))
+      .catch((err) => logError("Proposals", "프로젝트 목록 조회 실패", err));
+    // 화면이 열릴 때와 수정 불러오기로 선택값이 정해질 때 한 번씩 다시 조회한다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit]);
 
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -106,6 +127,10 @@ export function ProposalFormPage() {
         title,
         topic,
         content,
+        vendor_name: vendorName.trim() || null,
+        project_id: projectId ? Number(projectId) : null,
+        amount: amount.trim() === "" ? null : Number(amount),
+        currency,
         is_final_decision: isFinalDecision,
         end_title: isFinalDecision ? null : endTitle,
         approver_ids: isFinalDecision ? [] : approverIds.map(Number),
@@ -196,6 +221,71 @@ export function ProposalFormPage() {
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
           </div>
+
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-project">
+              프로젝트
+            </label>
+            <select
+              id="proposal-project"
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+            >
+              <option value="">일반 (프로젝트와 상관없는 구매)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {p.client_name} ({PROJECT_STATUS_LABELS[p.status]})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-vendor">
+                거래처명{isPurchase ? "" : " (선택)"}
+              </label>
+              <input
+                id="proposal-vendor"
+                required={isPurchase}
+                value={vendorName}
+                onChange={(e) => setVendorName(e.target.value)}
+                maxLength={200}
+                placeholder="예: 대성RF"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-amount">
+                금액{isPurchase ? " (부가세 별도)" : " (선택)"}
+              </label>
+              <div className="flex gap-2">
+                <select
+                  aria-label="통화"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value as "KRW" | "USD" | "JPY")}
+                  className="rounded-lg border border-border px-2 py-2 text-sm outline-none focus:border-primary bg-bg"
+                >
+                  <option value="KRW">원 (₩)</option>
+                  <option value="USD">달러 ($)</option>
+                  <option value="JPY">엔 (¥)</option>
+                </select>
+                <input
+                  id="proposal-amount"
+                  type="number"
+                  min={0}
+                  step="any"
+                  required={isPurchase}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0"
+                  className="min-w-0 flex-1 rounded-lg border border-border px-3 py-2 text-sm text-right tabular-nums outline-none focus:border-primary bg-bg"
+                />
+              </div>
+            </div>
+          </div>
+          {isPurchase && <p className="-mt-2 text-xs text-text-muted">여기에 적은 거래처·금액은 발주서를 만들 때 그대로 이어받습니다.</p>}
 
           <div>
             <label className="block text-xs text-text-muted mb-1.5">내용 (본문 도입 문장)</label>

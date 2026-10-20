@@ -47,7 +47,7 @@ describe("구매 품의서 카드", () => {
     const h = renderCard(proposal(), [order()]);
     expect(screen.getByText("발주 완료")).toBeTruthy();
     expect(screen.getByText("한솔전자")).toBeTruthy();
-    expect(screen.getByText("₩584,380")).toBeTruthy();
+    expect(screen.getByText("₩584,380, 부가세 ₩58,438")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "발송 확인" }));
     expect(h.onToggleSent).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByRole("button", { name: "발주" }));

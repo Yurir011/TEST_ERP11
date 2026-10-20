@@ -7,6 +7,7 @@ import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
+import { formatProposalAmount } from "./purchaseFlow";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal, type ProposalAttachment } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
@@ -196,6 +197,17 @@ export function ProposalDetailModal({
             <p className="font-medium">{proposal.department_name}</p>
           </div>
         </div>
+
+        {(proposal.vendor_name || formatProposalAmount(proposal) || proposal.project_name) && (
+          <div className="bg-bg rounded-xl p-4 text-sm mb-3 grid grid-cols-[64px_1fr] gap-y-1">
+            <span className="text-text-muted">프로젝트</span>
+            <span>{proposal.project_name || "일반"}</span>
+            <span className="text-text-muted">거래처</span>
+            <span>{proposal.vendor_name || "-"}</span>
+            <span className="text-text-muted">금액</span>
+            <span className="tabular-nums">{formatProposalAmount(proposal) ?? "-"}</span>
+          </div>
+        )}
 
         <div className="bg-bg rounded-xl p-4 text-sm mb-4">
           <p>1. 아래와 같이 {proposal.topic}을 진행하고자 하오니 검토하여 승인해 주십시오.</p>

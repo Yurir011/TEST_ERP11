@@ -10,7 +10,8 @@ from app.models.project_document import ProjectDocType, ProjectDocument, Project
 from app.models.proposal import PURCHASE_KIND, Proposal, ProposalStatus
 from app.models.user import User, is_admin_role
 from app.routers.proposals._common import PREFIX, _get_or_404, _to_out, logger
-from app.schemas.proposal import OrderFlowToggle, ProposalOut
+from app.schemas.proposal import OrderFlowToggle, OrderPaymentIn, ProposalOut
+from app.services.purchase_ledger import sync_purchase_transaction
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
 
@@ -47,11 +48,39 @@ def set_order_sent(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재가 승인된 발주서가 있어야 발송 확인을 할 수 있습니다.")
         p.order_sent_at = p.order_sent_at or datetime.now(timezone.utc)
         p.order_sent_by = p.order_sent_by or current_user.id
+        # 발주 완료 때 고른 결제 방법 (처음 발주 완료할 때만 받는다. 고르지 않으면 미입금)
+        if p.payment_method is None:
+            if payload.payment_method == "card" and payload.payment_card is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="법인카드는 카드를 골라야 합니다.")
+            p.payment_method = payload.payment_method
+            p.payment_card = payload.payment_card if payload.payment_method == "card" else None
     else:
         if p.received_at is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입고 확인을 먼저 취소해야 합니다.")
         p.order_sent_at = None
         p.order_sent_by = None
+        p.payment_method = None
+        p.payment_card = None
+    sync_purchase_transaction(db, p, current_user)  # 매입매출관리의 매입 반영 (발송 확인 → 매입 등록, 취소 → 삭제)
+    db.commit()
+    return _to_out(_get_or_404(db, proposal_id))
+
+
+@router.put("/{proposal_id}/order-payment", response_model=ProposalOut)
+def set_order_payment(
+    proposal_id: int, payload: OrderPaymentIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """발주 완료된 건의 결제 상태를 바꾼다: 입금 / 법인카드(카드 종류) / 미입금. 매입매출관리의 매입도 함께 바뀐다."""
+    p = _get_or_404(db, proposal_id)
+    _check_actor_and_kind(p, current_user)
+    if p.order_sent_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주 완료 후에 결제 상태를 정할 수 있습니다.")
+    if payload.payment_method == "card" and payload.payment_card is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="법인카드는 카드를 골라야 합니다.")
+    p.payment_method = payload.payment_method
+    p.payment_card = payload.payment_card if payload.payment_method == "card" else None
+    logger.debug(f"[Proposals] 결제 상태 변경: id={proposal_id}, method={p.payment_method}, card={p.payment_card}, by={current_user.id}")
+    sync_purchase_transaction(db, p, current_user)
     db.commit()
     return _to_out(_get_or_404(db, proposal_id))
 

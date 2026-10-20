@@ -20,7 +20,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { canComposeDocumentMail, openDocumentMail } from "../mail/documentMail";
 import { ProposalsPage } from "../proposals/ProposalsPage";
 import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
-import { OrderChoiceModal } from "../proposals/OrderChoiceModal";
+import { OrderChoiceModal, type OrderPayment } from "../proposals/OrderChoiceModal";
 import { ProposalAttachmentsModal } from "../proposals/ProposalAttachmentsModal";
 import { PurchaseProposalCard } from "../proposals/PurchaseProposalCard";
 import { computePurchaseFlow, isPurchaseProposal } from "../proposals/purchaseFlow";
@@ -570,17 +570,48 @@ export function ProjectDocumentsPage({
   }
 
   // 발주 선택 팝업의 "발주 완료": 온라인 주문처럼 발주서 없이 주문·결제를 마친 경우
-  async function handleOnlineOrderDone(p: Proposal) {
-    if (!(await confirm("온라인 주문 등으로 발주서 없이 '발주 완료' 처리할까요? 처리하면 입고 버튼을 누를 수 있습니다.", { okLabel: "발주 완료" }))) return;
-    logDebug("ProjectDocuments", `발주 완료(온라인 주문): proposal_id=${p.id}`);
+  async function handleOnlineOrderDone(p: Proposal, payment: OrderPayment) {
+    logDebug("ProjectDocuments", `발주 완료(온라인 주문): proposal_id=${p.id}, 결제=${payment.payment_method ?? "미입금"}`);
     setBusyId(p.id);
     try {
-      await apiPut(`/api/proposals/${p.id}/order-sent`, { value: true, online: true });
+      await apiPut(`/api/proposals/${p.id}/order-sent`, { value: true, online: true, ...payment });
       setOrderChoiceId(null);
       loadPurchaseCards();
     } catch (err) {
       logError("ProjectDocuments", "발주 완료 처리 실패", err);
       notifyError(err instanceof ApiError ? err.message : "발주 완료 처리 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // 발주 취소: 발송 확인(발주 완료)을 되돌려 발주 전 상태로 돌린다. 발주서는 그대로 남는다.
+  async function handleCancelOrder(p: Proposal) {
+    if (!(await confirm("발주를 취소할까요? 발송 확인(발주 완료)이 해제되고 결제 상태도 지워집니다. 작성한 발주서는 그대로 남습니다.", { okLabel: "발주 취소" }))) return;
+    logDebug("ProjectDocuments", `발주 취소: proposal_id=${p.id}`);
+    setBusyId(p.id);
+    try {
+      await apiPut(`/api/proposals/${p.id}/order-sent`, { value: false });
+      setOrderChoiceId(null);
+      loadPurchaseCards();
+    } catch (err) {
+      logError("ProjectDocuments", "발주 취소 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "발주 취소 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // 발주 완료된 건의 결제 상태(입금 / 법인카드 / 미입금) 변경 → 매입매출관리의 매입에도 반영된다
+  async function handleChangePayment(p: Proposal, payment: OrderPayment) {
+    logDebug("ProjectDocuments", `결제 상태 변경: proposal_id=${p.id}, 결제=${payment.payment_method ?? "미입금"}`);
+    setBusyId(p.id);
+    try {
+      await apiPut(`/api/proposals/${p.id}/order-payment`, payment);
+      loadPurchaseCards();
+    } catch (err) {
+      logError("ProjectDocuments", "결제 상태 변경 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "결제 상태를 바꾸지 못했습니다.");
     } finally {
       setBusyId(null);
     }
@@ -958,7 +989,9 @@ export function ProjectDocumentsPage({
               setOrderChoiceId(null);
               navigate(`/project-documents/new?type=purchase_order&proposal=${target.id}`);
             }}
-            onOnlineDone={() => void handleOnlineOrderDone(target)}
+            onOnlineDone={(payment) => void handleOnlineOrderDone(target, payment)}
+            onChangePayment={(payment) => void handleChangePayment(target, payment)}
+            onCancelOrder={() => void handleCancelOrder(target)}
             onOpenOrder={(doc) => {
               setOrderChoiceId(null);
               setDetailDoc(doc);

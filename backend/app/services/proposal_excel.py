@@ -7,6 +7,7 @@ from openpyxl.utils import get_column_letter
 
 from app.models.approval_step import ApprovalStepStatus
 from app.models.proposal import Proposal
+from app.services.proposal_pdf import format_proposal_amount
 
 STEP_STATUS_LABELS = {
     ApprovalStepStatus.pending: "대기",
@@ -42,6 +43,8 @@ def generate_proposal_excel(p: Proposal) -> bytes:
         ("부서", p.department_name),
         ("기안자", p.creator.name if p.creator else ""),
         ("제목", p.title),
+        *([("거래처", p.vendor_name or "")] if p.vendor_name else []),
+        *([("금액", format_proposal_amount(p.amount, p.currency))] if p.amount is not None else []),
         ("진행 내용", f"아래와 같이 {p.topic}을(를) 진행하고자 합니다."),
         ("내용", p.content),
     ]

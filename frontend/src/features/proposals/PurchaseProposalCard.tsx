@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ClampText } from "../../components/ui/ClampText";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import type { ProjectDocument } from "../projectDocuments/types";
-import { computePurchaseFlow, summarizeOrders, type FlowChip, type FlowTone } from "./purchaseFlow";
+import { computePurchaseFlow, summarizeOrders, summarizeProposal, type FlowChip, type FlowTone } from "./purchaseFlow";
 import { MAX_PROPOSAL_FILES, fileCountOf } from "./ProposalAttachmentsModal";
 import type { Proposal, ProposalAttachment } from "./types";
 
@@ -174,11 +174,11 @@ function ProposalViewButton({ chips, onOpenProposal }: { chips: FlowChip[]; onOp
 /** 입고 후 등록해야 하는 서류(거래명세서·세금계산서) 한 장의 등록 여부 칩. 입고 전에는 회색, 입고 후에는 등록됨(초록)/미등록(빨강). */
 function DocChip({ name, registered, received }: { name: string; registered: boolean; received: boolean }) {
   const tone = !received ? "bg-[#f1f2f4] text-text-muted" : registered ? "bg-tile-green text-tile-green-fg" : "bg-[#fef2f2] text-danger";
-  const text = !received ? "·" : registered ? "✓" : "미등록";
+  const text = !received ? " ·" : registered ? " ✓" : ""; // 미등록은 글자 없이 빨간색으로만 표시한다
   const title = !received ? `${name}: 입고 완료 후 등록합니다` : registered ? `${name} 등록됨` : `${name}이(가) 아직 등록되지 않았습니다`;
   return (
     <span title={title} aria-label={`${name} ${!received ? "입고 후 등록" : registered ? "등록됨" : "미등록"}`} className={`rounded-full px-2 py-px text-[11px] font-semibold whitespace-nowrap ${tone}`}>
-      {name} {text}
+      {name}{text}
     </span>
   );
 }
@@ -293,7 +293,8 @@ export function PurchaseProposalCard({
   canDelete,
 }: PurchaseProposalCardProps) {
   const flow = computePurchaseFlow(proposal, orders);
-  const summary = summarizeOrders(flow.activeOrders);
+  // 발주서가 있으면 발주서 값, 없으면 품의서에 적은 거래처·금액
+  const summary = summarizeOrders(flow.activeOrders) ?? summarizeProposal(proposal);
   // 저장·출력·엑셀·메일의 대상: 결재가 끝나 파일이 만들어진 문서만
   const proposalReady = proposal.status === "approved" && proposal.has_pdf;
   const readyOrders = flow.activeOrders.filter((d) => d.status === "approved" && d.has_pdf);
@@ -322,7 +323,8 @@ export function PurchaseProposalCard({
       }`}
     >
       {/* 제목 · 배지 · 날짜 */}
-      <div className="flex items-start gap-3 w-[250px] shrink-0">
+      <div className="flex flex-col gap-2.5 w-[250px] shrink-0">
+       <div className="flex items-start gap-3">
         <div className="w-12 h-12 rounded-full bg-tile-orange-fg text-white grid place-items-center shrink-0">
           <ShoppingCart size={21} />
         </div>
@@ -333,6 +335,33 @@ export function PurchaseProposalCard({
           <ProposalViewButton chips={flow.approval} onOpenProposal={onOpen} />
           <p className="text-xs text-text mt-1.5">{proposal.issue_date}</p>
           <p className="text-[11px] text-text-muted">No. {proposal.doc_no}</p>
+        </div>
+       </div>
+
+        {/* 저장/출력 아이콘 */}
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <ActionMenuButton icon={<Download size={15} />} label="저장" items={saveItems} emptyTitle="결재 승인 후 저장할 문서가 생깁니다." busy={busy} runLabel="선택 저장" />
+          <ActionMenuButton icon={<Sheet size={15} />} label="엑셀 저장" items={excelItems} emptyTitle="결재 승인 후 엑셀로 저장할 수 있습니다." busy={busy} runLabel="선택 엑셀 저장" />
+          <ActionMenuButton icon={<Printer size={15} />} label="출력" items={printItems} emptyTitle="결재 승인 후 출력할 문서가 생깁니다." busy={busy} runLabel="선택 출력" />
+          <ActionMenuButton icon={<Mail size={15} />} label="메일 발송" items={mailItems} emptyTitle="발주서가 작성되면 메일로 보낼 수 있습니다." busy={busy} runLabel="선택 메일 발송" />
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={!canDelete || busy}
+            title={
+              proposal.delete_requested
+                ? "삭제 결재가 진행 중입니다."
+                : !canDelete
+                  ? "작성자 또는 관리자(승인된 품의서)만 삭제할 수 있습니다."
+                  : proposal.status === "approved"
+                    ? "삭제 결재 요청"
+                    : "삭제"
+            }
+            aria-label="품의서 삭제"
+            className={`${ICON_BUTTON} hover:!text-danger hover:!border-danger/40`}
+          >
+            <Trash2 size={15} />
+          </button>
         </div>
       </div>
 
@@ -419,39 +448,15 @@ export function PurchaseProposalCard({
             <ClampText>{summary?.content ?? "-"}</ClampText>
           </div>
         </div>
+        <div className="bg-bg rounded-lg px-2.5 py-1">
+          <p className="text-[10px] text-text-muted">금액</p>
+          <p className="text-sm font-semibold text-primary tabular-nums truncate" title={summary?.total ? `${summary.total}, 부가세 ${summary.vat}` : undefined}>
+            {summary?.total ? `${summary.total}, 부가세 ${summary.vat}` : "-"}
+          </p>
+        </div>
       </div>
 
       {/* 합계 · 저장/출력 */}
-      <div className="flex flex-col items-end gap-1.5 min-w-[120px]" onClick={(e) => e.stopPropagation()}>
-        <div className="text-right">
-          <p className="text-[10px] text-text-muted">합계금액</p>
-          <p className="text-lg font-bold text-primary tabular-nums">{summary?.total ?? "-"}</p>
-        </div>
-        <div className="flex items-center gap-1">
-          <ActionMenuButton icon={<Download size={15} />} label="저장" items={saveItems} emptyTitle="결재 승인 후 저장할 문서가 생깁니다." busy={busy} runLabel="선택 저장" />
-          <ActionMenuButton icon={<Sheet size={15} />} label="엑셀 저장" items={excelItems} emptyTitle="결재 승인 후 엑셀로 저장할 수 있습니다." busy={busy} runLabel="선택 엑셀 저장" />
-          <ActionMenuButton icon={<Printer size={15} />} label="출력" items={printItems} emptyTitle="결재 승인 후 출력할 문서가 생깁니다." busy={busy} runLabel="선택 출력" />
-          <ActionMenuButton icon={<Mail size={15} />} label="메일 발송" items={mailItems} emptyTitle="발주서가 작성되면 메일로 보낼 수 있습니다." busy={busy} runLabel="선택 메일 발송" />
-          <button
-            type="button"
-            onClick={onDelete}
-            disabled={!canDelete || busy}
-            title={
-              proposal.delete_requested
-                ? "삭제 결재가 진행 중입니다."
-                : !canDelete
-                  ? "작성자 또는 관리자(승인된 품의서)만 삭제할 수 있습니다."
-                  : proposal.status === "approved"
-                    ? "삭제 결재 요청"
-                    : "삭제"
-            }
-            aria-label="품의서 삭제"
-            className={`${ICON_BUTTON} hover:!text-danger hover:!border-danger/40`}
-          >
-            <Trash2 size={15} />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

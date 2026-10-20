@@ -4,6 +4,7 @@ import { ApiError, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { isViewableInBrowser } from "./ProposalAttachmentsModal";
+import { formatProposalAmount } from "./purchaseFlow";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal, type ProposalAttachment } from "./types";
 
 /**
@@ -77,6 +78,17 @@ export function ProposalReferencePanel({ proposal, onClose }: { proposal: Propos
             {proposal.creator_name} · {proposal.department_name}
           </dd>
         </dl>
+
+        {(proposal.vendor_name || formatProposalAmount(proposal) || proposal.project_name) && (
+          <dl className="grid grid-cols-[72px_1fr] gap-y-1.5">
+            <dt className="text-xs text-text-muted">프로젝트</dt>
+            <dd>{proposal.project_name || "일반"}</dd>
+            <dt className="text-xs text-text-muted">거래처</dt>
+            <dd>{proposal.vendor_name || "-"}</dd>
+            <dt className="text-xs text-text-muted">금액</dt>
+            <dd className="tabular-nums">{formatProposalAmount(proposal) ?? "-"}</dd>
+          </dl>
+        )}
 
         <section>
           <p className="mb-1 text-xs text-text-muted">진행 내용</p>
