@@ -82,6 +82,8 @@ def _to_out(p: Proposal) -> ProposalOut:
         has_pdf=bool(p.file_path),
         reject_reason=p.reject_reason,
         delete_requested=bool(p.delete_requested),
+        order_sent_at=p.order_sent_at,
+        received_at=p.received_at,
         created_at=p.created_at,
     )
 

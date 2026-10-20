@@ -63,5 +63,7 @@ export interface Proposal {
   has_pdf: boolean;
   reject_reason: string | null;
   delete_requested: boolean; // 승인된 품의서의 삭제 결재가 진행 중
+  order_sent_at: string | null; // 구매 품의서: 발주서 발송 확인 시각
+  received_at: string | null; // 구매 품의서: 입고 확인 시각
   created_at: string;
 }

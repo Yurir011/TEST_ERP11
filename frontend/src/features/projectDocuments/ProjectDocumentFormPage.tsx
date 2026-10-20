@@ -7,6 +7,8 @@ import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPi
 import { useAuth } from "../../context/useAuth";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
+import { isPurchaseProposal } from "../proposals/purchaseFlow";
+import type { Proposal } from "../proposals/types";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload, downloadFile } from "../../lib/api";
 import { GRADE_LABELS, TITLE_LABELS, hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
@@ -42,6 +44,8 @@ export function ProjectDocumentFormPage() {
   // ?edit=문서ID 이면 기존 문서를 수정한다. 세금계산서는 팝빌 발행 전이면 승인된 문서도 수정할 수 있고,
   // 견적서/거래명세서는 반려(또는 작성 중)된 문서를 수정할 수 있다. 저장하면 결재를 다시 받아야 한다.
   const editId = searchParams.get("edit");
+  // ?proposal=품의서ID 이면 그 구매 품의서에서 발주서를 만든다 (구매 품의서 카드의 발주 버튼).
+  const proposalParam = searchParams.get("proposal");
   const isEdit = editId !== null && !isSet && isProjectDocType(typeParam);
   const docType: ProjectDocType = isProjectDocType(typeParam) ? typeParam : "quotation";
   const navigate = useNavigate();
@@ -62,6 +66,7 @@ export function ProjectDocumentFormPage() {
   const matchedClient = clients.find((c) => c.name === clientName.trim());
   const [managerName, setManagerName] = useState("");
   const [remark, setRemark] = useState(""); // 발주서 REMARK 칸
+  const [sourceProposal, setSourceProposal] = useState<Proposal | null>(null);
   const [currency, setCurrency] = useState<DocCurrency>("KRW");
   const [purposeType, setPurposeType] = useState<TaxInvoicePurpose>("청구");
   const [items, setItems] = useState<ProjectDocumentItemFormValues[]>([{ ...EMPTY_PROJECT_DOC_ITEM }]);
@@ -134,6 +139,28 @@ export function ProjectDocumentFormPage() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, editId]);
+
+  useEffect(() => {
+    if (!proposalParam || docType !== "purchase_order" || editId !== null) return;
+    logDebug("ProjectDocumentForm", `구매 품의서에서 발주서 작성: proposal_id=${proposalParam}`);
+    apiGet<Proposal[]>("/api/proposals")
+      .then((list) => {
+        const target = list.find((p) => String(p.id) === proposalParam);
+        if (!target || !isPurchaseProposal(target) || target.status !== "approved") {
+          setError("승인된 구매 품의서에서만 발주서를 만들 수 있습니다.");
+          return;
+        }
+        setSourceProposal(target);
+        // 발주서 하단 REMARK 칸에 근거 품의서 번호를 미리 적어 준다 (비어 있을 때만).
+        setRemark((prev) => prev || `품의서 No. ${target.doc_no}`);
+      })
+      .catch((err) => {
+        logError("ProjectDocumentForm", "구매 품의서 조회 실패", err);
+        setError("구매 품의서를 불러오지 못했습니다.");
+      });
+    // 화면이 열릴 때 한 번만 조회한다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     apiGet<Project[]>("/api/projects")
@@ -282,6 +309,12 @@ export function ProjectDocumentFormPage() {
       setError("관련 프로젝트 '기타'의 내용을 입력해주세요.");
       return;
     }
+    // 승인된 구매 품의서에서 만드는 발주서는 별도 결재 없이 바로 작성한다 (결재선 선택 창을 띄우지 않는다).
+    if (sourceProposal) {
+      logDebug("ProjectDocumentForm", `품의서 기반 발주서: 결재선 없이 작성 proposal_id=${sourceProposal.id}`);
+      void handleRequestApproval(null, [], true);
+      return;
+    }
     setShowApproverPicker(true);
   }
 
@@ -317,6 +350,7 @@ export function ProjectDocumentFormPage() {
       const createdResult = await apiPost<ProjectDocument | ProjectDocument[]>(endpoint, {
         ...projectPayload(projectId, projectOtherName),
         doc_type: docType,
+        proposal_id: docType === "purchase_order" ? (sourceProposal?.id ?? null) : null,
         issue_date: issueDate,
         currency,
         purpose_type: purposeType,
@@ -352,8 +386,12 @@ export function ProjectDocumentFormPage() {
         }
       }
 
-      notify("결재 요청이 완료되었습니다.");
-      navigate(routeProjectId ? `/projects/${routeProjectId}` : docType === "tax_invoice" ? "/tax-invoices" : "/project-documents", { replace: true });
+      notify(sourceProposal ? "발주서가 작성되었습니다. 거래처에 보낸 뒤 카드에서 발송 확인을 눌러 주세요." : "결재 요청이 완료되었습니다.");
+      // 구매 품의서 카드에서 왔으면 전자결재 화면(카드)으로 돌아간다.
+      navigate(
+        sourceProposal ? "/approval" : routeProjectId ? `/projects/${routeProjectId}` : docType === "tax_invoice" ? "/tax-invoices" : "/project-documents",
+        { replace: true },
+      );
     } catch (err) {
       logError("ProjectDocumentForm", "결재요청 실패", err);
       setError(err instanceof ApiError ? err.message : "결재요청 중 오류가 발생했습니다.");
@@ -402,6 +440,15 @@ export function ProjectDocumentFormPage() {
           <div className="flex items-start gap-2 bg-tile-orange text-tile-orange-fg rounded-xl px-4 py-3 text-xs">
             <Info size={14} className="mt-0.5 shrink-0" />
             <p>수정한 세금계산서는 결재를 다시 받아야 합니다. 승인되기 전까지는 출력·팝빌 발행을 할 수 없고, 재승인되면 매입매출 내역과, 대금 결제가 끝난 건은 입출금 내역(금액·거래처·입금/출금 구분)도 수정한 내용으로 함께 갱신됩니다. 결제일·결제방법·메모는 그대로 유지됩니다.</p>
+          </div>
+        )}
+
+        {sourceProposal && (
+          <div className="flex items-start gap-2 bg-tile-orange text-tile-orange-fg rounded-xl px-4 py-3 text-xs">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <p>
+              구매 품의서 <b>No. {sourceProposal.doc_no}</b> ({sourceProposal.title})에 대한 발주서입니다. 품의가 이미 승인되었으므로 별도 결재 없이 바로 작성되고, 품의서 카드에 발주서로 연결됩니다.
+            </p>
           </div>
         )}
 
@@ -581,7 +628,7 @@ export function ProjectDocumentFormPage() {
             disabled={isSubmitting}
             className="rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60"
           >
-            결재요청
+            {sourceProposal ? "발주서 작성" : "결재요청"}
           </button>
           <button
             type="button"

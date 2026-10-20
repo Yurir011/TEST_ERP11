@@ -65,6 +65,7 @@ export interface ProjectDocument {
   id: number;
   project_id: number | null; // null이면 "기타"(project_name에 직접 입력한 내용)
   project_name: string;
+  proposal_id: number | null; // 구매 품의서에서 만든 발주서이면 그 품의서
   doc_type: ProjectDocType;
   issue_date: string;
   doc_no: string | null;

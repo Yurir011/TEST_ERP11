@@ -59,6 +59,7 @@ def _to_out(doc: ProjectDocument, steps: list[ApprovalStep]) -> ProjectDocumentO
         id=doc.id,
         project_id=doc.project_id,
         project_name=doc.project_display_name,
+        proposal_id=doc.proposal_id,
         doc_type=doc.doc_type,
         issue_date=doc.issue_date,
         doc_no=doc.doc_no,

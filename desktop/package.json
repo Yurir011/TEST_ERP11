@@ -1,7 +1,7 @@
 {
   "name": "bench-desktop",
   "productName": "BENCH ERP",
-  "version": "0.72.9",
+  "version": "0.72.10",
   "private": true,
   "description": "BENCH ERP 데스크톱 클라이언트 (NFC 카드 로그인, 메신저 알림)",
   "main": "dist/main.js",

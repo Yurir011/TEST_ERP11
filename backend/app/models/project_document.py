@@ -76,6 +76,8 @@ class ProjectDocument(Base):
     # 거래처관리에 등록되지 않은 거래처라도 엑셀/PDF 양식의 공급자(공급받는자) 칸을 채울 수 있도록 문서에 함께 저장한다.
     counterparty_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     other_client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"), nullable=True)
+    # 구매 품의서에서 만든 발주서이면 그 품의서. 품의서 카드가 발주서를 찾는 데 쓴다 (품의서를 지워도 발주서는 남는다).
+    proposal_id: Mapped[int | None] = mapped_column(ForeignKey("proposals.id", ondelete="SET NULL"), index=True, nullable=True)
     doc_type: Mapped[ProjectDocType] = mapped_column(Enum(ProjectDocType, name="projectdoctype"), index=True)
     issue_date: Mapped[date] = mapped_column(Date)
     doc_no: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 견적번호 (MMDD-NN, 당일 발행 순번). 견적서/거래명세서만 사용

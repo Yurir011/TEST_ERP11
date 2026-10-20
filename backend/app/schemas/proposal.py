@@ -64,6 +64,12 @@ class ProposalStepOut(BaseModel):
     decided_at: datetime | None
 
 
+class OrderFlowToggle(BaseModel):
+    """발송 확인·입고 확인을 켜거나(true) 취소(false)한다."""
+
+    value: bool
+
+
 class ProposalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,4 +91,6 @@ class ProposalOut(BaseModel):
     has_pdf: bool
     reject_reason: str | None
     delete_requested: bool = False
+    order_sent_at: datetime | None = None
+    received_at: datetime | None = None
     created_at: datetime

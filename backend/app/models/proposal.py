@@ -18,6 +18,9 @@ DEPARTMENT_NAME = "연구개발팀"
 
 MAX_APPROVAL_STEPS = 3
 
+# 구매 품의서: 승인 후 발주서 작성 → 발송 확인 → 입고 확인까지 한 장의 카드로 이어서 관리하는 품의서 종류 이름.
+PURCHASE_KIND = "구매"
+
 
 class ProposalStatus(str, enum.Enum):
     pending = "pending"  # 결재 대기 중 (현재 단계 결재권자의 승인 대기)
@@ -51,6 +54,11 @@ class Proposal(Base):
     delete_requested: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     delete_prev_steps: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 구매 품의서의 발주·입고 진행(사용자가 직접 확인 처리). 발송 확인 후에만 입고 확인을 할 수 있다.
+    order_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    order_sent_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

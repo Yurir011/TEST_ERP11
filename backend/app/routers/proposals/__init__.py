@@ -5,11 +5,12 @@
   crud      작성, 수정, 삭제
   approval  승인·반려, 삭제 결재 요청
   files     PDF 다운로드, 첨부 추가·다운로드·삭제
+  order_flow 구매 품의서의 발송 확인·입고 확인
 PDF 생성은 services/proposal_files.py 에 있다.
 """
 from fastapi import APIRouter
 
-from app.routers.proposals import approval, crud, files, listing
+from app.routers.proposals import approval, crud, files, listing, order_flow
 
 router = APIRouter()
 
@@ -18,3 +19,4 @@ router.include_router(listing.router)
 router.include_router(crud.router)
 router.include_router(approval.router)
 router.include_router(files.router)
+router.include_router(order_flow.router)

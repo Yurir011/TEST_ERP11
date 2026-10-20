@@ -7,6 +7,7 @@ import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCh
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { PURCHASE_KIND } from "./purchaseFlow";
 import type { Proposal } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
@@ -178,6 +179,11 @@ export function ProposalFormPage() {
               placeholder="예: 구매, 출장 (비워두면 그냥 '품의서'로 표시됩니다)"
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
+            {kind.trim() === PURCHASE_KIND && (
+              <p className="text-xs text-text-muted mt-1.5">
+                구매 품의서는 결재 승인 후 발주서 작성, 발송 확인, 입고 확인, 서류 첨부까지 목록의 카드 한 장에서 이어서 관리됩니다.
+              </p>
+            )}
           </div>
 
           <div>

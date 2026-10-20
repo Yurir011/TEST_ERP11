@@ -21,11 +21,12 @@ function pdfFilename(p: Proposal): string {
 
 export function ProposalsPage({
   embedded = false,
+  excludeKind,
   openId,
   modalOnly = false,
   onDecided,
   onModalClose,
-}: { embedded?: boolean } & OpenOverlayProps) {
+}: { embedded?: boolean; /** 이 종류의 품의서는 표에서 뺀다 (카드로 따로 보여 주는 종류) */ excludeKind?: string } & OpenOverlayProps) {
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [pendingForMe, setPendingForMe] = useState<Proposal[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export function ProposalsPage({
   function loadProposals() {
     logDebug("Proposals", "목록 조회 시작");
     apiGet<Proposal[]>("/api/proposals")
-      .then(setProposals)
+      .then((list) => setProposals(excludeKind ? list.filter((p) => p.kind !== excludeKind) : list))
       .catch((err) => {
         logError("Proposals", "목록 조회 실패", err);
         setError("품의서 목록을 불러오지 못했습니다.");

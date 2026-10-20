@@ -81,6 +81,7 @@ class TaxInvoiceOcrOut(BaseModel):
 class ProjectDocumentCreate(BaseModel):
     project_id: int | None = None  # None이면 "기타" - project_other_name 필수
     project_other_name: str | None = None
+    proposal_id: int | None = None  # 구매 품의서에서 발주서를 만들 때 그 품의서 (발주서만 사용)
     doc_type: ProjectDocType
     issue_date: date
     currency: DocCurrency = DocCurrency.KRW
@@ -186,6 +187,7 @@ class ProjectDocumentOut(BaseModel):
     id: int
     project_id: int | None
     project_name: str
+    proposal_id: int | None = None
     doc_type: ProjectDocType
     issue_date: date
     doc_no: str | None

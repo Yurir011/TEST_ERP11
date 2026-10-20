@@ -11,6 +11,7 @@ from app.models.approval_step import ApprovalStep
 from app.models.client import Client
 from app.models.project import Project
 from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentItem, ProjectDocumentStatus
+from app.models.proposal import PURCHASE_KIND, Proposal, ProposalStatus
 from app.models.user import User, has_menu_permission
 from app.schemas.project_document import ProjectDocumentCreate, ProjectDocumentOut, ProjectDocumentSetCreate, ProjectDocumentUpdate
 from app.services import project_document_files as doc_files
@@ -50,6 +51,19 @@ def _resolve_project(db: Session, payload: ProjectDocumentCreate) -> Project | N
     return project
 
 
+def _check_source_proposal(db: Session, payload: ProjectDocumentCreate) -> None:
+    """구매 품의서에서 발주서를 만드는 경우, 품의서가 실제로 있고 승인된 구매 품의서인지 확인한다."""
+    if payload.proposal_id is None:
+        return
+    if payload.doc_type != ProjectDocType.purchase_order:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주서만 품의서와 연결할 수 있습니다.")
+    proposal = db.query(Proposal).filter(Proposal.id == payload.proposal_id).first()
+    if proposal is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="연결할 품의서를 찾을 수 없습니다.")
+    if proposal.kind != PURCHASE_KIND or proposal.status != ProposalStatus.approved:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 구매 품의서에서만 발주서를 만들 수 있습니다.")
+
+
 def _new_document(
     db: Session, payload: ProjectDocumentCreate, doc_type: ProjectDocType, project: Project | None, current_user: User
 ) -> ProjectDocument:
@@ -57,6 +71,7 @@ def _new_document(
     doc = ProjectDocument(
         project_id=payload.project_id,
         project_other_name=payload.project_other_name,
+        proposal_id=payload.proposal_id if doc_type == ProjectDocType.purchase_order else None,
         doc_type=doc_type,
         issue_date=payload.issue_date,
         currency=payload.currency.value,
@@ -101,6 +116,13 @@ def create_project_document(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 작성 권한이 없습니다.")
 
     project = _resolve_project(db, payload)
+    _check_source_proposal(db, payload)
+    if payload.proposal_id is not None:
+        # 승인된 구매 품의서에서 만드는 발주서는 품의 결재로 이미 승인된 것이므로 별도 결재 없이 바로 확정한다.
+        payload.is_final_decision = True
+        payload.end_title = None
+        payload.approver_ids = []
+        logger.debug(f"[ProjectDocuments] 품의서 기반 발주서: 별도 결재 없이 확정 proposal_id={payload.proposal_id}")
 
     logger.debug(
         f"[ProjectDocuments] 등록: doc_type={payload.doc_type}, project_id={payload.project_id}, "

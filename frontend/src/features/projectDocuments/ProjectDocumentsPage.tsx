@@ -13,12 +13,15 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { useAuth } from "../../context/useAuth";
-import { ApiError, apiDelete, apiGet, apiPost, downloadFile, openFile } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile, openFile } from "../../lib/api";
+import { isAdminRole } from "../../lib/auth";
 import { getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
 import { canComposeDocumentMail, openDocumentMail } from "../mail/documentMail";
 import { ProposalsPage } from "../proposals/ProposalsPage";
 import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
+import { PurchaseProposalCard } from "../proposals/PurchaseProposalCard";
+import { isPurchaseProposal } from "../proposals/purchaseFlow";
 import type { Proposal } from "../proposals/types";
 import { HometaxImportModal } from "../transactions/HometaxImportModal";
 import { ApproverPickerModal } from "./ApproverPickerModal";
@@ -113,6 +116,9 @@ export function ProjectDocumentsPage({
   // "전체" 탭에서는 품의서도 같은 목록에 함께 보여준다.
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [proposalDetail, setProposalDetail] = useState<Proposal | null>(null);
+  // 구매 품의서 카드(품의 → 발주 → 입고): "전체"와 "품의서" 탭 위쪽에 카드로 보여 준다.
+  const [purchaseProposals, setPurchaseProposals] = useState<Proposal[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<ProjectDocument[]>([]);
   const openTargetId = useOpenTarget(openId);
   const openedTargetRef = useRef(false);
   const listTopRef = useRef<HTMLDivElement>(null);
@@ -170,6 +176,24 @@ export function ProjectDocumentsPage({
       .catch((err) => logError("ProjectDocuments", "품의서 목록 조회 실패", err));
   }
 
+  function loadPurchaseCards() {
+    if (lockedDocType || (tab !== "all" && tab !== "proposal")) {
+      setPurchaseProposals([]);
+      setPurchaseOrders([]);
+      return;
+    }
+    logDebug("ProjectDocuments", "구매 품의서 카드 조회 시작");
+    Promise.all([
+      apiGet<Proposal[]>("/api/proposals"),
+      apiGet<ProjectDocument[]>("/api/project-documents?doc_type=purchase_order"),
+    ])
+      .then(([proposalList, orderList]) => {
+        setPurchaseProposals(proposalList.filter(isPurchaseProposal));
+        setPurchaseOrders(orderList);
+      })
+      .catch((err) => logError("ProjectDocuments", "구매 품의서 카드 조회 실패", err));
+  }
+
   function loadPendingForMe() {
     apiGet<ProjectDocument[]>("/api/project-documents?status=pending&approver_mine=true")
       .then((list) =>
@@ -183,6 +207,7 @@ export function ProjectDocumentsPage({
   useEffect(() => {
     loadDocs();
     loadProposals();
+    loadPurchaseCards();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -195,6 +220,7 @@ export function ProjectDocumentsPage({
   function reloadAll() {
     loadDocs();
     loadProposals();
+    loadPurchaseCards();
     loadPendingForMe();
   }
 
@@ -459,6 +485,69 @@ export function ProjectDocumentsPage({
     onError: setError,
   });
 
+  // 구매 품의서 카드: 발송 확인 / 입고 확인은 사용자가 직접 확인해 처리한다.
+  async function handleToggleSent(p: Proposal, sent: boolean) {
+    const message = sent
+      ? "발주서를 거래처에 보냈습니까? 발송 확인 후에 입고 처리를 할 수 있습니다."
+      : "발송 확인을 취소할까요?";
+    if (!(await confirm(message, { okLabel: sent ? "발송 확인" : "취소" }))) return;
+    logDebug("ProjectDocuments", `발송 확인 변경: proposal_id=${p.id}, sent=${sent}`);
+    setBusyId(p.id);
+    try {
+      await apiPut(`/api/proposals/${p.id}/order-sent`, { value: sent });
+      loadPurchaseCards();
+    } catch (err) {
+      logError("ProjectDocuments", "발송 확인 변경 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "발송 확인 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleToggleReceived(p: Proposal, received: boolean) {
+    const message = received ? "물품을 받았습니까? 입고 완료로 처리합니다." : "입고 완료를 취소할까요?";
+    if (!(await confirm(message, { okLabel: received ? "입고 완료" : "취소" }))) return;
+    logDebug("ProjectDocuments", `입고 확인 변경: proposal_id=${p.id}, received=${received}`);
+    setBusyId(p.id);
+    try {
+      await apiPut(`/api/proposals/${p.id}/received`, { value: received });
+      loadPurchaseCards();
+    } catch (err) {
+      logError("ProjectDocuments", "입고 확인 변경 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "입고 처리 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const purchaseCards = purchaseProposals.length > 0 && (
+    <div className="mb-6">
+      <h3 className="text-sm font-medium text-text-muted mb-2.5">구매 품의 진행 ({purchaseProposals.length})</h3>
+      <div className="flex flex-col gap-3">
+        {purchaseProposals.map((p) => (
+          <PurchaseProposalCard
+            key={p.id}
+            proposal={p}
+            orders={purchaseOrders}
+            canManage={!!user && (p.created_by === user.id || isAdminRole(user.role))}
+            busy={busyId === p.id}
+            onOpen={() => setProposalDetail(p)}
+            onOrder={() => {
+              logDebug("ProjectDocuments", `구매 품의서에서 발주서 작성: proposal_id=${p.id}`);
+              navigate(`/project-documents/new?type=purchase_order&proposal=${p.id}`);
+            }}
+            onOpenOrder={setDetailDoc}
+            onToggleSent={(sent) => handleToggleSent(p, sent)}
+            onToggleReceived={(received) => handleToggleReceived(p, received)}
+            onAttach={() => setProposalDetail(p)}
+            onDownload={() => handleProposalDownload(p)}
+            onPrint={() => handleProposalPrint(p)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+
   async function handleProposalDownload(p: Proposal) {
     setBusyId(p.id);
     try {
@@ -514,7 +603,11 @@ export function ProjectDocumentsPage({
       : (() => {
           const rows: DocListRow[] = visibleDocs.map((doc): DocListRow => ({ kind: "doc", doc }));
           if (lockedDocType || tab !== "all") return rows;
-          const all: DocListRow[] = [...rows, ...proposals.map((proposal): DocListRow => ({ kind: "proposal", proposal }))];
+          // 구매 품의서는 위쪽 카드로 보여 주므로 표에서는 뺀다.
+          const all: DocListRow[] = [
+            ...rows,
+            ...proposals.filter((p) => !isPurchaseProposal(p)).map((proposal): DocListRow => ({ kind: "proposal", proposal })),
+          ];
           const dateOf = (r: DocListRow) => (r.kind === "doc" ? r.doc.issue_date : r.proposal.issue_date);
           return all.sort((a, b) => dateOf(b).localeCompare(dateOf(a)));
         })();
@@ -604,10 +697,15 @@ export function ProjectDocumentsPage({
       )}
 
       {tab === "proposal" ? (
-        <ProposalsPage embedded />
+        <>
+          {purchaseCards}
+          <ProposalsPage embedded excludeKind="구매" />
+        </>
       ) : (
         <>
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
+
+      {purchaseCards}
 
       {lockedDocType === "tax_invoice" && docs !== null && docs.length > 0 && (
         <div ref={listTopRef} className="flex flex-wrap items-center gap-x-16 gap-y-3 mb-4 scroll-mt-4">
