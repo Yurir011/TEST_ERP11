@@ -5,7 +5,7 @@ import { DialogProvider } from "../../components/ui/dialog/DialogProvider";
 import { MAX_PROPOSAL_FILES, ProposalAttachmentsModal, pickUploadable } from "./ProposalAttachmentsModal";
 import type { Proposal } from "./types";
 
-const api = vi.hoisted(() => ({ apiUpload: vi.fn(), apiDelete: vi.fn(), downloadFile: vi.fn() }));
+const api = vi.hoisted(() => ({ apiUpload: vi.fn(), apiDelete: vi.fn(), downloadFile: vi.fn(), openFile: vi.fn() }));
 vi.mock("../../lib/api", () => ({
   ...api,
   ApiError: class ApiError extends Error {
@@ -17,7 +17,11 @@ vi.mock("../../lib/api", () => ({
   },
 }));
 
-beforeEach(() => Object.values(api).forEach((f) => f.mockReset()));
+beforeEach(() => {
+  Object.values(api).forEach((f) => f.mockReset());
+  api.downloadFile.mockResolvedValue(undefined);
+  api.openFile.mockResolvedValue(undefined);
+});
 afterEach(cleanup);
 
 const att = (id: number) => ({ id, kind: "file" as const, label: `서류${id}.pdf`, url: null, created_by: 1, created_at: "2026-10-20T00:00:00" });
@@ -56,6 +60,38 @@ describe("첨부 파일 팝업", () => {
     expect(screen.getByLabelText("첨부 개수").textContent).toBe("첨부 3/7");
     fireEvent.click(screen.getByLabelText("서류1.pdf 내려받기"));
     expect(api.downloadFile).toHaveBeenCalledWith("/api/proposals/1/attachments/1/file", "서류1.pdf");
+  });
+
+  it("파일 이름을 누르면 PDF·이미지는 새 창에서 열고, 엑셀 같은 문서는 내려받는다", () => {
+    const p = { id: 1, title: "샘플", attachments: [
+      { id: 1, kind: "file", label: "견적서.pdf", url: null, created_by: 1, created_at: "x" },
+      { id: 2, kind: "file", label: "사진.PNG", url: null, created_by: 1, created_at: "x" },
+      { id: 3, kind: "file", label: "거래명세서.xlsx", url: null, created_by: 1, created_at: "x" },
+    ] } as unknown as Proposal;
+    renderModal(p);
+    fireEvent.click(screen.getByRole("button", { name: "견적서.pdf 열기" }));
+    expect(api.openFile).toHaveBeenCalledWith("/api/proposals/1/attachments/1/file");
+    fireEvent.click(screen.getByRole("button", { name: "사진.PNG 열기" }));
+    expect(api.openFile).toHaveBeenCalledWith("/api/proposals/1/attachments/2/file"); // 대문자 확장자도 인식
+    fireEvent.click(screen.getByRole("button", { name: "거래명세서.xlsx 열기" }));
+    expect(api.downloadFile).toHaveBeenCalledWith("/api/proposals/1/attachments/3/file", "거래명세서.xlsx");
+    expect(api.openFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("링크는 이름을 누르면 새 창으로 열린다", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const p = { id: 1, title: "샘플", attachments: [{ id: 9, kind: "link", label: "거래처 견적 페이지", url: "https://example.com/q", created_by: 1, created_at: "x" }] } as unknown as Proposal;
+    renderModal(p);
+    fireEvent.click(screen.getByRole("button", { name: "거래처 견적 페이지 열기" }));
+    expect(open).toHaveBeenCalledWith("https://example.com/q", "_blank");
+    open.mockRestore();
+  });
+
+  it("열지 못하면 이유를 알린다", async () => {
+    api.openFile.mockRejectedValue(new Error("x"));
+    renderModal(proposal(1));
+    fireEvent.click(screen.getByRole("button", { name: "서류1.pdf 열기" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("파일을 열지 못했습니다.");
   });
 
   it("고른 파일을 하나씩 올리고, 형식이 맞지 않는 파일은 올리지 않고 알린다", async () => {

@@ -1,7 +1,7 @@
 import { Download, ExternalLink, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
-import { ApiError, apiDelete, apiUpload, downloadFile } from "../../lib/api";
+import { ApiError, apiDelete, apiUpload, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { Proposal, ProposalAttachment } from "./types";
 
@@ -16,6 +16,10 @@ const ALLOWED_EXTENSIONS = PROPOSAL_FILE_ACCEPT.split(",").map((e) => e.slice(1)
 export const fileCountOf = (p: Proposal) => p.attachments.filter((a) => a.kind === "file").length;
 
 const extensionOf = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
+
+/** 브라우저가 새 창에서 바로 보여 줄 수 있는 형식 (그 밖의 엑셀·워드 등은 내려받는다) */
+const VIEWABLE_EXTENSIONS = ["png", "jpg", "jpeg", "pdf", "txt"];
+export const isViewableInBrowser = (name: string) => VIEWABLE_EXTENSIONS.includes(extensionOf(name));
 
 /** 고른 파일 중 올릴 수 있는 것만 남기고, 못 올리는 이유를 모아 돌려준다 (남은 칸 수·형식·크기 기준). */
 export function pickUploadable(files: File[], remaining: number): { accepted: File[]; problems: string[] } {
@@ -90,9 +94,27 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
     }
   }
 
+  /** 이름을 누르면 바로 연다: 링크는 새 창, PDF·이미지는 새 창에서 보기, 그 밖의 문서는 내려받기 */
   function handleOpen(a: ProposalAttachment) {
-    if (a.kind === "link" && a.url) window.open(a.url, "_blank");
-    else downloadFile(`/api/proposals/${proposal.id}/attachments/${a.id}/file`, a.label).catch((err) => logError("ProposalAttachments", "다운로드 실패", err));
+    if (a.kind === "link" && a.url) {
+      window.open(a.url, "_blank");
+      return;
+    }
+    const path = `/api/proposals/${proposal.id}/attachments/${a.id}/file`;
+    logDebug("ProposalAttachments", `첨부 열기: attachment_id=${a.id}, ${isViewableInBrowser(a.label) ? "새 창" : "내려받기"}`);
+    const run = isViewableInBrowser(a.label) ? openFile(path) : downloadFile(path, a.label);
+    run.catch((err) => {
+      logError("ProposalAttachments", "첨부 열기 실패", err);
+      setProblems([err instanceof ApiError ? err.message : "파일을 열지 못했습니다."]);
+    });
+  }
+
+  /** 항상 내려받기 (열 수 있는 형식이어도 저장하고 싶을 때) */
+  function handleDownload(a: ProposalAttachment) {
+    downloadFile(`/api/proposals/${proposal.id}/attachments/${a.id}/file`, a.label).catch((err) => {
+      logError("ProposalAttachments", "다운로드 실패", err);
+      setProblems([err instanceof ApiError ? err.message : "파일을 내려받지 못했습니다."]);
+    });
   }
 
   return (
@@ -157,18 +179,28 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
               {proposal.attachments.map((a) => (
                 <li key={a.id} className="flex items-center gap-2 rounded-lg bg-bg px-3 py-2 text-sm">
                   <Paperclip size={14} className="shrink-0 text-text-muted" />
-                  <span className="flex-1 min-w-0 truncate" title={a.label}>
-                    {a.label}
-                  </span>
                   <button
                     type="button"
                     onClick={() => handleOpen(a)}
-                    aria-label={a.kind === "link" ? `${a.label} 열기` : `${a.label} 내려받기`}
-                    title={a.kind === "link" ? "열기" : "내려받기"}
-                    className="shrink-0 rounded p-1 text-text-muted hover:text-primary"
+                    aria-label={`${a.label} 열기`}
+                    title={a.kind === "link" || isViewableInBrowser(a.label) ? "누르면 새 창에서 열립니다" : "누르면 내려받습니다 (이 형식은 브라우저에서 바로 열 수 없습니다)"}
+                    className="flex-1 min-w-0 truncate text-left hover:text-primary hover:underline underline-offset-2"
                   >
-                    {a.kind === "link" ? <ExternalLink size={14} /> : <Download size={14} />}
+                    {a.label}
                   </button>
+                  {a.kind === "link" ? (
+                    <ExternalLink size={14} className="shrink-0 text-text-muted" aria-hidden />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(a)}
+                      aria-label={`${a.label} 내려받기`}
+                      title="내려받기"
+                      className="shrink-0 rounded p-1 text-text-muted hover:text-primary"
+                    >
+                      <Download size={14} />
+                    </button>
+                  )}
                   {canEdit && (
                     <button
                       type="button"
