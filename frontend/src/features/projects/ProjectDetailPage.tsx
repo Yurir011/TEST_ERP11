@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet, apiPut, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { DateNotesCard } from "./DateNotesCard";
 import { PurchaseProgressCard } from "./PurchaseProgressCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
 import { ScheduleProgressCard } from "./ScheduleProgressCard";
@@ -161,6 +162,8 @@ export function ProjectDetailPage() {
           <ScheduleProgressCard project={project} stages={stages} onUpdated={setProject} />
 
           <ProgressSectionCard project={project} onStagesChange={setStages} />
+
+          <DateNotesCard project={project} />
 
           <PurchaseProgressCard projectId={project.id} />
 

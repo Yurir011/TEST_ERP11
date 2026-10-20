@@ -1,0 +1,253 @@
+import { CalendarDays, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useDialog } from "../../components/ui/dialog/useDialog";
+import { useAuth } from "../../context/useAuth";
+import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
+import { isAdminRole } from "../../lib/auth";
+import { todayISO } from "../../lib/date";
+import { logDebug, logError } from "../../lib/logger";
+import {
+  MAX_NOTE_LENGTH,
+  WEEKDAYS,
+  formatNoteDate,
+  formatNoteTime,
+  groupNotesByDate,
+  monthCells,
+  offsetFromStart,
+  type ProjectDateNote,
+} from "./dateNotes";
+import { parseDate } from "./timeline";
+import type { Project } from "./types";
+
+// "날짜별 메모": 평소에는 날짜별 메모 목록만 보이고, 날짜 버튼을 눌렀을 때만 작은 달력이 뜬다. 메모마다 작성자와 시간이 남는다.
+export function DateNotesCard({ project }: { project: Project }) {
+  const { user } = useAuth();
+  const { confirm } = useDialog();
+  const today = todayISO();
+  const [notes, setNotes] = useState<ProjectDateNote[] | null>(null);
+  const [selected, setSelected] = useState(today);
+  const [viewMonth, setViewMonth] = useState(() => ({ year: parseDate(today).getFullYear(), month: parseDate(today).getMonth() }));
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(() => {
+    logDebug("DateNotes", `날짜별 메모 조회: project_id=${project.id}`);
+    apiGet<ProjectDateNote[]>(`/api/projects/${project.id}/date-notes`)
+      .then(setNotes)
+      .catch((err) => {
+        logError("DateNotes", "날짜별 메모 조회 실패", err);
+        setError("메모를 불러오지 못했습니다.");
+      });
+  }, [project.id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // 달력 바깥을 누르면 닫는다
+  useEffect(() => {
+    if (!calendarOpen) return;
+    function onDown(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) setCalendarOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [calendarOpen]);
+
+  const countByDate = new Map<string, number>();
+  for (const n of notes ?? []) countByDate.set(n.note_date, (countByDate.get(n.note_date) ?? 0) + 1);
+
+  function selectDate(date: string) {
+    setSelected(date);
+    const d = parseDate(date);
+    setViewMonth({ year: d.getFullYear(), month: d.getMonth() });
+    setCalendarOpen(false);
+  }
+
+  function shiftMonth(delta: number) {
+    setViewMonth(({ year, month }) => {
+      const d = new Date(year, month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  }
+
+  async function handleAdd(e: FormEvent) {
+    e.preventDefault();
+    const content = text.trim();
+    if (!content || saving) return;
+    setError(null);
+    setSaving(true);
+    logDebug("DateNotes", `메모 추가 시도: project_id=${project.id}, date=${selected}`);
+    try {
+      await apiPost(`/api/projects/${project.id}/date-notes`, { note_date: selected, content });
+      setText("");
+      load();
+    } catch (err) {
+      logError("DateNotes", "메모 추가 실패", err);
+      setError(err instanceof ApiError ? err.message : "메모를 저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(note: ProjectDateNote) {
+    if (!(await confirm(`${formatNoteDate(note.note_date)} 메모를 삭제하시겠습니까?`, { okLabel: "삭제", danger: true }))) return;
+    logDebug("DateNotes", `메모 삭제 시도: id=${note.id}`);
+    try {
+      await apiDelete(`/api/projects/${project.id}/date-notes/${note.id}`);
+      load();
+    } catch (err) {
+      logError("DateNotes", "메모 삭제 실패", err);
+      setError(err instanceof ApiError ? err.message : "메모를 삭제하지 못했습니다.");
+    }
+  }
+
+  const groups = groupNotesByDate(notes ?? []);
+  const canDelete = (n: ProjectDateNote) => !!user && (n.created_by === user.id || isAdminRole(user.role));
+
+  return (
+    <div className="bg-surface border border-border rounded-2xl p-6 mb-6">
+      <div className="flex items-baseline gap-2 mb-4">
+        <h2 className="text-sm font-semibold">날짜별 메모</h2>
+        <span className="text-xs text-text-muted">{notes ? `${notes.length}개 · 최근 날짜 순` : ""}</span>
+      </div>
+
+      <form onSubmit={handleAdd} className="relative flex flex-wrap items-start gap-2 mb-4">
+        <div ref={popoverRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setCalendarOpen((v) => !v)}
+            aria-expanded={calendarOpen}
+            className={`flex items-center gap-2 h-10 px-3 rounded-lg border text-sm whitespace-nowrap ${
+              calendarOpen ? "border-primary bg-tile-blue" : "border-border bg-bg hover:border-primary hover:bg-tile-blue"
+            }`}
+          >
+            <CalendarDays size={15} />
+            {formatNoteDate(selected)} ▾
+          </button>
+          {calendarOpen && (
+            <div role="dialog" aria-label="날짜 지정" className="absolute left-0 top-11 z-20 w-[292px] bg-surface border border-border rounded-xl p-3 shadow-lg">
+              <div className="flex items-center gap-1.5 mb-2">
+                <button type="button" onClick={() => shiftMonth(-1)} aria-label="이전 달" className="w-6 h-6 rounded-md border border-border text-text-muted hover:bg-bg">
+                  ‹
+                </button>
+                <b className="flex-1 text-center text-[13px]">
+                  {viewMonth.year}년 {viewMonth.month + 1}월
+                </b>
+                <button type="button" onClick={() => shiftMonth(1)} aria-label="다음 달" className="w-6 h-6 rounded-md border border-border text-text-muted hover:bg-bg">
+                  ›
+                </button>
+              </div>
+              <div className="grid grid-cols-7 gap-0.5">
+                {WEEKDAYS.map((w, i) => (
+                  <div key={w} className={`text-center text-[11px] pb-1 ${i === 0 ? "text-danger" : i === 6 ? "text-primary" : "text-text-muted"}`}>
+                    {w}
+                  </div>
+                ))}
+                {monthCells(viewMonth.year, viewMonth.month).map(({ date, inMonth }) => {
+                  const count = countByDate.get(date) ?? 0;
+                  const inRange = !!project.start_date && !!project.end_date && date >= project.start_date && date <= project.end_date;
+                  const isSelected = date === selected;
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      onClick={() => selectDate(date)}
+                      aria-label={`${formatNoteDate(date)}${count ? ` 메모 ${count}개` : ""}`}
+                      className={`h-[34px] rounded-lg border flex flex-col items-center justify-center gap-px ${
+                        isSelected ? "border-primary bg-tile-blue" : inRange ? "border-transparent bg-tile-blue/60 hover:bg-bg" : "border-transparent hover:bg-bg"
+                      } ${inMonth ? "" : "opacity-35"}`}
+                    >
+                      <span className={`text-[12.5px] tabular-nums ${date === today ? "bg-danger text-white rounded-full px-1.5" : ""}`}>
+                        {parseDate(date).getDate()}
+                      </span>
+                      <span className="flex gap-0.5 h-[5px]">
+                        {Array.from({ length: Math.min(count, 3) }, (_, i) => (
+                          <i key={i} className="w-[5px] h-[5px] rounded-full bg-tile-orange-fg" />
+                        ))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between mt-2 text-[11.5px] text-text-muted">
+                <span className="flex items-center gap-1">
+                  <i className="w-[7px] h-[7px] rounded-full bg-tile-orange-fg" />
+                  메모 있는 날
+                </span>
+                <button type="button" onClick={() => selectDate(today)} className="text-primary font-semibold text-xs">
+                  오늘로
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          maxLength={MAX_NOTE_LENGTH}
+          placeholder="이 날짜에 남길 메모를 입력하세요"
+          aria-label="메모 입력"
+          rows={1}
+          className="flex-1 min-w-[200px] h-10 focus:h-[68px] resize-none rounded-lg border border-border bg-bg focus:bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary transition-[height]"
+        />
+        <button
+          type="submit"
+          disabled={!text.trim() || saving}
+          className="h-10 px-4 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          저장
+        </button>
+      </form>
+
+      {error && <p className="text-xs text-danger mb-3">{error}</p>}
+
+      {notes === null && !error && <p className="text-sm text-text-muted">불러오는 중...</p>}
+      {notes !== null && groups.length === 0 && (
+        <div className="bg-bg border border-dashed border-border rounded-xl p-5 text-center text-xs text-text-muted">
+          아직 남긴 메모가 없습니다. 위에서 날짜를 지정해 첫 메모를 남겨 보세요.
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2.5">
+        {groups.map((g) => {
+          const d = parseDate(g.date);
+          const offset = offsetFromStart(g.date, project.start_date);
+          return (
+            <div key={g.date} className="grid grid-cols-[78px_1fr] gap-3">
+              <div className={`self-start text-center bg-bg border rounded-xl px-1 py-2 ${g.date === today ? "border-danger" : "border-border"}`}>
+                <b className={`block text-base tabular-nums leading-tight ${g.date === today ? "text-danger" : ""}`}>
+                  {d.getMonth() + 1}/{String(d.getDate()).padStart(2, "0")}
+                </b>
+                <small className="text-[11px] text-text-muted">
+                  {WEEKDAYS[d.getDay()]}
+                  {offset ? ` · ${offset}` : ""}
+                </small>
+              </div>
+              <ul className="flex flex-col gap-1.5 min-w-0">
+                {g.notes.map((n) => (
+                  <li key={n.id} className="bg-tile-orange border border-tile-orange-fg/20 rounded-xl pl-3.5 pr-2 py-2.5 text-[13px]">
+                    <p className="mb-1 whitespace-pre-wrap break-words">{n.content}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex-1 text-[11.5px] text-text-muted tabular-nums">
+                        {n.author_name ?? "알 수 없음"} · {formatNoteTime(n.created_at)}
+                      </span>
+                      {canDelete(n) && (
+                        <button type="button" onClick={() => handleDelete(n)} aria-label="메모 삭제" title="삭제" className="p-1 rounded-md text-text-muted hover:text-danger hover:bg-black/5">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

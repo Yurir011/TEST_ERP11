@@ -31,6 +31,7 @@ from app.routers import (
     payments,
     recurring_payments,
     project_documents,
+    project_notes,
     project_progress,
     projects,
     proposals,
@@ -81,6 +82,7 @@ app.include_router(projects.router)
 app.include_router(project_documents.router)
 app.include_router(proposals.router)
 app.include_router(project_progress.router)
+app.include_router(project_notes.router)
 app.include_router(sales_documents.router)
 app.include_router(transactions.router)
 app.include_router(payments.router)

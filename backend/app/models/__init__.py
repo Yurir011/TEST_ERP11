@@ -18,6 +18,7 @@ from app.models.presence import MessengerFavorite, UserPresence
 from app.models.project import Project
 from app.models.project_document import ProjectDocument, ProjectDocumentImage, ProjectDocumentItem
 from app.models.proposal import Proposal, ProposalAttachment
+from app.models.project_note import ProjectDateNote
 from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
 from app.models.sales_document import SalesDocument, SalesDocumentItem
 from app.models.schedule import ScheduleEvent
@@ -47,6 +48,7 @@ __all__ = [
     "ProjectDocumentImage",
     "Proposal",
     "ProposalAttachment",
+    "ProjectDateNote",
     "ProjectProgressStage",
     "ProjectPurchaseStep",
     "DocumentSet",
