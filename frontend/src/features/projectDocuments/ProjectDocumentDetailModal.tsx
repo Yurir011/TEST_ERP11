@@ -4,6 +4,7 @@ import { useAuth } from "../../context/useAuth";
 import { lineAmount } from "../../lib/money";
 import { DocumentMailHistory } from "../mail/DocumentMailHistory";
 import { formatDocAmount, itemsSummary, itemsTotal } from "./documentHelpers";
+import { PurchaseOrderAttachments } from "./PurchaseOrderAttachments";
 import { TaxInvoiceImages } from "./TaxInvoiceImages";
 import {
   PROJECT_DOC_STATUS_LABELS,
@@ -133,6 +134,7 @@ export function ProjectDocumentDetailModal({
         )}
 
         {doc.doc_type === "tax_invoice" && <TaxInvoiceImages doc={doc} />}
+        {doc.doc_type === "purchase_order" && <PurchaseOrderAttachments doc={doc} />}
 
         {doc.doc_type === "tax_invoice" && doc.direction !== "purchase" && (
           <div className="mb-4">

@@ -84,16 +84,30 @@ export function ProjectDocumentsTable({
                     <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>{p.kind ? `${p.kind}품의서` : "품의서"}</span>
                   </td>
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                    <span
-                      className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}
-                      title={p.status === "rejected" ? p.reject_reason ?? undefined : undefined}
-                    >
-                      {PROPOSAL_STATUS_LABELS[p.status]}
-                    </span>
-                    {p.is_final_decision && p.status === "approved" && (
-                      <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
-                    )}
-                    {p.delete_requested && <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>}
+                    {(() => {
+                      const extras = (
+                        <>
+                          {p.is_final_decision && p.status === "approved" && (
+                            <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
+                          )}
+                          {p.delete_requested && <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>}
+                        </>
+                      );
+                      return (
+                        <>
+                          <span className="invisible" aria-hidden>
+                            {extras}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}
+                            title={p.status === "rejected" ? p.reject_reason ?? undefined : undefined}
+                          >
+                            {PROPOSAL_STATUS_LABELS[p.status]}
+                          </span>
+                          {extras}
+                        </>
+                      );
+                    })()}
                   </td>
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
                     {p.issue_date}
@@ -162,18 +176,33 @@ export function ProjectDocumentsTable({
                   </td>
                 )}
                 <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                  <span
-                    className={`text-xs px-2 py-1 font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
-                    title={doc.status === "rejected" ? doc.reject_reason ?? undefined : undefined}
-                  >
-                    {PROJECT_DOC_STATUS_LABELS[doc.status]}
-                  </span>
-                  {doc.is_final_decision && doc.status === "approved" && (
-                    <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
-                  )}
-                  {doc.delete_requested && (
-                    <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>
-                  )}
+                  {(() => {
+                    // 상태 배지 오른쪽에 붙는 배지(전결 등)가 있어도 상태 배지가 칼럼 가운데에 같은 줄로 서도록, 왼쪽에 보이지 않는 같은 크기의 자리를 둔다.
+                    const extras = (
+                      <>
+                        {doc.is_final_decision && doc.status === "approved" && (
+                          <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
+                        )}
+                        {doc.delete_requested && (
+                          <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>
+                        )}
+                      </>
+                    );
+                    return (
+                      <>
+                        <span className="invisible" aria-hidden>
+                          {extras}
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-1 font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
+                          title={doc.status === "rejected" ? doc.reject_reason ?? undefined : undefined}
+                        >
+                          {PROJECT_DOC_STATUS_LABELS[doc.status]}
+                        </span>
+                        {extras}
+                      </>
+                    );
+                  })()}
                 </td>
                 {lockedDocType === "tax_invoice" && (
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">

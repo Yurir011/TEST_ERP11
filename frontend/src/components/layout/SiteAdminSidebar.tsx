@@ -4,6 +4,7 @@ import { useAuth } from "../../context/useAuth";
 import { useMessengerOptional } from "../../features/messenger/useMessenger";
 import { Logo } from "../ui/Logo";
 import { DesktopDownloadLink } from "../../features/desktop/DesktopDownloadLink";
+import { useTabMenu } from "./tabs/TabShellContext";
 import { VersionLabel } from "./VersionLabel";
 
 const menuItems = [
@@ -17,6 +18,7 @@ const menuItems = [
 export function SiteAdminSidebar() {
   const { user, logout } = useAuth();
   const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
+  const tabMenu = useTabMenu();
 
   return (
     <aside className="w-64 shrink-0 bg-sidebar border-r border-border h-screen sticky top-0 flex flex-col">
@@ -32,6 +34,11 @@ export function SiteAdminSidebar() {
             key={to}
             to={to}
             end={end}
+            onClick={(e) => {
+              if (!tabMenu || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+              e.preventDefault();
+              tabMenu.openMenu(to);
+            }}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                 isActive ? "text-text bg-surface font-medium shadow-sm" : "text-text-muted hover:bg-surface/60"

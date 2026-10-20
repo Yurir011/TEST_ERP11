@@ -7,12 +7,13 @@ import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPi
 import { useAuth } from "../../context/useAuth";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
-import { ApiError, apiGet, apiPost, apiPut, apiUpload, downloadFile } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload, downloadFile } from "../../lib/api";
 import { GRADE_LABELS, TITLE_LABELS, hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import { DocumentItemsEditor } from "./DocumentItemsEditor";
 import { OTHER_PROJECT, isProjectDocType, projectPayload, scannedCounterparty, toItemFormValues, toItemsPayload } from "./documentForm";
+import { PurchaseOrderAttachmentsSection } from "./PurchaseOrderAttachments";
 import { QuotationLoader } from "./QuotationLoader";
 import { TaxInvoicePhotoSection } from "./TaxInvoicePhotoSection";
 import {
@@ -71,6 +72,10 @@ export function ProjectDocumentFormPage() {
 
   // 세금계산서 사진 등록: 올린 사진은 문서 생성 직후 함께 저장하고, 첫 사진은 OCR로 입력란을 자동으로 채운다.
   const [invoiceImages, setInvoiceImages] = useState<File[]>([]);
+  // 발주서 파일 첨부: 새로 고른 파일은 문서 저장 직후 올리고, 수정 시 기존 첨부 중 지운 것은 저장할 때 함께 삭제한다.
+  const [attachFiles, setAttachFiles] = useState<File[]>([]);
+  const [originalAttachments, setOriginalAttachments] = useState<ProjectDocument["images"]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<ProjectDocument["images"]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanSummary, setScanSummary] = useState<TaxInvoiceOcrResult | null>(null);
   const [direction, setDirection] = useState<"sales" | "purchase" | null>(null);
@@ -119,6 +124,8 @@ export function ProjectDocumentFormPage() {
         setCurrency(target.currency);
         setPurposeType(target.purpose_type);
         setIsPaper(target.is_paper);
+        setOriginalAttachments(target.images);
+        setExistingAttachments(target.images);
         setItems(toItemFormValues(target.items));
       })
       .catch((err) => {
@@ -233,6 +240,27 @@ export function ProjectDocumentFormPage() {
     }
   }
 
+  function handleAttachFilesSelect(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (files.length === 0) return;
+    logDebug("ProjectDocumentForm", `발주서 첨부 파일 선택: ${files.map((f) => f.name).join(", ")}`);
+    setAttachFiles((prev) => [...prev, ...files]);
+  }
+
+  /** 발주서 첨부 반영: 지운 기존 파일을 삭제하고 새로 고른 파일을 올린다 (문서 저장이 끝난 뒤 호출) */
+  async function syncAttachments(docId: number) {
+    const keepIds = new Set(existingAttachments.map((a) => a.id));
+    for (const old of originalAttachments.filter((a) => !keepIds.has(a.id))) {
+      logDebug("ProjectDocumentForm", `발주서 첨부 삭제: doc_id=${docId}, image_id=${old.id}`);
+      await apiDelete(`/api/project-documents/${docId}/images/${old.id}`);
+    }
+    for (const file of attachFiles) {
+      logDebug("ProjectDocumentForm", `발주서 첨부 저장: doc_id=${docId}, filename=${file.name}`);
+      await apiUpload(`/api/project-documents/${docId}/images`, file);
+    }
+  }
+
   function removeInvoiceImage(index: number) {
     setInvoiceImages((prev) => prev.filter((_, i) => i !== index));
     if (index === 0) {
@@ -280,6 +308,7 @@ export function ProjectDocumentFormPage() {
           approver_ids: approverIds,
           is_final_decision: isFinalDecision,
         });
+        if (docType === "purchase_order") await syncAttachments(Number(editId));
         notify("수정 후 결재 요청이 완료되었습니다.");
         navigate(docType === "tax_invoice" ? "/tax-invoices" : "/project-documents", { replace: true });
         return;
@@ -313,6 +342,7 @@ export function ProjectDocumentFormPage() {
           await apiUpload(`/api/project-documents/${createdDocs[0].id}/images`, file);
         }
       }
+      if (docType === "purchase_order") await syncAttachments(createdDocs[0].id);
       for (const created of createdDocs) {
         if (created.status === "approved" && created.has_pdf) {
           await downloadFile(
@@ -483,6 +513,16 @@ export function ProjectDocumentFormPage() {
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg resize-none"
             />
           </div>
+        )}
+
+        {docType === "purchase_order" && (
+          <PurchaseOrderAttachmentsSection
+            files={attachFiles}
+            existing={existingAttachments}
+            onFilesSelect={handleAttachFilesSelect}
+            onRemoveFile={(index) => setAttachFiles((prev) => prev.filter((_, i) => i !== index))}
+            onRemoveExisting={(id) => setExistingAttachments((prev) => prev.filter((a) => a.id !== id))}
+          />
         )}
 
         {docType === "tax_invoice" && (

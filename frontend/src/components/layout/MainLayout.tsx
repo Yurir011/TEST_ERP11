@@ -1,5 +1,6 @@
 import { LogOut } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useTabShell } from "./tabs/TabShellContext";
 import { useAuth } from "../../context/useAuth";
 import { AttendanceToggle } from "../../features/attendance/AttendanceToggle";
 import { DesktopUpdateNotice } from "../../features/desktop/DesktopUpdateNotice";
@@ -16,6 +17,29 @@ interface MainLayoutProps {
 
 export function MainLayout({ title, description, actions, children }: MainLayoutProps) {
   const { user, logout } = useAuth();
+  const tabShell = useTabShell();
+  const setTabTitle = tabShell?.setTitle;
+
+  // 탭 막대에 이 화면의 제목을 보여 준다
+  useEffect(() => {
+    setTabTitle?.(title);
+  }, [setTabTitle, title]);
+
+  // 탭 안에서는 사이드바와 사용자 줄을 탭 틀(TabShell)이 한 번만 그리므로 제목과 내용만 그린다.
+  if (tabShell) {
+    return (
+      <main className="px-10 py-8">
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-text">{title}</h1>
+            {description && <p className="text-sm text-text-muted mt-1">{description}</p>}
+          </div>
+          {actions && <div className="flex items-center gap-3">{actions}</div>}
+        </div>
+        {children}
+      </main>
+    );
+  }
 
   return (
     <div className="flex min-h-screen">

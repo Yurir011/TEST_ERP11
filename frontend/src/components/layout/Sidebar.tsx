@@ -27,6 +27,7 @@ import { getBenchClient } from "../../lib/desktop";
 import { logError } from "../../lib/logger";
 import { Logo } from "../ui/Logo";
 import { DesktopDownloadLink } from "../../features/desktop/DesktopDownloadLink";
+import { useTabMenu } from "./tabs/TabShellContext";
 import { VersionLabel } from "./VersionLabel";
 
 const UNREAD_POLL_MS = 20000;
@@ -59,6 +60,7 @@ const menuItems: {
 export function Sidebar() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const tabMenu = useTabMenu();
   const [unreadCount, setUnreadCount] = useState(0);
   const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
   const mailBridge = getBenchClient()?.mail;
@@ -132,12 +134,12 @@ export function Sidebar() {
             to={to}
             end={end}
             onClick={(e) => {
-              // 메뉴를 누르면 현재 메뉴 여부와 관계없이 해당 페이지를 새로고침(전체 재로드)한다.
-              // 새 탭 열기(Ctrl/Shift/휠 클릭)는 기본 동작을 그대로 둔다.
-              if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+              // 메뉴를 누르면 그 메뉴의 탭을 앞으로 가져오고(보던 화면 그대로), 열린 탭이 없으면 새 탭으로 연다.
+              // 브라우저 새 탭 열기(Ctrl/Shift/휠 클릭)는 기본 동작을 그대로 둔다.
+              if (!tabMenu || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
               e.preventDefault();
-              console.debug(`[Sidebar] 메뉴 클릭 → 페이지 새로고침: ${to}`);
-              window.location.assign(to);
+              console.debug(`[Sidebar] 메뉴 클릭 → 탭 열기: ${to}`);
+              tabMenu.openMenu(to);
             }}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${

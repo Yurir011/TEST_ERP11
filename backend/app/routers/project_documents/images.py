@@ -15,7 +15,7 @@ from app.schemas.project_document import ProjectDocumentOut, TaxInvoiceOcrItemOu
 from app.services.tax_invoice_ocr import recognize_tax_invoice
 
 from app.routers.project_documents._common import PREFIX, _get_doc_or_404, _to_out_db, logger
-from app.services.upload_check import IMAGE_TYPES, read_upload
+from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, IMAGE_TYPES, read_upload
 
 
 router = APIRouter(prefix=PREFIX, tags=["project-documents"])
@@ -82,23 +82,29 @@ def upload_document_image(
     current_user: User = Depends(get_current_user),
 ):
     doc = _get_doc_or_404(db, doc_id)
-    if doc.doc_type != ProjectDocType.tax_invoice:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서에만 사진을 등록할 수 있습니다.")
+    if doc.doc_type not in (ProjectDocType.tax_invoice, ProjectDocType.purchase_order):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="세금계산서·발주서에만 파일을 등록할 수 있습니다.")
     if doc.created_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 사진을 등록할 수 있습니다.")
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
-    content = read_upload(file, IMAGE_TYPES, MAX_IMAGE_SIZE)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 파일을 등록할 수 있습니다.")
+    if doc.doc_type == ProjectDocType.tax_invoice:
+        # 세금계산서는 사진만, 발주서는 이미지·PDF·오피스 문서 등 일반 첨부 파일을 받는다.
+        if file.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
+        content = read_upload(file, IMAGE_TYPES, MAX_IMAGE_SIZE)
+        extension = ALLOWED_IMAGE_TYPES[file.content_type]
+    else:
+        content = read_upload(file, ATTACHMENT_TYPES, MAX_IMAGE_SIZE)
+        extension = EXTENSIONS[file.content_type]
 
     os.makedirs(settings.tax_invoice_images_dir, exist_ok=True)
-    stored_name = f"{doc.id}_{uuid.uuid4().hex}.{ALLOWED_IMAGE_TYPES[file.content_type]}"
+    stored_name = f"{doc.id}_{uuid.uuid4().hex}.{extension}"
     file_path = os.path.join(settings.tax_invoice_images_dir, stored_name)
     with open(file_path, "wb") as f:
         f.write(content)
 
     doc.images.append(ProjectDocumentImage(filename=file.filename or stored_name, file_path=file_path))
     db.commit()
-    logger.debug(f"[ProjectDocuments] 세금계산서 사진 등록: doc_id={doc_id}, filename={file.filename}, by={current_user.id}")
+    logger.debug(f"[ProjectDocuments] {doc.doc_type.value} 파일 등록: doc_id={doc_id}, filename={file.filename}, by={current_user.id}")
     return _to_out_db(db, _get_doc_or_404(db, doc_id))
 
 
@@ -113,7 +119,7 @@ def get_document_image(
     )
     if image is None or not os.path.exists(image.file_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사진을 찾을 수 없습니다.")
-    return FileResponse(image.file_path)
+    return FileResponse(image.file_path, filename=image.filename, content_disposition_type="inline")
 
 
 @router.delete("/{doc_id}/images/{image_id}", response_model=ProjectDocumentOut)
