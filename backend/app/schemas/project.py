@@ -7,10 +7,19 @@ from app.models.project import ProjectStatus
 
 class ProjectCreate(BaseModel):
     name: str
-    client_id: int
+    # 등록된 거래처는 client_id 로, 목록에 없는 거래처는 이름(client_name)을 직접 적어 보낸다 (없으면 그 이름으로 거래처를 새로 등록한다).
+    client_id: int | None = None
+    client_name: str | None = None
     memo: str | None = None
     start_date: date | None = None
     end_date: date | None = None
+
+    @model_validator(mode="after")
+    def _need_client(self):
+        self.client_name = (self.client_name or "").strip()[:200] or None
+        if self.client_id is None and self.client_name is None:
+            raise ValueError("거래처를 선택하거나 이름을 입력해주세요.")
+        return self
 
 
 class ProjectStatusUpdate(BaseModel):

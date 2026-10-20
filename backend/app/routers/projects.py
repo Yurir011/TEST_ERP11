@@ -1,7 +1,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, require_admin
@@ -91,14 +91,24 @@ def get_project(project_id: int, db: Session = Depends(get_db), current_user: Us
 def create_project(
     payload: ProjectCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    client = db.query(Client).filter(Client.id == payload.client_id).first()
-    if client is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
+    if payload.client_id is not None:
+        client = db.query(Client).filter(Client.id == payload.client_id).first()
+        if client is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
+    else:
+        # 목록에 없는 거래처를 직접 입력한 경우: 같은 이름의 거래처가 있으면 그것을 쓰고, 없으면 이름만으로 새로 등록한다.
+        # (상세 정보는 거래처관리에서 나중에 채운다.)
+        client = db.query(Client).filter(func.lower(Client.name) == payload.client_name.lower()).first()
+        if client is None:
+            client = Client(name=payload.client_name, created_by=current_user.id)
+            db.add(client)
+            db.flush()
+            logger.debug(f"[Projects] 직접 입력한 거래처 새로 등록: id={client.id}, name={client.name}, by={current_user.id}")
 
-    logger.debug(f"[Projects] 생성: name={payload.name}, client_id={payload.client_id}, by={current_user.id}")
+    logger.debug(f"[Projects] 생성: name={payload.name}, client_id={client.id}, by={current_user.id}")
     project = Project(
         name=payload.name,
-        client_id=payload.client_id,
+        client_id=client.id,
         memo=payload.memo,
         start_date=payload.start_date,
         end_date=payload.end_date,

@@ -55,8 +55,11 @@ export function ProjectFormPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!selectedClient) {
-      setError("거래처를 목록에서 선택해주세요.");
+    // 목록에서 고르지 않고 직접 적은 이름이 등록된 거래처 이름과 같으면 그 거래처로 연결하고, 아니면 서버가 이름으로 새로 등록한다.
+    const typedName = clientQuery.trim();
+    const client = selectedClient ?? suggestions.find((c) => c.name === typedName) ?? null;
+    if (!client && !typedName) {
+      setError("거래처를 선택하거나 이름을 입력해주세요.");
       return;
     }
     if (startDate && endDate && startDate > endDate) {
@@ -67,7 +70,8 @@ export function ProjectFormPage() {
     try {
       const created = await apiPost<Project>("/api/projects", {
         name,
-        client_id: selectedClient.id,
+        client_id: client?.id ?? null,
+        client_name: client ? null : typedName,
         memo: memo || null,
         start_date: startDate || null,
         end_date: endDate || null,
@@ -108,7 +112,7 @@ export function ProjectFormPage() {
                 setShowSuggestions(true);
               }}
               onFocus={() => setShowSuggestions(true)}
-              placeholder="거래처명 검색"
+              placeholder="거래처명 검색 또는 직접 입력"
               className="w-full rounded-lg border border-border pl-9 pr-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
           </div>
@@ -129,6 +133,11 @@ export function ProjectFormPage() {
             </ul>
           )}
           {selectedClient && <p className="text-xs text-success mt-1.5">선택됨: {selectedClient.name}</p>}
+          {!selectedClient && clientQuery.trim() && !suggestions.some((c) => c.name === clientQuery.trim()) && (
+            <p className="text-xs text-text-muted mt-1.5">
+              등록되지 않은 거래처입니다. 이 이름으로 거래처가 새로 등록되며, 상세 정보는 거래처관리에서 채울 수 있습니다.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
