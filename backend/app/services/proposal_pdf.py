@@ -124,7 +124,7 @@ def generate_proposal_pdf(proposal: Proposal) -> bytes:
     letterhead_style = ParagraphStyle("Letterhead", fontName=FONT_BOLD, fontSize=13, leading=16)
     letterhead_sub_style = ParagraphStyle("LetterheadSub", fontName=FONT_REGULAR, fontSize=8, textColor=colors.HexColor("#555555"))
     # leading(줄 높이)을 글자 크기보다 크게 잡아야 한다. 기본값(12pt)이면 22pt 글자가 위아래 줄과 겹친다.
-    title_style = ParagraphStyle("Title", fontName=FONT_BOLD, fontSize=22, leading=28, alignment=1, spaceBefore=6 * mm)
+    title_style = ParagraphStyle("Title", fontName=FONT_BOLD, fontSize=22, leading=28, alignment=1, spaceBefore=8 * mm)
     subject_label_style = ParagraphStyle("SubjectLabel", fontName=FONT_BOLD, fontSize=10, leading=14, alignment=1)
     subject_style = ParagraphStyle("Subject", fontName=FONT_BOLD, fontSize=15, leading=20, alignment=1)
     info_label_style = ParagraphStyle("InfoLabel", fontName=FONT_BOLD, fontSize=9)
@@ -139,7 +139,19 @@ def generate_proposal_pdf(proposal: Proposal) -> bytes:
     # 결재 도장 칸은 결재선 단계 수에 따라 너비가 달라지므로, 칸 너비를 도장 칸에 딱 맞춰 항상 오른쪽 끝에 붙인다.
     approval_box_width = sum(approval_box._colWidths)
     header = Table([[letterhead, approval_box]], colWidths=[pdf.width - approval_box_width, approval_box_width])
-    header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    # 칸 안 여백을 0 으로 둬야 결재 칸의 오른쪽 선이 아래 표(제목·문서번호·내용)의 오른쪽 선과 정확히 같은 위치에 오고,
+    # 회사명 글자도 표의 왼쪽 선과 맞는다.
+    header.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
 
     # 제목은 종류(제목줄)와 겹치지 않도록 문서번호 표와 같은 양식의 '제 목' 칸으로 분리한다.
     subject_box = Table(
@@ -228,7 +240,7 @@ def generate_proposal_pdf(proposal: Proposal) -> bytes:
     elements = [
         header,
         Paragraph(_doc_title(proposal), title_style),
-        Spacer(1, 6 * mm),
+        Spacer(1, 9 * mm),  # 문서 종류(구매품의서)와 제목 칸 사이를 넉넉히 띄운다
         subject_box,
         Spacer(1, 3 * mm),
         info_table,

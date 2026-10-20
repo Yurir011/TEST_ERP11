@@ -32,6 +32,15 @@ router = APIRouter(prefix=PREFIX, tags=["proposals"])
 @router.get("/{proposal_id}/pdf")
 def download_proposal_pdf(proposal_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     p = _get_or_404(db, proposal_id)
+    # 저장된 PDF 는 승인·첨부가 바뀔 때만 다시 만들어져서, 양식을 고쳐도 옛 문서는 옛 모양으로 남는다.
+    # 그래서 내려받을 때마다 현재 양식으로 다시 만든다 (내용·결재 현황은 그대로). 만들지 못하면 저장된 파일을 그대로 준다.
+    try:
+        proposal_files.regenerate_pdf(p)
+        db.commit()
+    except Exception:  # noqa: BLE001 - 어떤 이유로든 실패하면 기존 파일로 대신한다
+        db.rollback()
+        logger.exception(f"[Proposals] PDF 다시 만들기 실패, 저장된 파일로 대체: id={proposal_id}")
+        p = _get_or_404(db, proposal_id)
     if not p.file_path or not os.path.exists(p.file_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF 파일을 찾을 수 없습니다.")
     logger.debug(f"[Proposals] PDF 다운로드: id={proposal_id}, by={current_user.id}")

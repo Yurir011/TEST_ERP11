@@ -241,3 +241,38 @@ def test_proposal_excel_download(client, staff, auth_headers):
 
     pending = _create(client, h, [staff["dept_head"].id], end_title="dept_head")
     assert client.get(f"/api/proposals/{pending['id']}/excel", headers=h).status_code == 403
+
+
+def test_pdf_download_regenerates_with_current_layout(client, staff, auth_headers, tmp_path, monkeypatch):
+    """내려받을 때마다 현재 양식으로 PDF 를 다시 만든다 (옛 양식으로 저장된 문서도 새 모양으로 나온다)."""
+    calls = []
+
+    def fake_regenerate(p):
+        calls.append(p.id)
+        path = tmp_path / f"{p.id}.pdf"
+        path.write_bytes(b"%PDF-1.7\nnew layout")
+        p.file_path = str(path)
+
+    monkeypatch.setattr(proposal_files, "regenerate_pdf", fake_regenerate)
+    h = auth_headers(staff["writer"])
+    p = _create(client, h, final=True)
+    calls.clear()
+    res = client.get(f"/api/proposals/{p['id']}/pdf", headers=h)
+    assert res.status_code == 200 and res.content.endswith(b"new layout")
+    assert calls == [p["id"]]
+
+
+def test_pdf_download_falls_back_to_stored_file_when_regeneration_fails(client, db, staff, auth_headers, tmp_path, monkeypatch):
+    h = auth_headers(staff["writer"])
+    p = _create(client, h, final=True)
+    stored = tmp_path / "old.pdf"
+    stored.write_bytes(b"%PDF-1.7\nold file")
+    db.get(Proposal, p["id"]).file_path = str(stored)
+    db.commit()  # 저장된 파일 경로를 확정해 둔다 (다시 만들기 실패 때의 rollback 이 이 값을 되돌리지 않게)
+
+    def boom(_p):
+        raise RuntimeError("font missing")
+
+    monkeypatch.setattr(proposal_files, "regenerate_pdf", boom)
+    res = client.get(f"/api/proposals/{p['id']}/pdf", headers=h)
+    assert res.status_code == 200 and res.content.endswith(b"old file")
