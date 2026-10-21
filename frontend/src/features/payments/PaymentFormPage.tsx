@@ -10,7 +10,6 @@ import {
   PAYMENT_CATEGORIES,
   PAYMENT_CATEGORY_ITEMS,
   PAYMENT_METHOD_LABELS,
-  PAYMENT_TYPE_LABELS,
   PROOF_TYPE_LABELS,
   type BankType,
   type CardType,
@@ -35,6 +34,9 @@ import {
   validatePaymentForm,
 } from "./paymentForm";
 import { TransactionPicker } from "./TransactionPicker";
+
+// 입출금 등록 화면의 구분 이름: 입금 → 수입, 출금 → 지출 (저장되는 값은 그대로 deposit / withdrawal)
+const FORM_TYPE_LABELS: Record<PaymentType, string> = { deposit: "수입", withdrawal: "지출" };
 
 export function PaymentFormPage() {
   const navigate = useNavigate();
@@ -128,6 +130,8 @@ export function PaymentFormPage() {
         if (p.client_id !== null && p.client_name) {
           setSelectedClient({ id: p.client_id, name: p.client_name } as Client);
           setPartyQuery(p.client_name);
+        } else if (p.client_name) {
+          setPartyQuery(p.client_name); // 등록되지 않은 거래처 이름
         }
         setMemo(p.memo ?? "");
         setHasReceipt(p.has_receipt);
@@ -193,6 +197,8 @@ export function PaymentFormPage() {
         amount: Number(amount) || 0,
         method,
         client_id: selectedClient?.id ?? null,
+        // 등록된 거래처를 고르지 않고 이름만 입력했으면 그 이름을 그대로 저장한다 (목록에 빈칸으로 나오지 않게)
+        counterparty: selectedClient ? null : partyQuery.trim() || null,
         memo: memo || null,
         proof_type: usesProof ? proofType : null,
         proof_type_detail: usesProof && proofType === "other" ? proofTypeDetail : null,
@@ -236,7 +242,7 @@ export function PaymentFormPage() {
             <p className="text-xs text-text-muted mt-1.5">
               {linkedTx
                 ? `불러온 내역: ${linkedTx.client_name} · ${linkedTx.transaction_date} · ${formatCurrency(linkedTx.total_amount)} (계좌 종류를 고른 뒤 저장하면 결제완료로 처리됩니다)`
-                : "세금계산서로 기록된 외상매출/외상매입에 대한 입금·출금이면 불러와서 결제 처리하세요."}
+                : "세금계산서로 기록된 외상매출/외상매입에 대한 수입·지출이면 불러와서 결제 처리하세요."}
             </p>
           </div>
         )}
@@ -244,7 +250,7 @@ export function PaymentFormPage() {
         <div>
           <label className="block text-xs text-text-muted mb-1.5">구분</label>
           <div className="flex gap-2">
-            {(Object.keys(PAYMENT_TYPE_LABELS) as PaymentType[]).map((t) => (
+            {(Object.keys(FORM_TYPE_LABELS) as PaymentType[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -255,7 +261,7 @@ export function PaymentFormPage() {
                     : "border-border text-text-muted hover:bg-bg"
                 }`}
               >
-                {PAYMENT_TYPE_LABELS[t]}
+                {FORM_TYPE_LABELS[t]}
               </button>
             ))}
           </div>

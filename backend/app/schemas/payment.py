@@ -32,6 +32,7 @@ class PaymentCreate(BaseModel):
     amount: int
     method: PaymentMethod = PaymentMethod.other
     client_id: int | None = None
+    counterparty: str | None = None  # 등록되지 않은 거래처 이름 (client_id 가 없을 때 직접 입력한 이름)
     memo: str | None = None
     proof_type: ProofType | None = None
     proof_type_detail: str | None = None

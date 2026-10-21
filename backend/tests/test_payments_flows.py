@@ -223,3 +223,23 @@ def test_update_to_missing_client_is_rejected(client, h, make_client, db):
     res = client.put(f"/api/payments/{p['id']}", headers=h, json=_settle(client_id=999_999, amount=10_000))
     assert res.status_code == 400
     assert res.json()["detail"] == "존재하지 않는 거래처입니다."
+
+
+def test_unregistered_client_name_is_kept_and_shown(client, h, db):
+    """등록되지 않은 거래처 이름을 직접 입력해도 목록에 그 이름이 보이고, 검색·수정에도 쓰인다 (예전에는 빈칸으로 나왔다)."""
+    created = _create(client, h, method="cash", card_type=None, counterparty="  동네 문구점  ")
+    assert created["client_id"] is None and created["client_name"] == "동네 문구점"
+    listed = client.get("/api/payments", headers=h).json()
+    assert any(p["id"] == created["id"] and p["client_name"] == "동네 문구점" for p in listed)
+    assert [p["id"] for p in client.get("/api/payments?q=문구점", headers=h).json()] == [created["id"]]
+
+    # 등록된 거래처를 고르면 그 거래처 이름이 쓰이고 직접 입력한 이름은 저장하지 않는다
+    from app.models.client import Client
+
+    c = Client(name="한솔전자", created_by=created["id"] and 1)
+    c.created_by = db.query(Payment).filter(Payment.id == created["id"]).one().created_by
+    db.add(c)
+    db.commit()
+    picked = client.put(f"/api/payments/{created['id']}", headers=h, json=_payment(method="cash", card_type=None, client_id=c.id, counterparty="무시됨"))
+    assert picked.status_code == 200 and picked.json()["client_name"] == "한솔전자"
+    assert db.query(Payment).filter(Payment.id == created["id"]).one().counterparty is None

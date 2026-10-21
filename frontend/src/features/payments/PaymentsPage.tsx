@@ -232,6 +232,20 @@ export function PaymentsPage() {
   const cardTotal = cardRows.reduce((sum, r) => sum + r.amount, 0);
 
 
+  // 나중에 영수증 사진 올리기 (지출을 등록할 때 영수증이 없던 건). 올리면 그 줄의 영수증 아이콘이 영수증 보기로 바뀐다.
+  async function handleAttachReceipt(p: Payment, file: File) {
+    logDebug("Payments", `영수증 나중에 올리기: payment_id=${p.id}, ${file.name}`);
+    setError(null);
+    try {
+      await apiUpload(`/api/payments/${p.id}/receipt`, file);
+      setSelectedPayment((cur) => (cur && cur.id === p.id ? { ...cur, has_receipt: true } : cur));
+      loadPayments();
+    } catch (err) {
+      logError("Payments", "영수증 올리기 실패", err);
+      setError(err instanceof ApiError ? err.message : "영수증을 올리지 못했습니다. (jpg, png, webp 이미지만 올릴 수 있습니다)");
+    }
+  }
+
   function clearFilters() {
     setKeyword("");
     setDateFrom("");
@@ -560,6 +574,7 @@ export function PaymentsPage() {
           onPrint={handlePrint}
           onDownloadExcel={handleDownloadExcel}
           onDelete={handleDelete}
+          onAttachReceipt={(p, file) => void handleAttachReceipt(p, file)}
         />
       )}
 
@@ -594,7 +609,7 @@ export function PaymentsPage() {
       )}
 
       {selectedPayment && (
-        <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} />
+        <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} onAttachReceipt={handleAttachReceipt} />
       )}
 
       {settleTarget && (

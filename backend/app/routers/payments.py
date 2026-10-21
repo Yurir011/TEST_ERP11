@@ -62,7 +62,7 @@ def _to_out(p: Payment, occurred_date: date | None = None) -> PaymentOut:
         amount=p.amount,
         method=p.method,
         client_id=p.client_id,
-        client_name=p.client.name if p.client else None,
+        client_name=p.client.name if p.client else p.counterparty,
         has_receipt=bool(p.receipt_path),
         memo=p.memo,
         proof_type=p.proof_type,
@@ -187,6 +187,13 @@ def list_linkable_transactions(
     ]
 
 
+def _free_party(payload: PaymentCreate) -> str | None:
+    """등록된 거래처를 고르지 않고 이름만 직접 입력한 경우의 이름 (거래처를 골랐으면 비운다)."""
+    if payload.client_id is not None:
+        return None
+    return (payload.counterparty or "").strip()[:200] or None
+
+
 def _check_method_accounts(db: Session, payload: PaymentCreate) -> None:
     """고른 법인카드·계좌가 카드·계좌 관리에 등록된 것인지 확인한다."""
     if payload.card_type is not None:
@@ -236,6 +243,7 @@ def create_payment(
         amount=payload.amount,
         method=payload.method,
         client_id=payload.client_id,
+        counterparty=_free_party(payload),
         memo=payload.memo,
         proof_type=payload.proof_type,
         proof_type_detail=payload.proof_type_detail,
@@ -396,6 +404,7 @@ def update_payment(
     payment.amount = payload.amount
     payment.method = payload.method
     payment.client_id = payload.client_id
+    payment.counterparty = _free_party(payload)
     payment.memo = payload.memo
     payment.proof_type = payload.proof_type
     payment.proof_type_detail = payload.proof_type_detail

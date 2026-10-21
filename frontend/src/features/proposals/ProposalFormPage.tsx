@@ -37,7 +37,19 @@ export function ProposalFormPage() {
   const isCopy = !isEdit && copyId !== null;
 
   const [issueDate, setIssueDate] = useState(todayLabel());
-  const [kind, setKind] = useState("");
+  // 품의서 종류: 왼쪽 콤보박스(구매 / 일반) + 오른쪽 입력칸. 구매는 입력칸이 꺼지고, 일반은 종류 이름(예: 출장, 행사)을 적을 수 있다.
+  const [kindMode, setKindMode] = useState<"구매" | "일반">("일반");
+  const [kindText, setKindText] = useState("");
+  const kind = kindMode === "구매" ? PURCHASE_KIND : kindText.trim(); // 서버에 저장하는 종류 (일반이고 비워 두면 빈 값 = 그냥 '품의서')
+  function applyKind(value: string | null) {
+    if (value === PURCHASE_KIND) {
+      setKindMode("구매");
+      setKindText("");
+    } else {
+      setKindMode("일반");
+      setKindText(value ?? "");
+    }
+  }
   const [title, setTitle] = useState("");
   const [topic, setTopic] = useState("");
   const [content, setContent] = useState("");
@@ -55,14 +67,11 @@ export function ProposalFormPage() {
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
 
-  const isPurchase = kind.trim() === PURCHASE_KIND;
-  const isGeneral = kind.trim() === "";
-  // 품의서 종류: 구매 / 일반. 예전에 직접 적었던 다른 종류(출장 등)는 그 품의서를 고칠 때만 선택지에 남는다.
-  const legacyKind = !isPurchase && !isGeneral ? kind.trim() : null;
+  const isPurchase = kindMode === "구매";
   // 구매를 고르면 본문 도입 문장의 진행 내용을 "구매"로 채우고, 일반으로 바꾸면 그 자동 입력만 지운다.
-  function changeKind(next: string) {
-    setKind(next);
-    if (next === PURCHASE_KIND) setTopic((t) => (t.trim() === "" ? PURCHASE_KIND : t));
+  function changeKindMode(next: "구매" | "일반") {
+    setKindMode(next);
+    if (next === "구매") setTopic((t) => (t.trim() === "" ? PURCHASE_KIND : t));
     else setTopic((t) => (t === PURCHASE_KIND ? "" : t));
   }
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,7 +88,7 @@ export function ProposalFormPage() {
           return;
         }
         // 기안일자는 오늘 그대로 두고, 결재선·첨부는 새로 정한다.
-        setKind(source.kind ?? "");
+        applyKind(source.kind);
         setTitle(source.title);
         setTopic(source.topic);
         setContent(source.content);
@@ -111,7 +120,7 @@ export function ProposalFormPage() {
           return;
         }
         setIssueDate(target.issue_date);
-        setKind(target.kind ?? "");
+        applyKind(target.kind);
         setTitle(target.title);
         setTopic(target.topic);
         setContent(target.content);
@@ -174,7 +183,7 @@ export function ProposalFormPage() {
     try {
       const body = {
         issue_date: issueDate || todayLabel(),
-        kind: kind.trim() || null,
+        kind: kind || null,
         title,
         topic,
         content,
@@ -257,17 +266,27 @@ export function ProposalFormPage() {
             <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-kind">
               품의서 종류
             </label>
-            <select
-              id="proposal-kind"
-              value={kind}
-              onChange={(e) => changeKind(e.target.value)}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-            >
-              <option value={PURCHASE_KIND}>구매</option>
-              <option value="">일반</option>
-              {legacyKind && <option value={legacyKind}>{legacyKind}</option>}
-            </select>
-            {kind.trim() === PURCHASE_KIND && (
+            <div className="flex gap-2">
+              <select
+                id="proposal-kind"
+                value={kindMode}
+                onChange={(e) => changeKindMode(e.target.value as "구매" | "일반")}
+                className="w-32 shrink-0 rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              >
+                <option value="구매">구매</option>
+                <option value="일반">일반</option>
+              </select>
+              <input
+                aria-label="품의서 종류 내용"
+                value={isPurchase ? "" : kindText}
+                onChange={(e) => (e.target.value.trim() === PURCHASE_KIND ? changeKindMode("구매") : setKindText(e.target.value))} // '구매'를 직접 적으면 구매로 바뀐다
+                disabled={isPurchase}
+                maxLength={50}
+                placeholder={isPurchase ? "구매는 입력하지 않습니다" : "예: 출장, 행사 (비워두면 그냥 '품의서'로 표시됩니다)"}
+                className="min-w-0 flex-1 rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg disabled:cursor-not-allowed disabled:bg-border/40 disabled:text-text-muted"
+              />
+            </div>
+            {isPurchase && (
               <p className="text-xs text-text-muted mt-1.5">
                 구매 품의서는 결재 승인 후 발주서 작성, 발송 확인, 입고 확인, 서류 첨부까지 목록의 카드 한 장에서 이어서 관리됩니다.
               </p>

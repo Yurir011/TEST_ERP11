@@ -21,7 +21,7 @@ def generate_payment_voucher_excel(payment: Payment) -> bytes:
         ("날짜", payment.payment_date.isoformat()),
         ("분류", payment.category),
         ("항목", payment.description),
-        ("거래처", payment.client.name if payment.client else "-"),
+        ("거래처", payment.client.name if payment.client else (payment.counterparty or "-")),
         ("결제수단", method_detail_text(payment)),
         ("증빙발행", proof_text(payment)),
         ("금액", payment.amount),

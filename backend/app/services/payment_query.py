@@ -64,6 +64,7 @@ def build_payment_query(
                 Payment.description.ilike(keyword),
                 Payment.memo.ilike(keyword),
                 Client.name.ilike(keyword),
+                Payment.counterparty.ilike(keyword),
             )
         )
 

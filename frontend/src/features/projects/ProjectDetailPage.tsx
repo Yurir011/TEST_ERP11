@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, FileText } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -10,12 +10,6 @@ import { ProjectPurchaseList } from "./ProjectPurchaseList";
 import { ScheduleProgressCard } from "./ScheduleProgressCard";
 import { DocColumn } from "./DocColumn";
 import { groupBySet } from "./salesDocGroups";
-import {
-  PROJECT_DOC_STATUS_LABELS,
-  PROJECT_DOC_STATUS_STYLES,
-  PROJECT_DOC_TYPE_LABELS,
-  type ProjectDocument,
-} from "../projectDocuments/types";
 import {
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_STYLES,
@@ -34,7 +28,6 @@ export function ProjectDetailPage() {
   const [showDiscardForm, setShowDiscardForm] = useState(false);
   const [discardReason, setDiscardReason] = useState("");
   const [documents, setDocuments] = useState<SalesDocument[] | null>(null);
-  const [projectDocs, setProjectDocs] = useState<ProjectDocument[] | null>(null);
   const [stages, setStages] = useState<ProgressStage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -48,13 +41,6 @@ export function ProjectDetailPage() {
       });
   }
 
-  // 견적서·거래명세서는 전자결재(문서관리)와 같은 문서로 작성/결재/PDF 발급되므로 그쪽 목록을 그대로 가져온다.
-  function loadProjectDocs() {
-    apiGet<ProjectDocument[]>(`/api/project-documents?project_id=${id}`)
-      .then((list) => setProjectDocs(list.filter((d) => d.doc_type !== "tax_invoice")))
-      .catch((err) => logError("ProjectDetail", "견적서·거래명세서 목록 조회 실패", err));
-  }
-
   function loadDocuments() {
     apiGet<SalesDocument[]>(`/api/sales-documents?project_id=${id}`)
       .then(setDocuments)
@@ -64,7 +50,6 @@ export function ProjectDetailPage() {
   useEffect(() => {
     loadProject();
     loadDocuments();
-    loadProjectDocs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -166,51 +151,6 @@ export function ProjectDetailPage() {
           <DateNotesCard project={project} />
 
           <ProjectPurchaseList projectId={project.id} />
-
-          <h2 className="text-sm font-medium text-text-muted mb-3">견적서 · 거래명세서 · 발주서</h2>
-
-          {projectDocs !== null && projectDocs.length === 0 && (
-            <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center mb-6">
-              <FileText className="mx-auto mb-2 text-text-muted" size={24} />
-              <p className="text-sm text-text-muted">작성된 문서가 없습니다.</p>
-            </div>
-          )}
-
-          {projectDocs !== null && projectDocs.length > 0 && (
-            <div className="bg-surface border border-border rounded-2xl divide-y divide-border mb-6">
-              {projectDocs.map((doc) => (
-                <div key={doc.id} className="flex items-center justify-between gap-3 px-5 py-4">
-                  <Link to={`/project-documents?open=${doc.id}`} className="min-w-0 flex-1 hover:text-primary transition-colors">
-                    <p className="text-sm font-medium truncate">
-                      {PROJECT_DOC_TYPE_LABELS[doc.doc_type]}
-                      {doc.doc_no ? ` · ${doc.doc_no}` : ""}
-                    </p>
-                    <p className="text-xs text-text-muted mt-1">
-                      {doc.client_name} · {doc.issue_date}
-                    </p>
-                  </Link>
-                  <span className={`text-xs px-2 py-1 font-medium shrink-0 ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}>
-                    {PROJECT_DOC_STATUS_LABELS[doc.status]}
-                  </span>
-                  {doc.status === "approved" && doc.has_pdf && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await downloadFile(`/api/project-documents/${doc.id}/pdf`, `${PROJECT_DOC_TYPE_LABELS[doc.doc_type]}_${doc.issue_date}.pdf`);
-                        } catch (err) {
-                          logError("ProjectDetail", "문서 PDF 다운로드 실패", err);
-                        }
-                      }}
-                      className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5 shrink-0"
-                    >
-                      <Download size={14} />
-                      PDF
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
 
           {setGroups !== null && setGroups.length > 0 && (
             <h3 className="text-xs font-medium text-text-muted mb-2">이전 방식으로 작성한 문서</h3>

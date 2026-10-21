@@ -1,5 +1,5 @@
 import { FileSpreadsheet, Image, Pencil, Printer, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { downloadFile, openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
@@ -24,7 +24,9 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onClose: () => void }) {
+export function PaymentDetailModal({ payment, onClose, onAttachReceipt }: { payment: Payment; onClose: () => void; onAttachReceipt?: (payment: Payment, file: File) => Promise<void> | void }) {
+  const receiptInput = useRef<HTMLInputElement>(null);
+  const [attaching, setAttaching] = useState(false);
   const navigate = useNavigate();
   const { cardName, bankName } = usePaymentAccounts();
   const proofText = payment.proof_type
@@ -99,6 +101,36 @@ export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onC
         </div>
 
         <div className="flex items-center gap-2 mt-5">
+          {onAttachReceipt && (
+            <>
+              <input
+                ref={receiptInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                aria-label="영수증 파일"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  setAttaching(true);
+                  try {
+                    await onAttachReceipt(payment, file);
+                  } finally {
+                    setAttaching(false);
+                  }
+                }}
+              />
+              <button
+                onClick={() => receiptInput.current?.click()}
+                disabled={attaching}
+                className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg disabled:opacity-50"
+              >
+                <Image size={14} />
+                {attaching ? "올리는 중..." : payment.has_receipt ? "영수증 바꾸기" : "영수증 첨부"}
+              </button>
+            </>
+          )}
           {payment.has_receipt && (
             <button
               onClick={() => openFile(`/api/payments/${payment.id}/receipt`)}

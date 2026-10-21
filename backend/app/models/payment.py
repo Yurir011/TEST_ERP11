@@ -71,6 +71,8 @@ class Payment(Base):
     amount: Mapped[int] = mapped_column(BigInteger)
     method: Mapped[PaymentMethod] = mapped_column(Enum(PaymentMethod), default=PaymentMethod.other)
     client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id"), nullable=True)
+    # 등록된 거래처가 아니어서 이름만 직접 입력한 상대방 (client_id 가 없을 때만 쓴다)
+    counterparty: Mapped[str | None] = mapped_column(String(200), nullable=True)
     receipt_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # 계좌이체 건의 증빙 발행 여부/종류. 계좌이체가 아닌 경우 항상 None.
     proof_type: Mapped[ProofType | None] = mapped_column(Enum(ProofType, name="prooftype"), nullable=True)

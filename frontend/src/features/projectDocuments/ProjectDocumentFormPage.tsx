@@ -94,12 +94,12 @@ export function ProjectDocumentFormPage() {
   const [isPaper, setIsPaper] = useState(false); // 종이로 받은 매입 세금계산서 (팝빌 등록 대상 아님)
   const [approvalNo, setApprovalNo] = useState<string | null>(null);
 
-  // 세금계산서는 담당자를 로그인한 사용자(이름 + 직책, 직책이 없으면 직급)로 자동 입력한다. 이미 입력된 값은 덮어쓰지 않는다.
+  // 세금계산서와 발주서는 새로 쓸 때 담당자를 로그인한 사용자(이름 + 직책, 직책이 없으면 직급)로 자동 입력한다. 이미 입력된 값은 덮어쓰지 않으므로 고칠 수 있다.
   useEffect(() => {
-    if (docType !== "tax_invoice" || !user || isEdit) return;
+    if ((docType !== "tax_invoice" && docType !== "purchase_order") || !user || isEdit) return;
     const position = user.title ? TITLE_LABELS[user.title] : GRADE_LABELS[user.grade];
     const label = [user.name, position].filter(Boolean).join(" ");
-    logDebug("ProjectDocumentForm", `세금계산서 담당자 자동입력: ${label}`);
+    logDebug("ProjectDocumentForm", `${PROJECT_DOC_TYPE_LABELS[docType]} 담당자 자동입력: ${label}`);
     setManagerName((prev) => prev || label);
     // isEdit 는 화면 진입 시 경로로 정해지는 값이라 의존성에서 뺀다
     // eslint-disable-next-line react-hooks/exhaustive-deps

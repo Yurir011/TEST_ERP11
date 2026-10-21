@@ -77,7 +77,7 @@ def generate_payment_voucher_pdf(payment: Payment) -> bytes:
         ("날 짜", payment.payment_date.isoformat()),
         ("분 류", payment.category),
         ("항 목", payment.description),
-        ("거래처", payment.client.name if payment.client else "-"),
+        ("거래처", payment.client.name if payment.client else (payment.counterparty or "-")),
         ("결제수단", method_detail_text(payment)),
         ("증빙발행", proof_text(payment)),
         ("금 액", f"{payment.amount:,} 원"),

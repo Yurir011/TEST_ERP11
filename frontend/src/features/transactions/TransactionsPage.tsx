@@ -169,42 +169,7 @@ export function TransactionsPage() {
         </div>
       }
     >
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-        <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
-                tab === t.key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit">
-          {(
-            [
-              ["all", "전체"],
-              ["unsettled", "미결제"],
-              ["settled", "결제완료"],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setStatusTab(key)}
-              className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
-                statusTab === key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
-              }`}
-            >
-              {label} <span className="text-[11px] tabular-nums text-text-muted">{statusCounts[key]}</span>
-            </button>
-          ))}
-        </div>
-        </div>
-
+      <div className="flex items-center justify-end mb-3">
         <div className="flex items-center gap-2">
           <span className="text-xs text-text-muted">부가세 리포트 기준월</span>
           <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded-lg hover:bg-surface text-text-muted">
@@ -294,25 +259,57 @@ export function TransactionsPage() {
 
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
-      {visible !== null && visible.length === 0 && (
-        <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
-          <Receipt className="mx-auto mb-2 text-text-muted" size={24} />
-          <p className="text-sm text-text-muted">해당 기간의 거래 내역이 없습니다.</p>
-        </div>
-      )}
-
-      {visible !== null && visible.length > 0 && (
-        <p className="flex justify-between text-sm mb-2 px-1">
-          <span className="text-text-muted">
-            {tab === "all" ? "전체" : TX_TYPE_LABELS[tab]} · {statusTab === "all" ? "결제 구분 전체" : statusTab === "unsettled" ? "미결제" : "결제완료"} {visible.length}건
-          </span>
-          <b className="tabular-nums">합계 {formatCurrency(visibleTotal)}</b>
-        </p>
-      )}
-
-      {visible !== null && visible.length > 0 && (
-        <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm">
+      {/* 목록: 매출/매입 · 결제 구분 탭이 이 표의 머리줄이라 목록 바로 위에 붙어 있고, 건수·합계도 같은 줄에 보인다 */}
+      {visible !== null && (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border">
+            <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1 bg-bg border border-border rounded-lg p-1 w-fit">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
+                  tab === t.key ? "bg-surface font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 bg-bg border border-border rounded-lg p-1 w-fit">
+            {(
+              [
+                ["all", "전체"],
+                ["unsettled", "미결제"],
+                ["settled", "결제완료"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setStatusTab(key)}
+                className={`px-4 py-1.5 rounded-md text-sm transition-colors ${
+                  statusTab === key ? "bg-surface font-medium text-text shadow-sm" : "text-text-muted hover:text-text"
+                }`}
+              >
+                {label} <span className="text-[11px] tabular-nums text-text-muted">{statusCounts[key]}</span>
+              </button>
+            ))}
+          </div>
+            </div>
+            <span className="text-sm tabular-nums">
+              <span className="text-text-muted">{visible.length}건 · </span>
+              <b>합계 {formatCurrency(visibleTotal)}</b>
+            </span>
+          </div>
+          {visible.length === 0 ? (
+            <div className="p-10 text-center">
+              <Receipt className="mx-auto mb-2 text-text-muted" size={24} />
+              <p className="text-sm text-text-muted">해당 기간의 거래 내역이 없습니다.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-text-muted border-b border-border">
                 <th className="py-2.5 px-4 font-medium">구분</th>
@@ -384,7 +381,9 @@ export function TransactionsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

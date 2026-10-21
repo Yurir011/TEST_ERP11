@@ -37,7 +37,7 @@ def generate_payment_list_excel(payments: list[Payment]) -> bytes:
         ws.cell(row=row_idx, column=2, value=p.payment_date.isoformat())
         ws.cell(row=row_idx, column=3, value=p.category)
         ws.cell(row=row_idx, column=4, value=p.description)
-        ws.cell(row=row_idx, column=5, value=p.client.name if p.client else "-")
+        ws.cell(row=row_idx, column=5, value=p.client.name if p.client else (p.counterparty or "-"))
         ws.cell(row=row_idx, column=6, value=method_detail_text(p))
         ws.cell(row=row_idx, column=7, value=proof_text(p))
         amount_cell = ws.cell(row=row_idx, column=8, value=p.amount)
