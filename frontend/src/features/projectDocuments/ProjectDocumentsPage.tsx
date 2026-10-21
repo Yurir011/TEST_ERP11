@@ -643,6 +643,7 @@ export function ProjectDocumentsPage({
             onPrintOrder={handlePrint}
             onDownloadOrderExcel={handleDownloadExcel}
             onSendOrder={handleSend}
+            onCopy={() => navigate(`/proposals/new?copy=${p.id}`)}
             onDownloadAttachment={(a) => {
               logDebug("ProjectDocuments", `첨부 저장: proposal_id=${p.id}, attachment_id=${a.id}`);
               downloadFile(`/api/proposals/${p.id}/attachments/${a.id}/file`, a.label).catch((err) => {

@@ -29,6 +29,9 @@ export function ProposalFormPage() {
   const [searchParams] = useSearchParams();
   const editId = searchParams.get("edit");
   const isEdit = editId !== null;
+  // ?copy=품의서ID 이면 그 품의서의 내용을 그대로 가져와 새 품의서로 쓴다 (같은 소모품을 또 살 때). 날짜는 오늘, 문서번호는 결재 요청 때 새로 발급된다.
+  const copyId = searchParams.get("copy");
+  const isCopy = !isEdit && copyId !== null;
 
   const [issueDate, setIssueDate] = useState(todayLabel());
   const [kind, setKind] = useState("");
@@ -51,6 +54,34 @@ export function ProposalFormPage() {
   const isPurchase = kind.trim() === PURCHASE_KIND;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isCopy) return;
+    logDebug("Proposals", `복사해서 작성: source_id=${copyId}`);
+    apiGet<Proposal[]>("/api/proposals")
+      .then((list) => {
+        const source = list.find((p) => String(p.id) === copyId);
+        if (!source) {
+          setError("복사할 품의서를 찾을 수 없습니다.");
+          return;
+        }
+        // 기안일자는 오늘 그대로 두고, 결재선·첨부는 새로 정한다.
+        setKind(source.kind ?? "");
+        setTitle(source.title);
+        setTopic(source.topic);
+        setContent(source.content);
+        setVendorName(source.vendor_name ?? "");
+        setProjectId(source.project_id ? String(source.project_id) : "");
+        setAmount(source.amount === null || source.amount === undefined ? "" : String(source.amount));
+        setCurrency(source.currency ?? "KRW");
+      })
+      .catch((err) => {
+        logError("Proposals", "복사할 품의서 불러오기 실패", err);
+        setError("복사할 품의서를 불러오지 못했습니다.");
+      });
+    // 화면이 열릴 때 한 번만 불러온다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -90,7 +121,7 @@ export function ProposalFormPage() {
       .catch((err) => logError("Proposals", "프로젝트 목록 조회 실패", err));
     // 화면이 열릴 때와 수정 불러오기로 선택값이 정해질 때 한 번씩 다시 조회한다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit]);
+  }, [isEdit, isCopy]);
 
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -166,8 +197,14 @@ export function ProposalFormPage() {
 
   return (
     <MainLayout
-      title={isEdit ? "품의서 수정" : "품의서 작성"}
-      description={isEdit ? "수정한 뒤 결재를 처음부터 다시 받아야 합니다." : "결재 승인이 완료되면 PDF가 자동으로 생성됩니다."}
+      title={isEdit ? "품의서 수정" : isCopy ? "품의서 복사해서 작성" : "품의서 작성"}
+      description={
+        isEdit
+          ? "수정한 뒤 결재를 처음부터 다시 받아야 합니다."
+          : isCopy
+            ? "기존 품의서의 내용을 가져왔습니다. 기안일자는 오늘이고 문서번호는 결재 요청 때 새로 발급됩니다. 결재선을 선택해 주세요."
+            : "결재 승인이 완료되면 PDF가 자동으로 생성됩니다."
+      }
     >
       <form onSubmit={handleSubmit} className="max-w-2xl space-y-5">
         <div className="bg-surface border border-border rounded-2xl p-5 grid grid-cols-2 gap-4 text-sm">

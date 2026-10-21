@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Download, FileText, Mail, Package, Paperclip, Printer, Sheet, ShoppingCart, Trash2 } from "lucide-react";
+import { ArrowRight, Check, Copy, Download, FileText, Mail, Package, Paperclip, Printer, Sheet, ShoppingCart, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ClampText } from "../../components/ui/ClampText";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
@@ -172,13 +172,13 @@ function ProposalViewButton({ chips, onOpenProposal }: { chips: FlowChip[]; onOp
 }
 
 /** 입고 후 등록해야 하는 서류(거래명세서·세금계산서) 한 장의 등록 여부 칩. 입고 전에는 회색, 입고 후에는 등록됨(초록)/미등록(빨강). */
-function DocChip({ name, registered, received }: { name: string; registered: boolean; received: boolean }) {
-  const tone = !received ? "bg-[#f1f2f4] text-text-muted" : registered ? "bg-tile-green text-tile-green-fg" : "bg-[#fef2f2] text-danger";
-  const text = !received ? " ·" : registered ? " ✓" : ""; // 미등록은 글자 없이 빨간색으로만 표시한다
-  const title = !received ? `${name}: 입고 완료 후 등록합니다` : registered ? `${name} 등록됨` : `${name}이(가) 아직 등록되지 않았습니다`;
+function DocChip({ name, registered }: { name: string; registered: boolean }) {
+  // 문서가 올라와 있으면 초록 ✓, 없으면 입고 전후와 상관없이 글자만 빨갛게 보인다.
+  const tone = registered ? "bg-tile-green text-tile-green-fg" : "bg-[#fef2f2] text-danger";
   return (
-    <span title={title} aria-label={`${name} ${!received ? "입고 후 등록" : registered ? "등록됨" : "미등록"}`} className={`rounded-full px-2 py-px text-[11px] font-semibold whitespace-nowrap ${tone}`}>
-      {name}{text}
+    <span title={registered ? `${name} 등록됨` : `${name}이(가) 아직 등록되지 않았습니다`} aria-label={`${name} ${registered ? "등록됨" : "미등록"}`} className={`rounded-full px-2 py-px text-[11px] font-semibold whitespace-nowrap ${tone}`}>
+      {name}
+      {registered ? " ✓" : ""}
     </span>
   );
 }
@@ -236,7 +236,7 @@ function FlowButton({
       </button>
       <span className="text-xs font-medium text-text">{label}</span>
       {/* 아래 상태 줄은 세 칸이 같은 높이·같은 위치에서 시작하도록 감싼다 (배지가 있는 칸과 없는 칸의 세로 위치가 어긋나지 않게) */}
-      <div className="flex flex-col items-center gap-1 min-h-7">{children}</div>
+      <div className="flex flex-col items-center gap-1 min-h-7 mt-[10px]">{children}</div>
     </div>
   );
 }
@@ -266,6 +266,8 @@ interface PurchaseProposalCardProps {
   /** 올려 둔 첨부파일 저장 */
   onDownloadAttachment: (attachment: ProposalAttachment) => void;
   /** 품의서 삭제 (승인된 품의서는 삭제 결재를 요청한다) */
+  /** 같은 내용으로 새 품의서 작성 (소모품처럼 반복해서 사는 건) */
+  onCopy: () => void;
   onDelete: () => void;
   canDelete: boolean;
 }
@@ -289,6 +291,7 @@ export function PurchaseProposalCard({
   onDownloadOrderExcel,
   onSendOrder,
   onDownloadAttachment,
+  onCopy,
   onDelete,
   canDelete,
 }: PurchaseProposalCardProps) {
@@ -323,18 +326,19 @@ export function PurchaseProposalCard({
       }`}
     >
       {/* 제목 · 배지 · 날짜 */}
-      <div className="flex flex-col gap-2.5 w-[250px] shrink-0">
+      <div className="flex flex-col gap-[22px] w-[250px] shrink-0">
        <div className="flex items-start gap-3">
         <div className="w-12 h-12 rounded-full bg-tile-orange-fg text-white grid place-items-center shrink-0">
           <ShoppingCart size={21} />
         </div>
         <div className="min-w-0">
-          <p className="text-[15px] font-semibold text-text truncate" title={proposal.title}>
+          <p className="ml-0.5 text-[15px] font-semibold text-text truncate" title={proposal.title}>
             {proposal.title}
           </p>
-          <ProposalViewButton chips={flow.approval} onOpenProposal={onOpen} />
-          <p className="text-xs text-text mt-1.5">{proposal.issue_date}</p>
-          <p className="text-[11px] text-text-muted">No. {proposal.doc_no}</p>
+          <p className="ml-0.5 text-xs text-text mt-0.5">{proposal.issue_date}</p>
+          <div className="mt-1 -ml-2">
+            <ProposalViewButton chips={flow.approval} onOpenProposal={onOpen} />
+          </div>
         </div>
        </div>
 
@@ -344,6 +348,9 @@ export function PurchaseProposalCard({
           <ActionMenuButton icon={<Sheet size={15} />} label="엑셀 저장" items={excelItems} emptyTitle="결재 승인 후 엑셀로 저장할 수 있습니다." busy={busy} runLabel="선택 엑셀 저장" />
           <ActionMenuButton icon={<Printer size={15} />} label="출력" items={printItems} emptyTitle="결재 승인 후 출력할 문서가 생깁니다." busy={busy} runLabel="선택 출력" />
           <ActionMenuButton icon={<Mail size={15} />} label="메일 발송" items={mailItems} emptyTitle="발주서가 작성되면 메일로 보낼 수 있습니다." busy={busy} runLabel="선택 메일 발송" />
+          <button type="button" onClick={onCopy} disabled={busy} title="복사해서 새 품의서 작성 (날짜·문서번호만 새로)" aria-label="품의서 복사" className={ICON_BUTTON}>
+            <Copy size={15} />
+          </button>
           <button
             type="button"
             onClick={onDelete}
@@ -395,7 +402,7 @@ export function PurchaseProposalCard({
               title={flow.received ? "입고 확인을 먼저 취소해야 합니다." : canManage ? "눌러서 취소" : undefined}
               className="text-[11px] text-tile-green-fg disabled:cursor-default"
             >
-              {flow.onlineOrdered ? "온라인 주문" : "발송 완료"} {monthDay(proposal.order_sent_at)}
+              {monthDay(proposal.order_sent_at)}
             </button>
           )}
         </FlowButton>
@@ -427,30 +434,30 @@ export function PurchaseProposalCard({
           onClick={onAttach}
         >
           <div className="flex flex-col items-center gap-0.5">
-            <DocChip name="명세서" registered={flow.statementRegistered} received={flow.received} />
-            <DocChip name="계산서" registered={flow.taxInvoiceRegistered} received={flow.received} />
+            <DocChip name="명세서" registered={flow.statementRegistered} />
+            <DocChip name="계산서" registered={flow.taxInvoiceRegistered} />
           </div>
         </FlowButton>
         <div className="w-px self-stretch bg-border mx-1.5" />
       </div>
 
       {/* 거래처 · 내용 */}
-      <div className="grid gap-1 min-w-[170px] basis-[190px] flex-1 grow-[3]">
-        <div className="bg-bg rounded-lg px-2.5 py-1">
-          <p className="text-[10px] text-text-muted">거래처명</p>
-          <p className="text-sm font-medium truncate" title={summary?.client}>
+      <div className="grid grid-rows-3 gap-1 self-stretch min-w-[170px] basis-[190px] flex-1 grow-[3]">
+        <div className="bg-bg rounded-lg px-2.5 py-1.5 flex items-center gap-3">
+          <p className="w-12 shrink-0 text-[11px] text-text-muted">거래처명</p>
+          <p className="min-w-0 flex-1 text-sm font-medium truncate" title={summary?.client}>
             {summary?.client ?? "-"}
           </p>
         </div>
-        <div className="bg-bg rounded-lg px-2.5 py-1">
-          <p className="text-[10px] text-text-muted">내용</p>
-          <div className="text-sm">
+        <div className="bg-bg rounded-lg px-2.5 py-1.5 flex items-center gap-3">
+          <p className="w-12 shrink-0 text-[11px] text-text-muted">내용</p>
+          <div className="min-w-0 flex-1 text-sm font-medium">
             <ClampText>{summary?.content ?? "-"}</ClampText>
           </div>
         </div>
-        <div className="bg-bg rounded-lg px-2.5 py-1">
-          <p className="text-[10px] text-text-muted">금액</p>
-          <p className="text-sm font-semibold text-primary tabular-nums truncate" title={summary?.total ? `${summary.total}, 부가세 ${summary.vat}` : undefined}>
+        <div className="bg-bg rounded-lg px-2.5 py-1.5 flex items-center gap-3">
+          <p className="w-12 shrink-0 text-[11px] text-text-muted">금액</p>
+          <p className="min-w-0 flex-1 text-sm font-medium tabular-nums truncate" title={summary?.total ? `${summary.total}, 부가세 ${summary.vat}` : undefined}>
             {summary?.total ? `${summary.total}, 부가세 ${summary.vat}` : "-"}
           </p>
         </div>

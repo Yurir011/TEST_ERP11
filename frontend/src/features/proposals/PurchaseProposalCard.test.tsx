@@ -22,7 +22,7 @@ function renderCard(p: Proposal, orders: ProjectDocument[] = [], extra: Partial<
   const handlers = {
     onOpen: vi.fn(), onOrder: vi.fn(), onToggleSent: vi.fn(), onToggleReceived: vi.fn(),
     onAttach: vi.fn(), onDownloadProposal: vi.fn(), onDownloadProposalExcel: vi.fn(), onPrintProposal: vi.fn(), onDownloadOrder: vi.fn(), onPrintOrder: vi.fn(),
-    onDownloadOrderExcel: vi.fn(), onSendOrder: vi.fn(), onDownloadAttachment: vi.fn(), onDelete: vi.fn(),
+    onDownloadOrderExcel: vi.fn(), onSendOrder: vi.fn(), onDownloadAttachment: vi.fn(), onCopy: vi.fn(), onDelete: vi.fn(),
   };
   render(<PurchaseProposalCard proposal={p} orders={orders} canManage canDelete busy={false} {...handlers} {...extra} />);
   return handlers;
@@ -70,21 +70,27 @@ describe("구매 품의서 카드", () => {
     expect(screen.queryByRole("menu")).toBeNull(); // 발주서 보기는 여기에 없다 (발주 단계의 팝업에서 본다)
   });
 
-  it("온라인 주문으로 발주 완료 처리하면 발주서 없이도 입고를 할 수 있고, 취소할 수 있다", () => {
-    const h = renderCard(proposal({ order_sent_at: "2026-10-22T01:00:00Z" }), []);
+  it("온라인 주문으로 발주 완료 처리하면 발주서 없이도 입고를 할 수 있고, 아래에 온라인 주문 글씨는 나오지 않는다", () => {
+    renderCard(proposal({ order_sent_at: "2026-10-22T01:00:00Z" }), []);
     expect(screen.getByText("발주 완료")).toBeTruthy();
     expect(screen.queryByText("미발주")).toBeNull();
     expect((screen.getByRole("button", { name: "입고" }) as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: /온라인 주문/ }));
-    expect(h.onToggleSent).toHaveBeenCalledWith(false);
+    expect(screen.queryByText(/온라인 주문|발송 완료/)).toBeNull(); // 발주 완료 아래에는 발주한 날짜만 보인다
+    expect(screen.getByText("10/22")).toBeTruthy();
   });
 
   const docFile = (id: number, doc_kind: "statement" | "tax_invoice" | null) => ({ id, kind: "file" as const, label: `서류${id}.pdf`, url: null, doc_kind, created_by: 1, created_at: "x" });
 
-  it("입고 전에는 명세서·계산서 칩이 회색(입고 후 등록)이다", () => {
+  it("복사 아이콘을 누르면 같은 내용으로 새 품의서를 쓰도록 요청한다", () => {
+    const h = renderCard(proposal());
+    fireEvent.click(screen.getByRole("button", { name: "품의서 복사" }));
+    expect(h.onCopy).toHaveBeenCalledTimes(1);
+  });
+
+  it("입고 전이라도 문서가 없으면 명세서·계산서 칩이 빨간색(미등록)이다", () => {
     renderCard(proposal());
-    expect(screen.getByLabelText("명세서 입고 후 등록")).toBeTruthy();
-    expect(screen.getByLabelText("계산서 입고 후 등록")).toBeTruthy();
+    expect(screen.getByLabelText("명세서 미등록").className).toContain("text-danger");
+    expect(screen.getByLabelText("계산서 미등록").className).toContain("text-danger");
   });
 
   it("입고 후에는 등록된 서류는 등록됨, 빠진 서류는 미등록으로 보인다", () => {
