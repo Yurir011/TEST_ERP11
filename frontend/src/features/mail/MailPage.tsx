@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
-import { ALL_MAIL_FOLDER, type MailAccountInfo, type MailDocRef, type MailDetail, type MailDraft, type MailDraftKind, type MailFolder, type MailSendResult, type MailSummary, getBenchClient } from "../../lib/desktop";
+import { ALL_MAIL_FOLDER, type MailAccountEntry, type MailAccountInfo, type MailAccountList, type MailDocRef, type MailDetail, type MailDraft, type MailDraftKind, type MailFolder, type MailSendResult, type MailSummary, getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
 import { AddressBookView } from "./AddressBookView";
 import { ComposeView } from "./ComposeView";
@@ -41,10 +41,119 @@ export function MailPage() {
       </div>
     );
   }
-  return <MailApp />;
+  return <MailShell />;
 }
 
-function MailApp() {
+/** 안 읽은 수 등을 다시 읽는 간격 (계정이 둘 이상일 때 사이드바 숫자용) */
+const ACCOUNT_REFRESH_MS = 30_000;
+
+/**
+ * 메일 계정 여러 개를 다루는 바깥 틀. 계정마다 받은 메일함이 따로라서, 보는 계정을 바꾸면 그 계정의 화면을 새로 연다.
+ * (예전 앱처럼 계정 목록 기능이 없으면 계정 하나로 그대로 동작한다)
+ */
+function MailShell() {
+  const bridge = getBenchClient()!.mail!;
+  const [list, setList] = useState<MailAccountList | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  /** 알림을 눌러 다른 계정으로 넘어온 경우, 그 계정 화면이 열린 뒤 열어야 할 메일 */
+  const [openRequest, setOpenRequest] = useState<{ accountId: string; id: number } | null>(null);
+  /** 새 계정을 등록하려고 열어 둔 빈 칸과, 취소하면 돌아갈 계정 */
+  const addingRef = useRef<{ slot: string; back: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (typeof bridge.accounts !== "function") return null;
+    const l = await bridge.accounts();
+    setList(l);
+    return l;
+  }, [bridge]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const l = await refresh();
+      if (cancelled) return;
+      const id = l ? (l.accounts.some((a) => a.id === l.active) ? l.active : (l.accounts[0]?.id ?? l.active)) : "main";
+      if (id !== l?.active && typeof bridge.useAccount === "function") await bridge.useAccount(id);
+      if (!cancelled) setActiveId(id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge, refresh]);
+
+  // 새 메일·읽음으로 계정별 안 읽은 수가 바뀌므로 가끔 다시 읽는다
+  useEffect(() => {
+    if (typeof bridge.accounts !== "function") return;
+    const t = window.setInterval(() => void refresh(), ACCOUNT_REFRESH_MS);
+    return () => window.clearInterval(t);
+  }, [bridge, refresh]);
+
+  const switchAccount = useCallback(
+    async (id: string, openId?: number) => {
+      logDebug("Mail", `메일 계정 바꾸기: ${id}`);
+      if (typeof bridge.useAccount === "function") await bridge.useAccount(id);
+      setOpenRequest(openId ? { accountId: id, id: openId } : null);
+      setActiveId(id);
+      void refresh();
+    },
+    [bridge, refresh],
+  );
+
+  async function addAccount() {
+    if (typeof bridge.newSlot !== "function" || activeId === null) return;
+    const slot = await bridge.newSlot(); // 새 계정을 등록할 칸 (그 칸이 지금 보는 계정이 된다)
+    if (!slot) return;
+    addingRef.current = { slot, back: activeId };
+    setOpenRequest(null);
+    setActiveId(slot);
+  }
+
+  async function cancelAdd() {
+    const adding = addingRef.current;
+    addingRef.current = null;
+    if (!adding) return;
+    if (typeof bridge.dropSlot === "function") await bridge.dropSlot(adding.slot);
+    await switchAccount(adding.back);
+  }
+
+  /** 계정을 등록·지운 뒤: 목록을 다시 읽고, 보던 계정이 없어졌으면 앱이 정한 계정으로 옮긴다 */
+  async function accountsChanged() {
+    addingRef.current = null;
+    const l = await refresh();
+    if (!l) return;
+    if (!l.accounts.some((a) => a.id === activeId) && l.accounts.length > 0) await switchAccount(l.active);
+  }
+
+  if (activeId === null) return <p className="min-h-screen bg-bg p-8 text-sm text-text-muted">불러오는 중...</p>;
+  return (
+    <MailApp
+      key={activeId}
+      accountId={activeId}
+      accounts={list?.accounts}
+      onSwitchAccount={(id, openId) => void switchAccount(id, openId)}
+      onAddAccount={typeof bridge.newSlot === "function" ? () => void addAccount() : undefined}
+      onCancelAdd={addingRef.current?.slot === activeId ? () => void cancelAdd() : undefined}
+      onAccountsChanged={() => void accountsChanged()}
+      openRequest={openRequest?.accountId === activeId ? openRequest : null}
+      onOpenRequestHandled={() => setOpenRequest(null)}
+    />
+  );
+}
+
+interface MailAppProps {
+  accountId: string;
+  accounts?: MailAccountEntry[];
+  onSwitchAccount: (id: string, openId?: number) => void;
+  onAddAccount?: () => void;
+  /** 새 계정 등록 중일 때만: 등록하지 않고 이전 계정으로 돌아간다 */
+  onCancelAdd?: () => void;
+  onAccountsChanged: () => void;
+  /** 다른 계정의 알림을 눌러 이 계정 화면이 열린 경우 열어야 할 메일 */
+  openRequest: { accountId: string; id: number } | null;
+  onOpenRequestHandled: () => void;
+}
+
+function MailApp({ accountId, accounts, onSwitchAccount, onAddAccount, onCancelAdd, onAccountsChanged, openRequest, onOpenRequestHandled }: MailAppProps) {
   const bridge = getBenchClient()!.mail!;
   const { user } = useAuth();
   const dialog = useDialog();
@@ -145,6 +254,14 @@ function MailApp() {
 
   /** 문서 화면에서 "메일 보내기"로 넘어온 초안(PDF 첨부 포함)이 있으면 쓰기 화면으로 연다 */
   async function openPendingDocumentCompose() {
+    // 문서 메일은 앱이 정한 계정으로 쓴다. 지금 보는 계정과 다르면 그 계정 화면으로 옮기고, 초안은 새 화면이 가져간다
+    if (typeof bridge.accounts === "function") {
+      const cur = await bridge.accounts();
+      if (cur.active !== accountId) {
+        onSwitchAccount(cur.active);
+        return;
+      }
+    }
     const pending = await bridge.consumePendingCompose();
     if (!pending) return;
     if (!(await leaveCompose())) {
@@ -197,16 +314,27 @@ function MailApp() {
   // 새 메일 확인으로 목록이 바뀌었다는 신호, 알림을 눌러 특정 메일을 열라는 신호
   useEffect(() => {
     if (!account) return;
-    const offChanged = bridge.onChanged(() => setTick((t) => t + 1));
-    const offOpen = bridge.onOpenMessage(({ id }) => void openMessageRef.current(id));
+    const offChanged = bridge.onChanged((payload) => {
+      const changed = payload?.accountId;
+      if (!changed || changed === accountId) setTick((t) => t + 1); // 이 계정의 메일이 바뀐 경우만 목록을 다시 읽는다
+      onAccountsChanged(); // 계정별 안 읽은 수 갱신
+    });
+    // 알림을 눌러 연 메일: 다른 계정의 메일이면 그 계정 화면으로 옮겨서 연다
+    const open = (id: number, target?: string) => (target && target !== accountId ? onSwitchAccount(target, id) : void openMessageRef.current(id));
+    const offOpen = bridge.onOpenMessage(({ id, accountId: target }) => open(id, target));
     const offCompose = bridge.onOpenCompose(() => void openPendingComposeRef.current());
-    void bridge.consumePendingOpen().then((id) => id && void openMessageRef.current(id));
+    void bridge.consumePendingOpen().then((p) => p && open(p.id, p.accountId));
+    if (openRequest) {
+      void openMessageRef.current(openRequest.id);
+      onOpenRequestHandled();
+    }
     void openPendingComposeRef.current();
     return () => {
       offChanged();
       offOpen();
       offCompose();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bridge, account]);
 
   function goList() {
@@ -382,6 +510,7 @@ function MailApp() {
     await bridge.removeAccount();
     setAccount(null);
     setEditing(false);
+    onAccountsChanged(); // 다른 계정이 있으면 그 계정으로 옮긴다
   }
 
   useEffect(() => {
@@ -400,13 +529,14 @@ function MailApp() {
           <MailAccountForm
             bridge={bridge}
             initial={account}
-            onCancel={account ? () => setEditing(false) : undefined}
+            onCancel={account ? () => setEditing(false) : onCancelAdd}
             onSaved={(info) => {
               setAccount(info);
               setEditing(false);
               setFolder("INBOX");
               setPage(1);
               void syncFolder("INBOX");
+              onAccountsChanged(); // 사이드바 계정 목록에 새 계정을 보여 준다
             }}
           />
           {account && (
@@ -438,6 +568,10 @@ function MailApp() {
         onAddressBook={() => void leaveCompose().then((ok) => ok && setShowBook(true))}
         bookActive={showBook && !composing}
         onBackToErp={getBenchClient()?.focusMain ? () => void getBenchClient()?.focusMain?.() : undefined}
+        accounts={accounts}
+        activeAccountId={accountId}
+        onSwitchAccount={(id) => void leaveCompose().then((ok) => ok && onSwitchAccount(id))}
+        onAddAccount={onAddAccount ? () => void leaveCompose().then((ok) => ok && onAddAccount()) : undefined}
       />
       <main className="flex-1 min-w-0 h-full">
         {composing ? (

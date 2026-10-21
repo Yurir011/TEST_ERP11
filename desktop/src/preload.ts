@@ -42,8 +42,14 @@ const api = {
     /** 메일을 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로) */
     openWindow: (): Promise<void> => ipcRenderer.invoke("mail:open-window"),
     /** 새 메일이 도착했을 때 (보낸 사람·제목, 이 PC 안에서만) / 그 메일을 메일 창에서 열기 */
-    onNewMail: (cb: (items: { id: number; from: string; subject: string }[]) => void): Unsubscribe => subscribe("mail:new", cb),
-    openMessage: (id: number): Promise<void> => ipcRenderer.invoke("mail:open-message-window", id),
+    onNewMail: (cb: (items: { id: number; from: string; subject: string; accountId?: string; account?: string }[]) => void): Unsubscribe => subscribe("mail:new", cb),
+    /** accountId 를 주면 그 계정의 메일을 연다 (없으면 지금 보던 계정) */
+    openMessage: (id: number, accountId?: string): Promise<void> => ipcRenderer.invoke("mail:open-message-window", id, accountId),
+    /** 메일 계정 여러 개: 등록된 계정 목록과 지금 보는 계정, 보는 계정 바꾸기, 새 계정을 등록할 칸 준비·정리 */
+    accounts: (): Promise<unknown> => ipcRenderer.invoke("mail:accounts"),
+    useAccount: (id: string): Promise<unknown> => ipcRenderer.invoke("mail:use-account", id),
+    newSlot: (): Promise<string | null> => ipcRenderer.invoke("mail:new-slot"),
+    dropSlot: (id: string): Promise<void> => ipcRenderer.invoke("mail:drop-slot", id),
     account: (): Promise<unknown> => ipcRenderer.invoke("mail:account"),
     /** 보내는 사람 목록(쓰기 화면에서 고르는 이름·주소) 읽기·저장 */
     /** 받는 사람 자동완성: 보낸 적 있는 주소 목록(입력한 글이 있으면 걸러서), 목록에서 지우기 */
@@ -75,8 +81,8 @@ const api = {
     /** 서버에서 본문까지 검색해 해당하는 메일 번호를 받는다 */
     searchBody: (folder: string, query: string): Promise<unknown> => ipcRenderer.invoke("mail:search-body", folder, query),
     /** 새 메일 확인으로 목록이 바뀌었을 때 / 알림을 눌러 특정 메일을 열라는 신호 */
-    onChanged: (cb: () => void): Unsubscribe => subscribe("mail:changed", () => cb()),
-    onOpenMessage: (cb: (payload: { id: number }) => void): Unsubscribe => subscribe("mail:open-message", cb),
+    onChanged: (cb: (payload: { accountId?: string }) => void): Unsubscribe => subscribe("mail:changed", cb),
+    onOpenMessage: (cb: (payload: { id: number; accountId?: string }) => void): Unsubscribe => subscribe("mail:open-message", cb),
     /** ERP 문서(PDF)를 첨부해 메일 창에서 쓰기 화면을 연다 */
     composeDocument: (payload: unknown): Promise<unknown> => ipcRenderer.invoke("mail:compose-document", payload),
     onOpenCompose: (cb: () => void): Unsubscribe => subscribe("mail:open-compose", () => cb()),
@@ -84,7 +90,7 @@ const api = {
     /** 이 PC 받은메일함의 안 읽은 수 (계정이 없으면 null) 와 그 값이 바뀔 때의 신호 */
     unread: (): Promise<number | null> => ipcRenderer.invoke("mail:unread"),
     onUnread: (cb: (payload: { unread: number }) => void): Unsubscribe => subscribe("mail:unread", cb),
-    consumePendingOpen: (): Promise<number | null> => ipcRenderer.invoke("mail:consume-pending-open"),
+    consumePendingOpen: (): Promise<{ accountId: string; id: number } | null> => ipcRenderer.invoke("mail:consume-pending-open"),
     openAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-open", id, index),
   },
   /** 받은 파일 내용을 임시 폴더에 풀어 이 PC의 기본 프로그램으로 연다 */

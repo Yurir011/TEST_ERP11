@@ -1,12 +1,17 @@
 /** 메일 기능이 화면(웹)과 주고받는 값. 비밀번호는 어디에도 들어 있지 않다(입력할 때만 한 방향으로 전달). */
 
+/** 서버 접속 암호화 방식: ssl = 처음부터 암호화(IMAP 993 / SMTP 465), starttls = 접속 후 암호화로 전환(IMAP 143 / SMTP 587). 없으면 ssl */
+export type MailSecurity = "ssl" | "starttls";
+
 export interface MailAccountInfo {
   email: string;
   username: string;
   imapHost: string;
   imapPort: number;
+  imapSecurity?: MailSecurity;
   smtpHost: string;
   smtpPort: number;
+  smtpSecurity?: MailSecurity;
   /** 보낸 메일을 보낸메일함에 이 앱이 직접 저장할지 (서버가 보낸 메일을 자동으로 저장하지 않을 때만 켠다) */
   saveToSent: boolean;
 }

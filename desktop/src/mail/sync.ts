@@ -37,7 +37,7 @@ export class MailError extends Error {
 export function describeImapError(err: unknown): MailError {
   const e = err as { authenticationFailed?: boolean; code?: string; responseText?: string; message?: string };
   if (e?.authenticationFailed) {
-    return new MailError("로그인에 실패했습니다. 이메일·비밀번호를 확인하세요. (다음스마트워크 설정에서 외부 프로그램(IMAP/SMTP) 사용이 꺼져 있거나, 2단계 인증을 쓰면 앱 비밀번호가 필요할 수 있습니다.)", "auth");
+    return new MailError("로그인에 실패했습니다. 이메일·비밀번호를 확인하세요. (메일 서비스 설정에서 외부 프로그램(IMAP/SMTP) 사용이 꺼져 있거나, 2단계 인증을 쓰는 계정이면 앱 비밀번호가 필요할 수 있습니다. 지메일·네이버는 앱 비밀번호를 만들어 입력하세요.)", "auth");
   }
   const code = e?.code ?? "";
   if (code === "ENOTFOUND" || code === "EAI_AGAIN") return new MailError("메일 서버 주소를 찾을 수 없습니다. 서버 주소와 인터넷 연결을 확인하세요.", "network");
@@ -69,7 +69,9 @@ export class MailSync {
     return new ImapFlow({
       host: creds.imapHost,
       port: creds.imapPort,
-      secure: true, // 993 은 암호화로 바로 접속한다
+      // 기본(ssl)은 993 처럼 암호화로 바로 접속하고, starttls 는 143 처럼 접속한 뒤 암호화로 바꾼다 (암호화를 못 올리면 접속하지 않는다)
+      secure: creds.imapSecurity !== "starttls",
+      ...(creds.imapSecurity === "starttls" ? { doSTARTTLS: true } : {}),
       auth: { user: creds.username, pass: creds.password },
       logger: false,
       socketTimeout: 60_000,

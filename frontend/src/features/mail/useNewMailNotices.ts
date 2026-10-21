@@ -4,6 +4,9 @@ import { logDebug } from "../../lib/logger";
 
 export const MAX_NOTICES = 3;
 
+/** 알림 한 건을 가리키는 키 (메일 번호는 계정마다 따로 매겨지므로 계정과 함께 쓴다) */
+export const noticeKey = (n: Pick<NewMailItem, "id" | "accountId">) => `${n.accountId ?? ""}:${n.id}`;
+
 /** 보낸 사람 글("홍길동 <a@x.com>")에서 보여 줄 이름만 뽑는다 (이름이 없으면 주소) */
 export function senderLabel(from: string): string {
   const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from);
@@ -24,7 +27,7 @@ export function useNewMailNotices(unread: number | null) {
     return bridge.onNewMail((incoming) => {
       logDebug("Mail", `새 메일 알림 ${incoming.length}건`);
       setItems((prev) => {
-        const fresh = incoming.filter((n) => !prev.some((p) => p.id === n.id));
+        const fresh = incoming.filter((n) => !prev.some((p) => noticeKey(p) === noticeKey(n)));
         return [...fresh.reverse(), ...prev].slice(0, MAX_NOTICES); // 가장 최근에 온 것이 맨 위
       });
     });
@@ -35,7 +38,7 @@ export function useNewMailNotices(unread: number | null) {
 
   return {
     items,
-    dismiss: (id: number) => setItems((prev) => prev.filter((n) => n.id !== id)),
+    dismiss: (item: NewMailItem) => setItems((prev) => prev.filter((n) => noticeKey(n) !== noticeKey(item))),
     clear: () => setItems([]),
   };
 }

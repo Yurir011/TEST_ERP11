@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BenchClient } from "../../lib/desktop";
+import type { BenchClient, NewMailItem } from "../../lib/desktop";
 
 vi.mock("../../context/useAuth", () => ({ useAuth: () => ({ user: { id: 1, name: "박소장", role: "admin", title: null, menu_permissions: [] }, logout: vi.fn() }) }));
 vi.mock("../../features/todos/TodoPanel", () => ({ TodoPanel: () => null }));
@@ -114,7 +114,7 @@ describe("안 읽은 메일 수", () => {
 
 describe("새 메일 알림 (사이드바)", () => {
   function installWithNewMail(unread: number | null = 3) {
-    let push: (items: { id: number; from: string; subject: string }[]) => void = () => {};
+    let push: (items: NewMailItem[]) => void = () => {};
     let pushUnread: (p: { unread: number }) => void = () => {};
     const openMessage = vi.fn().mockResolvedValue(undefined);
     window.benchClient = {
@@ -152,8 +152,22 @@ describe("새 메일 알림 (사이드바)", () => {
     await screen.findByLabelText("안 읽은 메일 3통");
     h.push([{ id: 7, from: "a@x.com", subject: "안녕" }]);
     fireEvent.click(await screen.findByRole("button", { name: "a@x.com 안녕" }));
-    expect(h.openMessage).toHaveBeenCalledWith(7);
+    expect(h.openMessage).toHaveBeenCalledWith(7, undefined);
     await waitFor(() => expect(screen.queryByRole("region", { name: "새 메일 알림" })).toBeNull());
+  });
+
+  it("계정이 둘 이상이면 어느 계정으로 온 메일인지 보이고, 눌러 열 때 그 계정을 함께 알려 준다 (계정마다 메일 번호가 따로이므로)", async () => {
+    const h = installWithNewMail();
+    renderSidebar();
+    await screen.findByLabelText("안 읽은 메일 3통");
+    h.push([
+      { id: 7, from: "a@x.com", subject: "안녕", accountId: "main", account: "me@bench.co.kr" },
+      { id: 7, from: "b@x.com", subject: "반가워요", accountId: "a1b2c3", account: "work@gmail.com" },
+    ]);
+    expect(await screen.findByText("work@gmail.com")).toBeTruthy(); // 번호가 같아도 두 알림이 모두 보인다
+    expect(screen.getByText("me@bench.co.kr")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /b@x.com 반가워요/ }));
+    expect(h.openMessage).toHaveBeenCalledWith(7, "a1b2c3");
   });
 
   it("최근 3통만 최신 순으로 보이고, 하나씩 닫거나 모두 지울 수 있다", async () => {

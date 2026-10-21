@@ -25,6 +25,7 @@ import { MailPoller, type PollResult, resolvePollInterval } from "./mail/poller"
 import { MailSender } from "./mail/send";
 import { MailService, isDangerousFilename, safeFilename } from "./mail/service";
 import { MailStore } from "./mail/store";
+import { MAIN_SLOT, SlotRegistry, deleteSlotFiles, isSlotId, slotPaths } from "./mail/slots";
 import { MailSync } from "./mail/sync";
 import { loginMessage, performNfcLogin } from "./nfcLogin";
 import { serialPortProvider } from "./nfc/port";
@@ -79,16 +80,36 @@ let mailWin: BrowserWindow | null = null;
 let mail: MailService | null = null;
 let composer: MailComposer | null = null;
 let identities: IdentityStore | null = null;
-let mailPoller: MailPoller | null = null;
+/**
+ * 메일 계정마다 받은 메일 저장소·서비스·새 메일 확인이 따로 있다 (메일함이 서로 섞이지 않는다).
+ * 위의 mail / composer / identities 는 지금 메일 창에서 보고 있는 계정의 것을 가리킨다.
+ */
+interface MailRuntime {
+  id: string;
+  accounts: MailAccountStore;
+  store: MailStore;
+  service: MailService;
+  composer: MailComposer;
+  identities: IdentityStore;
+  poller: MailPoller;
+}
+const mailRuntimes = new Map<string, MailRuntime>();
+let mailSlots: SlotRegistry | null = null;
+let mailDir = "";
+let activeMailId = MAIN_SLOT;
+/** 계정별 받은메일함 안 읽은 수 (배지·사이드바 숫자는 이 합계) */
+const unreadByMail = new Map<string, number>();
 /** 작업 표시줄 배지는 메신저 안 읽은 수와 메일 안 읽은 수를 합쳐 하나로 보여 준다 */
 let badgeMessenger = 0;
 let badgeMail = 0;
-/** 알림을 눌러 메일 창을 여는 중이면 열어야 할 메일 번호 (창의 화면이 준비되면 가져간다) */
-let pendingOpenMessage: number | null = null;
+/** 알림을 눌러 메일 창을 여는 중이면 열어야 할 메일 (어느 계정의 몇 번 메일인지. 창의 화면이 준비되면 가져간다) */
+let pendingOpenMessage: { accountId: string; id: number } | null = null;
 /** ERP 문서 화면에서 "메일 보내기"로 넘어온 작성 초안 (메일 창의 화면이 준비되면 한 번만 가져간다) */
 interface PendingCompose {
   draft: { to: string; cc: string; subject: string; body: string; attachments: StagedAttachment[] };
   doc: { type: "project_document"; id: number };
+  /** 이 초안을 쓸 메일 계정 */
+  accountId: string;
 }
 let pendingCompose: PendingCompose | null = null;
 /** 새 메일 알림을 띄우는 통로. 점검(smoke)에서는 진짜 알림 대신 기록만 하도록 바꿔 끼운다 */
@@ -97,7 +118,6 @@ let showMailNotification: (title: string, body: string, onClick: () => void) => 
   n.on("click", onClick);
   n.show();
 };
-let mailStore: MailStore | null = null;
 
 const configFile = () => path.join(app.getPath("userData"), "config.json");
 
@@ -378,19 +398,41 @@ function applyBadge(): void {
   }
 }
 
-/** 이 PC 에 받아 둔 받은메일함의 안 읽은 수로 메일 배지를 다시 계산한다 (읽음 표시·이동·삭제 뒤에 부른다) */
+/** 지금 메일 창에서 보는 계정으로 바꾼다 (이후 mail / composer / identities 는 그 계정의 것) */
+function activateMail(id: string): MailRuntime | null {
+  const rt = mailRuntimes.get(id);
+  if (!rt) return null;
+  activeMailId = id;
+  mail = rt.service;
+  composer = rt.composer;
+  identities = rt.identities;
+  return rt;
+}
+
+/** 계정이 등록되어 있는 칸들 (받은메일함이 따로 있는 계정) */
+function configuredMail(): MailRuntime[] {
+  return [...mailRuntimes.values()].filter((rt) => rt.service.accountInfo() !== null);
+}
+
+/** 이 PC 에 받아 둔 모든 계정의 받은메일함 안 읽은 수로 메일 배지를 다시 계산한다 (읽음 표시·이동·삭제 뒤에 부른다) */
 function refreshMailBadge(): void {
-  if (!mail) return;
-  badgeMail = mail.inboxUnread();
+  unreadByMail.clear();
+  let total = 0;
+  for (const rt of configuredMail()) {
+    const n = rt.service.inboxUnread();
+    unreadByMail.set(rt.id, n);
+    total += n;
+  }
+  badgeMail = total;
   applyBadge();
 }
 
-/** 알림을 눌렀을 때 메일 창을 열고(이미 열려 있으면 앞으로) 해당 메일로 이동하게 한다. id 가 없으면 메일 창만 연다 */
-function openMessageInMailWindow(id: number | null): void {
-  pendingOpenMessage = id;
+/** 알림을 눌렀을 때 메일 창을 열고(이미 열려 있으면 앞으로) 해당 계정의 메일로 이동하게 한다. id 가 없으면 메일 창만 연다 */
+function openMessageInMailWindow(accountId: string, id: number | null): void {
+  pendingOpenMessage = id === null ? null : { accountId, id };
   openMailWindow();
   if (id === null || !mailWin || mailWin.isDestroyed() || mailWin.webContents.isLoading()) return; // 아직 불러오는 중이면 화면이 준비된 뒤 가져간다
-  mailWin.webContents.send("mail:open-message", { id });
+  mailWin.webContents.send("mail:open-message", { id, accountId });
   pendingOpenMessage = null;
 }
 
@@ -403,19 +445,22 @@ function openComposeInMailWindow(p: PendingCompose): void {
 }
 
 /** 새 메일 확인 결과: 배지 갱신, 열려 있는 메일 창 새로 읽기, 새 메일 알림 */
-function handlePollResult(r: PollResult): void {
-  badgeMail = r.unread;
+function handlePollResult(rt: MailRuntime, r: PollResult): void {
+  unreadByMail.set(rt.id, r.unread);
+  badgeMail = [...unreadByMail.values()].reduce((sum, n) => sum + n, 0);
   applyBadge();
   const window = mailWin && !mailWin.isDestroyed() ? mailWin : null;
-  if (r.changed && window) window.webContents.send("mail:changed");
+  if (r.changed && window) window.webContents.send("mail:changed", { accountId: rt.id });
+  // 계정이 둘 이상이면 어느 계정으로 온 메일인지 알려 준다
+  const email = configuredMail().length > 1 ? (rt.service.accountInfo()?.email ?? "") : "";
   // ERP 창 사이드바에 새 메일(보낸 사람·제목)을 보여 줄 수 있게 알린다 (메일 내용은 이 PC 안에서만 오간다)
-  if (r.newMail.length > 0 && win && !win.isDestroyed()) win.webContents.send("mail:new", r.newMail.map((m) => ({ id: m.id, from: m.from, subject: m.subject })));
+  if (r.newMail.length > 0 && win && !win.isDestroyed()) win.webContents.send("mail:new", r.newMail.map((m) => ({ id: m.id, from: m.from, subject: m.subject, accountId: rt.id, account: email || undefined })));
   const notice = formatNewMailNotice(r.newMail);
   if (!notice) return;
-  if (window && window.isFocused()) return; // 지금 메일 창을 보고 있으면 따로 알리지 않는다 (목록에 바로 나타난다)
-  log.info(`[Mail] 새 메일 알림: ${r.newMail.length}통`);
+  if (window && window.isFocused() && activeMailId === rt.id) return; // 지금 이 계정의 메일 창을 보고 있으면 따로 알리지 않는다 (목록에 바로 나타난다)
+  log.info(`[Mail] 새 메일 알림: ${r.newMail.length}통 (계정 ${rt.id})`);
   const only = r.newMail.length === 1 ? r.newMail[0].id : null;
-  showMailNotification(notice.title, notice.body, () => openMessageInMailWindow(only));
+  showMailNotification(email ? `${notice.title} (${email})` : notice.title, notice.body, () => openMessageInMailWindow(rt.id, only));
   if (win && !win.isDestroyed() && !win.isFocused()) win.flashFrame(true);
 }
 
@@ -533,12 +578,15 @@ function registerIpc(): void {
     const req = parseDocumentCompose(payload);
     if (!req) return { ok: false, error: "문서 정보가 올바르지 않습니다." };
     if (!composer || !mail) return MAIL_UNAVAILABLE;
-    if (!mail.accountInfo()) return { ok: false, error: "메일 계정이 등록되어 있지 않습니다. 메일 창에서 먼저 계정을 설정해 주세요.", needsAccount: true };
-    const staged = composer.stageDocument(req.filename, req.data);
+    // 지금 메일 창에서 보던 계정으로 쓰고, 그 계정이 등록되어 있지 않으면 등록된 첫 계정으로 쓴다
+    const target = configuredMail().find((x) => x.id === activeMailId) ?? configuredMail()[0];
+    if (!target) return { ok: false, error: "메일 계정이 등록되어 있지 않습니다. 메일 창에서 먼저 계정을 설정해 주세요.", needsAccount: true };
+    activateMail(target.id);
+    const staged = target.composer.stageDocument(req.filename, req.data);
     if (!staged.ok) return staged;
     // 이전에 가져가지 않은 초안이 있으면 그 첨부는 버린다
-    if (pendingCompose) composer.discard(pendingCompose.draft.attachments.map((a) => a.id));
-    openComposeInMailWindow({ draft: { to: req.to, cc: "", subject: req.subject, body: req.body, attachments: [staged.value] }, doc: req.doc });
+    if (pendingCompose) target.composer.discard(pendingCompose.draft.attachments.map((a) => a.id));
+    openComposeInMailWindow({ draft: { to: req.to, cc: "", subject: req.subject, body: req.body, attachments: [staged.value] }, doc: req.doc, accountId: target.id });
     return { ok: true, value: null };
   });
 
@@ -549,22 +597,28 @@ function registerIpc(): void {
     return p;
   });
 
-  ipcMain.handle("mail:unread", (e) => (guard(e, "mail:unread", ["server"]) && mail?.accountInfo() ? mail.inboxUnread() : null));
+  // 안 읽은 메일 수: 등록된 모든 계정의 받은메일함 합계 (계정이 하나도 없으면 null)
+  ipcMain.handle("mail:unread", (e) => {
+    if (!guard(e, "mail:unread", ["server"])) return null;
+    const list = configuredMail();
+    return list.length === 0 ? null : list.reduce((sum, rt) => sum + rt.service.inboxUnread(), 0);
+  });
 
   /** 알림을 눌러 메일 창이 새로 열린 경우, 화면이 준비된 뒤 열어야 할 메일 번호를 한 번만 알려 준다 */
   ipcMain.handle("mail:consume-pending-open", (e) => {
     if (!guard(e, "mail:consume-pending-open", ["server"])) return null;
-    const id = pendingOpenMessage;
+    const pending = pendingOpenMessage;
     pendingOpenMessage = null;
-    return id;
+    return pending;
   });
 
 
   /** ERP 사이드바의 새 메일 알림을 눌렀을 때: 메일 창을 열고 그 메일로 이동 */
-  ipcMain.handle("mail:open-message-window", (e, id: unknown) => {
+  ipcMain.handle("mail:open-message-window", (e, id: unknown, accountId?: unknown) => {
     if (!guard(e, "mail:open-message-window", ["server"])) return;
     const n = parseMailId(id);
-    if (n !== null) openMessageInMailWindow(n);
+    const account = isSlotId(accountId) && mailRuntimes.has(accountId) ? accountId : activeMailId;
+    if (n !== null) openMessageInMailWindow(account, n);
   });
 
   /** 메일 창에서 ERP 메인 창으로 돌아가기 */
@@ -666,12 +720,46 @@ function registerIpc(): void {
 
   ipcMain.handle("mail:account-save", async (e, input: unknown) => {
     if (!guard(e, "mail:account-save", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
-    return mail ? mail.saveAccount(input) : MAIL_UNAVAILABLE;
+    if (!mail) return MAIL_UNAVAILABLE;
+    const r = await mail.saveAccount(input);
+    if (r.ok) refreshMailBadge();
+    return r;
   });
 
+  // 계정 지우기: 처음 쓰던 칸이 아닌 계정은 그 칸의 받은 메일·설정 파일까지 함께 지운다
   ipcMain.handle("mail:account-remove", (e) => {
     if (!guard(e, "mail:account-remove", ["server"])) return;
     mail?.removeAccount();
+    if (activeMailId !== MAIN_SLOT) dropMailSlot(activeMailId);
+    refreshMailBadge();
+  });
+
+  /** 등록된 메일 계정 목록(이메일·안 읽은 수)과 지금 보고 있는 계정 */
+  ipcMain.handle("mail:accounts", (e) => {
+    if (!guard(e, "mail:accounts", ["server"])) return { accounts: [], active: MAIN_SLOT };
+    refreshMailBadge();
+    return { accounts: configuredMail().map((rt) => ({ id: rt.id, email: rt.service.accountInfo()!.email, unread: unreadByMail.get(rt.id) ?? 0 })), active: activeMailId };
+  });
+
+  /** 메일 창에서 볼 계정을 바꾼다. 이후 목록·본문·쓰기는 그 계정의 메일함에서 이루어진다 */
+  ipcMain.handle("mail:use-account", (e, id: unknown) => {
+    if (!guard(e, "mail:use-account", ["server"]) || !isSlotId(id)) return null;
+    const rt = activateMail(id);
+    return rt ? rt.service.accountInfo() : null;
+  });
+
+  /** 새 메일 계정을 등록할 칸을 준비하고 그 칸으로 바꾼다 (비어 있는 칸이 있으면 그것을 쓴다) */
+  ipcMain.handle("mail:new-slot", (e) => {
+    if (!guard(e, "mail:new-slot", ["server"])) return null;
+    return addMailSlot();
+  });
+
+  /** 등록하지 않고 끝낸 빈 칸을 치운다 */
+  ipcMain.handle("mail:drop-slot", (e, id: unknown) => {
+    if (!guard(e, "mail:drop-slot", ["server"]) || !isSlotId(id)) return;
+    const rt = mailRuntimes.get(id);
+    if (!rt || rt.service.accountInfo() !== null) return; // 등록된 계정이 있는 칸은 여기서 지우지 않는다
+    dropMailSlot(id);
   });
 
   ipcMain.handle("mail:folders", (e) => (guard(e, "mail:folders", ["server"]) && mail ? mail.folders() : []));
@@ -814,6 +902,63 @@ const secretStore: SecretStore = {
   decrypt: (cipher) => Buffer.from(safeStorage.decryptString(cipher), "base64"),
 };
 
+/** 메일 계정 한 칸의 저장소·서비스·새 메일 확인을 만든다 (계정마다 파일이 따로다) */
+function createMailRuntime(dir: string, id: string): MailRuntime {
+  const p = slotPaths(dir, id);
+  const logger = getLogger("Mail");
+  const store = new MailStore(p.db);
+  const accounts = new MailAccountStore(p.account, secretStore, logger);
+  const sync = new MailSync({ store, credentials: () => accounts.credentials(), log: logger });
+  const identitiesStore = new IdentityStore(p.identities, logger);
+  const service = new MailService({ accounts, store, sync, log: logger });
+  const sender = new MailSender({ credentials: () => accounts.credentials(), log: logger });
+  const composerObj = new MailComposer({ accounts, store, sync, sender, tempDir: path.join(dir, "compose-tmp"), log: logger });
+  const poller = new MailPoller({
+    poll: () => service.pollInbox(),
+    onResult: (r) => handlePollResult(rt, r),
+    intervalMs: resolvePollInterval(process.env.BENCH_MAIL_POLL_MS),
+    log: logger,
+  });
+  const rt: MailRuntime = { id, accounts, store, service, composer: composerObj, identities: identitiesStore, poller };
+  return rt;
+}
+
+/** 새 계정을 등록할 칸을 준비하고 그 칸으로 바꾼다. 비어 있는(계정이 없는) 칸이 있으면 그것을 쓴다. */
+function addMailSlot(): string | null {
+  if (!mailSlots || !mailDir) return null;
+  const empty = [...mailRuntimes.values()].find((rt) => rt.service.accountInfo() === null);
+  if (empty) {
+    activateMail(empty.id);
+    return empty.id;
+  }
+  const id = mailSlots.add();
+  const rt = createMailRuntime(mailDir, id);
+  mailRuntimes.set(id, rt);
+  if (!SMOKE) rt.poller.start();
+  activateMail(id);
+  log.info(`[Mail] 새 계정 칸 준비: ${id}`);
+  return id;
+}
+
+/** 계정 칸을 치운다 (그 칸의 받은 메일·설정 파일까지). 처음 쓰던 칸은 남기고, 보던 계정이 사라지면 다른 계정으로 바꾼다. */
+function dropMailSlot(id: string): void {
+  if (id === MAIN_SLOT || !mailSlots) return;
+  const rt = mailRuntimes.get(id);
+  if (!rt) return;
+  rt.poller.stop();
+  try {
+    rt.store.close();
+  } catch {
+    /* 이미 닫힘 */
+  }
+  mailRuntimes.delete(id);
+  unreadByMail.delete(id);
+  mailSlots.remove(id);
+  deleteSlotFiles(mailDir, id);
+  log.info(`[Mail] 계정 칸 삭제: ${id}`);
+  if (activeMailId === id) activateMail(configuredMail()[0]?.id ?? MAIN_SLOT);
+}
+
 /** 로컬 메일 저장소와 서비스를 준비한다. 실패해도 앱의 다른 기능은 계속 쓸 수 있다. */
 function startMail(): void {
   try {
@@ -821,28 +966,18 @@ function startMail(): void {
     fs.mkdirSync(dir, { recursive: true });
     fs.rmSync(path.join(dir, "open-tmp"), { recursive: true, force: true }); // 지난번에 열어 본 첨부의 임시 사본 정리
     fs.rmSync(path.join(dir, "compose-tmp"), { recursive: true, force: true }); // 보내다 만 메일의 전달용 첨부 임시 사본 정리
-    const store = new MailStore(path.join(dir, "mail.db"));
-    const accounts = new MailAccountStore(path.join(dir, "account.json"), secretStore, getLogger("Mail"));
-    const sync = new MailSync({ store, credentials: () => accounts.credentials(), log: getLogger("Mail") });
-    mailStore = store;
-    identities = new IdentityStore(path.join(dir, "identities.json"), getLogger("Mail"));
-    mail = new MailService({ accounts, store, sync, log: getLogger("Mail") });
-    const sender = new MailSender({ credentials: () => accounts.credentials(), log: getLogger("Mail") });
-    composer = new MailComposer({ accounts, store, sync, sender, tempDir: path.join(dir, "compose-tmp"), log: getLogger("Mail") });
-    log.info("[Mail] 로컬 메일 저장소 준비 완료");
+    mailDir = dir;
+    mailSlots = new SlotRegistry(path.join(dir, "accounts.json"));
+    for (const id of mailSlots.ids()) mailRuntimes.set(id, createMailRuntime(dir, id));
+    activateMail(configuredMail()[0]?.id ?? MAIN_SLOT);
+    log.info(`[Mail] 로컬 메일 저장소 준비 완료 (계정 칸 ${mailRuntimes.size}개, 등록된 계정 ${configuredMail().length}개)`);
     refreshMailBadge(); // 이전에 받아 둔 안 읽은 메일 수를 배지에 바로 반영
-    mailPoller = new MailPoller({
-      poll: () => mail!.pollInbox(),
-      onResult: handlePollResult,
-      intervalMs: resolvePollInterval(process.env.BENCH_MAIL_POLL_MS),
-      log: getLogger("Mail"),
-    });
-    if (!SMOKE) mailPoller.start(); // 점검(smoke)에서는 시간에 맞춘 자동 확인 대신 직접 부른다
+    if (!SMOKE) for (const rt of mailRuntimes.values()) rt.poller.start(); // 점검(smoke)에서는 시간에 맞춘 자동 확인 대신 직접 부른다
   } catch (err) {
+    mailRuntimes.clear();
     mail = null;
     composer = null;
     identities = null;
-    mailPoller = null;
     log.error(`[Mail] 메일 저장소를 준비하지 못했습니다: ${(err as Error).message}`);
   }
 }
@@ -1103,6 +1238,28 @@ async function runSmoke(): Promise<void> {
     const after = await call(`window.benchClient.mail.list("INBOX", 0, 50)`);
     check("[메일] 열어 본 메일은 읽음으로 바뀐다", (after.items as { id: number; seen: boolean }[]).filter((m) => m.seen).length >= 2);
 
+    // 2-2b) 계정 두 개: 계정마다 받은 메일함·설정 파일이 따로다 (같은 가짜 서버에 두 번째 계정을 등록해 본다)
+    const mailDirNow = path.join(app.getPath("userData"), "mail");
+    const slot = (await call(`window.benchClient.mail.newSlot()`)) as string | null;
+    const second = await call(`window.benchClient.mail.saveAccount(${JSON.stringify({ email: "e2e-second@test.local", username: cfg.user, password: cfg.pass, imapHost: cfg.host, imapPort: cfg.port, smtpHost: cfg.host, smtpPort: cfg.smtpPort ?? 465 })})`);
+    check("[메일 계정 2개] 새 계정 칸을 만들고 두 번째 계정을 등록한다 (처음 계정과 다른 칸)", typeof slot === "string" && slot !== "main" && second.ok === true && second.value.email === "e2e-second@test.local");
+    const secondEmptyList = await call(`window.benchClient.mail.list("INBOX", 0, 50)`);
+    check("[메일 계정 2개] 두 번째 계정의 메일함은 처음에 비어 있다 (첫 계정의 메일이 섞이지 않는다)", (secondEmptyList.items as unknown[]).length === 0);
+    const secondSync = await call(`window.benchClient.mail.sync("INBOX")`);
+    const secondList = await call(`window.benchClient.mail.list("INBOX", 0, 50)`);
+    check("[메일 계정 2개] 두 번째 계정을 동기화하면 그 계정의 메일함에만 메일이 들어온다", secondSync.ok === true && (secondList.items as unknown[]).length >= 3);
+    const twoList = (await call(`window.benchClient.mail.accounts()`)) as { accounts: { id: string; email: string }[]; active: string };
+    check("[메일 계정 2개] 등록된 계정 목록에 두 계정이 이메일과 함께 나오고 보는 계정은 두 번째이다", twoList.accounts.length === 2 && twoList.accounts.some((a) => a.id === "main" && a.email === "e2e@test.local") && twoList.accounts.some((a) => a.id === slot && a.email === "e2e-second@test.local") && twoList.active === slot);
+    const totalUnread = (await call(`window.benchClient.mail.unread()`)) as number;
+    check("[메일 계정 2개] 안 읽은 메일 수는 두 계정의 합계이다", typeof totalUnread === "number" && totalUnread >= 1);
+    const back = await call(`window.benchClient.mail.useAccount("main")`);
+    const mainAgain = await call(`window.benchClient.mail.list("INBOX", 0, 50)`);
+    check("[메일 계정 2개] 첫 계정으로 돌아오면 첫 계정의 메일함과 설정이 그대로이다", back?.email === "e2e@test.local" && (mainAgain.items as unknown[]).length === (after.items as unknown[]).length);
+    await call(`window.benchClient.mail.useAccount(${JSON.stringify(slot)})`);
+    await call(`window.benchClient.mail.removeAccount()`);
+    const oneList = (await call(`window.benchClient.mail.accounts()`)) as { accounts: { id: string }[]; active: string };
+    check("[메일 계정 2개] 두 번째 계정을 지우면 그 칸의 받은 메일·설정 파일까지 사라지고 첫 계정으로 돌아간다", oneList.accounts.length === 1 && oneList.active === "main" && !fs.existsSync(path.join(mailDirNow, `mail-${slot}.db`)) && !fs.existsSync(path.join(mailDirNow, `account-${slot}.json`)) && fs.existsSync(path.join(mailDirNow, "account.json")));
+
     // 2-3) 메일 보내기 (BENCH_SMOKE_MAIL 의 smtpPort 가 있을 때): 같은 암호화(TLS)·인증서 검증으로 가짜 SMTP 서버에 보낸다
     if (cfg.smtpPort) {
       const reSaved = await call(`window.benchClient.mail.saveAccount(${account(cfg.pass, true)})`);
@@ -1151,13 +1308,13 @@ async function runSmoke(): Promise<void> {
     showMailNotification = (title, body, click) => void notices.push({ title, body, click });
 
     const base = await mail!.pollInbox();
-    if (base.ok) handlePollResult(base.value);
+    if (base.ok) handlePollResult(mailRuntimes.get(activeMailId)!, base.value);
     check("[새 메일] 처음 확인에서는 이미 받아 둔 메일 때문에 알림이 뜨지 않는다", base.ok && base.value.newMail.length === 0 && notices.length === 0);
 
     await w.webContents.executeJavaScript(`window.__newmail = []; void window.benchClient.mail.onNewMail((items) => window.__newmail.push(items))`); // 반환값(함수)은 복사할 수 없으므로 버린다
     await appendRaw("NOTIFY-TEST", "알림 시험 본문");
     const poll1 = await mail!.pollInbox();
-    if (poll1.ok) handlePollResult(poll1.value);
+    if (poll1.ok) handlePollResult(mailRuntimes.get(activeMailId)!, poll1.value);
     check("[새 메일] 새로 도착한 안 읽은 메일 한 통이 알림으로 전달된다 (보낸 사람 이름·제목)", poll1.ok && poll1.value.newMail.length === 1 && notices.length === 1 && notices[0].title === "Smoke Sender" && notices[0].body === "NOTIFY-TEST");
     await sleep(150);
     const sidebarNew = await w.webContents.executeJavaScript("window.__newmail");
@@ -1165,7 +1322,7 @@ async function runSmoke(): Promise<void> {
     check("[새 메일] 작업 표시줄 배지가 메일 안 읽은 수를 따라간다", badgeMail === mail!.inboxUnread() && badgeMail >= 2);
 
     const poll2 = await mail!.pollInbox();
-    if (poll2.ok) handlePollResult(poll2.value);
+    if (poll2.ok) handlePollResult(mailRuntimes.get(activeMailId)!, poll2.value);
     check("[새 메일] 같은 메일은 두 번 알리지 않는다", poll2.ok && poll2.value.newMail.length === 0 && notices.length === 1);
 
     const winsBeforeNotice = BrowserWindow.getAllWindows().length;
@@ -1175,7 +1332,7 @@ async function runSmoke(): Promise<void> {
     await until(() => !noticeWindow.webContents.isLoading() && noticeWindow.webContents.getURL().endsWith("/mail"));
     const pendingId = await noticeWindow.webContents.executeJavaScript("window.benchClient.mail.consumePendingOpen()");
     const pendingAgain = await noticeWindow.webContents.executeJavaScript("window.benchClient.mail.consumePendingOpen()");
-    check("[새 메일] 새로 열린 메일 창이 열어야 할 메일 번호를 한 번만 받는다", poll1.ok && pendingId === poll1.value.newMail[0]?.id && pendingAgain === null);
+    check("[새 메일] 새로 열린 메일 창이 열어야 할 메일 번호를 한 번만 받는다", poll1.ok && pendingId?.id === poll1.value.newMail[0]?.id && pendingId?.accountId === activeMailId && pendingAgain === null);
     noticeWindow.destroy();
 
     const ids = async (folderPath: string) => ((await call(`window.benchClient.mail.list(${JSON.stringify(folderPath)}, 0, 100)`)) as { items: { id: number; subject: string }[] }).items;
@@ -1429,11 +1586,13 @@ function runApp(): void {
       return;
     }
     if (deviceTimer) clearInterval(deviceTimer);
-    mailPoller?.stop();
-    try {
-      mailStore?.close();
-    } catch {
-      /* 이미 닫힘 */
+    for (const rt of mailRuntimes.values()) {
+      rt.poller.stop();
+      try {
+        rt.store.close();
+      } catch {
+        /* 이미 닫힘 */
+      }
     }
   });
   // 메인 창을 닫으면 앱이 끝난다. 창이 잠깐 모두 닫힌 사이(로그아웃 마무리 중 등)에는 여기서 따로 끝내지 않는다

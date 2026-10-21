@@ -112,7 +112,9 @@ export class MailSender {
     const transport = nodemailer.createTransport({
       host: creds.smtpHost,
       port: creds.smtpPort,
-      secure: true, // 465 는 암호화로 바로 접속한다
+      // 기본(ssl)은 465 처럼 암호화로 바로 접속하고, starttls 는 587 처럼 접속한 뒤 암호화로 바꾼다 (암호화를 못 올리면 보내지 않는다)
+      secure: creds.smtpSecurity !== "starttls",
+      ...(creds.smtpSecurity === "starttls" ? { requireTLS: true } : {}),
       auth: { user: creds.username, pass: creds.password },
       connectionTimeout: 15_000,
       greetingTimeout: 15_000,

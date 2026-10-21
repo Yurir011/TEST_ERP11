@@ -8,7 +8,7 @@ import path from "node:path";
 
 import type { SecretStore } from "../device";
 import { type Logger, silentLogger } from "../log";
-import type { MailAccountInfo, MailAccountInput } from "./types";
+import type { MailAccountInfo, MailAccountInput, MailSecurity } from "./types";
 
 export interface MailCredentials extends MailAccountInfo {
   password: string;
@@ -27,6 +27,8 @@ export function validateAccountInput(input: unknown): { ok: true; value: Require
   const imapHost = str(i.imapHost).toLowerCase();
   const smtpHost = str(i.smtpHost).toLowerCase();
   const imapPort = Number(i.imapPort);
+  const imapSecurity: MailSecurity = i.imapSecurity === "starttls" ? "starttls" : "ssl";
+  const smtpSecurity: MailSecurity = i.smtpSecurity === "starttls" ? "starttls" : "ssl";
   const smtpPort = Number(i.smtpPort);
   const password = typeof i.password === "string" ? i.password : "";
   const saveToSent = i.saveToSent === true;
@@ -39,7 +41,7 @@ export function validateAccountInput(input: unknown): { ok: true; value: Require
   if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) return { ok: false, error: "SMTP 포트가 올바르지 않습니다." };
   if (!password) return { ok: false, error: "비밀번호를 입력해 주세요." };
   if (password.length > 512 || /[\r\n\0]/.test(password)) return { ok: false, error: "비밀번호 형식이 올바르지 않습니다." };
-  return { ok: true, value: { email, username, imapHost, imapPort, smtpHost, smtpPort, saveToSent, password } };
+  return { ok: true, value: { email, username, imapHost, imapPort, imapSecurity, smtpHost, smtpPort, smtpSecurity, saveToSent, password } };
 }
 
 export class MailAccountStore {
@@ -54,7 +56,10 @@ export class MailAccountStore {
     const raw = this.readRaw();
     if (!raw) return null;
     const { email, username, imapHost, imapPort, smtpHost, smtpPort } = raw;
-    return { email, username, imapHost, imapPort, smtpHost, smtpPort, saveToSent: raw.saveToSent === true };
+    // 암호화 방식은 예전 파일에 없을 수 있다(없으면 ssl)
+    const imapSecurity: MailSecurity = raw.imapSecurity === "starttls" ? "starttls" : "ssl";
+    const smtpSecurity: MailSecurity = raw.smtpSecurity === "starttls" ? "starttls" : "ssl";
+    return { email, username, imapHost, imapPort, imapSecurity, smtpHost, smtpPort, smtpSecurity, saveToSent: raw.saveToSent === true };
   }
 
   /** 접속에 쓸 정보(비밀번호 포함). main 프로세스 안에서만 쓴다. 복호화할 수 없으면 null */
@@ -84,7 +89,7 @@ export class MailAccountStore {
     const passwordEnc = this.secrets.encrypt(Buffer.from(password, "utf8")).toString("base64");
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     fs.writeFileSync(this.file, JSON.stringify({ ...info, passwordEnc }, null, 2), { mode: 0o600 });
-    this.log.info(`[Mail] 계정 저장: ${info.email} (IMAP ${info.imapHost}:${info.imapPort}, SMTP ${info.smtpHost}:${info.smtpPort})`);
+    this.log.info(`[Mail] 계정 저장: ${info.email} (IMAP ${info.imapHost}:${info.imapPort} ${info.imapSecurity ?? "ssl"}, SMTP ${info.smtpHost}:${info.smtpPort} ${info.smtpSecurity ?? "ssl"})`);
     return { ok: true };
   }
 

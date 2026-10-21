@@ -54,6 +54,16 @@ describe("validateAccountInput", () => {
     if (!r.ok) expect(r.error).toContain(word);
   });
 
+  it("암호화 방식은 ssl 이 기본이고 starttls 를 고를 수 있다", () => {
+    const def = validateAccountInput(valid);
+    expect(def.ok && def.value.imapSecurity).toBe("ssl");
+    expect(def.ok && def.value.smtpSecurity).toBe("ssl");
+    const tls = validateAccountInput({ ...valid, imapPort: 143, imapSecurity: "starttls", smtpPort: 587, smtpSecurity: "starttls" });
+    expect(tls.ok && [tls.value.imapSecurity, tls.value.smtpSecurity]).toEqual(["starttls", "starttls"]);
+    const odd = validateAccountInput({ ...valid, imapSecurity: "none", smtpSecurity: 5 }); // 알 수 없는 값은 ssl 로 본다
+    expect(odd.ok && [odd.value.imapSecurity, odd.value.smtpSecurity]).toEqual(["ssl", "ssl"]);
+  });
+
   it("객체가 아니면 거절한다", () => {
     expect(validateAccountInput(null).ok).toBe(false);
     expect(validateAccountInput("x").ok).toBe(false);
@@ -113,6 +123,21 @@ describe("MailAccountStore", () => {
     store.remove();
     expect(store.load()).toBeNull();
     expect(store.credentials()).toBeNull();
+  });
+
+  it("암호화 방식을 저장하고 읽는다. 예전에 저장한 파일(방식 없음)은 ssl 로 읽는다", () => {
+    const store = new MailAccountStore(file, fakeSecrets());
+    const v = validateAccountInput({ ...valid, smtpPort: 587, smtpSecurity: "starttls" });
+    if (!v.ok) throw new Error("검증 실패");
+    store.save(v.value);
+    expect(store.load()).toMatchObject({ imapSecurity: "ssl", smtpSecurity: "starttls" });
+    expect(store.credentials()).toMatchObject({ smtpSecurity: "starttls" });
+    // 방식이 없던 옛 파일
+    const legacy = JSON.parse(fs.readFileSync(file, "utf8"));
+    delete legacy.imapSecurity;
+    delete legacy.smtpSecurity;
+    fs.writeFileSync(file, JSON.stringify(legacy));
+    expect(store.load()).toMatchObject({ imapSecurity: "ssl", smtpSecurity: "ssl" });
   });
 
   it("파일이 없거나 손상되면 null", () => {

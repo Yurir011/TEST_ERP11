@@ -24,8 +24,11 @@ export interface MailAccountInfo {
   username: string;
   imapHost: string;
   imapPort: number;
+  /** 접속 암호화 방식 (ssl: 처음부터 암호화 / starttls: 접속 후 암호화). 없으면 ssl */
+  imapSecurity?: "ssl" | "starttls";
   smtpHost: string;
   smtpPort: number;
+  smtpSecurity?: "ssl" | "starttls";
   /** 보낸 메일을 보낸메일함에 앱이 직접 저장할지 (서버가 자동 저장하지 않을 때만 켠다) */
   saveToSent: boolean;
 }
@@ -37,8 +40,10 @@ export interface MailAccountInput {
   password: string;
   imapHost: string;
   imapPort: number;
+  imapSecurity?: "ssl" | "starttls";
   smtpHost: string;
   smtpPort: number;
+  smtpSecurity?: "ssl" | "starttls";
 }
 
 export interface MailFolder {
@@ -140,6 +145,24 @@ export interface NewMailItem {
   id: number;
   from: string;
   subject: string;
+  /** 어느 메일 계정으로 온 메일인지 (id 는 계정마다 따로 매겨지므로 계정과 함께 써야 한다) */
+  accountId?: string;
+  /** 계정이 둘 이상일 때만: 그 계정의 이메일 주소 */
+  account?: string;
+}
+
+/** 등록된 메일 계정 한 개 (계정마다 받은 메일함이 따로 있다) */
+export interface MailAccountEntry {
+  id: string;
+  email: string;
+  /** 그 계정 받은메일함의 안 읽은 메일 수 */
+  unread: number;
+}
+
+export interface MailAccountList {
+  accounts: MailAccountEntry[];
+  /** 메일 창에서 지금 보는 계정 */
+  active: string;
 }
 
 export interface MailContact {
@@ -177,7 +200,16 @@ export interface MailBridge {
   openWindow(): Promise<void>;
   /** 새 메일이 도착했을 때 호출된다 (보낸 사람·제목. 이 PC 안에서만 오간다) / 그 메일을 메일 창에서 연다 */
   onNewMail(cb: (items: NewMailItem[]) => void): () => void;
-  openMessage(id: number): Promise<void>;
+  /** accountId 를 주면 그 계정의 메일을 연다 (없으면 지금 보던 계정) */
+  openMessage(id: number, accountId?: string): Promise<void>;
+  /** 등록된 메일 계정 목록과 지금 보는 계정 (예전 앱에는 없다) */
+  accounts?(): Promise<MailAccountList>;
+  /** 메일 창에서 볼 계정을 바꾼다. 이후 목록·본문·쓰기는 그 계정의 메일함에서 이루어진다 */
+  useAccount?(id: string): Promise<MailAccountInfo | null>;
+  /** 새 계정을 등록할 칸을 준비하고 그 칸으로 바꾼다 (비어 있는 칸이 있으면 그것을 쓴다) */
+  newSlot?(): Promise<string | null>;
+  /** 등록하지 않고 끝낸 빈 칸을 치운다 */
+  dropSlot?(id: string): Promise<void>;
   account(): Promise<MailAccountInfo | null>;
   /** 받는 사람 자동완성: 메일을 보낸 적 있는 주소(최근 순, query 가 있으면 이름·주소에 맞는 것) / 주소록에서 지우기 */
   contacts(query: string, limit?: number): Promise<MailContact[]>;
@@ -211,11 +243,11 @@ export interface MailBridge {
   /** 서버에서 본문·제목·보낸 사람을 찾아, 이 PC 에 받아 둔 메일 중 해당하는 번호를 받는다 */
   searchBody(folder: string, query: string): Promise<MailResult<{ ids: number[] }>>;
   /** 새 메일 확인으로 목록이 바뀌었을 때 호출된다 */
-  onChanged(cb: () => void): () => void;
+  onChanged(cb: (payload: { accountId?: string }) => void): () => void;
   /** 알림을 눌러 특정 메일을 열라는 신호 (메일 창이 이미 열려 있을 때) */
-  onOpenMessage(cb: (payload: { id: number }) => void): () => void;
+  onOpenMessage(cb: (payload: { id: number; accountId?: string }) => void): () => void;
   /** 알림을 눌러 메일 창이 새로 열린 경우, 열어야 할 메일 번호를 한 번만 받는다 */
-  consumePendingOpen(): Promise<number | null>;
+  consumePendingOpen(): Promise<{ accountId: string; id: number } | null>;
   /** ERP 문서(PDF)를 첨부해 메일 창에서 쓰기 화면을 연다. 메일 계정이 없으면 needsAccount */
   composeDocument(payload: MailDocumentPayload): Promise<MailResult<null> & { needsAccount?: boolean }>;
   /** 문서 화면에서 넘어온 쓰기 초안이 도착했다는 신호(메일 창이 이미 열려 있을 때) / 새로 열린 창이 한 번만 가져가는 초안 */

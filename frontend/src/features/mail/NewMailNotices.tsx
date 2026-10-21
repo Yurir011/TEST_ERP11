@@ -1,11 +1,11 @@
 import { Mail, X } from "lucide-react";
 import type { NewMailItem } from "../../lib/desktop";
-import { senderLabel } from "./useNewMailNotices";
+import { noticeKey, senderLabel } from "./useNewMailNotices";
 
 interface Props {
   items: NewMailItem[];
-  onOpen: (id: number) => void;
-  onDismiss: (id: number) => void;
+  onOpen: (item: NewMailItem) => void;
+  onDismiss: (item: NewMailItem) => void;
   onClear: () => void;
 }
 
@@ -26,12 +26,13 @@ export function NewMailNotices({ items, onOpen, onDismiss, onClear }: Props) {
       </div>
       <ul className="space-y-1">
         {items.map((n) => (
-          <li key={n.id} className="flex items-start gap-1 rounded-md bg-surface/80 hover:bg-surface">
-            <button type="button" onClick={() => onOpen(n.id)} className="min-w-0 flex-1 text-left px-2 py-1.5" title={`${n.from}\n${n.subject}`}>
+          <li key={noticeKey(n)} className="flex items-start gap-1 rounded-md bg-surface/80 hover:bg-surface">
+            <button type="button" onClick={() => onOpen(n)} className="min-w-0 flex-1 text-left px-2 py-1.5" title={`${n.account ? `${n.account}\n` : ""}${n.from}\n${n.subject}`}>
               <span className="block text-xs font-semibold truncate">{senderLabel(n.from)}</span>
               <span className="block text-[11px] text-text-muted truncate">{n.subject || "(제목 없음)"}</span>
+              {n.account && <span className="block text-[10px] text-primary truncate">{n.account}</span>}
             </button>
-            <button type="button" onClick={() => onDismiss(n.id)} aria-label={`${senderLabel(n.from)} 알림 닫기`} className="p-1.5 text-text-muted hover:text-text shrink-0">
+            <button type="button" onClick={() => onDismiss(n)} aria-label={`${senderLabel(n.from)} 알림 닫기`} className="p-1.5 text-text-muted hover:text-text shrink-0">
               <X size={12} />
             </button>
           </li>

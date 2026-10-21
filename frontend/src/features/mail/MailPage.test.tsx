@@ -39,7 +39,7 @@ const detail = (over: Partial<MailDetail> = {}): MailDetail => ({
 });
 
 /** 앱이 화면에 보내는 신호(새 메일 확인 결과, 알림 클릭)를 시험에서 직접 보낼 수 있게 붙잡아 둔다 */
-const handlers: { changed: (() => void) | null; open: ((p: { id: number }) => void) | null; compose: (() => void) | null } = { changed: null, open: null, compose: null };
+const handlers: { changed: ((p?: { accountId?: string }) => void) | null; open: ((p: { id: number; accountId?: string }) => void) | null; compose: (() => void) | null } = { changed: null, open: null, compose: null };
 
 function installMail(over: Partial<MailBridge> = {}) {
   const bridge: MailBridge = {
@@ -71,13 +71,13 @@ function installMail(over: Partial<MailBridge> = {}) {
     remove: vi.fn().mockResolvedValue({ ok: true, value: { trashed: 1, deleted: 0 } }),
     spam: vi.fn().mockResolvedValue({ ok: true, value: { moved: 1 } }),
     searchBody: vi.fn().mockResolvedValue({ ok: true, value: { ids: [2] } }),
-    onChanged: vi.fn((cb: () => void) => {
-      handlers.changed = cb;
+    onChanged: vi.fn((cb: (p: { accountId?: string }) => void) => {
+      handlers.changed = cb as (p?: { accountId?: string }) => void;
       return () => {
         handlers.changed = null;
       };
     }),
-    onOpenMessage: vi.fn((cb: (p: { id: number }) => void) => {
+    onOpenMessage: vi.fn((cb: (p: { id: number; accountId?: string }) => void) => {
       handlers.open = cb;
       return () => {
         handlers.open = null;
@@ -158,11 +158,51 @@ describe("계정 등록", () => {
       password: "내-비밀번호",
       imapHost: "imap.daum.net",
       imapPort: 993,
+      imapSecurity: "ssl",
       smtpHost: "smtp.daum.net",
       smtpPort: 465,
+      smtpSecurity: "ssl",
       saveToSent: false,
     });
     expect(await screen.findByRole("navigation", { name: "메일 폴더" })).toBeTruthy();
+  });
+
+  it("메일 서비스를 고르면 서버 주소·포트·암호화 방식이 채워지고, 네이버는 아이디를 이메일 앞부분으로 보낸다", async () => {
+    const bridge = installMail({ account: vi.fn().mockResolvedValue(null), saveAccount: vi.fn().mockResolvedValue({ ok: true, value: account }) });
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("메일 서비스"), { target: { value: "naver" } });
+    fireEvent.change(screen.getByLabelText("이메일 주소"), { target: { value: "bench123@naver.com" } });
+    fireEvent.change(screen.getByLabelText("메일 비밀번호"), { target: { value: "앱-비밀번호" } });
+    fireEvent.click(screen.getByRole("button", { name: "등록" }));
+    await waitFor(() => expect(bridge.saveAccount).toHaveBeenCalled());
+    expect(bridge.saveAccount).toHaveBeenCalledWith(
+      expect.objectContaining({ username: "bench123", imapHost: "imap.naver.com", imapPort: 993, smtpHost: "smtp.naver.com", smtpPort: 465, imapSecurity: "ssl", smtpSecurity: "ssl" }),
+    );
+  });
+
+  it("지메일을 고르면 앱 비밀번호 안내가 나오고, 다음·다음 스마트워크는 같은 서버 설정이다", async () => {
+    installMail({ account: vi.fn().mockResolvedValue(null) });
+    renderPage();
+    const select = await screen.findByLabelText("메일 서비스");
+    fireEvent.change(select, { target: { value: "gmail" } });
+    expect(screen.getByText(/구글 계정에서 2단계 인증을 켠 뒤/)).toBeTruthy();
+    const options = Array.from((select as HTMLSelectElement).options).map((o) => o.textContent);
+    expect(options).toEqual(expect.arrayContaining(["다음 스마트워크", "다음 (한메일)", "지메일 (Gmail)", "네이버", "직접 입력 (IMAP/SMTP)"]));
+  });
+
+  it("암호화 방식을 STARTTLS 로 바꾸면 표준 포트(143·587)로 바뀌고 앱에 그대로 전달된다", async () => {
+    const bridge = installMail({ account: vi.fn().mockResolvedValue(null), saveAccount: vi.fn().mockResolvedValue({ ok: true, value: account }) });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /서버 설정 보기/ }));
+    fireEvent.change(screen.getByLabelText("받는 메일 암호화"), { target: { value: "starttls" } });
+    fireEvent.change(screen.getByLabelText("보내는 메일 암호화"), { target: { value: "starttls" } });
+    expect((screen.getByLabelText("받는 메일(IMAP) 서버").closest("div")!.parentElement!.querySelector("#mail-imap-port") as HTMLInputElement).value).toBe("143");
+    expect((document.getElementById("mail-smtp-port") as HTMLInputElement).value).toBe("587");
+    fireEvent.change(screen.getByLabelText("이메일 주소"), { target: { value: "me@example.com" } });
+    fireEvent.change(screen.getByLabelText("메일 비밀번호"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "등록" }));
+    await waitFor(() => expect(bridge.saveAccount).toHaveBeenCalled());
+    expect(bridge.saveAccount).toHaveBeenCalledWith(expect.objectContaining({ imapPort: 143, imapSecurity: "starttls", smtpPort: 587, smtpSecurity: "starttls" }));
   });
 
   it("접속에 실패하면 안내 문구를 보여 주고 폼을 유지한다", async () => {
@@ -826,6 +866,106 @@ describe("서버 본문 검색", () => {
   });
 });
 
+describe("메일 계정 여러 개", () => {
+  const second = { ...account, email: "work@gmail.com", username: "work@gmail.com", imapHost: "imap.gmail.com", smtpHost: "smtp.gmail.com" };
+  const twoAccounts = () => ({
+    accounts: [
+      { id: "main", email: "me@bench.co.kr", unread: 2 },
+      { id: "a1b2c3", email: "work@gmail.com", unread: 5 },
+    ],
+    active: "main",
+  });
+
+  /** 계정마다 따로 있는 메일함을 흉내 낸다: 보는 계정에 따라 account()·list() 가 다른 값을 준다 */
+  function installTwo(over: Partial<MailBridge> = {}) {
+    let current = "main";
+    const useAccount = vi.fn((id: string) => {
+      current = id;
+      return Promise.resolve(id === "main" ? account : second);
+    });
+    return installMail({
+      accounts: vi.fn().mockImplementation(() => Promise.resolve({ ...twoAccounts(), active: current })),
+      useAccount,
+      newSlot: vi.fn().mockResolvedValue("newslot"),
+      dropSlot: vi.fn().mockResolvedValue(undefined),
+      account: vi.fn().mockImplementation(() => Promise.resolve(current === "main" ? account : second)),
+      list: vi.fn().mockImplementation(() =>
+        Promise.resolve(current === "main" ? { items: mails, total: 2 } : { items: [{ ...mails[1], id: 10, subject: "지메일 계정의 메일" }], total: 1 }),
+      ),
+      ...over,
+    });
+  }
+
+  it("계정이 둘이면 사이드바에 계정 목록과 안 읽은 수가 보이고, 지금 계정이 표시된다", async () => {
+    installTwo();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    const group = screen.getByRole("group", { name: "메일 계정" });
+    expect(within(group).getByRole("button", { name: /me@bench\.co\.kr/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(group).getByLabelText("work@gmail.com 안 읽은 메일 5개")).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "+ 메일 계정 추가" })).toBeTruthy();
+  });
+
+  it("계정을 누르면 그 계정으로 바꾸고 그 계정의 메일함이 열린다 (메일함이 서로 섞이지 않는다)", async () => {
+    const bridge = installTwo();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    fireEvent.click(within(screen.getByRole("group", { name: "메일 계정" })).getByRole("button", { name: /work@gmail\.com/ }));
+    expect(await screen.findByText("지메일 계정의 메일")).toBeTruthy();
+    expect(bridge.useAccount).toHaveBeenCalledWith("a1b2c3");
+    expect(screen.queryByText("견적서 송부")).toBeNull();
+    expect(screen.getAllByText("work@gmail.com").length).toBeGreaterThan(0);
+  });
+
+  it("계정 추가를 누르면 새 칸을 준비하고 등록 화면이 나오며, 취소하면 칸을 치우고 이전 계정으로 돌아간다", async () => {
+    const bridge = installTwo({ account: undefined });
+    let current = "main";
+    (bridge.useAccount as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+      current = id;
+      return Promise.resolve(id === "main" ? account : null);
+    });
+    (bridge.account as ReturnType<typeof vi.fn>) = vi.fn().mockImplementation(() => Promise.resolve(current === "main" ? account : null));
+    // newSlot 이 새 칸으로 바꿔 둔 상태를 흉내 낸다
+    (bridge.newSlot as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      current = "newslot";
+      return Promise.resolve("newslot");
+    });
+    window.benchClient = { mail: bridge } as unknown as BenchClient;
+    renderPage();
+    await screen.findByText("견적서 송부");
+    fireEvent.click(screen.getByRole("button", { name: "+ 메일 계정 추가" }));
+    expect(await screen.findByRole("form", { name: "메일 계정 등록" })).toBeTruthy();
+    expect(bridge.newSlot).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    await waitFor(() => expect(bridge.dropSlot).toHaveBeenCalledWith("newslot"));
+    expect(await screen.findByText("견적서 송부")).toBeTruthy(); // 이전 계정의 메일함으로 돌아왔다
+    expect(bridge.useAccount).toHaveBeenCalledWith("main");
+  });
+
+  it("다른 계정으로 온 메일의 알림을 누르면 그 계정으로 바꾼 뒤 그 메일을 연다", async () => {
+    const bridge = installTwo();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    await waitFor(() => expect(handlers.open).toBeTruthy());
+    handlers.open!({ id: 10, accountId: "a1b2c3" });
+    await waitFor(() => expect(bridge.useAccount).toHaveBeenCalledWith("a1b2c3")); // 먼저 그 계정으로 바꾼다
+    await waitFor(() => expect(bridge.get).toHaveBeenCalledWith(10, false)); // 그 뒤 그 계정의 메일을 연다
+  });
+
+  it("다른 계정의 새 메일 신호는 지금 보는 계정의 목록을 다시 읽지 않는다", async () => {
+    const bridge = installTwo();
+    renderPage();
+    await screen.findByText("견적서 송부");
+    await waitFor(() => expect(handlers.changed).toBeTruthy());
+    const before = (bridge.list as ReturnType<typeof vi.fn>).mock.calls.length;
+    handlers.changed!({ accountId: "a1b2c3" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect((bridge.list as ReturnType<typeof vi.fn>).mock.calls.length).toBe(before);
+    handlers.changed!({ accountId: "main" });
+    await waitFor(() => expect((bridge.list as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(before));
+  });
+});
+
 describe("새 메일 신호와 알림", () => {
   it("새 메일 확인으로 목록이 바뀌었다는 신호를 받으면 목록을 다시 읽는다", async () => {
     const bridge = installMail();
@@ -847,7 +987,7 @@ describe("새 메일 신호와 알림", () => {
   });
 
   it("알림을 눌러 메일 창이 새로 열린 경우(대기 중인 번호)에도 그 메일을 연다", async () => {
-    const bridge = installMail({ consumePendingOpen: vi.fn().mockResolvedValue(2) });
+    const bridge = installMail({ consumePendingOpen: vi.fn().mockResolvedValue({ accountId: "main", id: 2 }) });
     renderPage();
     await waitFor(() => expect(bridge.get).toHaveBeenCalledWith(2, false));
   });

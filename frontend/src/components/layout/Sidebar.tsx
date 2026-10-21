@@ -120,9 +120,9 @@ export function Sidebar() {
             </button>
             <NewMailNotices
               items={newMail.items}
-              onOpen={(id) => {
-                newMail.dismiss(id);
-                void mailBridge?.openMessage(id);
+              onOpen={(item) => {
+                newMail.dismiss(item);
+                void mailBridge?.openMessage(item.id, item.accountId);
               }}
               onDismiss={newMail.dismiss}
               onClear={newMail.clear}
