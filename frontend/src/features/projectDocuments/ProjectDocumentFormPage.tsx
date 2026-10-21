@@ -11,7 +11,7 @@ import { ProposalReferencePanel } from "../proposals/ProposalReferencePanel";
 import { ReferenceProposalPicker } from "../proposals/ReferenceProposalPicker";
 import { isPurchaseProposal } from "../proposals/purchaseFlow";
 import type { Proposal } from "../proposals/types";
-import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload, downloadFile } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { GRADE_LABELS, TITLE_LABELS, hasMenuPermission } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
@@ -167,16 +167,25 @@ export function ProjectDocumentFormPage() {
         setReferenceProposal(target);
         // 발주서 하단 REMARK 칸에 근거 품의서 번호를 미리 적어 준다 (비어 있을 때만).
         setRemark((prev) => prev || `품의서 No. ${target.doc_no}`);
-        // 품의서에 적은 거래처·통화·금액을 이어받는다 (품목은 진행 내용 한 줄, 수량 1, 단가=금액. 작성 중 고칠 수 있다).
+        // 품의서에 적은 프로젝트·거래처·통화·금액·내용을 이어받는다 (품목은 제목 한 줄, 수량 1, 단가=금액, 비고=상세 내용 첫 줄. 작성 중 고칠 수 있다).
+        setProjectId((prev) => prev || (target.project_id ? String(target.project_id) : OTHER_PROJECT));
+        if (!target.project_id) setProjectOtherName((prev) => prev || "일반 구매");
         if (target.vendor_name) setClientName((prev) => prev || target.vendor_name!);
         if (target.currency) setCurrency(target.currency);
-        if (target.amount !== null && target.amount !== undefined) {
-          setItems((prev) =>
-            prev.length === 1 && !prev[0].content && !prev[0].unit_price
-              ? [{ ...EMPTY_PROJECT_DOC_ITEM, content: target.topic, quantity: "1", unit_price: String(target.amount) }]
-              : prev,
-          );
-        }
+        const firstLine = (target.content ?? "").split("\n").find((l) => l.trim())?.trim().slice(0, 100) ?? "";
+        setItems((prev) =>
+          prev.length === 1 && !prev[0].content && !prev[0].unit_price
+            ? [
+                {
+                  ...EMPTY_PROJECT_DOC_ITEM,
+                  content: target.title,
+                  quantity: "1",
+                  unit_price: target.amount !== null && target.amount !== undefined ? String(target.amount) : "",
+                  note: firstLine,
+                },
+              ]
+            : prev,
+        );
       })
       .catch((err) => {
         logError("ProjectDocumentForm", "구매 품의서 조회 실패", err);
@@ -414,15 +423,6 @@ export function ProjectDocumentFormPage() {
         }
       }
       if (docType === "purchase_order") await syncAttachments(createdDocs[0].id);
-      for (const created of createdDocs) {
-        if (created.status === "approved" && created.has_pdf) {
-          await downloadFile(
-            `/api/project-documents/${created.id}/pdf`,
-            `${PROJECT_DOC_TYPE_LABELS[created.doc_type]}_${issueDate}.pdf`
-          );
-        }
-      }
-
       notify(sourceProposal ? "발주서가 작성되었습니다. 거래처에 보낸 뒤 카드에서 발송 확인을 눌러 주세요." : "결재 요청이 완료되었습니다.");
       // 구매 품의서 카드에서 왔으면 전자결재 화면(카드)으로 돌아간다.
       navigate(

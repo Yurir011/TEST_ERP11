@@ -1,8 +1,8 @@
-import { CalendarDays, CornerDownRight, Trash2 } from "lucide-react";
+import { CalendarDays, CornerDownRight, Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
-import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { todayISO } from "../../lib/date";
 import { logDebug, logError } from "../../lib/logger";
@@ -16,6 +16,7 @@ import {
   monthCells,
   offsetFromStart,
   repliesByParent,
+  threadOf,
   type ProjectDateNote,
 } from "./dateNotes";
 import { parseDate } from "./timeline";
@@ -36,6 +37,9 @@ export function DateNotesCard({ project }: { project: Project }) {
   // 답글: 어느 메모에 답글을 쓰는 중인지와 그 내용
   const [replyTo, setReplyTo] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
+  // 메모·답글 수정: 고치는 중인 글과 그 내용
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
@@ -118,9 +122,32 @@ export function DateNotesCard({ project }: { project: Project }) {
     }
   }
 
+  async function handleSaveEdit(e: FormEvent, note: ProjectDateNote) {
+    e.preventDefault();
+    const content = editText.trim();
+    if (!content || saving) return;
+    if (content === note.content) {
+      setEditingId(null);
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    logDebug("DateNotes", `메모 수정 시도: id=${note.id}`);
+    try {
+      await apiPut(`/api/projects/${project.id}/date-notes/${note.id}`, { content });
+      setEditingId(null);
+      load();
+    } catch (err) {
+      logError("DateNotes", "메모 수정 실패", err);
+      setError(err instanceof ApiError ? err.message : "메모를 수정하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleDelete(note: ProjectDateNote) {
-    const hasReplies = (replies.get(note.id)?.length ?? 0) > 0;
-    const message = note.parent_id !== null ? "이 답글을 삭제하시겠습니까?" : `${formatNoteDate(note.note_date)} 메모를 삭제하시겠습니까?${hasReplies ? " 달린 답글도 함께 삭제됩니다." : ""}`;
+    const below = threadOf(note.id, replies).length; // 이 글 아래에 달린 답글·대댓글 수
+    const message = note.parent_id !== null ? `이 답글을 삭제하시겠습니까?${below ? " 그 아래 답글도 함께 삭제됩니다." : ""}` : `${formatNoteDate(note.note_date)} 메모를 삭제하시겠습니까?${below ? " 달린 답글도 함께 삭제됩니다." : ""}`;
     if (!(await confirm(message, { okLabel: "삭제", danger: true }))) return;
     logDebug("DateNotes", `메모 삭제 시도: id=${note.id}`);
     try {
@@ -135,6 +162,106 @@ export function DateNotesCard({ project }: { project: Project }) {
   const groups = groupNotesByDate(notes ?? []);
   const replies = repliesByParent(notes ?? []);
   const canDelete = (n: ProjectDateNote) => !!user && (n.created_by === user.id || isAdminRole(user.role));
+  const canEdit = (n: ProjectDateNote) => !!user && n.created_by === user.id; // 수정은 쓴 사람만
+
+  /** 메모(원 메모) 또는 답글 한 칸: 내용(또는 수정 입력)·작성자·시각·답글/수정/삭제 버튼. 답글 입력칸은 그 글 바로 아래에 열린다. */
+  function renderEntry(n: ProjectDateNote, root: ProjectDateNote) {
+    const isRoot = n.parent_id === null;
+    const editing = editingId === n.id;
+    const below = threadOf(n.id, replies).length;
+    const directCount = replies.get(n.id)?.length ?? 0;
+    return (
+      <>
+        <div className={`${isRoot ? "bg-tile-orange border border-tile-orange-fg/20 pl-3.5" : "min-w-0 flex-1 bg-bg border border-border pl-3"} rounded-xl pr-2 ${isRoot ? "py-2.5" : "py-2"} text-[13px]`}>
+          {editing ? (
+            <form onSubmit={(e) => handleSaveEdit(e, n)} className="flex flex-col gap-1.5">
+              <textarea
+                autoFocus
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                maxLength={MAX_NOTE_LENGTH}
+                aria-label="메모 수정"
+                rows={3}
+                className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+              <div className="flex justify-end gap-1.5">
+                <button type="button" onClick={() => setEditingId(null)} className="h-8 px-3 rounded-lg border border-border bg-surface text-xs hover:bg-bg">
+                  취소
+                </button>
+                <button type="submit" disabled={!editText.trim() || saving} className="h-8 px-3 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover disabled:opacity-50">
+                  저장
+                </button>
+              </div>
+            </form>
+          ) : (
+            <p className="mb-1 whitespace-pre-wrap break-words">
+              {!isRoot && n.parent_id !== root.id && n.reply_to_name && <b className="mr-1 font-semibold text-primary">@{n.reply_to_name}</b>}
+              {n.content}
+            </p>
+          )}
+          <div className="flex items-center gap-1.5">
+            <span className="flex-1 text-[11.5px] text-text-muted tabular-nums">
+              {n.author_name ?? "알 수 없음"} · {isRoot ? formatNoteTime(n.created_at) : formatNoteDateTime(n.created_at)}
+              {n.edited_at ? " · 수정됨" : ""}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setReplyTo((cur) => (cur === n.id ? null : n.id));
+                setReplyText("");
+              }}
+              aria-label={isRoot ? "답글 달기" : "대댓글 달기"}
+              className="flex items-center gap-1 px-1.5 py-1 rounded-md text-[11.5px] text-text-muted hover:text-primary hover:bg-black/5"
+            >
+              <CornerDownRight size={12} />
+              답글{isRoot && below > 0 ? ` ${below}` : directCount > 0 ? ` ${directCount}` : ""}
+            </button>
+            {canEdit(n) && !editing && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingId(n.id);
+                  setEditText(n.content);
+                }}
+                aria-label={isRoot ? "메모 수정" : "답글 수정"}
+                title="수정"
+                className="p-1 rounded-md text-text-muted hover:text-primary hover:bg-black/5"
+              >
+                <Pencil size={13} />
+              </button>
+            )}
+            {canDelete(n) && (
+              <button type="button" onClick={() => handleDelete(n)} aria-label={isRoot ? "메모 삭제" : "답글 삭제"} title="삭제" className="p-1 rounded-md text-text-muted hover:text-danger hover:bg-black/5">
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+        {replyTo === n.id && (
+          <form onSubmit={(e) => handleReply(e, n)} className={`mt-1 flex items-start gap-1.5 ${isRoot ? "ml-5" : ""}`}>
+            <CornerDownRight size={13} className="mt-3 shrink-0 text-text-muted" />
+            <textarea
+              autoFocus
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              maxLength={MAX_NOTE_LENGTH}
+              placeholder={isRoot ? "답글을 입력하세요" : `${n.author_name ?? "작성자"}님에게 답글을 입력하세요`}
+              aria-label="답글 입력"
+              rows={2}
+              className="flex-1 min-w-0 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            <button
+              type="submit"
+              disabled={!replyText.trim() || saving}
+              className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              등록
+            </button>
+          </form>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 mb-6">
@@ -258,73 +385,16 @@ export function DateNotesCard({ project }: { project: Project }) {
               <ul className="flex flex-col gap-1.5 min-w-0">
                 {g.notes.map((n) => (
                   <li key={n.id} className="min-w-0">
-                    <div className="bg-tile-orange border border-tile-orange-fg/20 rounded-xl pl-3.5 pr-2 py-2.5 text-[13px]">
-                      <p className="mb-1 whitespace-pre-wrap break-words">{n.content}</p>
-                      <div className="flex items-center gap-1.5">
-                        <span className="flex-1 text-[11.5px] text-text-muted tabular-nums">
-                          {n.author_name ?? "알 수 없음"} · {formatNoteTime(n.created_at)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReplyTo((cur) => (cur === n.id ? null : n.id));
-                            setReplyText("");
-                          }}
-                          aria-label="답글 달기"
-                          className="flex items-center gap-1 px-1.5 py-1 rounded-md text-[11.5px] text-text-muted hover:text-primary hover:bg-black/5"
-                        >
-                          <CornerDownRight size={12} />
-                          답글{(replies.get(n.id)?.length ?? 0) > 0 ? ` ${replies.get(n.id)!.length}` : ""}
-                        </button>
-                        {canDelete(n) && (
-                          <button type="button" onClick={() => handleDelete(n)} aria-label="메모 삭제" title="삭제" className="p-1 rounded-md text-text-muted hover:text-danger hover:bg-black/5">
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {(replies.get(n.id) ?? []).map((r) => (
-                      <div key={r.id} className="mt-1 ml-5 flex gap-1.5">
-                        <CornerDownRight size={13} className="mt-3 shrink-0 text-text-muted" />
-                        <div className="min-w-0 flex-1 bg-bg border border-border rounded-xl pl-3 pr-2 py-2 text-[13px]">
-                          <p className="mb-1 whitespace-pre-wrap break-words">{r.content}</p>
-                          <div className="flex items-center gap-1.5">
-                            <span className="flex-1 text-[11.5px] text-text-muted tabular-nums">
-                              {r.author_name ?? "알 수 없음"} · {formatNoteDateTime(r.created_at)}
-                            </span>
-                            {canDelete(r) && (
-                              <button type="button" onClick={() => handleDelete(r)} aria-label="답글 삭제" title="삭제" className="p-1 rounded-md text-text-muted hover:text-danger hover:bg-black/5">
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                          </div>
+                    {renderEntry(n, n)}
+                    {/* 답글·대댓글: 첫 단계에서 한 번만 들여쓰고, 그 아래 단계는 같은 들여쓰기로 이어진다 (누구에게 단 답글인지는 @이름으로 표시) */}
+                    {threadOf(n.id, replies).map((r) => (
+                      <div key={r.id} className="mt-1 ml-5">
+                        <div className="flex gap-1.5">
+                          <CornerDownRight size={13} className="mt-3 shrink-0 text-text-muted" />
+                          <div className="min-w-0 flex-1">{renderEntry(r, n)}</div>
                         </div>
                       </div>
                     ))}
-
-                    {replyTo === n.id && (
-                      <form onSubmit={(e) => handleReply(e, n)} className="mt-1 ml-5 flex items-start gap-1.5">
-                        <CornerDownRight size={13} className="mt-3 shrink-0 text-text-muted" />
-                        <textarea
-                          autoFocus
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          maxLength={MAX_NOTE_LENGTH}
-                          placeholder="답글을 입력하세요"
-                          aria-label="답글 입력"
-                          rows={2}
-                          className="flex-1 min-w-0 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-                        />
-                        <button
-                          type="submit"
-                          disabled={!replyText.trim() || saving}
-                          className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          등록
-                        </button>
-                      </form>
-                    )}
                   </li>
                 ))}
               </ul>

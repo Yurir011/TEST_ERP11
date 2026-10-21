@@ -110,8 +110,8 @@ describe("구매 품의서 진행 상태", () => {
 
   it("품의서에 적은 거래처·금액은 발주서가 없을 때 카드 요약으로 쓴다", () => {
     expect(summarizeProposal(proposal())).toBeNull();
-    const s = summarizeProposal(proposal({ vendor_name: "대성RF", amount: 1234567, currency: "KRW", topic: "계측기 구매" }))!;
-    expect(s).toEqual({ client: "대성RF", content: "계측기 구매", total: "₩1,234,567", vat: "₩123,457" });
+    const s = summarizeProposal(proposal({ vendor_name: "대성RF", amount: 1234567, currency: "KRW", title: "계측기 구매의 건" }))!;
+    expect(s).toEqual({ client: "대성RF", content: "계측기 구매의 건", total: "₩1,234,567", vat: "₩123,457" });
     expect(formatProposalAmount({ amount: 12.5, currency: "USD" })).toBe("$12.5");
     expect(formatProposalAmount({ amount: null, currency: "KRW" })).toBeNull();
   });

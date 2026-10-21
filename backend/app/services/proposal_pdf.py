@@ -8,6 +8,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Flowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.config import settings
+from app.core.korean import object_particle
 from app.models.approval_step import ApprovalStepStatus
 from app.models.proposal import Proposal
 from app.models.user import JobTitle
@@ -258,7 +259,7 @@ def generate_proposal_pdf(proposal: Proposal) -> bytes:
         subject_box,
         Spacer(1, 3 * mm),
         info_table,
-        Paragraph(f"1. 아래와 같이 {escape(proposal.topic)}을 진행하고자 하오니 검토하여 승인해 주십시오.", body_style),
+        Paragraph(f"1. 아래와 같이 {escape(proposal.topic)}{object_particle(proposal.topic)} 진행하고자 하오니 검토하여 승인해 주십시오.", body_style),
         Spacer(1, 4 * mm),
         content_box,
         *attachment_block,

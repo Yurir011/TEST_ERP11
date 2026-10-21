@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatNoteDate, groupNotesByDate, monthCells, formatNoteDateTime, offsetFromStart, repliesByParent, type ProjectDateNote } from "./dateNotes";
+import { formatNoteDate, groupNotesByDate, monthCells, formatNoteDateTime, offsetFromStart, repliesByParent, threadOf, type ProjectDateNote } from "./dateNotes";
 
 const note = (id: number, note_date: string, parent_id: number | null = null): ProjectDateNote => ({ id, parent_id, note_date, content: `메모${id}`, author_name: null, created_by: null, created_at: "2026-10-20T00:00:00Z" });
 
@@ -15,6 +15,14 @@ describe("날짜별 메모 도우미", () => {
     expect(groupNotesByDate(list).flatMap((g) => g.notes.map((n) => n.id))).toEqual([4, 1]);
     expect(repliesByParent(list).get(1)?.map((n) => n.id)).toEqual([2, 3]);
     expect(repliesByParent(list).get(4)).toBeUndefined();
+  });
+
+  it("대댓글까지 원 메모 아래에 한 줄로 펼친다 (답글 바로 밑에 그 답글의 대댓글)", () => {
+    const list = [note(1, "2026-10-08"), note(2, "2026-10-08", 1), note(3, "2026-10-08", 2), note(4, "2026-10-08", 1), note(5, "2026-10-08", 3)];
+    const replies = repliesByParent(list);
+    expect(threadOf(1, replies).map((n) => n.id)).toEqual([2, 3, 5, 4]);
+    expect(threadOf(4, replies)).toEqual([]);
+    expect(groupNotesByDate(list).flatMap((g) => g.notes.map((n) => n.id))).toEqual([1]);
   });
 
   it("답글 시각은 날짜와 시간을 함께 보여 준다", () => {

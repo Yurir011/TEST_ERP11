@@ -46,7 +46,7 @@ describe("참조 품의서 패널", () => {
     const panel = screen.getByRole("complementary", { name: "참조 품의서" });
     expect(panel.textContent).toContain("BS-품의-RND-261002-01");
     expect(panel.textContent).toContain("2026-10-02");
-    expect(panel.textContent).toContain("아래와 같이 모니터 구매을 진행하고자 합니다.");
+    expect(panel.textContent).toContain("아래와 같이 모니터 구매를 진행하고자 합니다.");
     expect(panel.textContent).toContain("품목 : LG 27인치 모니터");
     expect(panel.textContent).toContain("정혜란");
     expect(panel.textContent).toContain("박소장");

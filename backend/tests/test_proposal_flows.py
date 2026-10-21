@@ -497,3 +497,20 @@ def test_proposal_project_selection(client, db, staff, auth_headers):
     # 수정으로 일반으로 되돌릴 수 있다
     edited = client.put(f"/api/proposals/{chosen.json()['id']}", headers=h, json={**body, "project_id": None, "is_final_decision": True})
     assert edited.status_code == 200 and edited.json()["project_id"] is None
+
+
+def test_object_particle_and_pdf_intro_sentence():
+    """본문 도입 문장의 조사: 구매를 / 출장을 (받침에 따라)."""
+    from app.core.korean import object_particle
+
+    assert object_particle("구매") == "를" and object_particle("출장") == "을" and object_particle("PCB") == "을(를)" and object_particle("") == "을"
+
+
+def test_doc_no_does_not_collide_after_a_same_day_proposal_is_deleted(client, db, staff, auth_headers):
+    """같은 날 품의서를 지운 뒤 새로 써도 문서번호가 겹치지 않는다 (건수 + 1 로 채번하면 이미 있는 번호와 같아져 500 오류가 났다)."""
+    h = auth_headers(staff["writer"])
+    first, second, third = (_create(client, h, [staff["dept_head"].id, staff["team_lead"].id]) for _ in range(3))
+    assert [p["doc_no"][-2:] for p in (first, second, third)] == ["01", "02", "03"]
+    assert client.delete(f"/api/proposals/{first['id']}", headers=h).status_code in (200, 204)  # 01 삭제 → 건수는 2, 가장 큰 번호는 03
+    fourth = _create(client, h, [staff["dept_head"].id, staff["team_lead"].id])
+    assert fourth["doc_no"].endswith("-04") and fourth["doc_no"] not in (second["doc_no"], third["doc_no"])

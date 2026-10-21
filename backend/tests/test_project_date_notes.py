@@ -70,13 +70,16 @@ def test_reply_follows_parent_date_and_is_deleted_with_it(client, db, make_user,
     assert reply.status_code == 201, reply.text
     assert (reply.json()["parent_id"], reply.json()["note_date"], reply.json()["author_name"]) == (parent["id"], "2026-10-08", "답글러")
 
-    # 답글에 다시 답글은 안 된다 / 없는 메모·날짜 없는 새 메모는 거절
-    assert client.post(url, json={"parent_id": reply.json()["id"], "content": "또 답글"}, headers=auth_headers(other)).status_code == 400
+    # 답글에 다시 답글(대댓글)도 달 수 있고, 같은 날짜에 붙는다 / 없는 메모·날짜 없는 새 메모는 거절
+    nested = client.post(url, json={"parent_id": reply.json()["id"], "content": "대댓글"}, headers=auth_headers(author))
+    assert nested.status_code == 201 and nested.json()["note_date"] == "2026-10-08"
+    assert (nested.json()["parent_id"], nested.json()["reply_to_name"]) == (reply.json()["id"], "답글러")
     assert client.post(url, json={"parent_id": 999999, "content": "x"}, headers=auth_headers(other)).status_code == 404
     assert client.post(url, json={"content": "날짜 없음"}, headers=auth_headers(other)).status_code == 422
 
     listed = client.get(url, headers=auth_headers(author)).json()
-    assert [(n["id"], n["parent_id"]) for n in listed] == [(parent["id"], None), (reply.json()["id"], parent["id"])]
+    assert [(n["id"], n["parent_id"]) for n in listed] == [(parent["id"], None), (reply.json()["id"], parent["id"]), (nested.json()["id"], reply.json()["id"])]
+    assert [n["reply_to_name"] for n in listed] == [None, "작성자", "답글러"]
 
     # 답글은 쓴 사람이 지울 수 있고, 원 메모를 지우면 답글도 함께 지워진다
     assert client.delete(f"{url}/{reply.json()['id']}", headers=auth_headers(author)).status_code == 403
@@ -84,3 +87,28 @@ def test_reply_follows_parent_date_and_is_deleted_with_it(client, db, make_user,
     assert client.delete(f"{url}/{again['id']}", headers=auth_headers(other)).status_code == 204
     assert client.delete(f"{url}/{parent['id']}", headers=auth_headers(author)).status_code == 204
     assert client.get(url, headers=auth_headers(author)).json() == []
+
+
+def test_only_author_can_edit_and_edit_is_marked(client, db, make_user, make_client, auth_headers):
+    author = make_user(name="작성자")
+    admin = make_user(role=UserRole.admin, title=JobTitle.ceo, name="대표")
+    project = _project(db, make_client, author)
+    url = f"/api/projects/{project.id}/date-notes"
+    note = client.post(url, json={"note_date": "2026-10-08", "content": "처음 내용"}, headers=auth_headers(author)).json()
+    assert note["edited_at"] is None
+
+    # 쓴 사람만 고칠 수 있다 (관리자도 다른 사람의 글은 못 고친다)
+    assert client.put(f"{url}/{note['id']}", json={"content": "남이 고침"}, headers=auth_headers(admin)).status_code == 403
+    assert client.put(f"{url}/{note['id']}", json={"content": "   "}, headers=auth_headers(author)).status_code == 422
+    assert client.put(f"{url}/999999", json={"content": "x"}, headers=auth_headers(author)).status_code == 404
+
+    same = client.put(f"{url}/{note['id']}", json={"content": "처음 내용"}, headers=auth_headers(author)).json()
+    assert same["edited_at"] is None  # 내용이 그대로면 수정됨으로 표시하지 않는다
+    changed = client.put(f"{url}/{note['id']}", json={"content": " 고친 내용 "}, headers=auth_headers(author))
+    assert changed.status_code == 200 and changed.json()["content"] == "고친 내용" and changed.json()["edited_at"] is not None
+    listed = client.get(url, headers=auth_headers(author)).json()
+    assert listed[0]["content"] == "고친 내용" and listed[0]["edited_at"] is not None
+
+    # 답글도 쓴 사람이 고칠 수 있다
+    reply = client.post(url, json={"parent_id": note["id"], "content": "답글"}, headers=auth_headers(admin)).json()
+    assert client.put(f"{url}/{reply['id']}", json={"content": "답글 수정"}, headers=auth_headers(admin)).json()["reply_to_name"] == "작성자"

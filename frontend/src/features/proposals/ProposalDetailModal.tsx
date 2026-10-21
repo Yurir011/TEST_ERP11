@@ -8,6 +8,7 @@ import { openAttachment } from "../../lib/openAttachment";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
+import { objectParticle } from "../../lib/korean";
 import { formatProposalAmount } from "./purchaseFlow";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal, type ProposalAttachment } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
@@ -212,7 +213,10 @@ export function ProposalDetailModal({
         )}
 
         <div className="bg-bg rounded-xl p-4 text-sm mb-4">
-          <p>1. 아래와 같이 {proposal.topic}을 진행하고자 하오니 검토하여 승인해 주십시오.</p>
+          <p>
+            1. 아래와 같이 {proposal.topic}
+            {objectParticle(proposal.topic)} 진행하고자 하오니 검토하여 승인해 주십시오.
+          </p>
           <p className="mt-3 whitespace-pre-line text-text-muted">{proposal.content}</p>
         </div>
 

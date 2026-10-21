@@ -4,6 +4,7 @@ import { ApiError, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { isViewableInBrowser } from "./ProposalAttachmentsModal";
+import { objectParticle } from "../../lib/korean";
 import { formatProposalAmount } from "./purchaseFlow";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal, type ProposalAttachment } from "./types";
 
@@ -92,7 +93,10 @@ export function ProposalReferencePanel({ proposal, onClose }: { proposal: Propos
 
         <section>
           <p className="mb-1 text-xs text-text-muted">진행 내용</p>
-          <p>아래와 같이 {proposal.topic}을 진행하고자 합니다.</p>
+          <p>
+            아래와 같이 {proposal.topic}
+            {objectParticle(proposal.topic)} 진행하고자 합니다.
+          </p>
         </section>
 
         <section>

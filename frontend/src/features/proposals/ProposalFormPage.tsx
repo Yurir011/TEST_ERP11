@@ -9,8 +9,11 @@ import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PURCHASE_KIND } from "./purchaseFlow";
 import { PROJECT_STATUS_LABELS, type Project } from "../projects/types";
+import { ClientCombobox } from "../../components/ui/ClientCombobox";
+import type { Client } from "../clients/types";
 import type { Proposal } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
+import { objectParticle } from "../../lib/korean";
 
 const DEPARTMENT_NAME = "연구개발팀";
 
@@ -42,6 +45,7 @@ export function ProposalFormPage() {
   // 속한 프로젝트 ("" = 일반: 프로젝트와 상관없는 구매, 예: 사무용품). 기본은 일반.
   const [projectId, setProjectId] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
+  const [clients, setClients] = useState<Client[]>([]); // 거래처명 검색(자동완성)용 등록 거래처
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState<"KRW" | "USD" | "JPY">("KRW");
   const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
@@ -52,6 +56,15 @@ export function ProposalFormPage() {
   const [linkLabel, setLinkLabel] = useState("");
 
   const isPurchase = kind.trim() === PURCHASE_KIND;
+  const isGeneral = kind.trim() === "";
+  // 품의서 종류: 구매 / 일반. 예전에 직접 적었던 다른 종류(출장 등)는 그 품의서를 고칠 때만 선택지에 남는다.
+  const legacyKind = !isPurchase && !isGeneral ? kind.trim() : null;
+  // 구매를 고르면 본문 도입 문장의 진행 내용을 "구매"로 채우고, 일반으로 바꾸면 그 자동 입력만 지운다.
+  function changeKind(next: string) {
+    setKind(next);
+    if (next === PURCHASE_KIND) setTopic((t) => (t.trim() === "" ? PURCHASE_KIND : t));
+    else setTopic((t) => (t === PURCHASE_KIND ? "" : t));
+  }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,6 +136,13 @@ export function ProposalFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, isCopy]);
 
+  // 거래처 검색: 등록된 거래처를 불러온다. 등록되지 않은 거래처는 이름을 직접 입력할 수 있다.
+  useEffect(() => {
+    apiGet<Client[]>("/api/clients")
+      .then(setClients)
+      .catch((err) => logError("Proposals", "거래처 목록 조회 실패", err));
+  }, []);
+
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     setAttachments((prev) => [...prev, ...files.map((file) => ({ kind: "file" as const, file }))]);
@@ -158,9 +178,9 @@ export function ProposalFormPage() {
         title,
         topic,
         content,
-        vendor_name: vendorName.trim() || null,
+        vendor_name: isPurchase ? vendorName.trim() || null : null,
         project_id: projectId ? Number(projectId) : null,
-        amount: amount.trim() === "" ? null : Number(amount),
+        amount: isPurchase && amount.trim() !== "" ? Number(amount) : null,
         currency,
         is_final_decision: isFinalDecision,
         end_title: isFinalDecision ? null : endTitle,
@@ -234,13 +254,19 @@ export function ProposalFormPage() {
 
         <div className="bg-surface border border-border rounded-2xl p-6 space-y-4">
           <div>
-            <label className="block text-xs text-text-muted mb-1.5">품의서 종류 (선택)</label>
-            <input
+            <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-kind">
+              품의서 종류
+            </label>
+            <select
+              id="proposal-kind"
               value={kind}
-              onChange={(e) => setKind(e.target.value)}
-              placeholder="예: 구매, 출장 (비워두면 그냥 '품의서'로 표시됩니다)"
+              onChange={(e) => changeKind(e.target.value)}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-            />
+            >
+              <option value={PURCHASE_KIND}>구매</option>
+              <option value="">일반</option>
+              {legacyKind && <option value={legacyKind}>{legacyKind}</option>}
+            </select>
             {kind.trim() === PURCHASE_KIND && (
               <p className="text-xs text-text-muted mt-1.5">
                 구매 품의서는 결재 승인 후 발주서 작성, 발송 확인, 입고 확인, 서류 첨부까지 목록의 카드 한 장에서 이어서 관리됩니다.
@@ -278,20 +304,13 @@ export function ProposalFormPage() {
             </select>
           </div>
 
+          {isPurchase && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-vendor">
                 거래처명{isPurchase ? "" : " (선택)"}
               </label>
-              <input
-                id="proposal-vendor"
-                required={isPurchase}
-                value={vendorName}
-                onChange={(e) => setVendorName(e.target.value)}
-                maxLength={200}
-                placeholder="예: 대성RF"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-              />
+              <ClientCombobox id="proposal-vendor" required={isPurchase} value={vendorName} onChange={setVendorName} clients={clients} />
             </div>
             <div>
               <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-amount">
@@ -322,7 +341,8 @@ export function ProposalFormPage() {
               </div>
             </div>
           </div>
-          {isPurchase && <p className="-mt-2 text-xs text-text-muted">여기에 적은 거래처·금액은 발주서를 만들 때 그대로 이어받습니다.</p>}
+          )}
+          {isPurchase && <p className="-mt-2 text-xs text-text-muted">여기에 적은 제목·거래처·금액·프로젝트는 발주서를 만들 때 그대로 이어받습니다.</p>}
 
           <div>
             <label className="block text-xs text-text-muted mb-1.5">내용 (본문 도입 문장)</label>
@@ -332,21 +352,24 @@ export function ProposalFormPage() {
                 required
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                placeholder="OO 진행"
+                placeholder={isPurchase ? "구매" : "OO 진행"}
                 className="min-w-[140px] flex-1 rounded-md border border-border px-2 py-1 text-sm outline-none focus:border-primary bg-surface"
               />
-              <span>을 진행하고자 하오니 검토하여 승인해 주십시오.</span>
+              <span>{objectParticle(topic)} 진행하고자 하오니 검토하여 승인해 주십시오.</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-text-muted mb-1.5">상세 내용</label>
+            <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-content">
+              {isPurchase ? "상세 내용 (선택 · 품목·사유 등 참고 사항)" : "구체적인 내용"}
+            </label>
             <textarea
-              required
+              id="proposal-content"
+              required={!isPurchase}
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              rows={8}
-              placeholder="품목, 사유, 예산, 구매처 등 자유롭게 기재해주세요."
+              rows={isPurchase ? 5 : 10}
+              placeholder={isPurchase ? "품목, 사유 등 참고할 내용을 적어주세요. (없으면 비워둬도 됩니다)" : "품의하려는 내용을 구체적으로 기록해주세요. (목적, 일정, 예산, 담당 등)"}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg resize-y"
             />
           </div>

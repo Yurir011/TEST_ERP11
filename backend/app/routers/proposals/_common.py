@@ -46,10 +46,14 @@ _QUERY_OPTIONS = (
 
 
 def next_proposal_no(db: Session, issue_date: date) -> str:
-    """같은 날짜 기준으로 순번을 매겨 BS-품의-RND-YYMMDD-NN 형태로 반환한다."""
-    count = db.query(Proposal).filter(Proposal.issue_date == issue_date).count()
-    seq = count + 1
-    doc_no = f"BS-품의-{DEPARTMENT_CODE}-{issue_date.strftime('%y%m%d')}-{seq:02d}"
+    """같은 날짜 기준으로 순번을 매겨 BS-품의-RND-YYMMDD-NN 형태로 반환한다.
+
+    순번은 그 날짜에 이미 발급된 번호 중 가장 큰 순번 + 1 이다. (건수 + 1 로 하면 같은 날 품의서를 지운 뒤
+    새로 쓸 때 이미 있는 번호와 겹쳐 저장이 실패한다.)"""
+    prefix = f"BS-품의-{DEPARTMENT_CODE}-{issue_date.strftime('%y%m%d')}-"
+    used = [r[0] for r in db.query(Proposal.doc_no).filter(Proposal.doc_no.like(f"{prefix}%")).all()]
+    last = max((int(n[len(prefix):]) for n in used if n[len(prefix):].isdigit()), default=0)
+    doc_no = f"{prefix}{last + 1:02d}"
     logger.debug(f"[Proposals] 문서번호 채번: issue_date={issue_date}, doc_no={doc_no}")
     return doc_no
 

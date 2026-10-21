@@ -118,14 +118,14 @@ export function formatProposalAmount(p: Pick<Proposal, "amount" | "currency">): 
   return `${DOC_CURRENCY_SYMBOLS[p.currency ?? "KRW"]}${p.amount.toLocaleString()}`;
 }
 
-/** 발주서가 아직 없을 때 카드에 보여 줄 품의서의 거래처·내용(진행 내용)·금액. 거래처·금액을 안 적었으면 비어 있다. */
+/** 발주서가 아직 없을 때 카드에 보여 줄 품의서의 거래처·내용(제목)·금액. 거래처·금액을 안 적었으면 비어 있다. */
 export function summarizeProposal(p: Proposal): { client: string; content: string; total: string | null; vat: string | null } | null {
   const client = p.vendor_name?.trim();
   const total = formatProposalAmount(p);
   if (!client && !total) return null;
   const symbol = DOC_CURRENCY_SYMBOLS[p.currency ?? "KRW"];
   const vat = p.amount === null || p.amount === undefined ? null : `${symbol}${Math.round(p.amount * 0.1).toLocaleString()}`;
-  return { client: client || "-", content: p.topic, total, vat };
+  return { client: client || "-", content: p.title, total, vat }; // 진행 내용(topic)은 "구매"로 정해지므로 카드에는 제목을 보여 준다
 }
 
 /** 카드 오른쪽에 보여 줄 거래처·내용·합계 (발주서가 생기면 그 값, 아직 없으면 null). 발주서가 여러 장이면 합산한다. */

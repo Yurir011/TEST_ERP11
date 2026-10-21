@@ -204,10 +204,10 @@ function createWindow(): BrowserWindow {
     log.error(`[Main] 화면 불러오기 실패: ${safeOrigin(url)} (${code} ${desc})`);
     if (config.serverUrl && url.startsWith(config.serverUrl)) showShell("offline", "서버에서 화면을 불러오지 못했습니다.");
   });
-  w.on("close", (event) => {
+  w.on("close", () => {
     if (quitting || SMOKE) return;
-    event.preventDefault(); // 창을 닫아도 트레이에 남아 알림을 계속 받는다
-    w.hide();
+    log.info("[Main] 창의 X 로 닫음 → 앱을 종료합니다");
+    app.quit(); // X 를 누르면 트레이에 남지 않고 앱이 완전히 끝난다 (before-quit 에서 로그아웃 후 종료)
   });
   return w;
 }
@@ -1423,7 +1423,7 @@ function runApp(): void {
       /* 이미 닫힘 */
     }
   });
-  // 창이 모두 닫혀도(트레이로 내려가도) 앱은 끝내지 않는다
+  // 메인 창을 닫으면 앱이 끝난다. 창이 잠깐 모두 닫힌 사이(로그아웃 마무리 중 등)에는 여기서 따로 끝내지 않는다
   app.on("window-all-closed", () => {});
 
   void app.whenReady().then(async () => {

@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, FileText, Plus } from "lucide-react";
+import { ArrowLeft, Download, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -6,6 +6,7 @@ import { apiGet, apiPut, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
+import { ProjectPurchaseList } from "./ProjectPurchaseList";
 import { ScheduleProgressCard } from "./ScheduleProgressCard";
 import { DocColumn } from "./DocColumn";
 import { groupBySet } from "./salesDocGroups";
@@ -164,21 +165,9 @@ export function ProjectDetailPage() {
 
           <DateNotesCard project={project} />
 
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-text-muted">견적서 · 거래명세서 · 발주서</h2>
-            <div className="flex items-center gap-2">
-              {(["purchase_order", "quotation", "statement", "set"] as const).map((type) => (
-                <Link
-                  key={type}
-                  to={`/projects/${project.id}/documents/new?type=${type}`}
-                  className="flex items-center gap-1.5 text-xs font-medium bg-primary hover:bg-primary-hover text-white rounded-lg px-3 py-1.5 transition-colors"
-                >
-                  <Plus size={14} />
-                  {type === "set" ? "견적서 + 거래명세서 동시 작성" : `${PROJECT_DOC_TYPE_LABELS[type]} 작성`}
-                </Link>
-              ))}
-            </div>
-          </div>
+          <ProjectPurchaseList projectId={project.id} />
+
+          <h2 className="text-sm font-medium text-text-muted mb-3">견적서 · 거래명세서 · 발주서</h2>
 
           {projectDocs !== null && projectDocs.length === 0 && (
             <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center mb-6">

@@ -5,7 +5,9 @@ export const MAX_NOTE_LENGTH = 2000;
 
 export interface ProjectDateNote {
   id: number;
-  parent_id: number | null; // 답글이면 원 메모
+  parent_id: number | null; // 답글이면 답글을 단 대상(원 메모 또는 다른 답글)
+  reply_to_name?: string | null; // 답글을 단 대상의 작성자
+  edited_at?: string | null; // 고친 시각 (고치지 않았으면 없음)
   note_date: string;
   content: string;
   author_name: string | null;
@@ -20,11 +22,25 @@ export interface NoteGroup {
 
 export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-/** 원 메모(답글이 아닌 것)별 답글 목록. 받은 순서(작성 순)를 지킨다. */
+/** 메모(또는 답글)별 바로 아래 답글 목록. 받은 순서(작성 순)를 지킨다. */
 export function repliesByParent(notes: ProjectDateNote[]): Map<number, ProjectDateNote[]> {
   const map = new Map<number, ProjectDateNote[]>();
   for (const n of notes) if (n.parent_id !== null) map.set(n.parent_id, [...(map.get(n.parent_id) ?? []), n]);
   return map;
+}
+
+/** 원 메모 아래에 달린 모든 답글·대댓글을 화면에 그릴 순서(답글 바로 밑에 그 답글의 대댓글)로 펼친다.
+ * 들여쓰기는 첫 단계에서 한 번만 하므로 깊이는 알려 주지 않고, 누구에게 단 답글인지는 reply_to_name 으로 보여 준다. */
+export function threadOf(rootId: number, replies: Map<number, ProjectDateNote[]>): ProjectDateNote[] {
+  const out: ProjectDateNote[] = [];
+  const walk = (id: number) => {
+    for (const r of replies.get(id) ?? []) {
+      out.push(r);
+      walk(r.id);
+    }
+  };
+  walk(rootId);
+  return out;
 }
 
 /** 같은 날짜끼리 묶고 최근 날짜가 먼저 오게 한다. 같은 날짜 안에서는 받은 순서(작성 순)를 지킨다. 답글은 원 메모 밑에 붙으므로 여기엔 원 메모만 담는다. */

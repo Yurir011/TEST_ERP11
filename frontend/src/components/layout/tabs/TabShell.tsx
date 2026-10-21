@@ -225,8 +225,7 @@ export function TabShell({ routes }: { routes: ReactNode }) {
           <div className="sticky top-0 z-30 flex items-end gap-3 bg-sidebar border-b border-border pl-3 pr-6 pt-2.5">
             <div
               role="tablist"
-              className="flex items-end gap-1 min-w-0 flex-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
-              style={{ scrollbarWidth: "none" }} // 탭이 많으면 가로로 밀어서 볼 수 있지만 스크롤바는 보이지 않게 한다
+              className="flex items-end gap-1 min-w-0 flex-1"
             >
               {state.tabs.map((tab) => {
                 const isActive = tab.id === state.activeId;
@@ -235,9 +234,13 @@ export function TabShell({ routes }: { routes: ReactNode }) {
                 const color = TAB_COLORS[style.color];
                 const Icon = style.icon;
                 return (
+                  // 탭이 많아지면 익스플로러·크롬처럼 폭이 고르게 좁아져서 모두 보인다 (기본 220px → 최소 34px, 보고 있는 탭은 88px).
+                  // 폭이 좁아지면 이름(76px 미만)과 닫기 버튼(110px 미만, 보고 있는 탭은 항상)을 차례로 숨기고 아이콘만 남는다.
                   <div
                     key={tab.id}
-                    className={`group flex items-center gap-2 shrink-0 max-w-[220px] rounded-t-lg border border-b-0 border-t-[3px] border-border ${color.stripe} pl-2.5 pr-2 pt-2 text-sm text-text ${
+                    onClick={() => dispatch({ type: "activate", id: tab.id })}
+                    title={tabLabel(tab)}
+                    className={`@container/tab group flex items-center gap-2 min-w-0 flex-[0_1_220px] ${isActive ? "min-w-[88px]" : "min-w-[34px]"} cursor-pointer rounded-t-lg border border-b-0 border-t-[3px] border-border ${color.stripe} pl-2.5 pr-2 pt-2 text-sm text-text ${
                       isActive ? `${color.on} -mb-px pb-2.5 font-semibold` : `${color.idle} pb-2 opacity-75 hover:opacity-100`
                     }`}
                   >
@@ -249,8 +252,7 @@ export function TabShell({ routes }: { routes: ReactNode }) {
                       role="tab"
                       aria-selected={isActive}
                       onClick={() => dispatch({ type: "activate", id: tab.id })}
-                      className="truncate text-left"
-                      title={tabLabel(tab)}
+                      className="hidden @min-[76px]/tab:block min-w-0 flex-1 truncate text-left"
                     >
                       {tabLabel(tab)}
                     </button>
@@ -258,11 +260,12 @@ export function TabShell({ routes }: { routes: ReactNode }) {
                       <button
                         type="button"
                         aria-label={`${tabLabel(tab)} 탭 닫기`}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation(); // 탭 누름(이 탭으로 이동)으로 퍼지지 않게
                           console.debug(`[Tabs] 탭 닫기: id=${tab.id}, ${tabLabel(tab)}`);
                           dispatch({ type: "close", id: tab.id });
                         }}
-                        className="shrink-0 rounded p-0.5 text-text-muted hover:bg-border hover:text-text"
+                        className={`${isActive ? "" : "hidden @min-[110px]/tab:block"} shrink-0 rounded p-0.5 text-text-muted hover:bg-border hover:text-text ml-auto`}
                       >
                         <X size={12} />
                       </button>
