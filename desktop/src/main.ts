@@ -10,7 +10,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, powerMonitor, safeStorage, session, shell } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage, powerMonitor, safeStorage, screen, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { ImapFlow } from "imapflow";
 
@@ -31,6 +31,7 @@ import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
 import { INSTALLER_ARGS, checkForUpdate, describeUpdate, downloadInstaller } from "./updater";
 import { DEFAULT_ZOOM, stepZoom, zoomKeyAction } from "./zoom";
+import { isVisibleOnAnyDisplay } from "./windowPlacement";
 import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, loadDefaultServer, normalizeServerUrl, saveConfig } from "./serverConfig";
 import { badgeImageName, badgeSummary, clampBadgeCount, combinedBadgeCount, loginItemSettings, parseConversationId, startsHidden, UPDATED_FLAG } from "./startup";
 import { formatVersion } from "./version";
@@ -878,11 +879,23 @@ function setAutoStart(enabled: boolean): void {
   buildTrayMenu(); // 실제 등록 상태를 다시 읽어 메뉴에 반영한다
 }
 
+/**
+ * 앱 창을 앞으로 가져온다 (바로가기를 다시 누르거나 트레이를 눌렀을 때).
+ * 최소화돼 있으면 되살리고, 모니터를 뺀 뒤 화면 밖에 남은 창은 가운데로 옮기며,
+ * 다른 프로그램이 앞에 있어도 윈도우가 막지 못하도록 잠깐 맨 위로 올렸다가 내린다.
+ */
 function showWindow(): void {
-  if (!win) return;
+  if (!win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
+  if (!isVisibleOnAnyDisplay(win.getBounds(), screen.getAllDisplays().map((d) => d.workArea))) {
+    log.info("[Main] 창이 화면 밖에 있어 가운데로 옮깁니다");
+    win.center();
+  }
   win.show();
+  win.setAlwaysOnTop(true); // 윈도우는 뒤에 있던 프로그램이 스스로 앞으로 나오는 것을 막으므로, 맨 위로 올린 뒤 바로 내린다
   win.focus();
+  win.setAlwaysOnTop(false);
+  app.focus({ steal: true });
 }
 
 function buildTrayMenu(): void {
