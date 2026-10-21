@@ -7,8 +7,6 @@ import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import {
-  BANK_TYPE_LABELS,
-  CARD_TYPE_LABELS,
   PAYMENT_CATEGORIES,
   PAYMENT_CATEGORY_ITEMS,
   PAYMENT_METHOD_LABELS,
@@ -27,6 +25,7 @@ import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import { NumberInput } from "../../components/ui/NumberInput";
 import { todayISO } from "../../lib/date";
 import { OptionButtons } from "./OptionButtons";
+import { usePaymentAccounts } from "./paymentAccounts";
 import {
   descriptionFields,
   needsCustomText as itemNeedsCustomText,
@@ -41,6 +40,9 @@ export function PaymentFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
+  const { cards, banks } = usePaymentAccounts();
+  const cardLabels = Object.fromEntries(cards.map((c) => [c.code, c.nickname]));
+  const bankLabels = Object.fromEntries(banks.map((b) => [b.code, b.nickname]));
 
   const [type, setType] = useState<PaymentType>("withdrawal");
   const [paymentDate, setPaymentDate] = useState(todayISO());
@@ -289,14 +291,14 @@ export function PaymentFormPage() {
         {method === "corporate_card" && (
           <div>
             <label className="block text-xs text-text-muted mb-1.5">카드 종류</label>
-            <OptionButtons labels={CARD_TYPE_LABELS} value={cardType} onSelect={setCardType} columns={2} />
+            <OptionButtons labels={cardLabels} value={cardType} onSelect={setCardType} columns={cards.length <= 2 ? 2 : 3} />
           </div>
         )}
 
         {method === "bank_transfer" && (
           <div>
             <label className="block text-xs text-text-muted mb-1.5">계좌 종류</label>
-            <OptionButtons labels={BANK_TYPE_LABELS} value={bankType} onSelect={setBankType} columns={3} />
+            <OptionButtons labels={bankLabels} value={bankType} onSelect={setBankType} columns={banks.length <= 2 ? 2 : 3} />
           </div>
         )}
 

@@ -2,7 +2,8 @@ import type { Client } from "../clients/types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { formatCurrency } from "../../lib/format";
 import type { OutstandingKind, OutstandingRow } from "./outstanding";
-import { CARD_TYPE_LABELS, type CardType } from "./types";
+import { AccountName } from "./AccountName";
+import { type CardType } from "./types";
 
 export interface CardPendingRow {
   cardType: CardType;
@@ -132,7 +133,9 @@ export function OutstandingCards(props: OutstandingCardsProps) {
                   className="w-full flex items-center justify-between gap-2 bg-bg rounded-xl px-4 py-3 text-left hover:opacity-70"
                 >
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium">{CARD_TYPE_LABELS[r.cardType]}카드</span>
+                    <span className="block text-sm font-medium">
+                      <AccountName kind="card" code={r.cardType} />
+                    </span>
                     <span className="block text-xs text-text-muted mt-0.5">{r.count}건</span>
                   </span>
                   <span className="text-sm font-semibold tabular-nums shrink-0">{formatCurrency(r.amount)}</span>

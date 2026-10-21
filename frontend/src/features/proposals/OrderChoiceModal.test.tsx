@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetPaymentAccountsForTest } from "../payments/paymentAccounts";
+import { TEST_ACCOUNTS } from "../payments/testAccounts";
 import type { ProjectDocument } from "../projectDocuments/types";
 import { OrderChoiceModal } from "./OrderChoiceModal";
 import type { Proposal } from "./types";
 
+beforeEach(() => resetPaymentAccountsForTest(TEST_ACCOUNTS));
 afterEach(cleanup);
 
 const proposal = { id: 1, title: "샘플 구매" } as unknown as Proposal;
@@ -25,27 +28,27 @@ describe("발주 방법 선택 팝업", () => {
     fireEvent.click(screen.getByRole("button", { name: /^발주 완료/ }));
     expect(h.onOnlineDone).not.toHaveBeenCalled(); // 결제 방법을 확인한 뒤에 처리한다
     fireEvent.click(screen.getByRole("button", { name: /이 내용으로 처리/ }));
-    expect(h.onOnlineDone).toHaveBeenCalledWith({ payment_method: null, payment_card: null });
+    expect(h.onOnlineDone).toHaveBeenCalledWith({ payment_method: null, payment_card: null, payment_bank: null });
   });
 
-  it("발주 완료에서 입금이나 법인카드를 고르지 않으면 미입금으로 처리한다", () => {
+  it("발주 완료에서 입금이나 법인카드를 고르지 않으면 외상으로 처리한다", () => {
     renderModal();
     fireEvent.click(screen.getByRole("button", { name: /^발주 완료/ }));
-    expect(screen.getByText(/미입금으로 처리됩니다/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /이 내용으로 처리 \(미입금\)/ })).toBeTruthy();
+    expect(screen.getByText(/외상으로 처리됩니다/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /이 내용으로 처리 \(외상\)/ })).toBeTruthy();
   });
 
   it("입금을 고르면 입금, 법인카드를 고르면 카드 종류와 함께 보내고 둘은 함께 고를 수 없다", () => {
     const h = renderModal();
     fireEvent.click(screen.getByRole("button", { name: /^발주 완료/ }));
     fireEvent.click(screen.getByLabelText("입금"));
-    fireEvent.click(screen.getByRole("button", { name: /이 내용으로 처리 \(입금\)/ }));
-    expect(h.onOnlineDone).toHaveBeenLastCalledWith({ payment_method: "deposit", payment_card: null });
+    fireEvent.click(screen.getByRole("button", { name: /이 내용으로 처리 \(입금 \(기업은행\)\)/ }));
+    expect(h.onOnlineDone).toHaveBeenLastCalledWith({ payment_method: "deposit", payment_card: null, payment_bank: "ibk" });
 
     fireEvent.change(screen.getByLabelText("법인카드"), { target: { value: "bc" } });
     expect((screen.getByLabelText("입금") as HTMLInputElement).checked).toBe(false); // 카드를 고르면 입금은 해제된다
     fireEvent.click(screen.getByRole("button", { name: /이 내용으로 처리 \(법인카드/ }));
-    expect(h.onOnlineDone).toHaveBeenLastCalledWith({ payment_method: "card", payment_card: "bc" });
+    expect(h.onOnlineDone).toHaveBeenLastCalledWith({ payment_method: "card", payment_card: "bc", payment_bank: null });
   });
 
   it("발주 완료된 건은 현재 결제 상태를 보여 주고 바꿀 수 있다", () => {
@@ -54,7 +57,7 @@ describe("발주 방법 선택 팝업", () => {
     expect(screen.getByText("입금", { selector: "b" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("법인카드"), { target: { value: "kb_kookmin" } });
     fireEvent.click(screen.getByRole("button", { name: "결제 상태 저장" }));
-    expect(h.onChangePayment).toHaveBeenCalledWith({ payment_method: "card", payment_card: "kb_kookmin" });
+    expect(h.onChangePayment).toHaveBeenCalledWith({ payment_method: "card", payment_card: "kb_kookmin", payment_bank: null });
   });
 
   it("이미 발주서가 있으면 발주 완료(발주서 없이)는 고를 수 없고 작성한 발주서를 열 수 있다", () => {

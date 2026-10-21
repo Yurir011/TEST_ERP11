@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OptionButtons } from "./OptionButtons";
-import { BANK_TYPE_LABELS } from "./types";
+const BANK_TYPE_LABELS = { ibk: "기업은행", kb_kookmin: "KB국민은행", woori: "우리은행" };
 
 afterEach(cleanup);
 

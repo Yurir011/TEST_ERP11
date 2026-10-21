@@ -1,4 +1,4 @@
-import { CalendarDays, Trash2 } from "lucide-react";
+import { CalendarDays, CornerDownRight, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
@@ -10,10 +10,12 @@ import {
   MAX_NOTE_LENGTH,
   WEEKDAYS,
   formatNoteDate,
+  formatNoteDateTime,
   formatNoteTime,
   groupNotesByDate,
   monthCells,
   offsetFromStart,
+  repliesByParent,
   type ProjectDateNote,
 } from "./dateNotes";
 import { parseDate } from "./timeline";
@@ -31,6 +33,9 @@ export function DateNotesCard({ project }: { project: Project }) {
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 답글: 어느 메모에 답글을 쓰는 중인지와 그 내용
+  const [replyTo, setReplyTo] = useState<number | null>(null);
+  const [replyText, setReplyText] = useState("");
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
@@ -58,7 +63,7 @@ export function DateNotesCard({ project }: { project: Project }) {
   }, [calendarOpen]);
 
   const countByDate = new Map<string, number>();
-  for (const n of notes ?? []) countByDate.set(n.note_date, (countByDate.get(n.note_date) ?? 0) + 1);
+  for (const n of (notes ?? []).filter((x) => x.parent_id === null)) countByDate.set(n.note_date, (countByDate.get(n.note_date) ?? 0) + 1);
 
   function selectDate(date: string) {
     setSelected(date);
@@ -93,8 +98,30 @@ export function DateNotesCard({ project }: { project: Project }) {
     }
   }
 
+  async function handleReply(e: FormEvent, parent: ProjectDateNote) {
+    e.preventDefault();
+    const content = replyText.trim();
+    if (!content || saving) return;
+    setError(null);
+    setSaving(true);
+    logDebug("DateNotes", `답글 추가 시도: project_id=${project.id}, parent_id=${parent.id}`);
+    try {
+      await apiPost(`/api/projects/${project.id}/date-notes`, { parent_id: parent.id, content });
+      setReplyText("");
+      setReplyTo(null);
+      load();
+    } catch (err) {
+      logError("DateNotes", "답글 추가 실패", err);
+      setError(err instanceof ApiError ? err.message : "답글을 저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleDelete(note: ProjectDateNote) {
-    if (!(await confirm(`${formatNoteDate(note.note_date)} 메모를 삭제하시겠습니까?`, { okLabel: "삭제", danger: true }))) return;
+    const hasReplies = (replies.get(note.id)?.length ?? 0) > 0;
+    const message = note.parent_id !== null ? "이 답글을 삭제하시겠습니까?" : `${formatNoteDate(note.note_date)} 메모를 삭제하시겠습니까?${hasReplies ? " 달린 답글도 함께 삭제됩니다." : ""}`;
+    if (!(await confirm(message, { okLabel: "삭제", danger: true }))) return;
     logDebug("DateNotes", `메모 삭제 시도: id=${note.id}`);
     try {
       await apiDelete(`/api/projects/${project.id}/date-notes/${note.id}`);
@@ -106,13 +133,14 @@ export function DateNotesCard({ project }: { project: Project }) {
   }
 
   const groups = groupNotesByDate(notes ?? []);
+  const replies = repliesByParent(notes ?? []);
   const canDelete = (n: ProjectDateNote) => !!user && (n.created_by === user.id || isAdminRole(user.role));
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 mb-6">
       <div className="flex items-baseline gap-2 mb-4">
         <h2 className="text-sm font-semibold">날짜별 메모</h2>
-        <span className="text-xs text-text-muted">{notes ? `${notes.length}개 · 최근 날짜 순` : ""}</span>
+        <span className="text-xs text-text-muted">{notes ? `${notes.filter((n) => n.parent_id === null).length}개${notes.some((n) => n.parent_id !== null) ? ` · 답글 ${notes.filter((n) => n.parent_id !== null).length}개` : ""} · 최근 날짜 순` : ""}</span>
       </div>
 
       <form onSubmit={handleAdd} className="relative flex flex-wrap items-start gap-2 mb-4">
@@ -229,18 +257,74 @@ export function DateNotesCard({ project }: { project: Project }) {
               </div>
               <ul className="flex flex-col gap-1.5 min-w-0">
                 {g.notes.map((n) => (
-                  <li key={n.id} className="bg-tile-orange border border-tile-orange-fg/20 rounded-xl pl-3.5 pr-2 py-2.5 text-[13px]">
-                    <p className="mb-1 whitespace-pre-wrap break-words">{n.content}</p>
-                    <div className="flex items-center gap-1.5">
-                      <span className="flex-1 text-[11.5px] text-text-muted tabular-nums">
-                        {n.author_name ?? "알 수 없음"} · {formatNoteTime(n.created_at)}
-                      </span>
-                      {canDelete(n) && (
-                        <button type="button" onClick={() => handleDelete(n)} aria-label="메모 삭제" title="삭제" className="p-1 rounded-md text-text-muted hover:text-danger hover:bg-black/5">
-                          <Trash2 size={13} />
+                  <li key={n.id} className="min-w-0">
+                    <div className="bg-tile-orange border border-tile-orange-fg/20 rounded-xl pl-3.5 pr-2 py-2.5 text-[13px]">
+                      <p className="mb-1 whitespace-pre-wrap break-words">{n.content}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="flex-1 text-[11.5px] text-text-muted tabular-nums">
+                          {n.author_name ?? "알 수 없음"} · {formatNoteTime(n.created_at)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyTo((cur) => (cur === n.id ? null : n.id));
+                            setReplyText("");
+                          }}
+                          aria-label="답글 달기"
+                          className="flex items-center gap-1 px-1.5 py-1 rounded-md text-[11.5px] text-text-muted hover:text-primary hover:bg-black/5"
+                        >
+                          <CornerDownRight size={12} />
+                          답글{(replies.get(n.id)?.length ?? 0) > 0 ? ` ${replies.get(n.id)!.length}` : ""}
                         </button>
-                      )}
+                        {canDelete(n) && (
+                          <button type="button" onClick={() => handleDelete(n)} aria-label="메모 삭제" title="삭제" className="p-1 rounded-md text-text-muted hover:text-danger hover:bg-black/5">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    {(replies.get(n.id) ?? []).map((r) => (
+                      <div key={r.id} className="mt-1 ml-5 flex gap-1.5">
+                        <CornerDownRight size={13} className="mt-3 shrink-0 text-text-muted" />
+                        <div className="min-w-0 flex-1 bg-bg border border-border rounded-xl pl-3 pr-2 py-2 text-[13px]">
+                          <p className="mb-1 whitespace-pre-wrap break-words">{r.content}</p>
+                          <div className="flex items-center gap-1.5">
+                            <span className="flex-1 text-[11.5px] text-text-muted tabular-nums">
+                              {r.author_name ?? "알 수 없음"} · {formatNoteDateTime(r.created_at)}
+                            </span>
+                            {canDelete(r) && (
+                              <button type="button" onClick={() => handleDelete(r)} aria-label="답글 삭제" title="삭제" className="p-1 rounded-md text-text-muted hover:text-danger hover:bg-black/5">
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {replyTo === n.id && (
+                      <form onSubmit={(e) => handleReply(e, n)} className="mt-1 ml-5 flex items-start gap-1.5">
+                        <CornerDownRight size={13} className="mt-3 shrink-0 text-text-muted" />
+                        <textarea
+                          autoFocus
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          maxLength={MAX_NOTE_LENGTH}
+                          placeholder="답글을 입력하세요"
+                          aria-label="답글 입력"
+                          rows={2}
+                          className="flex-1 min-w-0 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!replyText.trim() || saving}
+                          className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          등록
+                        </button>
+                      </form>
+                    )}
                   </li>
                 ))}
               </ul>

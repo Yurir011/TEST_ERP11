@@ -5,8 +5,6 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from app.models.payment import (
     PAYMENT_CATEGORIES,
     PAYMENT_CATEGORY_ITEMS,
-    BankType,
-    CardType,
     PaymentMethod,
     PaymentType,
     ProofType,
@@ -37,8 +35,8 @@ class PaymentCreate(BaseModel):
     memo: str | None = None
     proof_type: ProofType | None = None
     proof_type_detail: str | None = None
-    card_type: CardType | None = None
-    bank_type: BankType | None = None
+    card_type: str | None = None  # 법인카드 code (카드·계좌 관리에 등록된 것)
+    bank_type: str | None = None  # 계좌 code
     # 새 입출금 등록 시 불러온 외상 매출/매입(매입매출 내역). 지정하면 그 내역이 결제완료로 바뀌고 이 입출금의 날짜가 완료일로 기록된다.
     transaction_id: int | None = None
 
@@ -104,8 +102,8 @@ class PaymentOut(BaseModel):
     memo: str | None
     proof_type: ProofType | None
     proof_type_detail: str | None
-    card_type: CardType | None
-    bank_type: BankType | None
+    card_type: str | None
+    bank_type: str | None
     card_pending: bool = False
     card_used_date: date | None = None
     # 이 입출금으로 결제완료 처리된 매입매출의 거래일(미수금/미지급금 발생일). 연결된 내역이 없으면 None.
@@ -128,7 +126,7 @@ class CsvImportResult(BaseModel):
 
 
 class CardPendingSummaryOut(BaseModel):
-    card_type: CardType
+    card_type: str
     count: int
     total_amount: int
     oldest_used_date: date | None
@@ -141,7 +139,7 @@ class CardPendingSummaryOut(BaseModel):
 
 
 class CardSettleIn(BaseModel):
-    card_type: CardType
+    card_type: str
     settle_date: date
 
 

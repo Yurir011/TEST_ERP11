@@ -12,6 +12,7 @@ from app.models.recurring_payment import RecurringPayment
 from app.models.user import User
 from app.schemas.payment import PaymentCreate
 from app.schemas.recurring_payment import RecurringPaymentCreate, RecurringPaymentOut
+from app.services.payment_accounts import require_account
 from app.services.recurring_payment import generate_recurring_payments
 
 router = APIRouter(prefix="/api/recurring-payments", tags=["recurring-payments"])
@@ -38,8 +39,9 @@ def _to_out(t: RecurringPayment) -> RecurringPaymentOut:
     )
 
 
-def _validate_like_payment(payload: RecurringPaymentCreate) -> None:
-    """분류/항목 규칙은 일반 입출금 등록과 동일하게 검사한다."""
+def _validate_like_payment(payload: RecurringPaymentCreate, db: Session) -> None:
+    """분류/항목 규칙은 일반 입출금 등록과 동일하게 검사하고, 고른 계좌가 카드·계좌 관리에 있는지 확인한다."""
+    require_account(db, "bank", payload.bank_type)
     try:
         PaymentCreate(
             type=payload.type,
@@ -74,7 +76,7 @@ def list_recurring(db: Session = Depends(get_db), current_user: User = Depends(r
 def create_recurring(
     payload: RecurringPaymentCreate, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
 ):
-    _validate_like_payment(payload)
+    _validate_like_payment(payload, db)
     tpl = RecurringPayment(
         type=payload.type,
         category=payload.category,
@@ -102,7 +104,7 @@ def update_recurring(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
-    _validate_like_payment(payload)
+    _validate_like_payment(payload, db)
     tpl = _get_or_404(db, template_id)
     tpl.type = payload.type
     tpl.category = payload.category

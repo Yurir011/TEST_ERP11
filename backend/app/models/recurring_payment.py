@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
-from app.models.payment import BankType, PaymentType
+from app.models.payment import PaymentType
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -24,7 +24,7 @@ class RecurringPayment(Base):
     amount: Mapped[int] = mapped_column(BigInteger)
     day_of_month: Mapped[int] = mapped_column(Integer)  # 1~31 (해당 월에 없는 날짜는 말일로 처리)
     start_month: Mapped[date] = mapped_column(Date)  # 첫 자동이체 월 (해당 월 1일로 저장)
-    bank_type: Mapped[BankType] = mapped_column(Enum(BankType, name="banktype"))
+    bank_type: Mapped[str] = mapped_column(String(40))  # 계좌 code (payment_accounts.code)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))

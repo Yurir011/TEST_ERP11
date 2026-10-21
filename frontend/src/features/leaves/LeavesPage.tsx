@@ -7,7 +7,11 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { openTargetDomId, useOpenTarget, useScrollToOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
+import { LeaveAdminPanel } from "./LeaveAdminPanel";
 import { LeaveDetailModal } from "./LeaveDetailModal";
+import { formatServiceLength, formatSignedDays } from "./leaveBalance";
+import { useAuth } from "../../context/useAuth";
+import { isAdminRole } from "../../lib/auth";
 import type { LeaveBalance, LeaveRecord } from "./types";
 import { toMonthValue } from "../../lib/date";
 import { useApprovalActions } from "../../lib/useApprovalActions";
@@ -19,6 +23,7 @@ interface LeavesPageProps extends OpenOverlayProps {
 
 export function LeavesPage({ embedded = false, openId, modalOnly = false, onDecided, onModalClose }: LeavesPageProps) {
   const { confirm, notify } = useDialog();
+  const { user } = useAuth();
   const now = new Date();
 
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
@@ -194,6 +199,11 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
           <div className="bg-surface border border-border rounded-2xl p-5">
             <p className="text-sm text-text-muted">발생 연차</p>
             <p className="text-2xl font-semibold mt-1">{balance.granted}일</p>
+            {balance.adjustment !== 0 && (
+              <p className="text-[11px] text-text-muted mt-0.5">
+                자동 {balance.auto_granted}일 · 관리자 조정 {formatSignedDays(balance.adjustment)}
+              </p>
+            )}
           </div>
           <div className="bg-surface border border-border rounded-2xl p-5">
             <p className="text-sm text-text-muted">사용</p>
@@ -205,13 +215,16 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
           </div>
           <div className="bg-surface border border-border rounded-2xl p-5">
             <p className="text-sm text-text-muted">잔여</p>
-            <p className="text-2xl font-semibold mt-1 text-primary">{balance.remaining}일</p>
+            <p className={`text-2xl font-semibold mt-1 ${balance.remaining < 0 ? "text-danger" : "text-primary"}`}>{balance.remaining}일</p>
+            {balance.remaining < 0 && <p className="text-[11px] text-danger mt-0.5">미리 당겨 씀 (다음 연차에서 차감)</p>}
+            {balance.carried_deficit > 0 && <p className="text-[11px] text-text-muted mt-0.5">지난 연차 당겨 씀 {balance.carried_deficit}일 차감 반영</p>}
           </div>
         </section>
       )}
       {balance && (
         <p className="text-xs text-text-muted mb-6">
-          현재 산정 기간: {balance.period_start} ~ {balance.period_end}
+          {balance.hire_date && `입사일 ${balance.hire_date} (근속 ${formatServiceLength(balance.hire_date)}) · `}
+          현재 산정 기간: {balance.period_start} ~ {balance.period_end} · 잔여보다 많이 신청하면 연차를 미리 당겨 쓰며 마이너스로 표시됩니다 (최대 {balance.advance_limit}일까지).
         </p>
       )}
 
@@ -402,6 +415,7 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
           )}
         </div>
       </section>
+      {!embedded && !!user && isAdminRole(user.role) && <LeaveAdminPanel onChanged={loadBalance} />}
       {detailModal}
     </>
   );

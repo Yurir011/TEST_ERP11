@@ -92,6 +92,7 @@ def _to_out(p: Proposal) -> ProposalOut:
         order_sent_at=p.order_sent_at,
         payment_method=p.payment_method,
         payment_card=p.payment_card,
+        payment_bank=p.payment_bank,
         received_at=p.received_at,
         created_at=p.created_at,
     )

@@ -4,7 +4,6 @@ import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import {
-  BANK_TYPE_LABELS,
   PAYMENT_CATEGORIES,
   PAYMENT_CATEGORY_ITEMS,
   PAYMENT_TYPE_LABELS,
@@ -15,6 +14,7 @@ import {
 } from "./types";
 import { NumberInput } from "../../components/ui/NumberInput";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { usePaymentAccounts } from "./paymentAccounts";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
 interface FormState {
@@ -66,6 +66,7 @@ const inputClass = "w-full rounded-lg border border-border px-3 py-2 text-sm out
 
 export function RecurringPaymentsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const { confirm } = useDialog();
+  const { banks, bankName } = usePaymentAccounts();
   const [items, setItems] = useState<RecurringPayment[] | null>(null);
   const [editing, setEditing] = useState<{ id: number | null; form: FormState } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -251,9 +252,9 @@ export function RecurringPaymentsModal({ onClose, onChanged }: { onClose: () => 
               <div>
                 <label className="block text-xs text-text-muted mb-1.5">계좌 종류</label>
                 <select value={editing.form.bankType} onChange={(e) => patch({ bankType: e.target.value as BankType })} className={inputClass}>
-                  {(Object.keys(BANK_TYPE_LABELS) as BankType[]).map((b) => (
-                    <option key={b} value={b}>
-                      {BANK_TYPE_LABELS[b]}
+                  {banks.map((b) => (
+                    <option key={b.code} value={b.code}>
+                      {b.nickname}
                     </option>
                   ))}
                 </select>
@@ -310,7 +311,7 @@ export function RecurringPaymentsModal({ onClose, onChanged }: { onClose: () => 
                       <div className="min-w-0">
                         <p className="text-sm font-semibold break-words">{t.description}</p>
                         <p className="text-xs text-text-muted mt-0.5">
-                          {t.category} · 매월 {t.day_of_month}일 · {BANK_TYPE_LABELS[t.bank_type]} · {t.start_month.slice(0, 7)}부터
+                          {t.category} · 매월 {t.day_of_month}일 · {bankName(t.bank_type)} · {t.start_month.slice(0, 7)}부터
                         </p>
                         <p className="text-xs text-text-muted mt-0.5">
                           {t.last_recorded_month ? `최근 기록: ${t.last_recorded_month}` : "아직 기록된 내역 없음"}

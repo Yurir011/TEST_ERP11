@@ -1,7 +1,8 @@
 import { Download, ExternalLink, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
-import { ApiError, apiDelete, apiPut, apiUploadForm, downloadFile, openFile } from "../../lib/api";
+import { ApiError, apiDelete, apiPut, apiUploadForm, downloadFile } from "../../lib/api";
+import { isViewableInBrowser, openAttachment } from "../../lib/openAttachment";
 import { logDebug, logError } from "../../lib/logger";
 import { ATTACHMENT_DOC_KIND_LABELS, type AttachmentDocKind, type Proposal, type ProposalAttachment } from "./types";
 
@@ -30,9 +31,7 @@ const hasDocKind = (p: Proposal, k: AttachmentDocKind) => p.attachments.some((a)
 
 const extensionOf = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
 
-/** 브라우저가 새 창에서 바로 보여 줄 수 있는 형식 (그 밖의 엑셀·워드 등은 내려받는다) */
-const VIEWABLE_EXTENSIONS = ["png", "jpg", "jpeg", "pdf", "txt"];
-export const isViewableInBrowser = (name: string) => VIEWABLE_EXTENSIONS.includes(extensionOf(name));
+export { isViewableInBrowser };
 
 /** 고른 파일 중 올릴 수 있는 것만 남기고, 못 올리는 이유를 모아 돌려준다 (남은 칸 수·형식·크기 기준). */
 export function pickUploadable(files: File[], remaining: number): { accepted: File[]; problems: string[] } {
@@ -132,9 +131,8 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
       return;
     }
     const path = `/api/proposals/${proposal.id}/attachments/${a.id}/file`;
-    logDebug("ProposalAttachments", `첨부 열기: attachment_id=${a.id}, ${isViewableInBrowser(a.label) ? "새 창" : "내려받기"}`);
-    const run = isViewableInBrowser(a.label) ? openFile(path) : downloadFile(path, a.label);
-    run.catch((err) => {
+    logDebug("ProposalAttachments", `첨부 열기: attachment_id=${a.id}`);
+    openAttachment(path, a.label).catch((err) => {
       logError("ProposalAttachments", "첨부 열기 실패", err);
       setProblems([err instanceof ApiError ? err.message : "파일을 열지 못했습니다."]);
     });
@@ -237,7 +235,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
                     type="button"
                     onClick={() => handleOpen(a)}
                     aria-label={`${a.label} 열기`}
-                    title={a.kind === "link" || isViewableInBrowser(a.label) ? "누르면 새 창에서 열립니다" : "누르면 내려받습니다 (이 형식은 브라우저에서 바로 열 수 없습니다)"}
+                    title="누르면 바로 열립니다 (문서는 앱에서 기본 프로그램으로, 웹 브라우저에서는 내려받습니다)"
                     className="flex-1 min-w-0 truncate text-left hover:text-primary hover:underline underline-offset-2"
                   >
                     {a.label}

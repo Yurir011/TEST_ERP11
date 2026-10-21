@@ -5,15 +5,9 @@ from datetime import date, timedelta
 
 import holidays
 
-from app.config import settings
 from app.logging_config import get_logger
-from app.models.payment import CardType
 
 logger = get_logger("CardBilling")
-
-
-def pay_day(card_type: CardType) -> int:
-    return settings.card_bc_pay_day if card_type == CardType.bc else settings.card_kb_pay_day
 
 
 def next_business_day_on_or_after(d: date) -> date:
@@ -23,9 +17,9 @@ def next_business_day_on_or_after(d: date) -> date:
     return d
 
 
-def settle_date_for_month(card_type: CardType, year: int, month: int) -> date:
-    """year-month의 결제일(휴일이면 다음 영업일로 보정)."""
-    day = min(pay_day(card_type), calendar.monthrange(year, month)[1])
+def settle_date_for_month(pay_day: int, year: int, month: int) -> date:
+    """year-month의 결제일(휴일이면 다음 영업일로 보정). pay_day 는 그 카드의 매월 결제일."""
+    day = min(pay_day, calendar.monthrange(year, month)[1])
     return next_business_day_on_or_after(date(year, month, day))
 
 
@@ -40,14 +34,14 @@ def usage_month_of(settle_date: date) -> tuple[date, date]:
     return date(y, m, 1), date(y, m, calendar.monthrange(y, m)[1])
 
 
-def default_settle_date(card_type: CardType, oldest_pending_used: date | None, today: date) -> date:
+def default_settle_date(pay_day: int, oldest_pending_used: date | None, today: date) -> date:
     """다음에 처리할 결제일. 결제예정 사용내역이 있으면 가장 오래된 사용월이 청구되는 결제일(이미 지났어도 그 날짜),
     없으면 오늘 이후 가장 가까운 결제일을 돌려준다."""
     if oldest_pending_used is not None:
         y, m = _month_add(oldest_pending_used.year, oldest_pending_used.month, 1)
-        return settle_date_for_month(card_type, y, m)
-    this_month = settle_date_for_month(card_type, today.year, today.month)
+        return settle_date_for_month(pay_day, y, m)
+    this_month = settle_date_for_month(pay_day, today.year, today.month)
     if this_month >= today:
         return this_month
     y, m = _month_add(today.year, today.month, 1)
-    return settle_date_for_month(card_type, y, m)
+    return settle_date_for_month(pay_day, y, m)

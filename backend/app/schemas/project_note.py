@@ -6,7 +6,8 @@ MAX_NOTE_LENGTH = 2000
 
 
 class ProjectNoteCreate(BaseModel):
-    note_date: date
+    note_date: date | None = None  # 답글이면 비워 둔다(원 메모의 날짜를 따른다)
+    parent_id: int | None = None  # 답글을 남길 원 메모
     content: str = Field(max_length=MAX_NOTE_LENGTH)
 
     @field_validator("content")
@@ -20,6 +21,7 @@ class ProjectNoteCreate(BaseModel):
 
 class ProjectNoteOut(BaseModel):
     id: int
+    parent_id: int | None = None
     note_date: date
     content: str
     author_name: str | None

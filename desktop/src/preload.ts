@@ -87,6 +87,8 @@ const api = {
     consumePendingOpen: (): Promise<number | null> => ipcRenderer.invoke("mail:consume-pending-open"),
     openAttachment: (id: number, index: number): Promise<unknown> => ipcRenderer.invoke("mail:attachment-open", id, index),
   },
+  /** 받은 파일 내용을 임시 폴더에 풀어 이 PC의 기본 프로그램으로 연다 */
+  openFile: (filename: string, data: ArrayBuffer): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke("file:open", filename, data),
   /** 앱 업데이트: 서버에 더 새 버전이 있는지 확인하고, 바로 받아 설치한다 (설치되면 앱이 다시 시작된다) */
   update: {
     check: (): Promise<unknown> => ipcRenderer.invoke("update:check"),

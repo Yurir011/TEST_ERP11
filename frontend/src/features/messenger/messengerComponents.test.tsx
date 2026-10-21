@@ -191,7 +191,7 @@ describe("MessageBubble", () => {
     expect(container.firstElementChild?.className).toContain("whitespace-pre-wrap");
   });
 
-  it("PDF 는 열기, 오피스 문서 등은 다운로드로 처리한다", async () => {
+  it("PDF 는 새 창으로 열고, 오피스 문서는 (웹 브라우저에서는) 내려받는다", async () => {
     api.openFile.mockResolvedValue(undefined);
     api.downloadFile.mockResolvedValue(undefined);
     const att = (id: number, name: string, type: string) => ({ id, file_name: name, size: 2048, content_type: type });
@@ -201,15 +201,15 @@ describe("MessageBubble", () => {
     unmount();
 
     renderBubble(msg({ attachments: [att(8, "자료.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")] }));
-    fireEvent.click(screen.getByTitle("다운로드"));
+    fireEvent.click(screen.getByTitle("열기"));
     await waitFor(() => expect(api.downloadFile).toHaveBeenCalledWith("/api/messenger/attachments/8", "자료.docx"));
-    expect(api.openFile).toHaveBeenCalledTimes(1); // 문서는 화면에서 열지 않는다
+    expect(api.openFile).toHaveBeenCalledTimes(1); // 문서는 브라우저 창에서 열 수 없어 내려받는다
   });
 
-  it("SVG·HTML 은 이미지로 그리지 않고 다운로드 버튼으로만 보인다", () => {
+  it("SVG·HTML 은 이미지로 그리지 않고 파일 버튼으로만 보인다", () => {
     const att = { id: 9, file_name: "x.svg", size: 10, content_type: "image/svg+xml" };
     renderBubble(msg({ attachments: [att] }));
-    expect(screen.getByTitle("다운로드")).toBeTruthy();
+    expect(screen.getByTitle("열기")).toBeTruthy();
     expect(screen.queryByRole("img")).toBeNull();
   });
 });

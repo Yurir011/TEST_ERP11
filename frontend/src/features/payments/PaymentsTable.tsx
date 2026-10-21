@@ -2,7 +2,9 @@ import { FileSpreadsheet, Image, Printer, Trash2 } from "lucide-react";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
-import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_STYLES, PROOF_TYPE_LABELS, paymentMethodDetailLabel, type Payment } from "./types";
+import { AccountName } from "./AccountName";
+import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, PAYMENT_TYPE_STYLES, PROOF_TYPE_LABELS, paymentMethodDetailLabel, type Payment } from "./types";
+import { usePaymentAccounts } from "./paymentAccounts";
 
 // 너비가 고정된 칸에서 글자가 길면 폰트 크기를 줄여 한 줄에 맞춘다 (글자 수 기준).
 function fitFontClass(length: number): string {
@@ -21,6 +23,8 @@ interface PaymentsTableProps {
 
 // 입출금 내역 표. 행을 누르면 상세, 오른쪽 아이콘으로 영수증·전표 인쇄·엑셀·삭제.
 export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, onDelete }: PaymentsTableProps) {
+  const { cardName, bankName } = usePaymentAccounts();
+  const names = { cardName, bankName };
   return (
     <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
       {/* 표 스타일: 가로선 없이 연한 세로선 + 줄무늬 (첫 열 앞, 버튼 열 앞은 선 제외) */}
@@ -77,9 +81,19 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
                 {p.client_name ?? <span className="text-text-muted">-</span>}
               </td>
               <td
-                className={`text-center py-2.5 px-2 whitespace-nowrap overflow-hidden ${fitFontClass(paymentMethodDetailLabel(p).length + (p.card_pending ? 5 : 0))}`}
+                className={`text-center py-2.5 px-2 whitespace-nowrap overflow-hidden ${fitFontClass(paymentMethodDetailLabel(p, names).length + (p.card_pending ? 5 : 0))}`}
               >
-                {paymentMethodDetailLabel(p)}
+                {p.method === "corporate_card" && p.card_type ? (
+                  <>
+                    {PAYMENT_METHOD_LABELS[p.method]} (<AccountName kind="card" code={p.card_type} />)
+                  </>
+                ) : p.method === "bank_transfer" && p.bank_type ? (
+                  <>
+                    {PAYMENT_METHOD_LABELS[p.method]} (<AccountName kind="bank" code={p.bank_type} />)
+                  </>
+                ) : (
+                  paymentMethodDetailLabel(p, names)
+                )}
                 {p.card_pending && <span className={`ml-1 text-[11px] px-1.5 py-0.5 font-medium ${SOFT_BADGE.orange}`}>결제예정</span>}
               </td>
               <td className="text-center py-2.5 px-2 whitespace-nowrap overflow-hidden">

@@ -1,9 +1,13 @@
 import { FileSpreadsheet, Image, Pencil, Printer, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { downloadFile, openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logError } from "../../lib/logger";
+import { AccountName } from "./AccountName";
+import { usePaymentAccounts } from "./paymentAccounts";
 import {
+  PAYMENT_METHOD_LABELS,
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_STYLES,
   PROOF_TYPE_LABELS,
@@ -11,7 +15,7 @@ import {
   type Payment,
 } from "./types";
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2 border-b border-border last:border-0">
       <span className="text-xs text-text-muted shrink-0">{label}</span>
@@ -22,6 +26,7 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onClose: () => void }) {
   const navigate = useNavigate();
+  const { cardName, bankName } = usePaymentAccounts();
   const proofText = payment.proof_type
     ? payment.proof_type === "other" && payment.proof_type_detail
       ? payment.proof_type_detail
@@ -72,7 +77,22 @@ export function PaymentDetailModal({ payment, onClose }: { payment: Payment; onC
             <Row label={payment.type === "deposit" ? "미수금 발생일" : "미지급금 발생일"} value={payment.occurred_date} />
           )}
           <Row label="금액" value={formatCurrency(payment.amount)} />
-          <Row label="결제수단" value={paymentMethodDetailLabel(payment)} />
+          <Row
+            label="결제수단"
+            value={
+              payment.method === "corporate_card" && payment.card_type ? (
+                <>
+                  {PAYMENT_METHOD_LABELS[payment.method]} (<AccountName kind="card" code={payment.card_type} />)
+                </>
+              ) : payment.method === "bank_transfer" && payment.bank_type ? (
+                <>
+                  {PAYMENT_METHOD_LABELS[payment.method]} (<AccountName kind="bank" code={payment.bank_type} />)
+                </>
+              ) : (
+                paymentMethodDetailLabel(payment, { cardName, bankName })
+              )
+            }
+          />
           <Row label="거래처" value={payment.client_name ?? "-"} />
           <Row label="증빙발행" value={proofText} />
           <Row label="메모" value={payment.memo ?? "-"} />

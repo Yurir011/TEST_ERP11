@@ -17,6 +17,7 @@ logger = get_logger("ProjectNotes")
 def _out(note: ProjectDateNote) -> ProjectNoteOut:
     return ProjectNoteOut(
         id=note.id,
+        parent_id=note.parent_id,
         note_date=note.note_date,
         content=note.content,
         author_name=note.author.name if note.author else None,
@@ -52,9 +53,23 @@ def create_date_note(
     current_user: User = Depends(get_current_user),
 ):
     _ensure_project(db, project_id)
-    logger.debug(f"[ProjectNotes] 메모 추가 시도: project_id={project_id}, date={payload.note_date}, by={current_user.id}")
+    logger.debug(f"[ProjectNotes] 메모 추가 시도: project_id={project_id}, date={payload.note_date}, parent={payload.parent_id}, by={current_user.id}")
+    note_date = payload.note_date
+    if payload.parent_id is not None:
+        parent = (
+            db.query(ProjectDateNote)
+            .filter(ProjectDateNote.id == payload.parent_id, ProjectDateNote.project_id == project_id)
+            .first()
+        )
+        if parent is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="답글을 남길 메모를 찾을 수 없습니다.")
+        if parent.parent_id is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="답글에는 다시 답글을 달 수 없습니다.")
+        note_date = parent.note_date  # 답글은 원 메모와 같은 날짜에 붙는다
+    elif note_date is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="메모 날짜를 지정해주세요.")
     note = ProjectDateNote(
-        project_id=project_id, note_date=payload.note_date, content=payload.content, created_by=current_user.id
+        project_id=project_id, note_date=note_date, content=payload.content, parent_id=payload.parent_id, created_by=current_user.id
     )
     db.add(note)
     db.commit()

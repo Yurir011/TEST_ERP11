@@ -1,3 +1,4 @@
+import { usePaymentAccounts } from "./paymentAccounts";
 import { useState, type FormEvent } from "react";
 import type { Client } from "../clients/types";
 import { remainingAmount, type Transaction } from "../transactions/types";
@@ -5,8 +6,6 @@ import { ApiError, apiPost } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import {
-  BANK_TYPE_LABELS,
-  CARD_TYPE_LABELS,
   PAYMENT_METHOD_LABELS,
   type BankType,
   type CardType,
@@ -27,6 +26,7 @@ interface SettleModalProps {
 }
 
 export function SettleModal({ kind, client, occurredLabel, transactions, onClose, onSuccess }: SettleModalProps) {
+  const { cards, banks, cardName, bankName } = usePaymentAccounts();
   const byTransactions = transactions !== undefined && transactions.length > 0;
   const outstanding = byTransactions
     ? transactions.reduce((sum, t) => sum + remainingAmount(t), 0)
@@ -40,7 +40,8 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
   const [paymentDate, setPaymentDate] = useState(todayISO());
   const [method, setMethod] = useState<PaymentMethod>("bank_transfer");
   const [cardType, setCardType] = useState<CardType | null>(null);
-  const [bankType, setBankType] = useState<BankType | null>("ibk");
+  const [bankPick, setBankType] = useState<BankType | null>(null);
+  const bankType: BankType | null = bankPick ?? banks[0]?.code ?? null; // 고르지 않으면 첫 번째 계좌
   const [memo, setMemo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +183,7 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
             <div>
               <label className="block text-xs text-text-muted mb-1.5">카드 종류</label>
               <div className="grid grid-cols-2 gap-2">
-                {(Object.keys(CARD_TYPE_LABELS) as CardType[]).map((ct) => (
+                {cards.map((card) => card.code).map((ct) => (
                   <button
                     key={ct}
                     type="button"
@@ -193,7 +194,7 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
                         : "border-border text-text-muted hover:bg-bg"
                     }`}
                   >
-                    {CARD_TYPE_LABELS[ct]}
+                    {cardName(ct)}
                   </button>
                 ))}
               </div>
@@ -204,7 +205,7 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
             <div>
               <label className="block text-xs text-text-muted mb-1.5">계좌 종류</label>
               <div className="grid grid-cols-3 gap-2">
-                {(Object.keys(BANK_TYPE_LABELS) as BankType[]).map((bt) => (
+                {banks.map((b) => b.code).map((bt) => (
                   <button
                     key={bt}
                     type="button"
@@ -215,7 +216,7 @@ export function SettleModal({ kind, client, occurredLabel, transactions, onClose
                         : "border-border text-text-muted hover:bg-bg"
                     }`}
                   >
-                    {BANK_TYPE_LABELS[bt]}
+                    {bankName(bt)}
                   </button>
                 ))}
               </div>

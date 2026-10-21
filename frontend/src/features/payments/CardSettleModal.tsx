@@ -2,7 +2,9 @@ import { useState } from "react";
 import { ApiError, apiPost } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
-import { CARD_TYPE_LABELS, type CardPendingSummary, type CardType } from "./types";
+import { AccountName } from "./AccountName";
+import { type CardPendingSummary, type CardType } from "./types";
+import { usePaymentAccounts } from "./paymentAccounts";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
 /** 카드 결제일에 해당 카드의 결제예정 사용내역을 한 번에 출금 확정하는 팝업. */
@@ -16,6 +18,7 @@ export function CardSettleModal({
   onSuccess: () => void;
 }) {
   const { confirm, notify } = useDialog();
+  const { cardName } = usePaymentAccounts();
   const [dates, setDates] = useState<Record<string, string>>(
     Object.fromEntries(summaries.map((s) => [s.card_type, s.default_settle_date]))
   );
@@ -29,7 +32,7 @@ export function CardSettleModal({
       return;
     }
     if (
-      !(await confirm(`${CARD_TYPE_LABELS[s.card_type]}카드 ${settleDate} 이전 사용내역을 ${settleDate} 결제일로 일괄 출금 처리하시겠습니까?`, { okLabel: "출금 처리" }))
+      !(await confirm(`${cardName(s.card_type)} ${settleDate} 이전 사용내역을 ${settleDate} 결제일로 일괄 출금 처리하시겠습니까?`, { okLabel: "출금 처리" }))
     ) {
       return;
     }
@@ -64,7 +67,9 @@ export function CardSettleModal({
           {summaries.map((s) => (
             <div key={s.card_type} className="border border-border rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">{CARD_TYPE_LABELS[s.card_type]}카드</span>
+                <span className="text-sm font-medium">
+                  <AccountName kind="card" code={s.card_type} />
+                </span>
                 <span className="text-sm">
                   {s.count}건 · {formatCurrency(s.total_amount)}
                 </span>

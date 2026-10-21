@@ -42,22 +42,9 @@ export const PROOF_TYPE_LABELS: Record<ProofType, string> = {
   other: "기타",
 };
 
-// 법인카드 건의 카드 종류
-export type CardType = "bc" | "kb_kookmin";
-
-export const CARD_TYPE_LABELS: Record<CardType, string> = {
-  bc: "BC",
-  kb_kookmin: "KB국민",
-};
-
-// 계좌이체 건의 계좌 종류
-export type BankType = "ibk" | "kb_kookmin" | "woori";
-
-export const BANK_TYPE_LABELS: Record<BankType, string> = {
-  ibk: "기업",
-  kb_kookmin: "국민",
-  woori: "우리",
-};
+// 법인카드·계좌 종류: 카드·계좌 관리에 등록된 수단의 code (옛 값 bc, kb_kookmin, ibk, woori 도 그대로). 이름은 paymentAccounts.ts 에서 찾는다.
+export type CardType = string;
+export type BankType = string;
 
 // 입출금 분류 13개. 인건비/차량/제조만 세부 항목 콤보박스를 갖는다 (PAYMENT_CATEGORY_ITEMS 참고).
 export const PAYMENT_CATEGORIES = [
@@ -121,10 +108,11 @@ export interface CardPendingSummary {
   later_amount: number;
 }
 
-export function paymentMethodDetailLabel(p: Payment): string {
+/** 결제수단 글자 ("법인카드 (별명)"). cardName/bankName 은 code 를 별명으로 바꾸는 함수 (usePaymentAccounts) */
+export function paymentMethodDetailLabel(p: Payment, names: { cardName: (c: string | null) => string; bankName: (c: string | null) => string }): string {
   const base = PAYMENT_METHOD_LABELS[p.method];
-  if (p.method === "corporate_card" && p.card_type) return `${base} (${CARD_TYPE_LABELS[p.card_type]})`;
-  if (p.method === "bank_transfer" && p.bank_type) return `${base} (${BANK_TYPE_LABELS[p.bank_type]})`;
+  if (p.method === "corporate_card" && p.card_type) return `${base} (${names.cardName(p.card_type)})`;
+  if (p.method === "bank_transfer" && p.bank_type) return `${base} (${names.bankName(p.bank_type)})`;
   return base;
 }
 

@@ -10,9 +10,10 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from app.logging_config import get_logger
-from app.models.payment import CardType, Payment, PaymentMethod, PaymentType
+from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.transaction import Transaction
 from app.services import card_billing
+from app.services.payment_accounts import card_pay_day
 
 logger = get_logger("CardPending")
 
@@ -36,7 +37,7 @@ def update_pending_on_edit(payment: Payment, new_type: PaymentType, new_method: 
 
 @dataclass
 class CardPendingSummary:
-    card_type: CardType
+    card_type: str
     count: int
     total_amount: int
     oldest_used_date: date | None
@@ -48,11 +49,11 @@ class CardPendingSummary:
     later_amount: int
 
 
-def summarize(db: Session, card_type: CardType, today: date) -> CardPendingSummary:
+def summarize(db: Session, card_type: str, today: date) -> CardPendingSummary:
     """카드 한 종류의 결제예정 요약. 다음 결제일에 청구되는 건만 건수/금액에 넣고, 그 뒤 사용분은 later_* 로 따로 센다."""
     base = db.query(Payment).filter(Payment.card_pending.is_(True), Payment.card_type == card_type)
     oldest = base.with_entities(sa_func.min(Payment.payment_date)).scalar()
-    settle_date = card_billing.default_settle_date(card_type, oldest, today)
+    settle_date = card_billing.default_settle_date(card_pay_day(db, card_type), oldest, today)
     usage_from, usage_to = card_billing.usage_month_of(settle_date)
 
     def agg(*conds):
@@ -75,7 +76,7 @@ def summarize(db: Session, card_type: CardType, today: date) -> CardPendingSumma
     )
 
 
-def settle(db: Session, card_type: CardType, settle_date: date) -> tuple[int, int, date]:
+def settle(db: Session, card_type: str, settle_date: date) -> tuple[int, int, date]:
     """결제일에 그 결제일이 청구하는 사용기간(전월 1일~말일) 이전의 결제예정 건을 출금 확정한다.
     입출금 날짜는 결제일로 바뀌고 원래 날짜는 사용일로 남는다. (건수, 합계, 사용기간 끝)을 돌려준다."""
     _, usage_to = card_billing.usage_month_of(settle_date)
@@ -93,7 +94,7 @@ def settle(db: Session, card_type: CardType, settle_date: date) -> tuple[int, in
     return len(pending), total, usage_to
 
 
-def add_statement_rows(db: Session, rows: list[dict], card_type: CardType, created_by: int) -> tuple[int, list[str]]:
+def add_statement_rows(db: Session, rows: list[dict], card_type: str, created_by: int) -> tuple[int, list[str]]:
     """카드 명세서에서 읽은 행을 결제예정 출금으로 추가한다. (추가 건수, 행별 오류)를 돌려준다."""
     imported = 0
     errors: list[str] = []

@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { formatCurrency } from "../../lib/format";
-import { CARD_TYPE_LABELS, type CardType, type Payment } from "./types";
+import { AccountName } from "./AccountName";
+import { type CardType, type Payment } from "./types";
 
 interface CardPendingDetailModalProps {
   cardType: CardType;
@@ -19,7 +20,9 @@ export function CardPendingDetailModal({ cardType, items, periodLabel, onClose }
       <div className="bg-surface rounded-2xl p-6 w-full max-w-lg max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-sm font-semibold">{CARD_TYPE_LABELS[cardType]}카드 결제예정 상세</h3>
+            <h3 className="text-sm font-semibold">
+              <AccountName kind="card" code={cardType} /> 결제예정 상세
+            </h3>
             <p className="text-xs text-text-muted mt-1">
               {periodLabel} · {items.length}건 · {formatCurrency(total)}
             </p>

@@ -378,13 +378,6 @@ def _purchase(client, h, amount=1000000):
     return res.json()
 
 
-@pytest.fixture
-def ledger_on(monkeypatch):
-    from app.services import purchase_ledger
-
-    monkeypatch.setattr(purchase_ledger, "LEDGER_SYNC_ENABLED", True)
-
-
 def _ledger(db, proposal_id):
     from app.models.transaction import Transaction
 
@@ -392,8 +385,17 @@ def _ledger(db, proposal_id):
     return db.query(Transaction).filter(Transaction.proposal_id == proposal_id).all()
 
 
-def test_order_done_creates_unpaid_purchase_transaction(ledger_on, client, db, staff, auth_headers):
-    """발주 완료에서 입금·법인카드를 고르지 않으면 미입금(외상매입)으로 매입에 잡힌다."""
+def _payments(db, proposal_id):
+    from app.models.payment import Payment
+    from app.models.proposal import Proposal as ProposalModel
+
+    db.expire_all()
+    p = db.get(ProposalModel, proposal_id)
+    return [db.get(Payment, p.payment_id)] if p.payment_id else []
+
+
+def test_order_done_creates_credit_purchase_without_payment(client, db, staff, auth_headers):
+    """발주 완료에서 입금·법인카드를 고르지 않으면 외상 매입으로 잡히고 입출금은 생기지 않는다."""
     h = auth_headers(staff["writer"])
     p = _purchase(client, h)
     assert _ledger(db, p["id"]) == []
@@ -402,30 +404,64 @@ def test_order_done_creates_unpaid_purchase_transaction(ledger_on, client, db, s
     assert res.json()["payment_method"] is None
     (tx,) = _ledger(db, p["id"])
     assert (tx.type.value, tx.counterparty, tx.supply_amount, tx.vat_amount, tx.total_amount) == ("purchase", "대성RF", 1000000, 100000, 1100000)
-    assert tx.settled is False and tx.paid_amount == 0 and "미입금" in tx.memo
+    assert tx.settled is False and "외상" in tx.memo
+    assert _payments(db, p["id"]) == []
     # 발송 확인을 취소하면 매입도 사라진다
     assert client.put(f"/api/proposals/{p['id']}/order-sent", headers=h, json={"value": False}).status_code == 200
     assert _ledger(db, p["id"]) == []
 
 
-def test_order_done_with_deposit_or_card_is_settled(ledger_on, client, db, staff, auth_headers):
+def test_order_with_card_or_deposit_creates_payment_and_settles(client, db, staff, auth_headers):
     h = auth_headers(staff["writer"])
     p = _purchase(client, h)
     res = client.put(f"/api/proposals/{p['id']}/order-sent", headers=h, json={"value": True, "online": True, "payment_method": "card", "payment_card": "bc"})
     assert res.status_code == 200 and (res.json()["payment_method"], res.json()["payment_card"]) == ("card", "bc")
     (tx,) = _ledger(db, p["id"])
-    assert tx.settled is True and tx.paid_amount == tx.total_amount and "BC카드" in tx.memo
+    (pay,) = _payments(db, p["id"])
+    assert tx.settled is True and tx.settled_payment_id == pay.id
+    assert (pay.type.value, pay.method.value, pay.card_type, pay.amount, pay.card_pending) == ("withdrawal", "corporate_card", "bc", 1100000, False)
 
-    # 나중에 입금으로 바꾸고, 다시 미입금으로 돌릴 수 있다
-    res = client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "deposit"})
-    assert res.status_code == 200 and res.json()["payment_card"] is None
-    (tx,) = _ledger(db, p["id"])
-    assert tx.settled is True and "입금" in tx.memo and "미입금" not in tx.memo
+    # 입금(계좌)으로 바꾸면 카드 출금을 지우고 계좌이체 출금으로 다시 만든다
+    res = client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "deposit", "payment_bank": "ibk"})
+    assert res.status_code == 200 and res.json()["payment_card"] is None and res.json()["payment_bank"] == "ibk"
+    (pay,) = _payments(db, p["id"])
+    assert (pay.method.value, pay.bank_type, pay.card_type) == ("bank_transfer", "ibk", None)
+    assert _ledger(db, p["id"])[0].settled is True
+
+    # 외상으로 돌리면 출금이 지워지고 매입이 외상으로 돌아온다
     client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={})
+    assert _payments(db, p["id"]) == []
     (tx,) = _ledger(db, p["id"])
-    assert tx.settled is False and tx.paid_amount == 0 and tx.settled_date is None
-    # 법인카드는 카드를 골라야 한다
+    assert tx.settled is False and tx.settled_payment_id is None
+    # 입금은 계좌, 법인카드는 카드를 골라야 한다
     assert client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "card"}).status_code == 400
+    assert client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "deposit"}).status_code == 400
+
+
+def test_receive_asks_payment_and_applies_to_ledger(client, db, staff, auth_headers):
+    """입고 완료 때 대금 결제 여부(외상 / 결제 완료)를 확인해 매입·입출금에 반영한다."""
+    h = auth_headers(staff["writer"])
+    p = _purchase(client, h)
+    client.put(f"/api/proposals/{p['id']}/order-sent", headers=h, json={"value": True, "online": True})
+    assert _payments(db, p["id"]) == []
+
+    # 입고하면서 입금 완료로 확인
+    res = client.put(f"/api/proposals/{p['id']}/received", headers=h, json={"value": True, "payment_asked": True, "payment_method": "deposit", "payment_bank": "woori"})
+    assert res.status_code == 200, res.text
+    assert res.json()["payment_method"] == "deposit" and res.json()["received_at"] is not None
+    (pay,) = _payments(db, p["id"])
+    assert pay.bank_type == "woori" and _ledger(db, p["id"])[0].settled is True
+
+    # 입고 확인을 취소했다 다시 하면서 외상으로 확인하면 출금이 지워진다
+    client.put(f"/api/proposals/{p['id']}/received", headers=h, json={"value": False})
+    client.put(f"/api/proposals/{p['id']}/received", headers=h, json={"value": True, "payment_asked": True})
+    assert _payments(db, p["id"]) == [] and _ledger(db, p["id"])[0].settled is False
+
+    # 결제 여부를 묻지 않고 입고만 하면 기존 결제 상태를 그대로 둔다
+    q = _purchase(client, h)
+    client.put(f"/api/proposals/{q['id']}/order-sent", headers=h, json={"value": True, "online": True, "payment_method": "card", "payment_card": "kb_kookmin"})
+    client.put(f"/api/proposals/{q['id']}/received", headers=h, json={"value": True})
+    assert len(_payments(db, q["id"])) == 1
 
 
 def test_order_payment_needs_order_done_and_writer(client, staff, auth_headers):

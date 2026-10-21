@@ -3,7 +3,8 @@ import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApprovalHistory } from "../../components/approval/ApprovalHistory";
 import { useAuth } from "../../context/useAuth";
-import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
+import { ApiError, apiDelete, apiPost, apiUpload } from "../../lib/api";
+import { openAttachment } from "../../lib/openAttachment";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
@@ -158,9 +159,10 @@ export function ProposalDetailModal({
     if (attachment.kind === "link" && attachment.url) {
       window.open(attachment.url, "_blank");
     } else {
-      downloadFile(`/api/proposals/${proposal.id}/attachments/${attachment.id}/file`, attachment.label).catch((err) =>
-        logError("Proposals", "첨부파일 다운로드 실패", err)
-      );
+      openAttachment(`/api/proposals/${proposal.id}/attachments/${attachment.id}/file`, attachment.label).catch((err) => {
+        logError("Proposals", "첨부파일 열기 실패", err);
+        setAttachmentError(err instanceof ApiError ? err.message : "파일을 열지 못했습니다.");
+      });
     }
   }
 

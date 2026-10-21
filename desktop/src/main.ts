@@ -764,6 +764,23 @@ function registerIpc(): void {
     return err ? { ok: false, error: "이 파일을 열 수 있는 프로그램이 없습니다." } : { ok: true, value: { filename: info.filename } };
   });
 
+  /** ERP 첨부파일 열기: 화면이 받은 파일 내용을 임시 폴더에 풀어 기본 프로그램으로 연다. 실행 파일 종류는 열지 않고, 크기도 제한한다. */
+  ipcMain.handle("file:open", async (e, filename: unknown, data: unknown) => {
+    if (!guard(e, "file:open", ["server"])) return { ok: false, error: "허용되지 않은 요청입니다." };
+    if (typeof filename !== "string" || !filename.trim()) return { ok: false, error: "파일 이름이 올바르지 않습니다." };
+    const bytes = data instanceof ArrayBuffer ? Buffer.from(data) : ArrayBuffer.isView(data) ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : null;
+    if (!bytes || bytes.length === 0) return { ok: false, error: "파일 내용이 비어 있습니다." };
+    if (bytes.length > 100 * 1024 * 1024) return { ok: false, error: "파일이 너무 커서 열 수 없습니다." };
+    if (isDangerousFilename(filename)) return { ok: false, error: "프로그램을 실행하는 파일은 열 수 없습니다." };
+    const dir = path.join(app.getPath("userData"), "open-tmp", String(Date.now()));
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, safeFilename(filename));
+    fs.writeFileSync(file, bytes);
+    log.info(`[File] 첨부파일 열기: ${safeFilename(filename)} (${bytes.length}바이트)`);
+    const err = await shell.openPath(file);
+    return err ? { ok: false, error: "이 파일을 열 수 있는 프로그램이 없습니다." } : { ok: true };
+  });
+
   ipcMain.handle("shell:state", (e) => {
     if (!guard(e, "shell:state", ["shell"])) return null;
     return { serverUrl: config.serverUrl, ...shellState };

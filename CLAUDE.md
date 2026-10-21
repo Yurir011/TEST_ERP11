@@ -1,6 +1,6 @@
 # 사내 ERP 시스템 구축 프로젝트
 
-> 회사명: BENCH (로고: 원형 크로스헤어 아이콘 + "BENCH" 워드마크, `frontend/src/components/ui/Logo.tsx`)
+> 회사명: BENCH (로고: 원형 크로스헤어 아이콘 + "BENCH" 워드마크 이미지 `frontend/src/assets/bench-logo.png`(원본 `BENCH_CI-01.png`), 사용처 `frontend/src/components/ui/Logo.tsx`)
 > 대상: 직원 5명 규모 통신기기 개발·제조업체
 > 형태: 사내 서버 기반 인트라넷 웹앱 (외부 비공개)
 > 전략: 먼저 뼈대(레이아웃/인증/대시보드)를 완성하고, 이후 기능을 모듈 단위로 하나씩 추가

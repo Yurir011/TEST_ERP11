@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.payment import BankType, PaymentType
+from app.models.payment import PaymentType
 
 
 class RecurringPaymentCreate(BaseModel):
@@ -12,7 +12,7 @@ class RecurringPaymentCreate(BaseModel):
     amount: int = Field(gt=0)
     day_of_month: int = Field(ge=1, le=31)
     start_month: date  # 첫 자동이체 월 (날짜는 무시하고 해당 월 1일로 저장)
-    bank_type: BankType
+    bank_type: str  # 계좌 code
     memo: str | None = None
     is_active: bool = True
 
@@ -27,7 +27,7 @@ class RecurringPaymentOut(BaseModel):
     amount: int
     day_of_month: int
     start_month: date
-    bank_type: BankType
+    bank_type: str
     memo: str | None
     is_active: bool
     last_recorded_month: str | None  # 가장 최근에 기록된 월 ("2026-10")

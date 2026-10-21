@@ -1,5 +1,6 @@
 import { formatCurrency } from "../../lib/format";
-import { CARD_TYPE_LABELS, type CardType, type Payment } from "./types";
+import { usePaymentAccounts } from "./paymentAccounts";
+import { type CardType, type Payment } from "./types";
 
 export type CardFilter = "all" | CardType;
 
@@ -12,12 +13,15 @@ interface CardFilterBoxesProps {
 
 // 카드 탭 상단의 카드 종류별 요약 상자. 누르면 그 카드 내역만 표에 나온다.
 export function CardFilterBoxes({ rows, value, onChange }: CardFilterBoxesProps) {
+  const { all } = usePaymentAccounts();
+  // 지금 쓰는 카드와, 숨겼더라도 내역이 남아 있는 카드를 보여 준다
+  const cardCodes = all.filter((a) => a.kind === "card" && (a.is_active || rows.some((p) => p.card_type === a.code)));
   const boxes: { key: CardFilter; label: string; rows: Payment[] }[] = [
     { key: "all", label: "전체 카드", rows },
-    ...(Object.keys(CARD_TYPE_LABELS) as CardType[]).map((ct) => ({
-      key: ct,
-      label: CARD_TYPE_LABELS[ct],
-      rows: rows.filter((p) => p.card_type === ct),
+    ...cardCodes.map((c) => ({
+      key: c.code as CardType,
+      label: c.nickname,
+      rows: rows.filter((p) => p.card_type === c.code),
     })),
   ];
 

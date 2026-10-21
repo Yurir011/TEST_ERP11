@@ -13,15 +13,24 @@ from app.core.approval import (
     validate_chain_approvers,
 )
 from app.core.deps import get_current_user
-from app.core.leave_calc import calculate_annual_leave_days, count_business_days, get_leave_year_window
+from app.core.leave_calc import count_business_days
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
-from app.models.leave import LeaveRequest, LeaveStatus
+from app.models.leave import LeaveAdjustment, LeaveRequest, LeaveStatus
 from app.models.schedule import ScheduleEvent
 from app.models.user import User, is_admin_role
 from app.schemas.approval import to_approval_step_out
-from app.schemas.leave import LeaveBalanceOut, LeaveCreate, LeaveOut, RejectIn
+from app.schemas.leave import (
+    LeaveAdjustmentCreate,
+    LeaveAdjustmentOut,
+    LeaveBalanceOut,
+    LeaveBalanceRowOut,
+    LeaveCreate,
+    LeaveOut,
+    RejectIn,
+)
+from app.services.leave_balance import compute_balance
 from app.services.approval_notice import create_decision_notification, create_request_notification
 
 router = APIRouter(prefix="/api/leaves", tags=["leaves"])
@@ -83,36 +92,77 @@ def _to_out(record: LeaveRequest, steps: list[ApprovalStep]) -> LeaveOut:
     )
 
 
-def _compute_balance(db: Session, user: User, as_of: date) -> LeaveBalanceOut:
-    granted = calculate_annual_leave_days(user.hire_date, as_of)
-    period_start, period_end = get_leave_year_window(user.hire_date, as_of)
-
-    records = (
-        db.query(LeaveRequest)
-        .filter(
-            LeaveRequest.user_id == user.id,
-            LeaveRequest.start_date >= period_start,
-            LeaveRequest.start_date < period_end,
-            LeaveRequest.status != LeaveStatus.rejected,
-        )
-        .all()
-    )
-    used = sum(r.days for r in records if r.status == LeaveStatus.approved)
-    pending = sum(r.days for r in records if r.status == LeaveStatus.pending)
-
-    return LeaveBalanceOut(
-        granted=granted,
-        used=used,
-        pending=pending,
-        remaining=granted - used,
-        period_start=period_start,
-        period_end=period_end,
-    )
-
-
 @router.get("/balance", response_model=LeaveBalanceOut)
 def get_my_balance(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return _compute_balance(db, current_user, date.today())
+    return compute_balance(db, current_user, date.today())
+
+
+def _require_admin(user: User) -> None:
+    if not is_admin_role(user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="관리자만 사용할 수 있습니다.")
+
+
+def _adjustment_out(a: LeaveAdjustment) -> LeaveAdjustmentOut:
+    return LeaveAdjustmentOut(
+        id=a.id, user_id=a.user_id, days=a.days, reason=a.reason, effective_date=a.effective_date,
+        created_by_name=a.creator.name if a.creator else None, created_at=a.created_at,
+    )
+
+
+@router.get("/balances", response_model=list[LeaveBalanceRowOut])
+def get_all_balances(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """관리자: 재직 중인 직원 전체의 연차 현황 (입사일 기준 자동 발생 + 조정 − 사용)."""
+    _require_admin(current_user)
+    users = db.query(User).filter(User.is_active.is_(True)).order_by(User.hire_date, User.id).all()
+    today = date.today()
+    logger.debug(f"[Leaves] 직원별 연차 현황 조회: count={len(users)}, by={current_user.id}")
+    return [LeaveBalanceRowOut(user_id=u.id, user_name=u.name, **compute_balance(db, u, today).model_dump()) for u in users]
+
+
+@router.get("/adjustments", response_model=list[LeaveAdjustmentOut])
+def list_adjustments(user_id: int = Query(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _require_admin(current_user)
+    rows = (
+        db.query(LeaveAdjustment)
+        .options(joinedload(LeaveAdjustment.creator))
+        .filter(LeaveAdjustment.user_id == user_id)
+        .order_by(LeaveAdjustment.effective_date.desc(), LeaveAdjustment.id.desc())
+        .all()
+    )
+    return [_adjustment_out(a) for a in rows]
+
+
+@router.post("/adjustments", response_model=LeaveAdjustmentOut, status_code=status.HTTP_201_CREATED)
+def create_adjustment(payload: LeaveAdjustmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """관리자: 직원의 연차 일수를 더하거나(+) 뺀다(-). 효력일이 속한 연차 주기에 반영된다."""
+    _require_admin(current_user)
+    target = db.get(User, payload.user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="직원을 찾을 수 없습니다.")
+    adjustment = LeaveAdjustment(
+        user_id=payload.user_id,
+        days=payload.days,
+        reason=payload.reason,
+        effective_date=payload.effective_date or date.today(),
+        created_by=current_user.id,
+    )
+    db.add(adjustment)
+    db.commit()
+    db.refresh(adjustment)
+    logger.debug(f"[Leaves] 연차 조정: user_id={payload.user_id}, days={payload.days:+d}, by={current_user.id}")
+    return _adjustment_out(adjustment)
+
+
+@router.delete("/adjustments/{adjustment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_adjustment(adjustment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _require_admin(current_user)
+    adjustment = db.get(LeaveAdjustment, adjustment_id)
+    if adjustment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="조정 내역을 찾을 수 없습니다.")
+    db.delete(adjustment)
+    db.commit()
+    logger.debug(f"[Leaves] 연차 조정 삭제: id={adjustment_id}, by={current_user.id}")
+    return None
 
 
 @router.post("", response_model=LeaveOut, status_code=status.HTTP_201_CREATED)
@@ -128,12 +178,15 @@ def create_leave(
     if days <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="평일이 포함된 기간을 선택해주세요.")
 
-    balance = _compute_balance(db, current_user, payload.start_date)
-    if days > balance.remaining:
+    balance = compute_balance(db, current_user, payload.start_date)
+    # 잔여보다 많이 신청하면 연차를 미리 당겨 쓰는 것으로 보고 잔여가 마이너스가 된다. 다음 주기에 발생할 연차까지만 당겨 쓸 수 있다.
+    if balance.remaining - days < -balance.advance_limit:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"잔여 연차({balance.remaining}일)보다 많은 {days}일을 신청할 수 없습니다.",
+            detail=f"당겨 쓸 수 있는 한도를 넘습니다. (잔여 {balance.remaining}일, 최대 {balance.advance_limit}일까지 당겨 쓸 수 있어 {days}일은 신청할 수 없습니다.)",
         )
+    if days > balance.remaining:
+        logger.debug(f"[Leaves] 연차 당겨 쓰기 신청: user_id={current_user.id}, 잔여={balance.remaining}, 신청={days}")
 
     doc_label = f"연차 ({payload.start_date} ~ {payload.end_date}, {days}일)"
     steps: list[ApprovalStep] = []

@@ -292,6 +292,8 @@ export interface BenchClient {
   focusMain?(): Promise<void>;
   /** 앱 업데이트 (예전 앱에는 없다) */
   update?: UpdateBridge;
+  /** 받은 파일을 이 PC의 기본 프로그램으로 바로 연다 (엑셀·워드·한글 등). 예전 앱에는 없다 */
+  openFile?(filename: string, data: ArrayBuffer): Promise<{ ok: boolean; error?: string }>;
 }
 
 declare global {

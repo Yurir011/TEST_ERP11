@@ -20,7 +20,9 @@ import { logDebug, logError } from "../../lib/logger";
 import { canComposeDocumentMail, openDocumentMail } from "../mail/documentMail";
 import { ProposalsPage } from "../proposals/ProposalsPage";
 import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
-import { OrderChoiceModal, type OrderPayment } from "../proposals/OrderChoiceModal";
+import { OrderChoiceModal } from "../proposals/OrderChoiceModal";
+import type { OrderPayment } from "../proposals/PaymentPicker";
+import { ReceiveModal } from "../proposals/ReceiveModal";
 import { ProposalAttachmentsModal } from "../proposals/ProposalAttachmentsModal";
 import { PurchaseProposalCard } from "../proposals/PurchaseProposalCard";
 import { computePurchaseFlow, isPurchaseProposal } from "../proposals/purchaseFlow";
@@ -123,6 +125,7 @@ export function ProjectDocumentsPage({
   const [purchaseOrders, setPurchaseOrders] = useState<ProjectDocument[]>([]);
   const [deleteRequestProposal, setDeleteRequestProposal] = useState<Proposal | null>(null);
   const [orderChoiceId, setOrderChoiceId] = useState<number | null>(null);
+  const [receiveId, setReceiveId] = useState<number | null>(null); // 입고 완료 때 대금 결제 여부를 확인하는 창
   const [attachmentsId, setAttachmentsId] = useState<number | null>(null);
   const openTargetId = useOpenTarget(openId);
   const openedTargetRef = useRef(false);
@@ -509,13 +512,18 @@ export function ProjectDocumentsPage({
     }
   }
 
-  async function handleToggleReceived(p: Proposal, received: boolean) {
-    const message = received ? "물품을 받았습니까? 입고 완료로 처리합니다." : "입고 완료를 취소할까요?";
-    if (!(await confirm(message, { okLabel: received ? "입고 완료" : "취소" }))) return;
-    logDebug("ProjectDocuments", `입고 확인 변경: proposal_id=${p.id}, received=${received}`);
+  // 입고 완료는 대금 결제 여부(외상 / 입금 / 법인카드)를 확인하는 창을 거치고, 입고 취소는 확인만 한다.
+  async function handleToggleReceived(p: Proposal, received: boolean, payment?: OrderPayment) {
+    if (received && !payment) {
+      setReceiveId(p.id);
+      return;
+    }
+    if (!received && !(await confirm("입고 완료를 취소할까요?", { okLabel: "취소" }))) return;
+    logDebug("ProjectDocuments", `입고 확인 변경: proposal_id=${p.id}, received=${received}, 결제=${payment ? (payment.payment_method ?? "외상") : "-"}`);
     setBusyId(p.id);
     try {
-      await apiPut(`/api/proposals/${p.id}/received`, { value: received });
+      await apiPut(`/api/proposals/${p.id}/received`, received && payment ? { value: true, payment_asked: true, ...payment } : { value: received });
+      setReceiveId(null);
       loadPurchaseCards();
     } catch (err) {
       logError("ProjectDocuments", "입고 확인 변경 실패", err);
@@ -571,7 +579,7 @@ export function ProjectDocumentsPage({
 
   // 발주 선택 팝업의 "발주 완료": 온라인 주문처럼 발주서 없이 주문·결제를 마친 경우
   async function handleOnlineOrderDone(p: Proposal, payment: OrderPayment) {
-    logDebug("ProjectDocuments", `발주 완료(온라인 주문): proposal_id=${p.id}, 결제=${payment.payment_method ?? "미입금"}`);
+    logDebug("ProjectDocuments", `발주 완료(온라인 주문): proposal_id=${p.id}, 결제=${payment.payment_method ?? "외상"}`);
     setBusyId(p.id);
     try {
       await apiPut(`/api/proposals/${p.id}/order-sent`, { value: true, online: true, ...payment });
@@ -602,9 +610,9 @@ export function ProjectDocumentsPage({
     }
   }
 
-  // 발주 완료된 건의 결제 상태(입금 / 법인카드 / 미입금) 변경 → 매입매출관리의 매입에도 반영된다
+  // 발주 완료된 건의 결제 상태(입금 / 법인카드 / 외상) 변경 → 매입매출관리·입출금관리에도 반영된다
   async function handleChangePayment(p: Proposal, payment: OrderPayment) {
-    logDebug("ProjectDocuments", `결제 상태 변경: proposal_id=${p.id}, 결제=${payment.payment_method ?? "미입금"}`);
+    logDebug("ProjectDocuments", `결제 상태 변경: proposal_id=${p.id}, 결제=${payment.payment_method ?? "외상"}`);
     setBusyId(p.id);
     try {
       await apiPut(`/api/proposals/${p.id}/order-payment`, payment);
@@ -618,6 +626,7 @@ export function ProjectDocumentsPage({
   }
 
   const orderChoiceProposal = purchaseProposals.find((p) => p.id === orderChoiceId) ?? null;
+  const receiveProposal = purchaseProposals.find((p) => p.id === receiveId) ?? null;
   const attachmentsProposal = purchaseProposals.find((p) => p.id === attachmentsId) ?? null;
 
   const purchaseCards = purchaseProposals.length > 0 && (
@@ -1001,6 +1010,15 @@ export function ProjectDocumentsPage({
           />
         );
       })()}
+
+      {receiveProposal && (
+        <ReceiveModal
+          proposal={receiveProposal}
+          busy={busyId === receiveProposal.id}
+          onConfirm={(payment) => void handleToggleReceived(receiveProposal, true, payment)}
+          onClose={() => setReceiveId(null)}
+        />
+      )}
 
       {attachmentsProposal && (
         <ProposalAttachmentsModal

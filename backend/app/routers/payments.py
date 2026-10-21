@@ -14,7 +14,7 @@ require_payments_access = require_menu_access("payments")
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
-from app.models.payment import CardType, Payment, PaymentMethod, PaymentType
+from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.transaction import Transaction, TransactionType
 from app.services.settlement import (
     apply_balance_settlement,
@@ -28,6 +28,7 @@ from app.services.settlement import (
 from app.services.transaction_credit import remaining_amount
 from app.models.user import User
 from app.services import card_pending as card_pending_service
+from app.services.payment_accounts import list_accounts, require_account
 from app.services.payment_query import build_payment_query, monthly_total, occurred_dates
 from app.services.recurring_payment import generate_recurring_payments
 from app.schemas.payment import (
@@ -103,7 +104,7 @@ def export_payments_excel(
     date_to: date | None = Query(default=None),
     q: str | None = Query(default=None, description="분류/내용/메모/거래처명 검색어"),
     method: PaymentMethod | None = Query(default=None, description="결제수단 필터 (corporate_card = 카드 탭)"),
-    card_type: CardType | None = Query(default=None, description="카드 종류 필터 (카드 탭에서 BC/KB 선택)"),
+    card_type: str | None = Query(default=None, description="카드 필터 (카드 탭에서 카드 선택, 카드·계좌 관리의 code)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
@@ -137,8 +138,8 @@ def get_monthly_report(
 def get_card_pending_summary(db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)):
     """카드 결제일에 일괄 확정하기 전인 법인카드 사용내역을 카드별로 요약한다. 다음 결제일에 청구되는 건만 건수/금액에 포함한다."""
     today = date.today()
-    result = [CardPendingSummaryOut(**asdict(card_pending_service.summarize(db, card_type, today))) for card_type in CardType]
-    logger.debug(f"[Payments] 카드 결제예정 요약 조회: by={current_user.id}, {[(r.card_type.value, r.default_settle_date.isoformat(), r.count, r.total_amount) for r in result]}")
+    result = [CardPendingSummaryOut(**asdict(card_pending_service.summarize(db, card.code, today))) for card in list_accounts(db, "card")]
+    logger.debug(f"[Payments] 카드 결제예정 요약 조회: by={current_user.id}, {[(r.card_type, r.default_settle_date.isoformat(), r.count, r.total_amount) for r in result]}")
     return result
 
 
@@ -148,10 +149,11 @@ def settle_card_payments(
 ):
     """카드 결제일에 해당 카드의 결제예정 사용내역 중 그 결제일이 청구하는 사용기간(전월 1일~말일) 이전 건을 한 번에 출금 확정한다.
     입출금 날짜는 결제일로 바뀐다."""
+    require_account(db, "card", payload.card_type, must_be_active=False)
     count, total, usage_to = card_pending_service.settle(db, payload.card_type, payload.settle_date)
     db.commit()
     logger.debug(
-        f"[Payments] 카드 결제일 일괄처리: card={payload.card_type.value}, settle_date={payload.settle_date}, usage_to={usage_to}, "
+        f"[Payments] 카드 결제일 일괄처리: card={payload.card_type}, settle_date={payload.settle_date}, usage_to={usage_to}, "
         f"count={count}, total={total}, by={current_user.id}"
     )
     return CardSettleOut(settled_count=count, total_amount=total)
@@ -185,6 +187,14 @@ def list_linkable_transactions(
     ]
 
 
+def _check_method_accounts(db: Session, payload: PaymentCreate) -> None:
+    """고른 법인카드·계좌가 카드·계좌 관리에 등록된 것인지 확인한다."""
+    if payload.card_type is not None:
+        require_account(db, "card", payload.card_type)
+    if payload.bank_type is not None:
+        require_account(db, "bank", payload.bank_type)
+
+
 @router.post("", response_model=PaymentOut, status_code=status.HTTP_201_CREATED)
 def create_payment(
     payload: PaymentCreate, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
@@ -194,6 +204,8 @@ def create_payment(
         client = db.query(Client).filter(Client.id == payload.client_id).first()
         if client is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
+
+    _check_method_accounts(db, payload)
 
     linked_tx = None
     if payload.transaction_id is not None:
@@ -244,13 +256,14 @@ def create_payment(
 
 @router.post("/import-csv", response_model=CsvImportResult)
 def import_card_statement(
-    card_type: CardType = Query(description="가져오는 명세서의 카드 종류. 결제예정으로 기록되어 카드 결제일에 일괄 확정된다."),
+    card_type: str = Query(description="가져오는 명세서의 카드(카드·계좌 관리의 code). 결제예정으로 기록되어 카드 결제일에 일괄 확정된다."),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payments_access),
 ):
+    require_account(db, "card", card_type)
     raw = file.file.read()
-    logger.debug(f"[Payments] CSV 업로드: filename={file.filename}, card_type={card_type.value}, size={len(raw)}, by={current_user.id}")
+    logger.debug(f"[Payments] CSV 업로드: filename={file.filename}, card_type={card_type}, size={len(raw)}, by={current_user.id}")
     try:
         rows = parse_card_statement_csv(raw)
     except CsvParseError as exc:
@@ -351,6 +364,11 @@ def update_payment(
     payment = db.query(Payment).options(joinedload(Payment.client)).filter(Payment.id == payment_id).first()
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
+
+    if payload.card_type is not None and payload.card_type != payment.card_type:
+        require_account(db, "card", payload.card_type)
+    if payload.bank_type is not None and payload.bank_type != payment.bank_type:
+        require_account(db, "bank", payload.bank_type)
 
     linked_tx = db.query(Transaction).filter(Transaction.settled_payment_id == payment.id).first()
     if payment.partial_transaction_id is not None and payload.amount != payment.amount:

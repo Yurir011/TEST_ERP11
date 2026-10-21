@@ -1,6 +1,7 @@
 import { FileText, Paperclip, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { ApiError, downloadFile, openFile } from "../../lib/api";
+import { ApiError, openFile } from "../../lib/api";
+import { openAttachment } from "../../lib/openAttachment";
 import { getToken } from "../../lib/auth";
 import { logError } from "../../lib/logger";
 import { useDialog } from "../../components/ui/dialog/useDialog";
@@ -73,21 +74,19 @@ function ImageAttachment({ a }: { a: Attachment }) {
 
 function FileAttachment({ a }: { a: Attachment }) {
   const dialog = useDialog();
-  const viewable = isInlineViewable(a.content_type);
   async function open() {
     try {
-      if (viewable) await openFile(attachmentPath(a)); // PDF 는 새 창에서 바로 본다
-      else await downloadFile(attachmentPath(a), a.file_name);
+      await openAttachment(attachmentPath(a), a.file_name); // PDF·사진은 새 창, 문서는 앱에서 바로 열기(웹은 내려받기)
     } catch (err) {
       dialog.notifyError(err instanceof ApiError ? err.message : "파일을 열지 못했습니다.");
     }
   }
   return (
-    <button type="button" onClick={open} className="flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2 text-left max-w-full hover:bg-black/15" title={viewable ? "열기" : "다운로드"}>
+    <button type="button" onClick={open} className="flex items-center gap-2 rounded-lg bg-black/10 px-3 py-2 text-left max-w-full hover:bg-black/15" title="열기">
       <FileText size={18} className="shrink-0" />
       <span className="min-w-0">
         <span className="block text-sm truncate">{a.file_name}</span>
-        <span className="block text-[11px] opacity-70">{formatBytes(a.size)} · {viewable ? "열기" : "다운로드"}</span>
+        <span className="block text-[11px] opacity-70">{formatBytes(a.size)} · 열기</span>
       </span>
     </button>
   );

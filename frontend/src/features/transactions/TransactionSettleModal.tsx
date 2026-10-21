@@ -1,10 +1,9 @@
+import { usePaymentAccounts } from "../payments/paymentAccounts";
 import { useState, type FormEvent } from "react";
 import { ApiError, apiPost } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import {
-  BANK_TYPE_LABELS,
-  CARD_TYPE_LABELS,
   PAYMENT_METHOD_LABELS,
   type BankType,
   type CardType,
@@ -22,13 +21,15 @@ interface TransactionSettleModalProps {
 
 // 외상 매출/매입 1건을 결제완료로 처리한다. 입출금 내역이 함께 기록되고, 거래처 미수금/미지급금에서 해당 금액이 빠진다.
 export function TransactionSettleModal({ tx, onClose, onSuccess }: TransactionSettleModalProps) {
+  const { cards, banks, cardName, bankName } = usePaymentAccounts();
   const isSales = tx.type === "sales";
   const title = isSales ? "수금 처리" : "지급 처리";
 
   const [paymentDate, setPaymentDate] = useState(todayISO());
   const [method, setMethod] = useState<PaymentMethod>("bank_transfer");
   const [cardType, setCardType] = useState<CardType | null>(null);
-  const [bankType, setBankType] = useState<BankType | null>("ibk");
+  const [bankPick, setBankType] = useState<BankType | null>(null);
+  const bankType: BankType | null = bankPick ?? banks[0]?.code ?? null; // 고르지 않으면 첫 번째 계좌
   const [memo, setMemo] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +116,7 @@ export function TransactionSettleModal({ tx, onClose, onSuccess }: TransactionSe
             <div>
               <label className="block text-xs text-text-muted mb-1.5">카드 종류</label>
               <div className="grid grid-cols-2 gap-2">
-                {(Object.keys(CARD_TYPE_LABELS) as CardType[]).map((ct) => (
+                {cards.map((card) => card.code).map((ct) => (
                   <button
                     key={ct}
                     type="button"
@@ -124,7 +125,7 @@ export function TransactionSettleModal({ tx, onClose, onSuccess }: TransactionSe
                       cardType === ct ? "border-primary bg-tile-blue text-tile-blue-fg font-medium" : "border-border text-text-muted hover:bg-bg"
                     }`}
                   >
-                    {CARD_TYPE_LABELS[ct]}
+                    {cardName(ct)}
                   </button>
                 ))}
               </div>
@@ -135,7 +136,7 @@ export function TransactionSettleModal({ tx, onClose, onSuccess }: TransactionSe
             <div>
               <label className="block text-xs text-text-muted mb-1.5">계좌 종류</label>
               <div className="grid grid-cols-3 gap-2">
-                {(Object.keys(BANK_TYPE_LABELS) as BankType[]).map((bt) => (
+                {banks.map((b) => b.code).map((bt) => (
                   <button
                     key={bt}
                     type="button"
@@ -144,7 +145,7 @@ export function TransactionSettleModal({ tx, onClose, onSuccess }: TransactionSe
                       bankType === bt ? "border-primary bg-tile-blue text-tile-blue-fg font-medium" : "border-border text-text-muted hover:bg-bg"
                     }`}
                   >
-                    {BANK_TYPE_LABELS[bt]}
+                    {bankName(bt)}
                   </button>
                 ))}
               </div>

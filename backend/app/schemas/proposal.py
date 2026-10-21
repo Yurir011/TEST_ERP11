@@ -80,7 +80,8 @@ class OrderPaymentIn(BaseModel):
     """발주 건의 결제 확인: 입금(deposit) / 법인카드(card + 카드 종류) / 둘 다 아니면 미입금(null)."""
 
     payment_method: Literal["deposit", "card"] | None = None
-    payment_card: Literal["bc", "kb_kookmin"] | None = None
+    payment_card: str | None = None  # 카드·계좌 관리의 카드 code
+    payment_bank: str | None = None  # 카드·계좌 관리의 계좌 code
 
 
 class OrderFlowToggle(BaseModel):
@@ -88,8 +89,10 @@ class OrderFlowToggle(BaseModel):
 
     value: bool
     online: bool = False  # 발송 확인에서만 사용: 온라인 주문처럼 발주서 없이 "발주 완료"로 처리한다
-    payment_method: Literal["deposit", "card"] | None = None  # 발송 확인에서만 사용: 입금 / 법인카드 / (없으면 미입금)
-    payment_card: Literal["bc", "kb_kookmin"] | None = None
+    payment_method: Literal["deposit", "card"] | None = None  # 발송 확인·입고 확인에서 대금 결제 상태: 입금 / 법인카드 / (없으면 외상)
+    payment_card: str | None = None
+    payment_bank: str | None = None
+    payment_asked: bool = False  # 입고 확인에서만 사용: true 면 위 결제 상태로 바꾼다 (입고 때 대금 결제 여부를 물어 본 경우)
 
 
 class ProposalOut(BaseModel):
@@ -121,5 +124,6 @@ class ProposalOut(BaseModel):
     order_sent_at: datetime | None = None
     payment_method: str | None = None
     payment_card: str | None = None
+    payment_bank: str | None = None
     received_at: datetime | None = None
     created_at: datetime

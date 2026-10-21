@@ -8,7 +8,10 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.config import settings
-from app.models.payment import BankType, CardType, Payment, PaymentMethod, PaymentType, ProofType
+from sqlalchemy.orm import object_session
+
+from app.models.payment import Payment, PaymentMethod, PaymentType, ProofType
+from app.services.payment_accounts import display_name
 from app.services.certificate_pdf import FONT_BOLD, FONT_REGULAR, _ensure_fonts_registered
 
 TYPE_LABELS = {PaymentType.deposit: "입금", PaymentType.withdrawal: "출금"}
@@ -27,18 +30,6 @@ PROOF_LABELS = {
     ProofType.other: "기타",
 }
 
-CARD_TYPE_LABELS = {
-    CardType.bc: "BC",
-    CardType.kb_kookmin: "KB국민",
-}
-
-BANK_TYPE_LABELS = {
-    BankType.ibk: "기업",
-    BankType.kb_kookmin: "국민",
-    BankType.woori: "우리",
-}
-
-
 def _esc(value: str) -> str:
     """사용자가 직접 입력한 자유 텍스트(메모/내용 등)에 &, <, > 가 있어도 reportlab Paragraph가 깨지지 않도록 이스케이프."""
     return escape(value)
@@ -47,10 +38,11 @@ def _esc(value: str) -> str:
 def method_detail_text(payment: Payment) -> str:
     """결제수단 옆에 표시할 카드/계좌 종류 텍스트. 예: '법인카드 (BC)', '계좌이체 (국민)'."""
     base = METHOD_LABELS[payment.method]
-    if payment.method == PaymentMethod.corporate_card and payment.card_type:
-        return f"{base} ({CARD_TYPE_LABELS[payment.card_type]})"
-    if payment.method == PaymentMethod.bank_transfer and payment.bank_type:
-        return f"{base} ({BANK_TYPE_LABELS[payment.bank_type]})"
+    db = object_session(payment)
+    if db is not None and payment.method == PaymentMethod.corporate_card and payment.card_type:
+        return f"{base} ({display_name(db, 'card', payment.card_type)})"
+    if db is not None and payment.method == PaymentMethod.bank_transfer and payment.bank_type:
+        return f"{base} ({display_name(db, 'bank', payment.bank_type)})"
     return base
 
 

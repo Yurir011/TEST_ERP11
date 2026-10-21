@@ -1,6 +1,6 @@
 import { Download, Paperclip, X } from "lucide-react";
 import type { ChangeEvent } from "react";
-import { downloadFile } from "../../lib/api";
+import { openAttachment } from "../../lib/openAttachment";
 import { logError } from "../../lib/logger";
 import type { ProjectDocument } from "./types";
 
@@ -60,7 +60,7 @@ export function PurchaseOrderAttachments({ doc }: { doc: ProjectDocument }) {
   if (doc.images.length === 0) return null;
   async function handleDownload(a: Attachment) {
     try {
-      await downloadFile(`/api/project-documents/${doc.id}/images/${a.id}`, a.filename);
+      await openAttachment(`/api/project-documents/${doc.id}/images/${a.id}`, a.filename);
     } catch (err) {
       logError("PurchaseOrderAttachments", `첨부 다운로드 실패: image_id=${a.id}`, err);
     }

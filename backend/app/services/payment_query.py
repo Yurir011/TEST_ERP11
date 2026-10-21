@@ -6,7 +6,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.client import Client
-from app.models.payment import CardType, Payment, PaymentMethod, PaymentType
+from app.models.payment import Payment, PaymentMethod, PaymentType
 from app.models.transaction import Transaction
 
 
@@ -32,7 +32,7 @@ def build_payment_query(
     q: str | None,
     card_pending: bool | None = None,
     method: PaymentMethod | None = None,
-    card_type: CardType | None = None,
+    card_type: str | None = None,
 ):
     query = db.query(Payment).options(joinedload(Payment.client), joinedload(Payment.creator))
     if type_filter is not None:

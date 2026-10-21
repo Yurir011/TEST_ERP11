@@ -56,3 +56,31 @@ def test_unknown_project_is_404(client, make_user, auth_headers):
     headers = auth_headers(make_user())
     assert client.get("/api/projects/999999/date-notes", headers=headers).status_code == 404
     assert client.post("/api/projects/999999/date-notes", json={"note_date": "2026-10-08", "content": "x"}, headers=headers).status_code == 404
+
+
+def test_reply_follows_parent_date_and_is_deleted_with_it(client, db, make_user, make_client, auth_headers):
+    """답글은 원 메모의 날짜에 붙고, 한 단계만 달 수 있으며, 원 메모를 지우면 함께 지워진다."""
+    author = make_user(name="작성자")
+    other = make_user(name="답글러")
+    project = _project(db, make_client, author)
+    url = f"/api/projects/{project.id}/date-notes"
+    parent = client.post(url, json={"note_date": "2026-10-08", "content": "원 메모"}, headers=auth_headers(author)).json()
+
+    reply = client.post(url, json={"parent_id": parent["id"], "content": "답글입니다"}, headers=auth_headers(other))
+    assert reply.status_code == 201, reply.text
+    assert (reply.json()["parent_id"], reply.json()["note_date"], reply.json()["author_name"]) == (parent["id"], "2026-10-08", "답글러")
+
+    # 답글에 다시 답글은 안 된다 / 없는 메모·날짜 없는 새 메모는 거절
+    assert client.post(url, json={"parent_id": reply.json()["id"], "content": "또 답글"}, headers=auth_headers(other)).status_code == 400
+    assert client.post(url, json={"parent_id": 999999, "content": "x"}, headers=auth_headers(other)).status_code == 404
+    assert client.post(url, json={"content": "날짜 없음"}, headers=auth_headers(other)).status_code == 422
+
+    listed = client.get(url, headers=auth_headers(author)).json()
+    assert [(n["id"], n["parent_id"]) for n in listed] == [(parent["id"], None), (reply.json()["id"], parent["id"])]
+
+    # 답글은 쓴 사람이 지울 수 있고, 원 메모를 지우면 답글도 함께 지워진다
+    assert client.delete(f"{url}/{reply.json()['id']}", headers=auth_headers(author)).status_code == 403
+    again = client.post(url, json={"parent_id": parent["id"], "content": "하나 더"}, headers=auth_headers(other)).json()
+    assert client.delete(f"{url}/{again['id']}", headers=auth_headers(other)).status_code == 204
+    assert client.delete(f"{url}/{parent['id']}", headers=auth_headers(author)).status_code == 204
+    assert client.get(url, headers=auth_headers(author)).json() == []

@@ -28,6 +28,7 @@ from app.routers import (
     nfc_cards,
     notices,
     notifications,
+    payment_accounts,
     payments,
     recurring_payments,
     project_documents,
@@ -86,6 +87,7 @@ app.include_router(project_notes.router)
 app.include_router(sales_documents.router)
 app.include_router(transactions.router)
 app.include_router(payments.router)
+app.include_router(payment_accounts.router)
 app.include_router(recurring_payments.router)
 app.include_router(users.router)
 app.include_router(mail.router)

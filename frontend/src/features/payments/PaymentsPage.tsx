@@ -17,10 +17,14 @@ import type { Client } from "../clients/types";
 import { ApiError, apiDelete, apiGet, apiUpload, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PaymentDetailModal } from "./PaymentDetailModal";
+import { PaymentAccountsModal } from "./PaymentAccountsModal";
 import { RecurringPaymentsModal } from "./RecurringPaymentsModal";
+import { useAuth } from "../../context/useAuth";
+import { isAdminRole } from "../../lib/auth";
 import { CardSettleModal } from "./CardSettleModal";
 import { CardPendingDetailModal } from "./CardPendingDetailModal";
 import { SettleModal } from "./SettleModal";
+import { usePaymentAccounts } from "./paymentAccounts";
 import { CardFilterBoxes, type CardFilter } from "./CardFilterBoxes";
 import { OutstandingCards } from "./OutstandingCards";
 import { PaymentsTable } from "./PaymentsTable";
@@ -29,7 +33,6 @@ import { OutstandingDetailModal } from "./OutstandingDetailModal";
 import type { Transaction } from "../transactions/types";
 import {
   PAYMENT_TYPE_LABELS,
-  CARD_TYPE_LABELS,
   type CardPendingSummary,
   type CardType,
   type CsvImportResult,
@@ -67,7 +70,11 @@ export function PaymentsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
-  const [csvCardType, setCsvCardType] = useState<CardType>("bc");
+  const [showAccounts, setShowAccounts] = useState(false);
+  const { user } = useAuth();
+  const { cards: cardAccounts } = usePaymentAccounts();
+  const [csvCardPick, setCsvCardType] = useState<CardType | "">("");
+  const csvCardType: CardType = csvCardPick || cardAccounts[0]?.code || "";
   const [cardPending, setCardPending] = useState<CardPendingSummary[]>([]);
   const [showCardSettle, setShowCardSettle] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -216,7 +223,7 @@ export function PaymentsPage() {
   // 카드 결제예정: 월별 보기이면 선택한 달에 사용한 건만, 전체이면 아직 결제 확정 전인 모든 건을 카드별로 합산한다.
   const cardMonthKey = toMonthValue(periodYm.year, periodYm.month);
   const cardItemsInPeriod = cardItems.filter((p) => outstandingPeriod === "all" || p.payment_date.startsWith(cardMonthKey));
-  const cardRows = (Object.keys(CARD_TYPE_LABELS) as CardType[])
+  const cardRows = Array.from(new Set(cardItemsInPeriod.map((p) => p.card_type).filter((c): c is string => !!c)))
     .map((cardType) => {
       const mine = cardItemsInPeriod.filter((p) => p.card_type === cardType);
       return { cardType, count: mine.length, amount: mine.reduce((sum, p) => sum + p.amount, 0) };
@@ -333,6 +340,15 @@ export function PaymentsPage() {
       actions={
         <div className="flex items-center gap-2">
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvSelected} className="hidden" />
+          {!!user && isAdminRole(user.role) && (
+            <button
+              onClick={() => setShowAccounts(true)}
+              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
+            >
+              <CreditCard size={14} />
+              카드·계좌 관리
+            </button>
+          )}
           <button
             onClick={() => setShowRecurring(true)}
             className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
@@ -356,9 +372,9 @@ export function PaymentsPage() {
             className="text-xs border border-border rounded-lg px-2 py-2 bg-surface"
             title="가져올 CSV 명세서의 카드 종류"
           >
-            {(Object.keys(CARD_TYPE_LABELS) as CardType[]).map((k) => (
-              <option key={k} value={k}>
-                {CARD_TYPE_LABELS[k]}카드
+            {cardAccounts.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.nickname}
               </option>
             ))}
           </select>
@@ -558,6 +574,7 @@ export function PaymentsPage() {
         />
       )}
 
+      {showAccounts && <PaymentAccountsModal onClose={() => setShowAccounts(false)} />}
       {showRecurring && (
         <RecurringPaymentsModal
           onClose={() => setShowRecurring(false)}

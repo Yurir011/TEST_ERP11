@@ -5,7 +5,6 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet, apiPut, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
-import { PurchaseProgressCard } from "./PurchaseProgressCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
 import { ScheduleProgressCard } from "./ScheduleProgressCard";
 import { DocColumn } from "./DocColumn";
@@ -164,8 +163,6 @@ export function ProjectDetailPage() {
           <ProgressSectionCard project={project} onStagesChange={setStages} />
 
           <DateNotesCard project={project} />
-
-          <PurchaseProgressCard projectId={project.id} />
 
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-text-muted">견적서 · 거래명세서 · 발주서</h2>

@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 
 from app.main import app
-from app.models.payment import CardType, Payment
+from app.models.payment import Payment
 from app.models.user import JobTitle, UserRole
 from app.services import card_billing
 
@@ -99,7 +99,7 @@ def test_card_pending_summary_and_settle(client, h, db):
     assert set(rows) == {"bc", "kb_kookmin"}
 
     bc = rows["bc"]
-    settle = card_billing.default_settle_date(CardType.bc, date(2026, 9, 5), date.today())
+    settle = card_billing.default_settle_date(23, date(2026, 9, 5), date.today())
     assert bc["default_settle_date"] == settle.isoformat()
     assert (bc["usage_from"], bc["usage_to"]) == ("2026-09-01", "2026-09-30")
     assert (bc["count"], bc["total_amount"]) == (2, 30_000)
@@ -111,14 +111,14 @@ def test_card_pending_summary_and_settle(client, h, db):
     assert res.status_code == 200, res.text
     assert res.json() == {"settled_count": 2, "total_amount": 30_000}
 
-    bc_rows = db.query(Payment).filter(Payment.card_type == CardType.bc).order_by(Payment.card_used_date, Payment.payment_date).all()
+    bc_rows = db.query(Payment).filter(Payment.card_type == "bc").order_by(Payment.card_used_date, Payment.payment_date).all()
     settled = [p for p in bc_rows if not p.card_pending]
     assert len(settled) == 2
     assert all(p.payment_date == settle for p in settled)  # 날짜가 결제일로 바뀐다
     assert sorted(p.card_used_date for p in settled) == [date(2026, 9, 5), date(2026, 9, 25)]  # 사용일은 남는다
     assert [p.amount for p in bc_rows if p.card_pending] == [40_000]
     # 다른 카드는 그대로
-    assert db.query(Payment).filter(Payment.card_type == CardType.kb_kookmin, Payment.card_pending.is_(True)).count() == 1
+    assert db.query(Payment).filter(Payment.card_type == "kb_kookmin", Payment.card_pending.is_(True)).count() == 1
 
 
 def test_csv_import_records_card_pending_withdrawals(client, h, db):
@@ -128,7 +128,7 @@ def test_csv_import_records_card_pending_withdrawals(client, h, db):
     )
     assert res.status_code == 200, res.text
     assert res.json()["imported"] == 2
-    rows = db.query(Payment).filter(Payment.card_type == CardType.kb_kookmin).order_by(Payment.payment_date).all()
+    rows = db.query(Payment).filter(Payment.card_type == "kb_kookmin").order_by(Payment.payment_date).all()
     assert [(r.payment_date, r.description, r.amount, r.category, r.card_pending, r.card_used_date) for r in rows] == [
         (date(2026, 9, 3), "문구점", 12_000, "법인카드", True, date(2026, 9, 3)),
         (date(2026, 9, 4), "식당", 33_000, "법인카드", True, date(2026, 9, 4)),

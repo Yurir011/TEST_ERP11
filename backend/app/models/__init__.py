@@ -8,11 +8,12 @@ from app.models.mail_log import MailLog
 from app.models.nfc_card import NfcCard
 from app.models.document import DocumentIssue
 from app.models.document_set import DocumentSet
-from app.models.leave import LeaveRequest
+from app.models.leave import LeaveAdjustment, LeaveRequest
 from app.models.messenger import Conversation, ConversationMember, Message, MessageAttachment
 from app.models.notice import Notice
 from app.models.notification import Notification
 from app.models.payment import Payment
+from app.models.payment_account import PaymentAccount
 from app.models.recurring_payment import RecurringPayment, RecurringPaymentRun
 from app.models.presence import MessengerFavorite, UserPresence
 from app.models.project import Project
@@ -31,6 +32,7 @@ __all__ = [
     "Notice",
     "Notification",
     "Attendance",
+    "LeaveAdjustment",
     "LeaveRequest",
     "DocumentIssue",
     "Client",
@@ -56,6 +58,7 @@ __all__ = [
     "SalesDocumentItem",
     "Transaction",
     "Payment",
+    "PaymentAccount",
     "RecurringPayment",
     "RecurringPaymentRun",
     "ScheduleEvent",

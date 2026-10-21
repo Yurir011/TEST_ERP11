@@ -5,6 +5,7 @@ export const MAX_NOTE_LENGTH = 2000;
 
 export interface ProjectDateNote {
   id: number;
+  parent_id: number | null; // 답글이면 원 메모
   note_date: string;
   content: string;
   author_name: string | null;
@@ -19,10 +20,17 @@ export interface NoteGroup {
 
 export const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-/** 같은 날짜끼리 묶고 최근 날짜가 먼저 오게 한다. 같은 날짜 안에서는 받은 순서(작성 순)를 지킨다. */
+/** 원 메모(답글이 아닌 것)별 답글 목록. 받은 순서(작성 순)를 지킨다. */
+export function repliesByParent(notes: ProjectDateNote[]): Map<number, ProjectDateNote[]> {
+  const map = new Map<number, ProjectDateNote[]>();
+  for (const n of notes) if (n.parent_id !== null) map.set(n.parent_id, [...(map.get(n.parent_id) ?? []), n]);
+  return map;
+}
+
+/** 같은 날짜끼리 묶고 최근 날짜가 먼저 오게 한다. 같은 날짜 안에서는 받은 순서(작성 순)를 지킨다. 답글은 원 메모 밑에 붙으므로 여기엔 원 메모만 담는다. */
 export function groupNotesByDate(notes: ProjectDateNote[]): NoteGroup[] {
   const map = new Map<string, ProjectDateNote[]>();
-  for (const n of notes) map.set(n.note_date, [...(map.get(n.note_date) ?? []), n]);
+  for (const n of notes) if (n.parent_id === null) map.set(n.note_date, [...(map.get(n.note_date) ?? []), n]);
   return [...map.entries()].sort(([a], [b]) => (a < b ? 1 : -1)).map(([date, list]) => ({ date, notes: list }));
 }
 
@@ -44,6 +52,12 @@ export function formatNoteTime(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** 서버 시각(ISO) → "10/21 09:31" (답글처럼 원 메모와 다른 날에 쓸 수 있는 글에 쓴다) */
+export function formatNoteDateTime(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()} ${formatNoteTime(iso)}`;
 }
 
 /** 달력 한 달 칸 목록 (일요일 시작, 앞뒤 달 날짜 포함) */

@@ -34,21 +34,6 @@ class ProofType(str, enum.Enum):
     other = "other"  # 기타 (자유 입력)
 
 
-class CardType(str, enum.Enum):
-    """법인카드 건의 카드 종류"""
-
-    bc = "bc"  # BC카드
-    kb_kookmin = "kb_kookmin"  # KB국민카드
-
-
-class BankType(str, enum.Enum):
-    """계좌이체 건의 계좌 종류"""
-
-    ibk = "ibk"  # 기업은행
-    kb_kookmin = "kb_kookmin"  # KB국민은행
-    woori = "woori"  # 우리은행
-
-
 # 입출금 분류(13개). 콤보박스 선택지로 사용 — category 컬럼은 자유 입력 String이지만 이 목록으로 값을 제한한다.
 PAYMENT_CATEGORIES = (
     "소모품비",
@@ -91,13 +76,13 @@ class Payment(Base):
     proof_type: Mapped[ProofType | None] = mapped_column(Enum(ProofType, name="prooftype"), nullable=True)
     proof_type_detail: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # 법인카드 건의 카드 종류. 법인카드가 아닌 경우 항상 None.
-    card_type: Mapped[CardType | None] = mapped_column(Enum(CardType, name="cardtype"), nullable=True)
+    card_type: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 법인카드 code (payment_accounts.code, kind=card)
     # 법인카드 사용내역은 카드 결제일에 일괄 확정한다. 확정 전(결제예정)에는 card_pending=True이고 월 입출금 집계에서 제외된다.
     # 확정하면 payment_date가 카드 결제일로 바뀌고, 원래 사용일은 card_used_date에 남는다.
     card_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     card_used_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # 계좌이체 건의 계좌 종류. 계좌이체가 아닌 경우 항상 None.
-    bank_type: Mapped[BankType | None] = mapped_column(Enum(BankType, name="banktype"), nullable=True)
+    bank_type: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 계좌 code (payment_accounts.code, kind=bank)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 매입매출 한 건의 일부만 수금/지급한 결제. 연결된 매입매출의 paid_amount에 반영되어 있다 (전액 결제는 Transaction.settled_payment_id로 연결).
     # transactions.settled_payment_id 와 서로 참조하는 순환 관계라 테이블을 만든 뒤 외래키를 추가한다(use_alter). 이름은 실제 DB 와 같다.

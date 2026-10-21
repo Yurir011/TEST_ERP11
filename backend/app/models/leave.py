@@ -18,6 +18,23 @@ class LeaveStatus(str, enum.Enum):
     rejected = "rejected"
 
 
+class LeaveAdjustment(Base):
+    """관리자가 직원의 연차 일수를 더하거나(+) 빼는(-) 조정 내역. 효력일이 속한 연차 주기의 발생 일수에 더해진다."""
+
+    __tablename__ = "leave_adjustments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    days: Mapped[int] = mapped_column(Integer)  # +/- 일수 (0 은 불가)
+    reason: Mapped[str] = mapped_column(String(300))
+    effective_date: Mapped[date] = mapped_column(Date)  # 이 날짜가 속한 연차 주기에 반영된다
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    creator: Mapped["User | None"] = relationship(foreign_keys=[created_by])
+
+
 class LeaveRequest(Base):
     __tablename__ = "leave_requests"
 

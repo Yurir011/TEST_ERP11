@@ -92,7 +92,7 @@ export function MobileLeavesPage() {
     <MobileLayout title="연차">
       <MobileCard>
         <p className="text-xs text-text-muted">잔여 연차</p>
-        <p className="text-3xl font-extrabold mt-1 tabular-nums">
+        <p className={`text-3xl font-extrabold mt-1 tabular-nums ${balance && balance.remaining < 0 ? "text-danger" : ""}`}>
           {balance ? balance.remaining : "-"}
           <span className="text-sm font-semibold text-text-muted"> / {balance ? balance.granted : "-"}일</span>
         </p>

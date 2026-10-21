@@ -22,6 +22,8 @@ class ProjectDateNote(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
     note_date: Mapped[date] = mapped_column(Date)  # 메모를 남긴 "대상 날짜" (작성한 날과 다를 수 있다)
     content: Mapped[str] = mapped_column(Text)
+    # 답글이면 원래 메모(한 단계만 허용). 답글은 원 메모와 같은 날짜에 붙고, 원 메모를 지우면 함께 지워진다.
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("project_date_notes.id", ondelete="CASCADE"), nullable=True, index=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

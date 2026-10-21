@@ -9,6 +9,7 @@ import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SiteAdminDashboardPage } from "./features/dashboard/SiteAdminDashboardPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { useOpenConversationFromDesktop } from "./features/messenger/useOpenConversationFromDesktop";
+import { useFileDrop } from "./lib/fileDrop";
 
 // 화면별로 JS 를 나눠 첫 화면(로그인·대시보드)을 가볍게 한다. 나머지 화면은 처음 열 때 받아오고,
 // 로그인 뒤 브라우저가 한가할 때 미리 받아 두어 메뉴를 옮길 때 기다리지 않게 한다.
@@ -376,6 +377,7 @@ function App() {
   const { user } = useAuth();
   usePrefetchPages(user !== null);
   useOpenConversationFromDesktop(); // 앱에서 메시지 알림을 누르면 그 대화방으로
+  useFileDrop(); // 파일 첨부 칸 위에 파일을 끌어다 놓으면 첨부
   return (
     <Suspense fallback={pageFallback}>
     <Routes>

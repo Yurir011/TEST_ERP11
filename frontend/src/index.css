@@ -56,3 +56,10 @@ input:not([type="email"]):not([type="number"]):not([type="password"]):not([type=
 textarea {
   ime-mode: active;
 }
+
+/* 파일을 끌어다 놓을 수 있는 첨부 영역: 파일을 끌고 오면 점선 테두리로 알려 준다 (lib/fileDrop.ts) */
+[data-drop-active] {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 0.75rem;
+}
