@@ -343,7 +343,7 @@ export function PurchaseProposalCard({
        </div>
 
         {/* 저장/출력 아이콘 */}
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
           <ActionMenuButton icon={<Download size={15} />} label="저장" items={saveItems} emptyTitle="결재 승인 후 저장할 문서가 생깁니다." busy={busy} runLabel="선택 저장" />
           <ActionMenuButton icon={<Sheet size={15} />} label="엑셀 저장" items={excelItems} emptyTitle="결재 승인 후 엑셀로 저장할 수 있습니다." busy={busy} runLabel="선택 엑셀 저장" />
           <ActionMenuButton icon={<Printer size={15} />} label="출력" items={printItems} emptyTitle="결재 승인 후 출력할 문서가 생깁니다." busy={busy} runLabel="선택 출력" />
@@ -371,6 +371,8 @@ export function PurchaseProposalCard({
           </button>
         </div>
       </div>
+
+      <div className="w-px self-stretch bg-border" />
 
       {/* 발주 → 입고, 첨부 */}
       <div className="flex items-start gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
