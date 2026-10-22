@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { ApprovalNote, ApprovalStamps } from "./ApprovalStamps";
+import { ApprovalNote, ApprovalStampBox } from "./ApprovalStamps";
 import type { HistoryInput } from "./historyModel";
 
 afterEach(cleanup);
@@ -21,27 +21,38 @@ const base: HistoryInput = {
   deleteRequested: false,
 };
 
-describe("결재 도장 줄", () => {
-  it("작성과 결재자마다 도장이 하나씩, 이름·직책·날짜가 아래에 붙는다", () => {
-    render(<ApprovalStamps {...base} />);
-    const items = within(screen.getByRole("list", { name: "결재 현황" })).getAllByRole("listitem");
-    expect(items).toHaveLength(3);
-    expect(items[0].textContent).toContain("작성");
-    expect(items[0].textContent).toContain("김영업");
-    expect(items[0].textContent).toContain("10-16");
-    expect(items[1].textContent).toContain("승인");
-    expect(items[1].textContent).toContain("박부장");
-    expect(items[1].textContent).toContain("부서장");
-    expect(items[2].textContent).toContain("결재 중"); // 지금 차례
-    expect(items[2].textContent).not.toMatch(/\d\d-\d\d/); // 아직 처리 전이라 날짜가 없다
+describe("결재칸 표", () => {
+  it("결재자마다 한 칸이 있고 처리 결과와 이름·날짜가 적히며, 맨 아래 합친 줄에 상태가 나온다 (작성자 칸은 없다)", () => {
+    render(<ApprovalStampBox {...base} />);
+    const table = screen.getByRole("table", { name: "결재 현황" });
+    expect(within(table).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["부서장", "팀장"]);
+    const cells = within(table).getAllByRole("cell");
+    expect(cells).toHaveLength(3); // 결재자 두 칸 + 상태 한 줄
+    expect(cells[0].textContent).toContain("승인");
+    expect(cells[0].textContent).toContain("박부장");
+    expect(cells[0].textContent).toContain("10-16");
+    expect(cells[1].textContent).toContain("결재 중"); // 지금 차례
+    expect(cells[1].textContent).toContain("이팀장");
+    expect(cells[2].textContent).toBe("결재 대기");
+    expect(cells[2].getAttribute("colspan")).toBe("2");
+    expect(table.textContent).not.toContain("김영업"); // 작성자는 항목 표에 있다
   });
 
-  it("결재자가 없는 전결 문서는 작성 도장과 전결 승인 도장 둘이다", () => {
-    render(<ApprovalStamps {...base} steps={[]} status="approved" finalDecision decidedAt="2026-10-16T12:00:00" />);
-    const items = within(screen.getByRole("list", { name: "결재 현황" })).getAllByRole("listitem");
-    expect(items).toHaveLength(2);
-    expect(items[1].textContent).toContain("승인");
-    expect(items[1].textContent).toContain("전결");
+  it("결재자가 없는 전결 문서는 [결재(전결)] 한 칸과 상태 줄이다", () => {
+    render(<ApprovalStampBox {...base} steps={[]} status="approved" finalDecision decidedAt="2026-10-16T12:00:00" />);
+    const table = screen.getByRole("table", { name: "결재 현황" });
+    expect(within(table).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["결재"]);
+    const cells = within(table).getAllByRole("cell");
+    expect(cells[0].textContent).toContain("승인");
+    expect(cells[0].textContent).toContain("전결");
+    expect(cells[0].textContent).toContain("10-16"); // 전결일
+    expect(cells[1].textContent).toBe("승인됨");
+  });
+
+  it("결재선이 아직 없는 작성 중 문서도 빈 칸 하나와 상태 줄을 보인다", () => {
+    render(<ApprovalStampBox {...base} steps={[]} status="draft" currentStep={0} />);
+    const cells = within(screen.getByRole("table", { name: "결재 현황" })).getAllByRole("cell");
+    expect(cells[1].textContent).toBe("작성 중");
   });
 });
 

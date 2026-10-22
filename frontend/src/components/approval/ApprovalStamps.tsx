@@ -1,45 +1,73 @@
-import { buildHistory, type HistoryInput, type LineState } from "./historyModel";
+import { buildHistory, type HistoryInput, type LineState, type NowKind } from "./historyModel";
 
-const RING: Record<LineState, string> = {
-  ok: "border-success text-success",
-  cur: "border-primary text-primary",
-  bad: "border-danger text-danger",
-  idle: "border-border text-text-muted",
+const STATE_TEXT: Record<LineState, string> = {
+  ok: "text-success",
+  cur: "text-primary",
+  bad: "text-danger",
+  idle: "text-text-muted",
 };
-const LABEL: Record<LineState, string> = { ok: "승인", cur: "결재 중", bad: "반려", idle: "대기" };
+const STATE_LABEL: Record<LineState, string> = { ok: "승인", cur: "결재 중", bad: "반려", idle: "대기" };
+const NOW_ROW: Record<NowKind, string> = {
+  approved: "bg-success/10 text-success",
+  pending: "bg-primary/10 text-primary",
+  rejected: "bg-danger/10 text-danger",
+  draft: "bg-bg text-text-muted",
+};
 
 /** "2026-10-22 16:40" → "10-22" (처리하지 않았으면 빈 글) */
 const shortDate = (at: string) => (at.length >= 10 ? at.slice(5, 10) : "");
 
-function Stamp({ ring, label, name, role, date }: { ring: string; label: string; name: string; role?: string; date?: string }) {
-  return (
-    <li className="w-[68px] text-center text-[11px] leading-tight text-text-muted">
-      <span className={`mx-auto mb-1 grid h-10 w-10 place-items-center rounded-full border-2 text-xs font-extrabold ${ring}`}>{label}</span>
-      <b className="block text-[12px] font-semibold text-text break-words">{name}</b>
-      {role && <span className="block break-words">{role}</span>}
-      {date && <span className="block tabular-nums">{date}</span>}
-    </li>
-  );
-}
+// 항목 표와 같은 진한 테두리
+const CELL = "border border-[#b4b3b9] px-1.5 py-1";
 
 /**
- * 결재 도장 줄: [작성] 과 결재자마다 동그란 도장 하나. 승인은 초록, 지금 차례는 파랑, 반려는 빨강, 아직은 회색 테두리.
- * 이름 아래에 직책(전결 포함)과 처리한 날짜(월-일)를 적는다. 상세 창 머리 오른쪽에 둔다.
+ * 인쇄된 품의서처럼 오른쪽 위에 놓는 결재칸: 결재자(직책)마다 한 칸, 맨 아래에 칸을 합친 상태 줄.
+ * 승인은 초록, 지금 차례는 파랑, 반려는 빨강, 아직 순서가 아니면 회색 글씨로 처리 결과를 적고 아래에 이름과 날짜(월-일)를 붙인다.
+ * 작성자는 항목 표에 있으므로 넣지 않는다.
  */
-export function ApprovalStamps(props: HistoryInput) {
+export function ApprovalStampBox(props: HistoryInput) {
   const h = buildHistory(props);
+  const cols = h.line.map((l, i) => ({
+    key: `line-${i}`,
+    head: l.role === "전결" ? "결재" : l.role,
+    main: STATE_LABEL[l.state],
+    mainClass: `${STATE_TEXT[l.state]} font-bold`,
+    sub: [l.role === "전결" ? "전결" : l.name, shortDate(l.at)].filter(Boolean).join(" "), // 전결도 처리한 날짜를 붙인다
+  }));
+  // 결재선이 아직 없는 문서(작성 중)도 칸이 비지 않게 한다
+  if (cols.length === 0) cols.push({ key: "none", head: "결재", main: "-", mainClass: "text-text-muted", sub: "" });
   return (
-    <ol aria-label="결재 현황" className="flex shrink-0 gap-1.5">
-      <Stamp ring="border-border text-text-muted" label="작성" name={h.made.who} date={shortDate(h.made.at)} />
-      {h.line.map((l, i) => (
-        <Stamp key={`${l.role}-${i}`} ring={RING[l.state]} label={LABEL[l.state]} name={l.name} role={l.role} date={shortDate(l.at)} />
-      ))}
-    </ol>
+    <table aria-label="결재 현황" style={{ width: `${cols.length * 5.5}rem` }} className="shrink-0 table-fixed border-collapse text-center text-[11px]">
+      <thead>
+        <tr className="bg-bg text-text-muted">
+          {cols.map((c) => (
+            <th key={c.key} scope="col" className={`${CELL} font-semibold`}>
+              {c.head}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          {cols.map((c) => (
+            <td key={c.key} className={`${CELL} h-10 align-middle break-words`}>
+              <span className={`block text-xs ${c.mainClass}`}>{c.main}</span>
+              {c.sub && <span className="block text-[10px] text-text-muted">{c.sub}</span>}
+            </td>
+          ))}
+        </tr>
+        <tr>
+          <td colSpan={cols.length} className={`${CELL} py-1 text-xs font-bold ${NOW_ROW[h.now.kind]}`}>
+            {h.now.tag}
+          </td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
 /**
- * 도장 줄로는 알 수 없는 사정을 한 줄로 알린다: 결재를 기다리는 중이면 누구를 얼마나 기다리는지, 반려됐으면 사유.
+ * 결재칸으로는 알 수 없는 사정을 한 줄로 알린다: 결재를 기다리는 중이면 누구를 얼마나 기다리는지, 반려됐으면 사유.
  * 승인 완료·작성 중에는 아무것도 보이지 않는다.
  */
 export function ApprovalNote(props: HistoryInput) {

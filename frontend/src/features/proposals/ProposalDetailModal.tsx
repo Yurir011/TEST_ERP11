@@ -1,7 +1,7 @@
 import { Check, Download, ExternalLink, Paperclip, Pencil, Printer, Link as LinkIcon, Trash2, X } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApprovalNote, ApprovalStamps } from "../../components/approval/ApprovalStamps";
+import { ApprovalNote, ApprovalStampBox } from "../../components/approval/ApprovalStamps";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { openAttachment } from "../../lib/openAttachment";
@@ -10,7 +10,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
 import { objectParticle } from "../../lib/korean";
 import { formatProposalAmount } from "./purchaseFlow";
-import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal, type ProposalAttachment } from "./types";
+import type { Proposal, ProposalAttachment } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
 function docTitle(p: Proposal): string {
@@ -185,148 +185,149 @@ export function ProposalDetailModal({
     finalDecision: proposal.is_final_decision,
     rejectReason: proposal.reject_reason,
     deleteRequested: proposal.delete_requested,
+    // 전결은 결재 요청과 동시에 승인되므로 기안(요청) 시각을 전결일로 쓴다 (품의서에는 따로 승인 시각을 저장하지 않는다)
+    decidedAt: proposal.created_at,
   };
+
+  const TH = "w-20 border border-border bg-bg px-3 py-3.5 text-center align-middle text-xs font-semibold text-text-muted";
+  const TD = "border border-border px-3 py-3.5 align-top";
+  const hasDeal = !!(proposal.vendor_name || formatProposalAmount(proposal) || proposal.project_name);
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-bold">
-              {docTitle(proposal)} · {proposal.title}
-            </h3>
-            <p className="text-xs text-text-muted mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span>
-                No. {proposal.doc_no} · {proposal.issue_date}
-              </span>
-              <span className={`text-xs px-2 py-0.5 font-bold ${PROPOSAL_STATUS_STYLES[proposal.status]}`}>
-                {PROPOSAL_STATUS_LABELS[proposal.status]}
-              </span>
-            </p>
+      <div className="relative bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+        <button onClick={onClose} aria-label="닫기" className="absolute right-4 top-4 text-text-muted hover:text-text">
+          <X size={20} />
+        </button>
+
+        {/* 인쇄된 품의서 모양: 왼쪽 위 문서번호·기안일자, 오른쪽 위 결재칸, 가운데 제목, 아래 항목 표 */}
+        <div className="flex items-start justify-between gap-4 pr-8">
+          <div className="text-xs leading-relaxed text-text-muted">
+            <p>No. {proposal.doc_no}</p>
+            <p>기안일자 {proposal.issue_date}</p>
           </div>
-          <ApprovalStamps {...historyInput} />
-          <button onClick={onClose} aria-label="닫기" className="text-text-muted hover:text-text shrink-0">
-            <X size={20} />
-          </button>
+          <ApprovalStampBox {...historyInput} />
         </div>
 
-        <div className="mt-3 empty:hidden">
+        <h3 className="my-4 text-center text-xl font-extrabold tracking-[0.3em]">{docTitle(proposal)}</h3>
+
+        <div className="mb-3 empty:hidden">
           <ApprovalNote {...historyInput} />
         </div>
 
-        {/* 기안자·부서·프로젝트·거래처·금액을 한 줄로 흘려 보여 준다 */}
-        <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-          {[
-            ["기안자", proposal.creator_name],
-            ["기안부서", proposal.department_name],
-            ...(proposal.vendor_name || formatProposalAmount(proposal) || proposal.project_name
-              ? [
-                  ["프로젝트", proposal.project_name || "일반"],
-                  ["거래처", proposal.vendor_name || "-"],
-                  ["금액", formatProposalAmount(proposal) ?? "-"],
-                ]
-              : []),
-          ].map(([label, value]) => (
-            <div key={label} className="flex items-baseline gap-1.5">
-              <dt className="text-xs text-text-muted">{label}</dt>
-              <dd className="font-semibold tabular-nums">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <table className="mb-4 w-full border-collapse text-[13px] outline outline-1 -outline-offset-1 outline-[#b4b3b9]">
+          <tbody>
+            <tr>
+              <th scope="row" className={`${TH} !border-[#b4b3b9]`}>제목</th>
+              <td colSpan={3} className={`${TD} !border-[#b4b3b9]`}>{proposal.title}</td>
+            </tr>
+            <tr>
+              <th scope="row" className={`${TH} ${hasDeal ? "" : "!border-b-[#b4b3b9]"}`}>기안자</th>
+              <td className={`${TD} ${hasDeal ? "" : "!border-b-[#b4b3b9]"}`}>{proposal.creator_name}</td>
+              <th scope="row" className={`${TH} ${hasDeal ? "" : "!border-b-[#b4b3b9]"}`}>기안부서</th>
+              <td className={`${TD} ${hasDeal ? "" : "!border-b-[#b4b3b9]"}`}>{proposal.department_name}</td>
+            </tr>
+            {hasDeal && (
+              <>
+                <tr>
+                  <th scope="row" className={TH}>프로젝트</th>
+                  <td className={TD}>{proposal.project_name || "일반"}</td>
+                  <th scope="row" className={TH}>금액</th>
+                  <td className={`${TD} font-bold tabular-nums`}>{formatProposalAmount(proposal) ?? "-"}</td>
+                </tr>
+                <tr>
+                  <th scope="row" className={`${TH} !border-b-[#b4b3b9]`}>거래처</th>
+                  <td colSpan={3} className={`${TD} !border-b-[#b4b3b9]`}>{proposal.vendor_name || "-"}</td>
+                </tr>
+              </>
+            )}
+            <tr>
+              <th scope="row" className={`${TH} !border-t-[#b4b3b9]`}>내용</th>
+              <td colSpan={3} className={`${TD} leading-relaxed !border-t-[#b4b3b9]`}>
+                <p>
+                  1. 아래와 같이 {proposal.topic}
+                  {objectParticle(proposal.topic)} 진행하고자 하오니 검토하여 승인해 주십시오.
+                </p>
+                <p className="mt-1 whitespace-pre-line text-text-muted">{proposal.content}</p>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row" className={TH}>첨부</th>
+              <td colSpan={3} className={TD}>
+                {proposal.attachments.length === 0 && <p className="text-xs text-text-muted">첨부된 파일/링크가 없습니다.</p>}
+                {proposal.attachments.length > 0 && (
+                  <ul className="space-y-1">
+                    {proposal.attachments.map((a) => (
+                      <li key={a.id} className="flex items-center justify-between gap-2">
+                        <button type="button" onClick={() => handleOpenAttachment(a)} className="flex min-w-0 items-center gap-2 text-left hover:text-primary">
+                          {a.kind === "file" ? (
+                            <Paperclip size={14} className="shrink-0 text-text-muted" />
+                          ) : (
+                            <LinkIcon size={14} className="shrink-0 text-text-muted" />
+                          )}
+                          <span className="truncate">{a.label}</span>
+                          {a.kind === "link" && <ExternalLink size={11} className="shrink-0 text-text-muted" />}
+                        </button>
+                        <div className="ml-2 flex shrink-0 items-center gap-2">
+                          {a.kind === "file" && (
+                            <button type="button" onClick={() => handleSaveAttachment(a)} aria-label={`${a.label} 저장`} title="내 PC에 저장" className="text-text-muted hover:text-primary">
+                              <Download size={14} />
+                            </button>
+                          )}
+                          {canManageAttachments && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAttachment(a)}
+                              disabled={attachmentBusy}
+                              aria-label={`${a.label} 삭제`}
+                              title="삭제"
+                              className="text-text-muted hover:text-danger disabled:opacity-50"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-        <div className="bg-bg rounded-xl px-4 py-3 text-sm leading-relaxed mt-4">
-          <p>
-            1. 아래와 같이 {proposal.topic}
-            {objectParticle(proposal.topic)} 진행하고자 하오니 검토하여 승인해 주십시오.
-          </p>
-          <p className="mt-2 whitespace-pre-line text-text-muted">{proposal.content}</p>
-        </div>
-
-        <hr className="border-border my-4" />
-
-        <div className="mb-4">
-          <p className="text-sm font-bold mb-2">첨부파일 · 링크</p>
-          {proposal.attachments.length === 0 && <p className="text-xs text-text-muted">첨부된 파일/링크가 없습니다.</p>}
-          {proposal.attachments.length > 0 && (
-            <ul className="space-y-1.5">
-              {proposal.attachments.map((a) => (
-                <li key={a.id} className="flex items-center justify-between bg-bg rounded-lg px-3 py-2 text-sm">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenAttachment(a)}
-                    className="flex items-center gap-2 min-w-0 text-left hover:text-primary"
-                  >
-                    {a.kind === "file" ? (
-                      <Paperclip size={14} className="text-text-muted shrink-0" />
-                    ) : (
-                      <LinkIcon size={14} className="text-text-muted shrink-0" />
-                    )}
-                    <span className="truncate">{a.label}</span>
-                    {a.kind === "link" && <ExternalLink size={11} className="text-text-muted shrink-0" />}
-                  </button>
-                  <div className="flex items-center gap-2 shrink-0 ml-2">
-                    {a.kind === "file" && (
+                {canManageAttachments && (
+                  <div className="mt-2 space-y-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-primary hover:opacity-80">
+                      <Paperclip size={13} />
+                      파일 추가
+                      <input type="file" onChange={handleAddFile} disabled={attachmentBusy} className="hidden" />
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="flex-1 rounded-lg border border-border bg-bg px-3 py-1.5 text-xs outline-none focus:border-primary"
+                      />
+                      <input
+                        value={linkLabel}
+                        onChange={(e) => setLinkLabel(e.target.value)}
+                        placeholder="설명 (선택)"
+                        className="w-28 rounded-lg border border-border bg-bg px-3 py-1.5 text-xs outline-none focus:border-primary"
+                      />
                       <button
                         type="button"
-                        onClick={() => handleSaveAttachment(a)}
-                        aria-label={`${a.label} 저장`}
-                        title="내 PC에 저장"
-                        className="text-text-muted hover:text-primary"
-                      >
-                        <Download size={14} />
-                      </button>
-                    )}
-                    {canManageAttachments && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAttachment(a)}
+                        onClick={handleAddLink}
                         disabled={attachmentBusy}
-                        aria-label={`${a.label} 삭제`}
-                        title="삭제"
-                        className="text-text-muted hover:text-danger disabled:opacity-50"
+                        className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-text-muted hover:bg-bg disabled:opacity-50"
                       >
-                        <Trash2 size={14} />
+                        추가
                       </button>
-                    )}
+                    </div>
+                    {attachmentError && <p className="text-xs text-danger">{attachmentError}</p>}
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {canManageAttachments && (
-            <div className="mt-3 space-y-2">
-              <label className="inline-flex items-center gap-1.5 text-xs text-primary cursor-pointer hover:opacity-80">
-                <Paperclip size={13} />
-                파일 추가
-                <input type="file" onChange={handleAddFile} disabled={attachmentBusy} className="hidden" />
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="flex-1 rounded-lg border border-border px-3 py-1.5 text-xs outline-none focus:border-primary bg-bg"
-                />
-                <input
-                  value={linkLabel}
-                  onChange={(e) => setLinkLabel(e.target.value)}
-                  placeholder="설명 (선택)"
-                  className="w-28 rounded-lg border border-border px-3 py-1.5 text-xs outline-none focus:border-primary bg-bg"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddLink}
-                  disabled={attachmentBusy}
-                  className="text-xs text-text-muted border border-border rounded-lg px-3 py-1.5 hover:bg-bg disabled:opacity-50 shrink-0"
-                >
-                  추가
-                </button>
-              </div>
-              {attachmentError && <p className="text-xs text-danger">{attachmentError}</p>}
-            </div>
-          )}
-        </div>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
         {proposal.delete_requested && (
           <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-4">
