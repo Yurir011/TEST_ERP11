@@ -179,7 +179,8 @@ export class MailSync {
   private async doSyncMessages(client: ImapFlow, folderPath: string): Promise<{ added: number; removed: number; addedUids: number[] }> {
     const store = this.deps.store;
     const now = this.deps.now?.() ?? Date.now();
-    const days = this.deps.windowDays ?? DEFAULT_WINDOW_DAYS;
+    // 기간은 계정 설정(syncDays)을 따르고, 0 이면 기간 제한 없이 전부 받는다
+    const days = this.deps.windowDays ?? this.deps.credentials()?.syncDays ?? DEFAULT_WINDOW_DAYS;
     const since = new Date(now - days * 86_400_000);
 
     const lock = await client.getMailboxLock(folderPath, { readOnly: true });
@@ -194,7 +195,7 @@ export class MailSync {
       if (validity) store.setUidValidity(folderPath, validity);
 
       const allUids = ((await client.search({ all: true }, { uid: true })) || []) as number[];
-      const sinceUids = ((await client.search({ since }, { uid: true })) || []) as number[];
+      const sinceUids = days === 0 ? allUids : (((await client.search({ since }, { uid: true })) || []) as number[]);
       const local = new Set(store.localUids(folderPath));
       const serverSet = new Set(allUids);
 

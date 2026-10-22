@@ -14,12 +14,18 @@ export interface MailAccountInfo {
   smtpSecurity?: MailSecurity;
   /** 보낸 메일을 보낸메일함에 이 앱이 직접 저장할지 (서버가 보낸 메일을 자동으로 저장하지 않을 때만 켠다) */
   saveToSent: boolean;
+  /** 서버에서 최근 며칠 안의 메일을 받을지. 0 이면 전부. 없으면 90일 */
+  syncDays?: number;
 }
 
+/** 동기화 기간으로 고를 수 있는 값 (일). 0 = 전체 */
+export const SYNC_DAYS_CHOICES = [90, 365, 1095, 0] as const;
+
 /** 계정 저장 요청: 비밀번호는 저장 즉시 암호화되어 이 PC 에만 남는다 */
-export interface MailAccountInput extends Omit<MailAccountInfo, "username" | "saveToSent"> {
+export interface MailAccountInput extends Omit<MailAccountInfo, "username" | "saveToSent" | "syncDays"> {
   username?: string;
   saveToSent?: boolean;
+  syncDays?: number;
   password: string;
 }
 

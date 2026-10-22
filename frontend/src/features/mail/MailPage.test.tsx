@@ -163,8 +163,22 @@ describe("계정 등록", () => {
       smtpPort: 465,
       smtpSecurity: "ssl",
       saveToSent: false,
+      syncDays: 90,
     });
     expect(await screen.findByRole("navigation", { name: "메일 폴더" })).toBeTruthy();
+  });
+
+  it("가져올 메일 기간을 고를 수 있다 (기본 3개월, 전체는 0)", async () => {
+    const bridge = installMail({ account: vi.fn().mockResolvedValue(null), saveAccount: vi.fn().mockResolvedValue({ ok: true, value: account }) });
+    renderPage();
+    const period = (await screen.findByLabelText("가져올 메일 기간")) as HTMLSelectElement;
+    expect(period.value).toBe("90");
+    fireEvent.change(period, { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("이메일 주소"), { target: { value: "me@bench.co.kr" } });
+    fireEvent.change(screen.getByLabelText("메일 비밀번호"), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "등록" }));
+    await waitFor(() => expect(bridge.saveAccount).toHaveBeenCalled());
+    expect(bridge.saveAccount).toHaveBeenCalledWith(expect.objectContaining({ syncDays: 0 }));
   });
 
   it("메일 서비스를 고르면 서버 주소·포트·암호화 방식이 채워지고, 네이버는 아이디를 이메일 앞부분으로 보낸다", async () => {

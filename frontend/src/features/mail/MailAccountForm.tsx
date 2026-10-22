@@ -26,6 +26,7 @@ export function MailAccountForm({ bridge, onSaved, onCancel, initial }: Props) {
   const [smtpPort, setSmtpPort] = useState(String(initial?.smtpPort ?? first.smtpPort));
   const [smtpSecurity, setSmtpSecurity] = useState<MailSecurity>(initial?.smtpSecurity ?? first.smtpSecurity);
   const [saveToSent, setSaveToSent] = useState(initial?.saveToSent ?? first.saveToSent);
+  const [syncDays, setSyncDays] = useState(initial?.syncDays ?? 90);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -82,6 +83,7 @@ export function MailAccountForm({ bridge, onSaved, onCancel, initial }: Props) {
         smtpPort: Number(smtpPort),
         smtpSecurity,
         saveToSent,
+        syncDays,
       });
       if (!r.ok) {
         setError(r.error);
@@ -122,6 +124,17 @@ export function MailAccountForm({ bridge, onSaved, onCancel, initial }: Props) {
         <p className="text-xs text-text-muted mt-1.5">
           비밀번호는 이 PC 에서만 암호화해 보관하고 ERP 서버로는 보내지 않습니다. 2단계 인증을 쓰는 계정은 앱 비밀번호를 입력하세요.
         </p>
+      </div>
+
+      <div>
+        <label htmlFor="mail-sync-days" className="block text-xs text-text-muted mb-1.5">가져올 메일 기간</label>
+        <select id="mail-sync-days" value={syncDays} onChange={(e) => setSyncDays(Number(e.target.value))} className={INPUT}>
+          <option value={90}>최근 3개월</option>
+          <option value={365}>최근 1년</option>
+          <option value={1095}>최근 3년</option>
+          <option value={0}>전체 (서버에 있는 메일 모두)</option>
+        </select>
+        <p className="text-xs text-text-muted mt-1.5">기간이 길수록 처음 받아 오는 데 시간이 걸리고 이 PC 의 저장 공간을 더 씁니다. 나중에 바꿀 수 있습니다.</p>
       </div>
 
       <button type="button" onClick={() => setShowAdvanced((v) => !v)} aria-expanded={showAdvanced} className="text-xs text-primary hover:underline">

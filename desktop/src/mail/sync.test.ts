@@ -141,6 +141,18 @@ describe("메일 동기화", () => {
     expect(store.count("INBOX")).toBe(2);
   });
 
+  it("계정 설정의 기간(syncDays)을 따른다: 0 이면 오래된 메일까지 전부 받는다", async () => {
+    server = await startFakeImap([old, recent(2)]);
+    const all = await makeSync({ credentials: () => creds({ syncDays: 0 }) }).syncFolder("INBOX");
+    expect(all.added).toBe(2);
+  });
+
+  it("기간을 정하지 않은 예전 계정은 90일 안의 메일만 받는다", async () => {
+    server = await startFakeImap([old, recent(2)]);
+    const r = await makeSync({ credentials: () => creds() }).syncFolder("INBOX");
+    expect(r.added).toBe(1);
+  });
+
   it("UIDVALIDITY 가 달라지면 로컬 사본을 버리고 서버 기준으로 다시 받는다", async () => {
     server = await startFakeImap([recent(1)]);
     const sync = makeSync();

@@ -31,12 +31,15 @@ export interface MailAccountInfo {
   smtpSecurity?: "ssl" | "starttls";
   /** 보낸 메일을 보낸메일함에 앱이 직접 저장할지 (서버가 자동 저장하지 않을 때만 켠다) */
   saveToSent: boolean;
+  /** 서버에서 최근 며칠 안의 메일을 받을지 (0 이면 전부). 없으면 90일 */
+  syncDays?: number;
 }
 
 export interface MailAccountInput {
   email: string;
   username?: string;
   saveToSent?: boolean;
+  syncDays?: number;
   password: string;
   imapHost: string;
   imapPort: number;
