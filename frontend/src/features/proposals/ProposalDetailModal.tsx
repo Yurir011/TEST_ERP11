@@ -1,7 +1,7 @@
 import { Check, Download, ExternalLink, Paperclip, Pencil, Printer, Link as LinkIcon, Trash2, X } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApprovalHistory } from "../../components/approval/ApprovalHistory";
+import { ApprovalNote, ApprovalStamps } from "../../components/approval/ApprovalStamps";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { openAttachment } from "../../lib/openAttachment";
@@ -175,73 +175,77 @@ export function ProposalDetailModal({
     });
   }
 
+  const historyInput = {
+    creatorName: proposal.creator_name,
+    createdAt: proposal.created_at,
+    summary: proposal.title,
+    steps: proposal.steps,
+    currentStep: proposal.current_step,
+    status: proposal.status,
+    finalDecision: proposal.is_final_decision,
+    rejectReason: proposal.reject_reason,
+    deleteRequested: proposal.delete_requested,
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
       <div className="bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-semibold">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-bold">
               {docTitle(proposal)} · {proposal.title}
             </h3>
-            <p className="text-xs text-text-muted mt-1">
-              No. {proposal.doc_no} · {proposal.issue_date}
+            <p className="text-xs text-text-muted mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>
+                No. {proposal.doc_no} · {proposal.issue_date}
+              </span>
+              <span className={`text-xs px-2 py-0.5 font-bold ${PROPOSAL_STATUS_STYLES[proposal.status]}`}>
+                {PROPOSAL_STATUS_LABELS[proposal.status]}
+              </span>
             </p>
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-text">
-            <X size={18} />
+          <ApprovalStamps {...historyInput} />
+          <button onClick={onClose} aria-label="닫기" className="text-text-muted hover:text-text shrink-0">
+            <X size={20} />
           </button>
         </div>
 
-        <div className="flex items-center gap-2 mb-4">
-          <span className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[proposal.status]}`}>
-            {PROPOSAL_STATUS_LABELS[proposal.status]}
-          </span>
+        <div className="mt-3 empty:hidden">
+          <ApprovalNote {...historyInput} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-          <div>
-            <p className="text-xs text-text-muted mb-0.5">기안자</p>
-            <p className="font-medium">{proposal.creator_name}</p>
-          </div>
-          <div>
-            <p className="text-xs text-text-muted mb-0.5">기안부서</p>
-            <p className="font-medium">{proposal.department_name}</p>
-          </div>
-        </div>
+        {/* 기안자·부서·프로젝트·거래처·금액을 한 줄로 흘려 보여 준다 */}
+        <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          {[
+            ["기안자", proposal.creator_name],
+            ["기안부서", proposal.department_name],
+            ...(proposal.vendor_name || formatProposalAmount(proposal) || proposal.project_name
+              ? [
+                  ["프로젝트", proposal.project_name || "일반"],
+                  ["거래처", proposal.vendor_name || "-"],
+                  ["금액", formatProposalAmount(proposal) ?? "-"],
+                ]
+              : []),
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-baseline gap-1.5">
+              <dt className="text-xs text-text-muted">{label}</dt>
+              <dd className="font-semibold tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
 
-        {(proposal.vendor_name || formatProposalAmount(proposal) || proposal.project_name) && (
-          <div className="bg-bg rounded-xl p-4 text-sm mb-3 grid grid-cols-[64px_1fr] gap-y-1">
-            <span className="text-text-muted">프로젝트</span>
-            <span>{proposal.project_name || "일반"}</span>
-            <span className="text-text-muted">거래처</span>
-            <span>{proposal.vendor_name || "-"}</span>
-            <span className="text-text-muted">금액</span>
-            <span className="tabular-nums">{formatProposalAmount(proposal) ?? "-"}</span>
-          </div>
-        )}
-
-        <div className="bg-bg rounded-xl p-4 text-sm mb-4">
+        <div className="bg-bg rounded-xl px-4 py-3 text-sm leading-relaxed mt-4">
           <p>
             1. 아래와 같이 {proposal.topic}
             {objectParticle(proposal.topic)} 진행하고자 하오니 검토하여 승인해 주십시오.
           </p>
-          <p className="mt-3 whitespace-pre-line text-text-muted">{proposal.content}</p>
+          <p className="mt-2 whitespace-pre-line text-text-muted">{proposal.content}</p>
         </div>
 
-        <ApprovalHistory
-          creatorName={proposal.creator_name}
-          createdAt={proposal.created_at}
-          summary={proposal.title}
-          steps={proposal.steps}
-          currentStep={proposal.current_step}
-          status={proposal.status}
-          finalDecision={proposal.is_final_decision}
-          rejectReason={proposal.reject_reason}
-          deleteRequested={proposal.delete_requested}
-        />
+        <hr className="border-border my-4" />
 
         <div className="mb-4">
-          <p className="text-xs text-text-muted mb-1.5">첨부파일 · 링크</p>
+          <p className="text-sm font-bold mb-2">첨부파일 · 링크</p>
           {proposal.attachments.length === 0 && <p className="text-xs text-text-muted">첨부된 파일/링크가 없습니다.</p>}
           {proposal.attachments.length > 0 && (
             <ul className="space-y-1.5">
@@ -324,9 +328,6 @@ export function ProposalDetailModal({
           )}
         </div>
 
-        {proposal.status === "rejected" && proposal.reject_reason && (
-          <p className="text-xs text-danger mb-4">반려 사유: {proposal.reject_reason}</p>
-        )}
         {proposal.delete_requested && (
           <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-4">
             이 품의서는 삭제 결재가 진행 중입니다. 최종 승인되면 삭제되고, 반려되면 기존 승인 상태로 유지됩니다.

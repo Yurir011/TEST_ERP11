@@ -232,8 +232,20 @@ def reorder_event(
 
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_event(event_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def delete_event(
+    event_id: int,
+    series: bool = Query(False, description="true 이면 같은 반복 일정(같은 recurrence_group_id)을 모두 삭제한다"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     event = _get_editable_event(db, event_id, current_user)
+    group_id = event.recurrence_group_id
+    if series and group_id and not group_id.startswith("leave-"):
+        # 반복 일정은 한 사람이 한 번에 만든 묶음이므로, 이 일정을 지울 수 있으면 묶음 전체도 지울 수 있다
+        count = db.query(ScheduleEvent).filter(ScheduleEvent.recurrence_group_id == group_id).delete(synchronize_session=False)
+        db.commit()
+        logger.debug(f"[Schedule] 반복 일정 전체 삭제: group_id={group_id}, 건수={count}, by={current_user.id}")
+        return None
     db.delete(event)
     db.commit()
     logger.debug(f"[Schedule] 일정 삭제: id={event_id}, by={current_user.id}")

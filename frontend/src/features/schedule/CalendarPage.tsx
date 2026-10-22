@@ -201,9 +201,18 @@ export function CalendarPage() {
 
   async function handleDelete() {
     if (!modalEvent) return;
-    if (!(await confirm("이 일정을 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
+    // 반복 일정이면 먼저 반복 전체를 지울지 묻고, 아니라고 하면 이 일정 하나만 지울지 다시 묻는다 (휴가로 자동 표시된 일정은 반복 일정이 아니다)
+    const isRepeating = !!modalEvent.recurrence_group_id && !modalEvent.recurrence_group_id.startsWith("leave-");
+    let series = false;
+    if (isRepeating) {
+      series = await confirm("반복 일정입니다.\n반복되는 일정을 모두 삭제할까요?", { okLabel: "전체 삭제", danger: true });
+      if (!series && !(await confirm("이 일정 하나만 삭제할까요?", { okLabel: "이 일정만 삭제", danger: true }))) return;
+    } else if (!(await confirm("이 일정을 삭제할까요?", { okLabel: "삭제", danger: true }))) {
+      return;
+    }
     try {
-      await apiDelete(`/api/schedule/${modalEvent.id}`);
+      logDebug("Calendar", `일정 삭제: id=${modalEvent.id}, 반복 전체=${series}`);
+      await apiDelete(`/api/schedule/${modalEvent.id}${series ? "?series=true" : ""}`);
       closeModal();
       loadEvents();
     } catch (err) {

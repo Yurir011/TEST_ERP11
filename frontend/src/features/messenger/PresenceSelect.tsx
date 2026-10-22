@@ -3,6 +3,7 @@ import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "../attendance/types";
+import { notifyAttendanceChanged } from "../attendance/useAttendanceToday";
 import { STATUS_OPTIONS, isPresenceStatus, statusDotClass, statusLabel } from "./presence";
 import { useMessenger } from "./useMessenger";
 
@@ -25,6 +26,7 @@ export function PresenceSelect() {
       if (today?.clock_out && !(await dialog.confirm("이미 퇴근 처리되었습니다.\n퇴근을 취소하고 다시 출근으로 기록할까요?", { okLabel: "다시 출근" }))) return false;
       logDebug("Attendance", today?.clock_out ? "상태 콤보박스: 퇴근 취소(다시 출근)" : "상태 콤보박스: 출근 처리 시도");
       await apiPost<AttendanceRecord>("/api/attendance/clock-in");
+      notifyAttendanceChanged(); // 열려 있는 다른 화면의 출근 표시도 바로 맞춘다
       return true;
     }
     if (!today?.clock_in) {
@@ -35,6 +37,7 @@ export function PresenceSelect() {
     if (!(await dialog.confirm("퇴근 처리할까요?\n퇴근하면 오늘은 다시 출근으로 되돌릴 수 없습니다.", { okLabel: "퇴근하기", danger: true }))) return false;
     logDebug("Attendance", "상태 콤보박스: 퇴근 처리 시도");
     await apiPost<AttendanceRecord>("/api/attendance/clock-out");
+    notifyAttendanceChanged();
     return true;
   }
 

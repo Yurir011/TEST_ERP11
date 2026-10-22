@@ -5,6 +5,7 @@ import { useAuth } from "../../context/useAuth";
 import { AttendanceToggle } from "../../features/attendance/AttendanceToggle";
 import { DesktopUpdateNotice } from "../../features/desktop/DesktopUpdateNotice";
 import { TITLE_LABELS } from "../../lib/auth";
+import { BackButton } from "../ui/BackButton";
 import { Sidebar } from "./Sidebar";
 import { SiteAdminSidebar } from "./SiteAdminSidebar";
 
@@ -12,10 +13,12 @@ interface MainLayoutProps {
   title: string;
   description?: string;
   actions?: ReactNode;
+  /** 제목 왼쪽 위에 화살표 [뒤로가기]를 둔다 (작성 화면용) */
+  showBack?: boolean;
   children: ReactNode;
 }
 
-export function MainLayout({ title, description, actions, children }: MainLayoutProps) {
+export function MainLayout({ title, description, actions, showBack = false, children }: MainLayoutProps) {
   const { user, logout } = useAuth();
   const tabShell = useTabShell();
   const setTabTitle = tabShell?.setTitle;
@@ -29,6 +32,7 @@ export function MainLayout({ title, description, actions, children }: MainLayout
   if (tabShell) {
     return (
       <main className="px-10 py-8">
+        {showBack && <BackButton className="mb-3" />}
         <div className="flex items-start justify-between mb-8">
           <div>
             <h1 className="text-2xl font-semibold text-text">{title}</h1>
@@ -62,6 +66,7 @@ export function MainLayout({ title, description, actions, children }: MainLayout
             </button>
           </div>
         )}
+        {showBack && <BackButton className="mb-3" />}
         <div className="flex items-start justify-between mb-8">
           <div>
             <h1 className="text-2xl font-semibold text-text">{title}</h1>

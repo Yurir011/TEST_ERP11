@@ -4,7 +4,7 @@ import { DateTextInput } from "../../components/ui/DateTextInput";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PercentPickerPopover } from "./PercentPickerPopover";
-import { PROGRESS_ROW_STYLES } from "./progressRowStyles";
+import { PROGRESS_ROW_STYLES, stageColorIndex } from "./progressRowStyles";
 import { MAX_PROGRESS_STAGES, type Project, type ProgressStage } from "./types";
 import { TIMELINE_LABEL_WIDTH, diffDays, formatMonthDay, parseDate, stageDayRange, todayFraction } from "./timeline";
 
@@ -129,6 +129,8 @@ export function ProgressSectionCard({
   const fraction = hasSchedule ? todayFraction(project.start_date!, totalWeeks) : null;
   const gridStyle = { gridTemplateColumns: `repeat(${totalWeeks}, minmax(0, 1fr))` };
   const editingStage = stages?.find((s) => s.id === editingId) ?? null;
+  // 색은 항목마다 정해져 있어 위아래로 옮겨도 항목을 따라간다 (만든 순서대로 색을 돌려 쓴다)
+  const colorIndexOf = (id: number) => stageColorIndex(stages ?? [], id);
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 mb-6">
@@ -186,7 +188,7 @@ export function ProgressSectionCard({
 
           <div className="space-y-2.5">
             {stages.map((stage, i) => {
-              const style = PROGRESS_ROW_STYLES[i % PROGRESS_ROW_STYLES.length];
+              const style = PROGRESS_ROW_STYLES[colorIndexOf(stage.id)];
               const range = hasSchedule ? stageDayRange(stage, project.start_date!, totalWeeks) : null;
               return (
                 <div key={stage.id} className="flex items-center gap-2 group/stage">

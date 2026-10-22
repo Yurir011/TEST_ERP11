@@ -226,6 +226,7 @@ export function ProposalFormPage() {
 
   return (
     <MainLayout
+      showBack
       title={isEdit ? "품의서 수정" : isCopy ? "품의서 복사해서 작성" : "품의서 작성"}
       description={
         isEdit

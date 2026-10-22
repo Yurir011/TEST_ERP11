@@ -225,7 +225,7 @@ function FlowButton({
         disabled={disabled}
         title={title}
         aria-label={label}
-        className={`relative w-12 h-12 rounded-full grid place-items-center transition-colors disabled:cursor-not-allowed ${style}`}
+        className={`relative w-10 h-10 rounded-full grid place-items-center transition-colors disabled:cursor-not-allowed ${style}`}
       >
         {icon}
         {state === "done" && (
@@ -328,8 +328,8 @@ export function PurchaseProposalCard({
       {/* 제목 · 배지 · 날짜 */}
       <div className="flex flex-col gap-[22px] w-[250px] shrink-0">
        <div className="flex items-start gap-3">
-        <div className="w-12 h-12 rounded-full bg-tile-orange-fg text-white grid place-items-center shrink-0">
-          <ShoppingCart size={21} />
+        <div className="w-10 h-10 rounded-full bg-tile-orange-fg text-white grid place-items-center shrink-0">
+          <ShoppingCart size={18} />
         </div>
         <div className="min-w-0">
           <p className="ml-0.5 text-[15px] font-semibold text-text truncate" title={proposal.title}>
@@ -377,7 +377,7 @@ export function PurchaseProposalCard({
       {/* 발주 → 입고, 첨부 */}
       <div className="flex items-start gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
         <FlowButton
-          icon={<FileText size={20} />}
+          icon={<FileText size={17} />}
           label="발주"
           state={flow.orderDone ? "done" : flow.canOrder ? "ready" : "locked"}
           disabled={!flow.canOrder || busy}
@@ -408,9 +408,9 @@ export function PurchaseProposalCard({
             </button>
           )}
         </FlowButton>
-        <ArrowRight size={18} className="text-text-muted mt-3.5" />
+        <ArrowRight size={18} className="text-text-muted mt-[11px]" />
         <FlowButton
-          icon={<Package size={20} />}
+          icon={<Package size={17} />}
           label="입고"
           state={flow.received ? "done" : flow.canReceive ? "ready" : "locked"}
           disabled={!flow.canReceive || !canManage || busy}
@@ -429,7 +429,7 @@ export function PurchaseProposalCard({
           {flow.received && <span className="text-[11px] text-text-muted">{monthDay(proposal.received_at)}</span>}
         </FlowButton>
         <FlowButton
-          icon={<Paperclip size={20} />}
+          icon={<Paperclip size={17} />}
           label="첨부"
           state="plain"
           title={`거래명세서·세금계산서 등 관련 서류 올리기 (파일 ${fileCountOf(proposal)}/${MAX_PROPOSAL_FILES})`}

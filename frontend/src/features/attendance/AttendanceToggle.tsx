@@ -1,24 +1,15 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
-import { ApiError, apiGet, apiPost } from "../../lib/api";
+import { ApiError, apiPost } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "./types";
+import { notifyAttendanceChanged, useAttendanceToday } from "./useAttendanceToday";
 
 export function AttendanceToggle() {
   const dialog = useDialog();
-  const [today, setToday] = useState<AttendanceRecord | null | undefined>(undefined);
+  const { today, setToday } = useAttendanceToday();
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function loadToday() {
-    apiGet<AttendanceRecord | null>("/api/attendance/today")
-      .then(setToday)
-      .catch((err) => logError("Attendance", "오늘 근태 조회 실패", err));
-  }
-
-  useEffect(() => {
-    loadToday();
-  }, []);
 
   if (today === undefined) return null;
 
@@ -35,9 +26,11 @@ export function AttendanceToggle() {
       if (isWorking) {
         logDebug("Attendance", "헤더 토글: 퇴근 처리 시도");
         setToday(await apiPost<AttendanceRecord>("/api/attendance/clock-out"));
+        notifyAttendanceChanged();
       } else {
         logDebug("Attendance", "헤더 토글: 출근 처리 시도");
         setToday(await apiPost<AttendanceRecord>("/api/attendance/clock-in"));
+        notifyAttendanceChanged();
       }
     } catch (err) {
       logError("Attendance", "헤더 토글: 출퇴근 처리 실패", err);

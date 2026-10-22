@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, Check, FileSignature, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Check, FileSignature, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet, downloadFile, openFile } from "../../lib/api";
@@ -8,7 +8,8 @@ import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { CLAMP_CELL, ClampText } from "../../components/ui/ClampText";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { ProposalDetailModal } from "./ProposalDetailModal";
-import { DEFAULT_PERIOD_MONTHS, PERIOD_MONTHS, SORT_LABELS, filterAndSortProposals, type ProposalSortKey, type SortDirection } from "./proposalList";
+import { ListViewControls, useListView } from "../../components/ui/ListViewControls";
+import { filterAndSortProposals } from "./proposalList";
 import { formatProposalAmount } from "./purchaseFlow";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal } from "./types";
 import { useApprovalActions } from "../../lib/useApprovalActions";
@@ -24,11 +25,26 @@ function pdfFilename(p: Proposal): string {
 export function ProposalsPage({
   embedded = false,
   excludeKind,
+  view: viewProp,
+  leading,
+  extraShown = 0,
+  extraTotal = 0,
   openId,
   modalOnly = false,
   onDecided,
   onModalClose,
-}: { embedded?: boolean; /** 이 종류의 품의서는 표에서 뺀다 (카드로 따로 보여 주는 종류) */ excludeKind?: string } & OpenOverlayProps) {
+}: {
+  embedded?: boolean;
+  /** 이 종류의 품의서는 표에서 뺀다 (카드로 따로 보여 주는 종류) */
+  excludeKind?: string;
+  /** 부모가 조회 조건을 쥐고 있으면 그것을 쓴다 (부모의 검색 패널과 같은 조건) */
+  view?: ReturnType<typeof useListView>;
+  /** 검색 패널 바로 아래, 표 위에 놓을 내용 (구매 품의 진행 카드) */
+  leading?: ReactNode;
+  /** 패널의 건수에 더할, 표 밖에서 보여 주는 항목(구매 품의 카드)의 건수 */
+  extraShown?: number;
+  extraTotal?: number;
+} & OpenOverlayProps) {
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [pendingForMe, setPendingForMe] = useState<Proposal[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -36,17 +52,9 @@ export function ProposalsPage({
   const [detail, setDetail] = useState<Proposal | null>(null);
   const openTargetId = useOpenTarget(openId);
   const [openedTarget, setOpenedTarget] = useState(false);
-  // 목록 보기 조건: 기본은 최근 1개월, 최근 날짜 먼저
-  const [months, setMonths] = useState<number>(DEFAULT_PERIOD_MONTHS);
-  const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<ProposalSortKey>("date");
-  const [direction, setDirection] = useState<SortDirection>("desc");
-  const shown = useMemo(() => (proposals ? filterAndSortProposals(proposals, { months, query, sortKey, direction }) : null), [proposals, months, query, sortKey, direction]);
-
-  function changeSortKey(key: ProposalSortKey) {
-    setSortKey(key);
-    setDirection(key === "vendor" ? "asc" : "desc"); // 업체명은 가나다순, 날짜·금액은 큰 것(최근)부터
-  }
+  const ownView = useListView();
+  const view = viewProp ?? ownView;
+  const shown = useMemo(() => (proposals ? filterAndSortProposals(proposals, view.options) : null), [proposals, view.options]);
 
   // 업무 알림(?open=품의서ID)으로 들어오면 목록을 받은 뒤 해당 품의서 상세를 한 번 연다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
   if (openTargetId !== null && !openedTarget && proposals !== null) {
@@ -137,20 +145,23 @@ export function ProposalsPage({
 
   const content = (
     <>
-      <div className="grid grid-cols-1 gap-4 mb-6">
-        <Link
-          to="/proposals/new"
-          className="bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors flex items-center gap-3"
-        >
-          <div className="p-2.5 rounded-xl bg-bg text-tile-orange-fg">
-            <FileSignature size={18} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-text">품의서 작성</p>
-            <p className="text-xs text-text-muted mt-0.5">새 품의서 등록</p>
-          </div>
-        </Link>
-      </div>
+      {/* 문서관리 화면 안에서는 위쪽 [품의서 작성] 카드가 이미 있으므로 따로 두지 않는다 */}
+      {!embedded && (
+        <div className="grid grid-cols-1 gap-4 mb-6">
+          <Link
+            to="/proposals/new"
+            className="bg-surface border border-border rounded-2xl p-5 hover:border-primary/40 transition-colors flex items-center gap-3"
+          >
+            <div className="p-2.5 rounded-xl bg-bg text-tile-orange-fg">
+              <FileSignature size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-text">품의서 작성</p>
+              <p className="text-xs text-text-muted mt-0.5">새 품의서 등록</p>
+            </div>
+          </Link>
+        </div>
+      )}
 
       {pendingForMe.length > 0 && (
         <div className="bg-surface border border-tile-blue-fg/30 rounded-2xl p-5 mb-6">
@@ -199,49 +210,11 @@ export function ProposalsPage({
         </div>
       )}
 
-      {proposals !== null && proposals.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-3" role="search" aria-label="품의서 검색·정렬">
-          <select aria-label="조회 기간" value={months} onChange={(e) => setMonths(Number(e.target.value))} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary">
-            {PERIOD_MONTHS.map((m) => (
-              <option key={m} value={m}>
-                최근 {m}개월
-              </option>
-            ))}
-          </select>
-          <div className="relative flex-1 min-w-[12rem] max-w-sm">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
-            <input
-              type="search"
-              aria-label="업체명 또는 품의명 검색"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="업체명 또는 품의명 검색"
-              className="w-full rounded-lg border border-border bg-surface pl-8 pr-3 py-1.5 text-sm outline-none focus:border-primary"
-            />
-          </div>
-          <div className="flex items-center gap-1 ml-auto">
-            <select aria-label="정렬 기준" value={sortKey} onChange={(e) => changeSortKey(e.target.value as ProposalSortKey)} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary">
-              {(Object.keys(SORT_LABELS) as ProposalSortKey[]).map((k) => (
-                <option key={k} value={k}>
-                  {SORT_LABELS[k]}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setDirection((d) => (d === "asc" ? "desc" : "asc"))}
-              aria-label={direction === "asc" ? "오름차순 (누르면 내림차순)" : "내림차순 (누르면 오름차순)"}
-              title={direction === "asc" ? "오름차순" : "내림차순"}
-              className="rounded-lg border border-border bg-surface p-2 text-text-muted hover:text-primary"
-            >
-              {direction === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
-            </button>
-          </div>
-          <span className="w-full text-xs text-text-muted" aria-live="polite">
-            {shown?.length ?? 0}건 (전체 {proposals.length}건)
-          </span>
-        </div>
+      {proposals !== null && (proposals.length > 0 || extraTotal > 0) && (
+        <ListViewControls view={view} shown={(shown?.length ?? 0) + extraShown} total={proposals.length + extraTotal} />
       )}
+
+      {leading}
 
       {shown !== null && proposals !== null && proposals.length > 0 && shown.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">

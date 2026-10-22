@@ -42,7 +42,7 @@ describe("품의서 목록 검색·정렬", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toContain("케이블");
     expect(rows[1]).toContain("커넥터");
-    expect(screen.getByText("2건 (전체 4건)")).toBeTruthy();
+    expect(document.querySelector("[aria-live=polite]")?.textContent).toContain("2건");
   });
 
   it("조회 기간을 늘리면 오래된 품의서도 보인다 (12개월까지 고를 수 있다)", async () => {
@@ -60,12 +60,38 @@ describe("품의서 목록 검색·정렬", () => {
     renderPage();
     await screen.findByRole("table");
     fireEvent.change(screen.getByLabelText("조회 기간"), { target: { value: "12" } });
-    fireEvent.change(screen.getByLabelText("업체명 또는 품의명 검색"), { target: { value: "가나" } });
+    fireEvent.change(screen.getByLabelText("검색"), { target: { value: "가나" } });
     expect(titles().map((t) => (t.includes("커넥터") ? "커넥터" : "기판"))).toEqual(["커넥터", "기판"]);
-    fireEvent.change(screen.getByLabelText("업체명 또는 품의명 검색"), { target: { value: "케이" } });
+    fireEvent.change(screen.getByLabelText("검색"), { target: { value: "케이" } });
     expect(titles()).toHaveLength(1);
-    fireEvent.change(screen.getByLabelText("업체명 또는 품의명 검색"), { target: { value: "없는말" } });
+    fireEvent.change(screen.getByLabelText("검색"), { target: { value: "없는말" } });
     expect(screen.getByText(/조건에 맞는 품의서가 없습니다/)).toBeTruthy();
+  });
+
+  it("상태로 거르고, 필터 초기화를 누르면 기본(1개월·최신순)으로 돌아간다", async () => {
+    renderPage();
+    await screen.findByRole("table");
+    fireEvent.change(screen.getByLabelText("조회 기간"), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText("상태"), { target: { value: "pending" } });
+    expect(screen.getByText(/조건에 맞는 품의서가 없습니다/)).toBeTruthy(); // 예시 데이터는 모두 승인 상태
+    fireEvent.change(screen.getByLabelText("상태"), { target: { value: "approved" } });
+    expect(titles()).toHaveLength(4);
+    fireEvent.change(screen.getByLabelText("정렬 기준"), { target: { value: "amount" } });
+    fireEvent.click(screen.getByRole("button", { name: "필터 초기화" }));
+    expect((screen.getByLabelText("조회 기간") as HTMLSelectElement).value).toBe("1");
+    expect((screen.getByLabelText("상태") as HTMLSelectElement).value).toBe("");
+    expect((screen.getByLabelText("정렬 기준") as HTMLSelectElement).value).toBe("date");
+    expect(titles()).toHaveLength(2);
+  });
+
+  it("정렬 순서 콤보박스 글자는 정렬 기준에 맞게 바뀐다", async () => {
+    renderPage();
+    await screen.findByRole("table");
+    const dir = screen.getByLabelText("정렬 순서") as HTMLSelectElement;
+    expect(Array.from(dir.options).map((o) => o.textContent)).toEqual(["최신순", "오래된순"]);
+    fireEvent.change(screen.getByLabelText("정렬 기준"), { target: { value: "vendor" } });
+    expect(Array.from(dir.options).map((o) => o.textContent)).toEqual(["가나다 역순", "가나다순"]);
+    expect(dir.value).toBe("asc");
   });
 
   it("금액순·업체명순으로 정렬하고 방향을 뒤집을 수 있다", async () => {
@@ -74,7 +100,7 @@ describe("품의서 목록 검색·정렬", () => {
     fireEvent.change(screen.getByLabelText("조회 기간"), { target: { value: "12" } });
     fireEvent.change(screen.getByLabelText("정렬 기준"), { target: { value: "amount" } });
     expect(titles()[0]).toContain("기판"); // 금액이 큰 것부터
-    fireEvent.click(screen.getByRole("button", { name: /내림차순/ }));
+    fireEvent.change(screen.getByLabelText("정렬 순서"), { target: { value: "asc" } });
     expect(titles()[0]).toContain("커넥터");
     fireEvent.change(screen.getByLabelText("정렬 기준"), { target: { value: "vendor" } });
     expect(titles()[0]).toContain("가나상사"); // 가나다순

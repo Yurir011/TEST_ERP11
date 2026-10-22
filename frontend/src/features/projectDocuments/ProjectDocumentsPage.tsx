@@ -19,6 +19,9 @@ import { getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
 import { canComposeDocumentMail, openDocumentMail } from "../mail/documentMail";
 import { ProposalsPage } from "../proposals/ProposalsPage";
+import { ListViewControls, useListView } from "../../components/ui/ListViewControls";
+import { filterAndSortDocRows } from "./docListView";
+import { filterAndSortProposals } from "../proposals/proposalList";
 import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
 import { OrderChoiceModal } from "../proposals/OrderChoiceModal";
 import type { OrderPayment } from "../proposals/PaymentPicker";
@@ -157,13 +160,14 @@ export function ProjectDocumentsPage({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const listView = useListView(); // 세금계산서 외 목록의 조회 기간·검색·정렬
   const [showHometax, setShowHometax] = useState(false);
 
   function loadDocs() {
-    if (tab === "proposal") return;
+    if (tab === "proposal" || tab === "all") return; // 전체 탭은 구매 품의 진행 목록만 보여 주고, 문서 표는 구분을 눌렀을 때만 받는다
     logDebug("ProjectDocuments", `목록 조회: type=${tab}`);
     const params = new URLSearchParams();
-    if (tab !== "all") params.set("doc_type", tab);
+    params.set("doc_type", tab); // 전체 탭은 위에서 이미 빠졌다
     const qs = params.toString();
     apiGet<ProjectDocument[]>(`/api/project-documents${qs ? `?${qs}` : ""}`)
       .then((list) => setDocs(lockedDocType ? list : list.filter((d) => d.doc_type !== "tax_invoice")))
@@ -174,14 +178,7 @@ export function ProjectDocumentsPage({
   }
 
   function loadProposals() {
-    if (lockedDocType || tab !== "all") {
-      setProposals([]);
-      return;
-    }
-    logDebug("ProjectDocuments", "전체 목록용 품의서 조회 시작");
-    apiGet<Proposal[]>("/api/proposals")
-      .then(setProposals)
-      .catch((err) => logError("ProjectDocuments", "품의서 목록 조회 실패", err));
+    setProposals([]); // 전체 탭에서도 문서 표를 보여 주지 않으므로 섞어 보일 품의서 목록은 받지 않는다
   }
 
   function loadPurchaseCards() {
@@ -629,11 +626,21 @@ export function ProjectDocumentsPage({
   const receiveProposal = purchaseProposals.find((p) => p.id === receiveId) ?? null;
   const attachmentsProposal = purchaseProposals.find((p) => p.id === attachmentsId) ?? null;
 
+  // 검색 패널(기간·상태·검색어·정렬)에 맞는 구매 품의만 카드로 보여 준다
+  const visiblePurchase = filterAndSortProposals(purchaseProposals, listView.options);
   const purchaseCards = purchaseProposals.length > 0 && (
     <div className="mb-6">
-      <h3 className="text-sm font-medium text-text-muted mb-2.5">구매 품의 진행 ({purchaseProposals.length})</h3>
+      <h3 className="text-sm font-medium text-text-muted mb-2.5">
+        구매 품의 진행 ({visiblePurchase.length}
+        {visiblePurchase.length !== purchaseProposals.length ? ` / 전체 ${purchaseProposals.length}` : ""})
+      </h3>
+      {visiblePurchase.length === 0 && (
+        <div className="bg-surface border border-dashed border-border rounded-2xl p-6 text-center text-sm text-text-muted">
+          조건에 맞는 구매 품의가 없습니다. 기간을 늘리거나 검색어를 바꿔 보세요.
+        </div>
+      )}
       <div className="flex flex-col gap-3">
-        {purchaseProposals.map((p) => (
+        {visiblePurchase.map((p) => (
           <PurchaseProposalCard
             key={p.id}
             proposal={p}
@@ -742,6 +749,9 @@ export function ProjectDocumentsPage({
           return all.sort((a, b) => dateOf(b).localeCompare(dateOf(a)));
         })();
 
+  // 세금계산서 목록은 위의 자체 필터를 쓰고, 그 밖의 목록은 조회 기간(기본 1개월)·검색·정렬을 적용한다.
+  const listRows: DocListRow[] | null = mergedRows !== null && lockedDocType !== "tax_invoice" ? filterAndSortDocRows(mergedRows, listView.options) : mergedRows;
+
   // 검색 결과 합계: 원화(KRW) 문서만 합산한다 (외화는 섞으면 왜곡되므로 건수만 안내).
   const visibleKrwTotal = (visibleDocs ?? []).filter((d) => d.currency === "KRW").reduce((sum, d) => sum + itemsTotal(d), 0);
   const foreignCount = (visibleDocs ?? []).filter((d) => d.currency !== "KRW").length;
@@ -826,16 +836,28 @@ export function ProjectDocumentsPage({
         </div>
       )}
 
+      {!lockedDocType && tab !== "proposal" && (
+        <ListViewControls
+          view={listView}
+          shown={tab === "all" ? visiblePurchase.length : (listRows?.length ?? 0)}
+          total={tab === "all" ? purchaseProposals.length : (mergedRows?.length ?? 0)}
+          placeholder="업체명, 품의명, 프로젝트로 검색"
+        />
+      )}
+
       {tab === "proposal" ? (
-        <>
-          {purchaseCards}
-          <ProposalsPage embedded excludeKind="구매" />
-        </>
+        <ProposalsPage embedded excludeKind="구매" view={listView} leading={purchaseCards} extraShown={visiblePurchase.length} extraTotal={purchaseProposals.length} />
       ) : (
         <>
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
       {purchaseCards}
+
+      {tab === "all" && !lockedDocType && (
+        <div className="bg-surface border border-dashed border-border rounded-2xl p-6 text-center text-sm text-text-muted">
+          문서 목록은 위의 구분(품의서·견적서·발주서·거래명세서)을 누르면 나타납니다.
+        </div>
+      )}
 
       {lockedDocType === "tax_invoice" && docs !== null && docs.length > 0 && (
         <div ref={listTopRef} className="flex flex-wrap items-center gap-x-16 gap-y-3 mb-4 scroll-mt-4">
@@ -951,18 +973,22 @@ export function ProjectDocumentsPage({
         </div>
       )}
 
-      {mergedRows !== null && mergedRows.length === 0 && (
+      {lockedDocType && listRows !== null && mergedRows !== null && mergedRows.length > 0 && lockedDocType !== "tax_invoice" && (
+        <ListViewControls view={listView} shown={listRows.length} total={mergedRows.length} placeholder="업체명, 품의명, 프로젝트로 검색" />
+      )}
+
+      {tab !== "all" && listRows !== null && listRows.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <FileText className="mx-auto mb-2 text-text-muted" size={24} />
           <p className="text-sm text-text-muted">
-            {docs && docs.length > 0 ? "조건에 맞는 문서가 없습니다." : "등록된 문서가 없습니다."}
+            {mergedRows && mergedRows.length > 0 ? "조건에 맞는 문서가 없습니다. 기간을 늘리거나 검색어를 바꿔 보세요." : docs && docs.length > 0 ? "조건에 맞는 문서가 없습니다." : "등록된 문서가 없습니다."}
           </p>
         </div>
       )}
 
-      {mergedRows !== null && mergedRows.length > 0 && (
+      {tab !== "all" && listRows !== null && listRows.length > 0 && (
         <ProjectDocumentsTable
-          rows={mergedRows}
+          rows={listRows}
           lockedDocType={lockedDocType}
           userId={user?.id}
           busyId={busyId}

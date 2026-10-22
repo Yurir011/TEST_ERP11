@@ -5,6 +5,7 @@ import { ApiError, apiGet } from "../../lib/api";
 import { formatDuration, formatTime } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "./types";
+import { useAttendanceToday } from "./useAttendanceToday";
 import { toMonthValue } from "../../lib/date";
 
 const MAX_HISTORY_MONTHS = 36;
@@ -58,16 +59,11 @@ export function AttendanceSection() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
 
-  const [today, setToday] = useState<AttendanceRecord | null>(null);
+  const { today: todayRecord } = useAttendanceToday();
+  const today = todayRecord ?? null;
   const [myRecords, setMyRecords] = useState<AttendanceRecord[]>([]);
   const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
   const [monthError, setMonthError] = useState<string | null>(null);
-
-  function loadToday() {
-    apiGet<AttendanceRecord | null>("/api/attendance/today")
-      .then(setToday)
-      .catch((err) => logError("Attendance", "오늘 기록 조회 실패", err));
-  }
 
   function loadMonth() {
     logDebug("Attendance", `월별 조회: ${year}-${month}`);
@@ -86,11 +82,6 @@ export function AttendanceSection() {
         .catch((err) => logError("Attendance", "전체 월별 기록 조회 실패", err));
     }
   }
-
-  useEffect(() => {
-    loadToday();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     loadMonth();

@@ -1,40 +1,40 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../../context/useAuth", () => ({ useAuth: () => ({ user: { id: 1, name: "박소장" } }) }));
+vi.mock("../../components/ui/dialog/useDialog", () => ({ useDialog: () => ({ confirm: vi.fn(), notifyError: vi.fn() }) }));
+vi.mock("../../lib/logger", () => ({ logDebug: vi.fn(), logError: vi.fn() }));
+const { apiGet, apiPost } = vi.hoisted(() => ({ apiGet: vi.fn(), apiPost: vi.fn() }));
+vi.mock("../../lib/api", () => ({ apiGet, apiPost, ApiError: class extends Error {} }));
+
 import { AttendanceToggle } from "./AttendanceToggle";
+import { notifyAttendanceChanged } from "./useAttendanceToday";
 
-const confirm = vi.hoisted(() => vi.fn());
-const api = vi.hoisted(() => ({ apiGet: vi.fn(), apiPost: vi.fn() }));
-vi.mock("../../components/ui/dialog/useDialog", () => ({ useDialog: () => ({ confirm, notify: vi.fn(), notifyError: vi.fn() }) }));
-vi.mock("../../lib/api", () => ({ ApiError: class extends Error {}, apiGet: api.apiGet, apiPost: api.apiPost }));
+const working = { id: 1, user_id: 1, user_name: "박소장", work_date: "2026-10-22", clock_in: "2026-10-22T07:10:00Z", clock_out: null };
 
-const working = { clock_in: "2026-10-19T09:00:00", clock_out: null };
-
-beforeEach(() => {
-  confirm.mockReset();
-  api.apiGet.mockReset().mockResolvedValue(working);
-  api.apiPost.mockReset().mockResolvedValue({ ...working, clock_out: "2026-10-19T18:00:00" });
+beforeEach(() => apiGet.mockResolvedValue(null));
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
 });
-afterEach(cleanup);
 
-describe("출퇴근 토글의 퇴근 확인", () => {
-  it("퇴근은 확인을 받은 뒤에만 처리한다", async () => {
+describe("출근 표시는 서버 값을 따라간다", () => {
+  it("화면이 열려 있는 동안 다른 곳에서 출근했어도, 포커스를 받으면 서버 값으로 다시 맞춘다", async () => {
     render(<AttendanceToggle />);
-    const btn = await screen.findByRole("button", { name: "퇴근하기" });
-    confirm.mockResolvedValue(false);
-    fireEvent.click(btn);
-    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
-    expect(api.apiPost).not.toHaveBeenCalled();
-    confirm.mockResolvedValue(true);
-    fireEvent.click(btn);
-    await waitFor(() => expect(api.apiPost).toHaveBeenCalledWith("/api/attendance/clock-out"));
+    expect(await screen.findByText("출근 전")).toBeTruthy();
+    apiGet.mockResolvedValue(working);
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(await screen.findByText("근무중")).toBeTruthy();
   });
 
-  it("출근은 묻지 않고 바로 처리한다", async () => {
-    api.apiGet.mockResolvedValue(null);
+  it("다른 화면에서 출퇴근을 누르면 알림을 받아 바로 다시 읽는다", async () => {
     render(<AttendanceToggle />);
-    fireEvent.click(await screen.findByRole("button", { name: "출근하기" }));
-    await waitFor(() => expect(api.apiPost).toHaveBeenCalledWith("/api/attendance/clock-in"));
-    expect(confirm).not.toHaveBeenCalled();
+    await screen.findByText("출근 전");
+    apiGet.mockResolvedValue(working);
+    act(() => notifyAttendanceChanged());
+    expect(await screen.findByText("근무중")).toBeTruthy();
   });
 });
