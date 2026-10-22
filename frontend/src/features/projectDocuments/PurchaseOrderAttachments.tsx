@@ -1,5 +1,6 @@
 import { Download, Paperclip, X } from "lucide-react";
 import type { ChangeEvent } from "react";
+import { downloadFile } from "../../lib/api";
 import { openAttachment } from "../../lib/openAttachment";
 import { logError } from "../../lib/logger";
 import type { ProjectDocument } from "./types";
@@ -9,6 +10,8 @@ type Attachment = ProjectDocument["images"][number];
 export const PURCHASE_ORDER_ATTACH_ACCEPT = ".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt";
 
 interface PurchaseOrderAttachmentsProps {
+  /** 수정 중인 발주서 번호 (새로 쓰는 중이면 null). 이미 저장된 첨부를 내려받는 데 쓴다 */
+  docId: number | null;
   files: File[];
   existing: Attachment[];
   onFilesSelect: (e: ChangeEvent<HTMLInputElement>) => void;
@@ -17,7 +20,14 @@ interface PurchaseOrderAttachmentsProps {
 }
 
 /** 발주서 작성 화면의 "파일 첨부(선택)" 영역: 새로 고른 파일과(수정 시) 이미 첨부된 파일 목록 */
-export function PurchaseOrderAttachmentsSection({ files, existing, onFilesSelect, onRemoveFile, onRemoveExisting }: PurchaseOrderAttachmentsProps) {
+export function PurchaseOrderAttachmentsSection({ docId, files, existing, onFilesSelect, onRemoveFile, onRemoveExisting }: PurchaseOrderAttachmentsProps) {
+  async function saveExisting(a: Attachment) {
+    try {
+      await downloadFile(`/api/project-documents/${docId}/images/${a.id}`, a.filename);
+    } catch (err) {
+      logError("PurchaseOrderAttachments", `첨부 저장 실패: image_id=${a.id}`, err);
+    }
+  }
   return (
     <div className="border border-dashed border-border rounded-xl px-4 py-3">
       <div className="flex items-center justify-between">
@@ -36,9 +46,16 @@ export function PurchaseOrderAttachmentsSection({ files, existing, onFilesSelect
           {existing.map((a) => (
             <li key={`e-${a.id}`} className="flex items-center justify-between text-xs bg-bg rounded-lg px-2.5 py-1.5">
               <span className="truncate">{a.filename}</span>
-              <button type="button" onClick={() => onRemoveExisting(a.id)} className="text-text-muted hover:text-danger">
-                <X size={13} />
-              </button>
+              <span className="flex items-center gap-2 shrink-0 ml-2">
+                {docId !== null && (
+                  <button type="button" onClick={() => void saveExisting(a)} aria-label={`${a.filename} 저장`} title="내 PC에 저장" className="text-text-muted hover:text-primary">
+                    <Download size={13} />
+                  </button>
+                )}
+                <button type="button" onClick={() => onRemoveExisting(a.id)} aria-label={`${a.filename} 삭제`} className="text-text-muted hover:text-danger">
+                  <X size={13} />
+                </button>
+              </span>
             </li>
           ))}
           {files.map((f, idx) => (

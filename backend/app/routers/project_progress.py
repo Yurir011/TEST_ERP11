@@ -19,6 +19,7 @@ from app.schemas.project_progress import (
     ProgressStageCreate,
     ProgressStageOut,
     ProgressStageProgressUpdate,
+    ProgressStageReorder,
     ProgressStageScheduleUpdate,
     PurchaseStepOut,
     PurchaseStepRename,
@@ -94,6 +95,28 @@ def create_progress_stage(
     db.refresh(stage)
     logger.debug(f"[ProjectProgress] 진행 상황 단계 추가 완료: id={stage.id}, project_id={project_id}")
     return stage
+
+
+@router.put("/{project_id}/progress-stages/reorder", response_model=list[ProgressStageOut])
+def reorder_progress_stages(
+    project_id: int,
+    payload: ProgressStageReorder,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = _get_project_or_404(db, project_id)
+    stages = {s.id: s for s in project.progress_stages}
+    if len(payload.ids) != len(stages) or set(payload.ids) != set(stages):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="항목 목록이 바뀌었습니다. 화면을 새로 고친 뒤 다시 시도해 주세요.",
+        )
+    for order, stage_id in enumerate(payload.ids, start=1):
+        stages[stage_id].order_index = order
+    db.commit()
+    db.refresh(project)
+    logger.debug(f"[ProjectProgress] 진행 상황 항목 순서 변경: project_id={project_id}, ids={payload.ids}")
+    return project.progress_stages
 
 
 @router.delete("/{project_id}/progress-stages/{stage_id}", status_code=status.HTTP_204_NO_CONTENT)

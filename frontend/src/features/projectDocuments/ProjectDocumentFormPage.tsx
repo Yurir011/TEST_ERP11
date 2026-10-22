@@ -635,6 +635,7 @@ export function ProjectDocumentFormPage() {
 
         {docType === "purchase_order" && (
           <PurchaseOrderAttachmentsSection
+            docId={editId ? Number(editId) : null}
             files={attachFiles}
             existing={existingAttachments}
             onFilesSelect={handleAttachFilesSelect}

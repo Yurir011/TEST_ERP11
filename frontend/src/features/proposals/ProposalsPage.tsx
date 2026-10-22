@@ -1,5 +1,5 @@
-import { Check, FileSignature, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowDown, ArrowUp, Check, FileSignature, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet, downloadFile, openFile } from "../../lib/api";
@@ -8,6 +8,8 @@ import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { CLAMP_CELL, ClampText } from "../../components/ui/ClampText";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { ProposalDetailModal } from "./ProposalDetailModal";
+import { DEFAULT_PERIOD_MONTHS, PERIOD_MONTHS, SORT_LABELS, filterAndSortProposals, type ProposalSortKey, type SortDirection } from "./proposalList";
+import { formatProposalAmount } from "./purchaseFlow";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal } from "./types";
 import { useApprovalActions } from "../../lib/useApprovalActions";
 
@@ -34,6 +36,17 @@ export function ProposalsPage({
   const [detail, setDetail] = useState<Proposal | null>(null);
   const openTargetId = useOpenTarget(openId);
   const [openedTarget, setOpenedTarget] = useState(false);
+  // 목록 보기 조건: 기본은 최근 1개월, 최근 날짜 먼저
+  const [months, setMonths] = useState<number>(DEFAULT_PERIOD_MONTHS);
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<ProposalSortKey>("date");
+  const [direction, setDirection] = useState<SortDirection>("desc");
+  const shown = useMemo(() => (proposals ? filterAndSortProposals(proposals, { months, query, sortKey, direction }) : null), [proposals, months, query, sortKey, direction]);
+
+  function changeSortKey(key: ProposalSortKey) {
+    setSortKey(key);
+    setDirection(key === "vendor" ? "asc" : "desc"); // 업체명은 가나다순, 날짜·금액은 큰 것(최근)부터
+  }
 
   // 업무 알림(?open=품의서ID)으로 들어오면 목록을 받은 뒤 해당 품의서 상세를 한 번 연다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
   if (openTargetId !== null && !openedTarget && proposals !== null) {
@@ -187,12 +200,64 @@ export function ProposalsPage({
       )}
 
       {proposals !== null && proposals.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-3" role="search" aria-label="품의서 검색·정렬">
+          <select aria-label="조회 기간" value={months} onChange={(e) => setMonths(Number(e.target.value))} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary">
+            {PERIOD_MONTHS.map((m) => (
+              <option key={m} value={m}>
+                최근 {m}개월
+              </option>
+            ))}
+          </select>
+          <div className="relative flex-1 min-w-[12rem] max-w-sm">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="업체명 또는 품의명 검색"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="업체명 또는 품의명 검색"
+              className="w-full rounded-lg border border-border bg-surface pl-8 pr-3 py-1.5 text-sm outline-none focus:border-primary"
+            />
+          </div>
+          <div className="flex items-center gap-1 ml-auto">
+            <select aria-label="정렬 기준" value={sortKey} onChange={(e) => changeSortKey(e.target.value as ProposalSortKey)} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary">
+              {(Object.keys(SORT_LABELS) as ProposalSortKey[]).map((k) => (
+                <option key={k} value={k}>
+                  {SORT_LABELS[k]}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setDirection((d) => (d === "asc" ? "desc" : "asc"))}
+              aria-label={direction === "asc" ? "오름차순 (누르면 내림차순)" : "내림차순 (누르면 오름차순)"}
+              title={direction === "asc" ? "오름차순" : "내림차순"}
+              className="rounded-lg border border-border bg-surface p-2 text-text-muted hover:text-primary"
+            >
+              {direction === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+            </button>
+          </div>
+          <span className="w-full text-xs text-text-muted" aria-live="polite">
+            {shown?.length ?? 0}건 (전체 {proposals.length}건)
+          </span>
+        </div>
+      )}
+
+      {shown !== null && proposals !== null && proposals.length > 0 && shown.length === 0 && (
+        <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
+          <p className="text-sm text-text-muted">조건에 맞는 품의서가 없습니다. 기간을 늘리거나 검색어를 바꿔 보세요.</p>
+        </div>
+      )}
+
+      {shown !== null && shown.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-text-muted border-b border-border">
                 <th className="py-2.5 px-4 font-medium">문서번호</th>
-                <th className="py-2.5 px-4 font-medium w-[45%]">제목</th>
+                <th className="py-2.5 px-4 font-medium w-[35%]">제목</th>
+                <th className="py-2.5 px-4 font-medium">업체명</th>
+                <th className="py-2.5 px-4 font-medium text-right">금액</th>
                 <th className="py-2.5 px-4 font-medium">기안자</th>
                 <th className="py-2.5 px-4 font-medium">기안일자</th>
                 <th className="py-2.5 px-4 font-medium">상태</th>
@@ -200,7 +265,7 @@ export function ProposalsPage({
               </tr>
             </thead>
             <tbody>
-              {proposals.map((p) => {
+              {shown.map((p) => {
                 const currentStep = p.steps.find((s) => s.step_order === p.current_step);
                 return (
                   <tr
@@ -212,6 +277,8 @@ export function ProposalsPage({
                     <td className={`py-2.5 px-4 ${CLAMP_CELL}`}>
                       <ClampText>{`${docTitle(p)} · ${p.title}`}</ClampText>
                     </td>
+                    <td className="py-2.5 px-4">{p.vendor_name || "-"}</td>
+                    <td className="py-2.5 px-4 text-right tabular-nums whitespace-nowrap">{formatProposalAmount(p) ?? "-"}</td>
                     <td className="py-2.5 px-4">{p.creator_name}</td>
                     <td className="py-2.5 px-4">{p.issue_date}</td>
                     <td className="py-2.5 px-4">

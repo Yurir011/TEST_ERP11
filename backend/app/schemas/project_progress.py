@@ -18,6 +18,12 @@ class ProgressStageScheduleUpdate(BaseModel):
     end_date: date | None = None
 
 
+class ProgressStageReorder(BaseModel):
+    """화면에 보이는 순서대로 항목 번호를 모두 담는다"""
+
+    ids: list[int]
+
+
 class ProgressStageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

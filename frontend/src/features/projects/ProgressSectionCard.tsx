@@ -1,5 +1,6 @@
-import { ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { DateTextInput } from "../../components/ui/DateTextInput";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PercentPickerPopover } from "./PercentPickerPopover";
@@ -9,7 +10,7 @@ import { TIMELINE_LABEL_WIDTH, diffDays, formatMonthDay, parseDate, stageDayRang
 
 // 항목 이름 칸 + 간격 뒤부터 연필·삭제 버튼 앞까지가 날짜 그래프가 그려지는 영역이다 (주 눈금·오늘 선·바가 같은 영역을 기준으로 맞춘다).
 const TRACK_LEFT = `calc(${TIMELINE_LABEL_WIDTH} + 0.5rem)`;
-const TRACK_RIGHT = "40px";
+const TRACK_RIGHT = "60px";
 // 바가 이 비율보다 좁으면 진행율 글자를 오른쪽 정렬 대신 가운데에 둔다
 const MIN_INSIDE_LABEL_WIDTH = 0.09;
 import { useDialog } from "../../components/ui/dialog/useDialog";
@@ -84,6 +85,26 @@ export function ProgressSectionCard({
     } catch (err) {
       logError("ProjectProgress", "진행 상황 단계 일정 변경 실패", err);
       setError(err instanceof Error ? err.message : "일정 변경 중 오류가 발생했습니다.");
+    }
+  }
+
+  /** 항목을 위(-1)나 아래(+1)로 한 칸 옮긴다. 화면은 바로 바꾸고, 저장에 실패하면 서버 순서로 되돌린다 */
+  async function handleMove(index: number, step: -1 | 1) {
+    if (!stages) return;
+    const target = index + step;
+    if (target < 0 || target >= stages.length) return;
+    const next = [...stages];
+    [next[index], next[target]] = [next[target], next[index]];
+    logDebug("ProjectProgress", `진행 상황 항목 순서 변경 시도: id=${stages[index].id}, ${step < 0 ? "위로" : "아래로"}`);
+    setStagesState(next);
+    try {
+      const saved = await apiPut<ProgressStage[]>(`/api/projects/${project.id}/progress-stages/reorder`, { ids: next.map((s) => s.id) });
+      setStagesState(saved);
+      onStagesChange(saved);
+    } catch (err) {
+      logError("ProjectProgress", "진행 상황 항목 순서 변경 실패", err);
+      setError(err instanceof Error ? err.message : "순서를 바꾸지 못했습니다.");
+      loadStages();
     }
   }
 
@@ -259,6 +280,28 @@ export function ProgressSectionCard({
                     </div>
                   )}
 
+                  <div className="shrink-0 flex flex-col -my-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleMove(i, -1)}
+                      disabled={i === 0}
+                      aria-label={`${stage.name} 위로 이동`}
+                      title="위로"
+                      className="text-text-muted hover:text-primary disabled:opacity-25 disabled:hover:text-text-muted"
+                    >
+                      <ChevronUp size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleMove(i, 1)}
+                      disabled={i === stages.length - 1}
+                      aria-label={`${stage.name} 아래로 이동`}
+                      title="아래로"
+                      className="text-text-muted hover:text-primary disabled:opacity-25 disabled:hover:text-text-muted"
+                    >
+                      <ChevronDown size={12} />
+                    </button>
+                  </div>
                   <button
                     onClick={() => setEditingId(editingId === stage.id ? null : stage.id)}
                     className="shrink-0 text-text-muted hover:text-primary"
@@ -281,20 +324,16 @@ export function ProgressSectionCard({
           {editingStage && (
             <div className="mt-3 flex items-center gap-2 text-xs bg-bg border border-border rounded-lg px-3 py-2">
               <span className="text-text-muted shrink-0">{editingStage.name} 기간</span>
-              <input
-                type="date"
+              <DateTextInput
+                aria-label={`${editingStage.name} 시작일`}
                 value={editingStage.start_date ?? ""}
-                onChange={(e) => handleSetSchedule(editingStage, "start_date", e.target.value)}
-                onClick={(e) => e.currentTarget.showPicker?.()}
-                className="border border-border rounded-md px-1.5 py-1 bg-surface outline-none focus:border-primary cursor-pointer"
+                onCommit={(v) => void handleSetSchedule(editingStage, "start_date", v)}
               />
               <span className="text-text-muted">~</span>
-              <input
-                type="date"
+              <DateTextInput
+                aria-label={`${editingStage.name} 종료일`}
                 value={editingStage.end_date ?? ""}
-                onChange={(e) => handleSetSchedule(editingStage, "end_date", e.target.value)}
-                onClick={(e) => e.currentTarget.showPicker?.()}
-                className="border border-border rounded-md px-1.5 py-1 bg-surface outline-none focus:border-primary cursor-pointer"
+                onCommit={(v) => void handleSetSchedule(editingStage, "end_date", v)}
               />
               <button onClick={() => setEditingId(null)} className="ml-auto text-text-muted hover:text-text">
                 닫기

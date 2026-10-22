@@ -3,7 +3,7 @@ import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApprovalHistory } from "../../components/approval/ApprovalHistory";
 import { useAuth } from "../../context/useAuth";
-import { ApiError, apiDelete, apiPost, apiUpload } from "../../lib/api";
+import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { openAttachment } from "../../lib/openAttachment";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
@@ -167,6 +167,14 @@ export function ProposalDetailModal({
     }
   }
 
+  /** 열지 않고 항상 내려받아 저장한다 */
+  function handleSaveAttachment(attachment: ProposalAttachment) {
+    downloadFile(`/api/proposals/${proposal.id}/attachments/${attachment.id}/file`, attachment.label).catch((err) => {
+      logError("Proposals", "첨부파일 저장 실패", err);
+      setAttachmentError(err instanceof ApiError ? err.message : "파일을 저장하지 못했습니다.");
+    });
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
       <div className="bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -252,16 +260,31 @@ export function ProposalDetailModal({
                     <span className="truncate">{a.label}</span>
                     {a.kind === "link" && <ExternalLink size={11} className="text-text-muted shrink-0" />}
                   </button>
-                  {canManageAttachments && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteAttachment(a)}
-                      disabled={attachmentBusy}
-                      className="text-text-muted hover:text-danger shrink-0 disabled:opacity-50"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    {a.kind === "file" && (
+                      <button
+                        type="button"
+                        onClick={() => handleSaveAttachment(a)}
+                        aria-label={`${a.label} 저장`}
+                        title="내 PC에 저장"
+                        className="text-text-muted hover:text-primary"
+                      >
+                        <Download size={14} />
+                      </button>
+                    )}
+                    {canManageAttachments && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAttachment(a)}
+                        disabled={attachmentBusy}
+                        aria-label={`${a.label} 삭제`}
+                        title="삭제"
+                        className="text-text-muted hover:text-danger disabled:opacity-50"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
