@@ -27,11 +27,12 @@ export const PROPOSAL_TITLE_LABELS: Record<ProposalApproverTitle, string> = {
 export type ProposalAttachmentKind = "file" | "link";
 
 /** 구매 품의서에서 입고 후 등록해야 하는 서류 종류 (서버: ATTACHMENT_DOC_KINDS). 종류 없음(null)은 기타 서류. */
-export type AttachmentDocKind = "statement" | "tax_invoice";
+export type AttachmentDocKind = "statement" | "tax_invoice" | "invoice";
 
 export const ATTACHMENT_DOC_KIND_LABELS: Record<AttachmentDocKind, string> = {
   statement: "거래명세서",
   tax_invoice: "세금계산서",
+  invoice: "인보이스",
 };
 
 export interface ProposalAttachment {
@@ -52,6 +53,15 @@ export interface ProposalStep {
   approver_name: string;
   status: ProposalStepStatus;
   decided_at: string | null;
+}
+
+/** 품의서의 결제 내역 한 줄 (입출금관리의 출금과 같다) */
+export interface ProposalPayment {
+  id: number;
+  payment_date: string;
+  method: "deposit" | "card" | "cash" | "other" | string;
+  account: string | null; // 계좌 또는 카드 code
+  amount: number;
 }
 
 export interface Proposal {
@@ -82,6 +92,8 @@ export interface Proposal {
   payment_method?: "deposit" | "card" | null; // 발주 완료 때 확인한 결제 방법 (없으면 미입금)
   payment_card?: string | null; // 법인카드 code (카드·계좌 관리)
   payment_bank?: string | null; // 입금일 때 계좌 code
+  payable_total?: number | null; // 결제할 금액(부가세 포함). 발주 완료된 원화 품의서만 값이 있다
+  payments?: ProposalPayment[]; // 결제 내역(부분 결제 가능)
   received_at: string | null; // 구매 품의서: 입고 확인 시각
   created_at: string;
 }

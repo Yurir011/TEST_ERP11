@@ -20,6 +20,7 @@ describe("조회 기간", () => {
   it("오늘로부터 N개월 전 날짜를 구한다 (말일이 없는 달은 말일로)", () => {
     expect(periodStart(1, TODAY)).toBe("2026-09-22");
     expect(periodStart(12, TODAY)).toBe("2025-10-22");
+    expect(periodStart(0, TODAY)).toBe("");
     expect(periodStart(1, new Date(2026, 2, 31))).toBe("2026-02-28");
   });
 

@@ -3,14 +3,16 @@ import os
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, object_session
 
 from app.logging_config import get_logger
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
+from app.models.payment import Payment, PaymentMethod
 from app.models.proposal import DEPARTMENT_CODE, Proposal, ProposalStatus
 from app.models.user import JobTitle, User
-from app.schemas.proposal import ProposalAttachmentOut, ProposalOut, ProposalStepOut
+from app.schemas.proposal import ProposalAttachmentOut, ProposalOut, ProposalPaymentOut, ProposalStepOut
 from app.services.approval_notice import create_decision_notification, create_request_notification
+from app.services.purchase_ledger import payment_summary
 
 PREFIX = "/api/proposals"
 
@@ -58,7 +60,19 @@ def next_proposal_no(db: Session, issue_date: date) -> str:
     return doc_no
 
 
+def _payment_out(p: Payment) -> ProposalPaymentOut:
+    if p.method == PaymentMethod.bank_transfer:
+        method, account = "deposit", p.bank_type
+    elif p.method == PaymentMethod.corporate_card:
+        method, account = "card", p.card_type
+    else:
+        method, account = p.method.value, None
+    return ProposalPaymentOut(id=p.id, payment_date=p.payment_date, method=method, account=account, amount=p.amount)
+
+
 def _to_out(p: Proposal) -> ProposalOut:
+    session = object_session(p)
+    payable_total, payments = payment_summary(session, p) if session is not None else (None, [])
     return ProposalOut(
         id=p.id,
         doc_no=p.doc_no,
@@ -97,6 +111,8 @@ def _to_out(p: Proposal) -> ProposalOut:
         payment_method=p.payment_method,
         payment_card=p.payment_card,
         payment_bank=p.payment_bank,
+        payable_total=payable_total,
+        payments=[_payment_out(x) for x in payments],
         received_at=p.received_at,
         created_at=p.created_at,
     )

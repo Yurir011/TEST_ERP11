@@ -1,9 +1,9 @@
 import { ExternalLink, FileText, Paperclip, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { ApiError, downloadFile, openFile } from "../../lib/api";
+import { ApiError, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
-import { isViewableInBrowser } from "./ProposalAttachmentsModal";
+import { openAttachment as openAttachmentFile } from "../../lib/openAttachment";
 import { objectParticle } from "../../lib/korean";
 import { formatProposalAmount } from "./purchaseFlow";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal, type ProposalAttachment } from "./types";
@@ -39,8 +39,8 @@ export function ProposalReferencePanel({ proposal, onClose }: { proposal: Propos
       return;
     }
     const path = `/api/proposals/${proposal.id}/attachments/${a.id}/file`;
-    const run = isViewableInBrowser(a.label) ? openFile(path) : downloadFile(path, a.label);
-    run.catch((err) => {
+    // 사진·PDF 는 새 창, 엑셀 등 문서는 앱에서 PC 의 기본 프로그램으로 바로 연다 (웹 브라우저는 내려받기)
+    openAttachmentFile(path, a.label).catch((err) => {
       logError("ProposalReference", "첨부 열기 실패", err);
       setError(err instanceof ApiError ? err.message : "파일을 열지 못했습니다.");
     });

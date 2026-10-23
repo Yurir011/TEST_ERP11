@@ -2,7 +2,39 @@ import { toLocalISODate } from "../../lib/date";
 import type { ProgressStage, Project } from "./types";
 
 // ── 주차 기반 진행 타임라인 계산용 헬퍼 ──
-export const TIMELINE_LABEL_WIDTH = "6rem";
+const LABEL_MAX_PX = 240; // 이름 칸 최대 너비 (15rem)
+const LABEL_MIN_PX = 64;
+const LABEL_PAD_PX = 12; // 오른쪽 여백(pr-2) + 어림 오차
+const LABEL_FONT_PX = 12; // 기본 글씨 크기
+const LABEL_MIN_FONT_PX = 11; // 이보다 작게는 줄이지 않는다 (넘치면 줄바꿈)
+
+export interface LabelLayout {
+  widthPx: number;
+  fontPx: number;
+  wrap: boolean;
+}
+
+// 글자 폭 어림값: 한글·전각은 1em, 영문·숫자·기호는 0.6em
+function textEm(text: string): number {
+  let em = 0;
+  for (const ch of text) em += ch.charCodeAt(0) > 0x7f ? 1 : 0.6;
+  return em;
+}
+
+/**
+ * 진행상황 항목 이름 칸의 너비·글씨 크기를 정한다.
+ * 가장 긴 이름에 맞춰 칸을 줄이고(최대 15rem), 넘치면 글씨를 최소 11px 까지만 줄이며, 그래도 넘치면 줄바꿈한다.
+ */
+export function labelLayout(names: string[]): LabelLayout {
+  const maxEm = Math.max(0, ...names.map(textEm));
+  const room = LABEL_MAX_PX - LABEL_PAD_PX;
+  if (maxEm * LABEL_FONT_PX <= room) {
+    return { widthPx: Math.max(LABEL_MIN_PX, Math.ceil(maxEm * LABEL_FONT_PX) + LABEL_PAD_PX), fontPx: LABEL_FONT_PX, wrap: false };
+  }
+  const fitted = Math.floor((room / maxEm) * 2) / 2;
+  if (fitted >= LABEL_MIN_FONT_PX) return { widthPx: LABEL_MAX_PX, fontPx: fitted, wrap: false };
+  return { widthPx: LABEL_MAX_PX, fontPx: LABEL_MIN_FONT_PX, wrap: true };
+}
 
 export function parseDate(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00`);

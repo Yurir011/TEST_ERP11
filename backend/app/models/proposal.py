@@ -94,9 +94,9 @@ class Proposal(Base):
     )
 
 
-# 구매 품의서에서 입고 후 등록해야 하는 서류 종류. 카드의 "명세서·계산서" 배지가 이 값으로 등록 여부를 판단한다.
+# 구매 품의서에 올리는 서류 종류. 카드가 이 값으로 등록된 서류(명세서·계산서·인보이스)를 보여 준다. 입고 후 꼭 있어야 하는 것은 거래명세서·세금계산서이고 인보이스는 선택이다.
 # 종류가 없는 첨부(기존 첨부, 기타 서류)는 None 으로 둔다.
-ATTACHMENT_DOC_KINDS = ("statement", "tax_invoice")  # 거래명세서, 세금계산서
+ATTACHMENT_DOC_KINDS = ("statement", "tax_invoice", "invoice")  # 거래명세서, 세금계산서, 인보이스
 
 
 class ProposalAttachmentKind(str, enum.Enum):

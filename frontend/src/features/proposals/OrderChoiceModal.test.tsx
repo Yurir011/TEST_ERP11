@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetPaymentAccountsForTest } from "../payments/paymentAccounts";
 import { TEST_ACCOUNTS } from "../payments/testAccounts";
 import type { ProjectDocument } from "../projectDocuments/types";
+vi.mock("../../components/ui/dialog/useDialog", () => ({ useDialog: () => ({ confirm: vi.fn(), notify: vi.fn() }) }));
+
 import { OrderChoiceModal } from "./OrderChoiceModal";
 import type { Proposal } from "./types";
 
@@ -14,7 +16,7 @@ const proposal = { id: 1, title: "샘플 구매" } as unknown as Proposal;
 const order = { id: 10, issue_date: "2026-10-20", client_name: "한솔전자", status: "approved" } as unknown as ProjectDocument;
 
 function renderModal(over: Partial<Parameters<typeof OrderChoiceModal>[0]> = {}) {
-  const h = { onCreateOrder: vi.fn(), onOnlineDone: vi.fn(), onChangePayment: vi.fn(), onCancelOrder: vi.fn(), onOpenOrder: vi.fn(), onClose: vi.fn() };
+  const h = { onCreateOrder: vi.fn(), onOnlineDone: vi.fn(), onProposalChanged: vi.fn(), onCancelOrder: vi.fn(), onOpenOrder: vi.fn(), onClose: vi.fn() };
   render(<OrderChoiceModal proposal={proposal} orders={[]} onlineOrdered={false} orderDone={false} canManage busy={false} {...h} {...over} />);
   return h;
 }
@@ -51,13 +53,11 @@ describe("발주 방법 선택 팝업", () => {
     expect(h.onOnlineDone).toHaveBeenLastCalledWith({ payment_method: "card", payment_card: "bc", payment_bank: null });
   });
 
-  it("발주 완료된 건은 현재 결제 상태를 보여 주고 바꿀 수 있다", () => {
-    const done = { ...proposal, order_sent_at: "2026-10-21T01:00:00Z", payment_method: "deposit", payment_card: null } as unknown as Proposal;
-    const h = renderModal({ proposal: done, onlineOrdered: true, orderDone: true });
-    expect(screen.getByText("입금", { selector: "b" })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("법인카드"), { target: { value: "kb_kookmin" } });
-    fireEvent.click(screen.getByRole("button", { name: "결제 상태 저장" }));
-    expect(h.onChangePayment).toHaveBeenCalledWith({ payment_method: "card", payment_card: "kb_kookmin", payment_bank: null });
+  it("발주 완료된 건은 결제 내역 박스(부분 결제)를 보여 준다", () => {
+    const done = { ...proposal, order_sent_at: "2026-10-21T01:00:00Z", payable_total: 1100000, payments: [{ id: 5, payment_date: "2026-10-22", method: "deposit", account: "ibk", amount: 400000 }] } as unknown as Proposal;
+    renderModal({ proposal: done, onlineOrdered: true, orderDone: true });
+    expect(screen.getByRole("region", { name: "결제 내역" })).toBeTruthy();
+    expect(screen.getByText("부분 결제")).toBeTruthy();
   });
 
   it("이미 발주서가 있으면 발주 완료(발주서 없이)는 고를 수 없고 작성한 발주서를 열 수 있다", () => {

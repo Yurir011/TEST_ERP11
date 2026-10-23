@@ -79,7 +79,7 @@ describe("구매 품의서 진행 상태", () => {
     expect(computePurchaseFlow(proposal({ status: "approved", order_sent_at: "x" }), [order()]).onlineOrdered).toBe(false);
   });
 
-  const file = (id: number, doc_kind: "statement" | "tax_invoice" | null, kind: "file" | "link" = "file") =>
+  const file = (id: number, doc_kind: "statement" | "tax_invoice" | "invoice" | null, kind: "file" | "link" = "file") =>
     ({ id, kind, label: `서류${id}`, url: null, doc_kind, created_by: 1, created_at: "x" }) as Proposal["attachments"][number];
 
   it("거래명세서·세금계산서 등록 여부는 종류가 정해진 파일이 1장 이상 있는지로 판단하고, 기타·링크는 세지 않는다", () => {
@@ -89,6 +89,10 @@ describe("구매 품의서 진행 상태", () => {
     expect([one.statementRegistered, one.taxInvoiceRegistered]).toEqual([true, false]);
     const both = computePurchaseFlow(proposal({ status: "approved", attachments: [file(1, "statement"), file(2, "tax_invoice")] }), []);
     expect([both.statementRegistered, both.taxInvoiceRegistered]).toEqual([true, true]);
+    const inv = computePurchaseFlow(proposal({ status: "approved", attachments: [file(1, "invoice")] }), []);
+    expect([inv.statementRegistered, inv.taxInvoiceRegistered, inv.invoiceRegistered, inv.hasAttachments]).toEqual([false, false, true, true]);
+    expect(none.hasAttachments).toBe(true); // 기타 파일·링크도 첨부로 센다
+    expect(computePurchaseFlow(proposal({ status: "approved", attachments: [] }), []).hasAttachments).toBe(false);
   });
 
   it("입고가 끝났는데 서류가 빠졌을 때만 서류 부족으로 본다", () => {

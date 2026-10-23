@@ -10,9 +10,9 @@ from app.models.project_document import ProjectDocType, ProjectDocument, Project
 from app.models.proposal import PURCHASE_KIND, Proposal, ProposalStatus
 from app.models.user import User, is_admin_role
 from app.routers.proposals._common import PREFIX, _get_or_404, _to_out, logger
-from app.schemas.proposal import OrderFlowToggle, OrderPaymentIn, ProposalOut
+from app.schemas.proposal import OrderFlowToggle, OrderPaymentIn, ProposalOut, ProposalPaymentIn
 from app.services.payment_accounts import require_account
-from app.services.purchase_ledger import sync_purchase_transaction
+from app.services.purchase_ledger import add_purchase_payment, has_extra_payments, remove_purchase_payment, sync_purchase_transaction
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
 
@@ -70,6 +70,8 @@ def set_order_sent(
     else:
         if p.received_at is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입고 확인을 먼저 취소해야 합니다.")
+        if has_extra_payments(db, p):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결제 내역이 있어 발송 확인을 취소할 수 없습니다. 결제 내역을 먼저 삭제해 주세요.")
         p.order_sent_at = None
         p.order_sent_by = None
         _set_payment(db, p, None, None, None)
@@ -90,6 +92,32 @@ def set_order_payment(
     _set_payment(db, p, payload.payment_method, payload.payment_card, payload.payment_bank)
     logger.debug(f"[Proposals] 결제 상태 변경: id={proposal_id}, method={p.payment_method}, card={p.payment_card}, by={current_user.id}")
     sync_purchase_transaction(db, p, current_user)
+    db.commit()
+    return _to_out(_get_or_404(db, proposal_id))
+
+
+@router.post("/{proposal_id}/payments", response_model=ProposalOut, status_code=status.HTTP_201_CREATED)
+def add_payment(
+    proposal_id: int, payload: ProposalPaymentIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """결제 내역을 한 줄 추가한다 (부분 결제 가능). 입출금관리에 출금이 생기고, 잔액을 다 채우면 매입이 결제완료가 된다."""
+    p = _get_or_404(db, proposal_id)
+    _check_actor_and_kind(p, current_user)
+    if p.order_sent_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주 완료 후에 결제할 수 있습니다.")
+    logger.debug(f"[Proposals] 결제 추가 시도: id={proposal_id}, method={payload.payment_method}, amount={payload.amount}, by={current_user.id}")
+    add_purchase_payment(db, p, payload.payment_method, payload.account, payload.amount, current_user)
+    db.commit()
+    return _to_out(_get_or_404(db, proposal_id))
+
+
+@router.delete("/{proposal_id}/payments/{payment_id}", response_model=ProposalOut)
+def delete_payment(proposal_id: int, payment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """결제 내역 한 줄을 지운다. 입출금관리의 출금도 함께 지워지고 잔액이 되살아난다."""
+    p = _get_or_404(db, proposal_id)
+    _check_actor_and_kind(p, current_user)
+    logger.debug(f"[Proposals] 결제 삭제 시도: id={proposal_id}, payment_id={payment_id}, by={current_user.id}")
+    remove_purchase_payment(db, p, payment_id)
     db.commit()
     return _to_out(_get_or_404(db, proposal_id))
 

@@ -21,6 +21,7 @@ def _no_pdf(monkeypatch):
 EXPECTED_OPERATIONS = [
     ('DELETE', '/api/proposals/{proposal_id}', 'delete_proposal_api_proposals__proposal_id__delete', ['204', '422']),
     ('DELETE', '/api/proposals/{proposal_id}/attachments/{attachment_id}', 'delete_attachment_api_proposals__proposal_id__attachments__attachment_id__delete', ['200', '422']),
+    ('DELETE', '/api/proposals/{proposal_id}/payments/{payment_id}', 'delete_payment_api_proposals__proposal_id__payments__payment_id__delete', ['200', '422']),
     ('GET', '/api/proposals', 'list_proposals_api_proposals_get', ['200', '422']),
     ('GET', '/api/proposals/{proposal_id}/attachments/{attachment_id}/file', 'download_attachment_file_api_proposals__proposal_id__attachments__attachment_id__file_get', ['200', '422']),
     ('GET', '/api/proposals/{proposal_id}/excel', 'download_proposal_excel_api_proposals__proposal_id__excel_get', ['200', '422']),
@@ -28,6 +29,7 @@ EXPECTED_OPERATIONS = [
     ('POST', '/api/proposals', 'create_proposal_api_proposals_post', ['201', '422']),
     ('POST', '/api/proposals/{proposal_id}/attachments/file', 'upload_attachment_file_api_proposals__proposal_id__attachments_file_post', ['201', '422']),
     ('POST', '/api/proposals/{proposal_id}/attachments/link', 'add_attachment_link_api_proposals__proposal_id__attachments_link_post', ['201', '422']),
+    ('POST', '/api/proposals/{proposal_id}/payments', 'add_payment_api_proposals__proposal_id__payments_post', ['201', '422']),
     ('POST', '/api/proposals/{proposal_id}/request-delete', 'request_delete_proposal_api_proposals__proposal_id__request_delete_post', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}', 'update_proposal_api_proposals__proposal_id__put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/order-payment', 'set_order_payment_api_proposals__proposal_id__order_payment_put', ['200', '422']),
@@ -281,7 +283,7 @@ def test_pdf_download_falls_back_to_stored_file_when_regeneration_fails(client, 
 
 
 def test_attachment_doc_kind_upload_and_change(client, staff, auth_headers, tmp_path, monkeypatch):
-    """첨부 파일에 서류 종류(거래명세서·세금계산서)를 정해 올리고, 나중에 바꿀 수 있다."""
+    """첨부 파일에 서류 종류(거래명세서·세금계산서·인보이스)를 정해 올리고, 나중에 바꿀 수 있다."""
     from app.config import settings
 
     monkeypatch.setattr(settings, "proposal_attachments_dir", str(tmp_path / "att"))
@@ -301,6 +303,9 @@ def test_attachment_doc_kind_upload_and_change(client, staff, auth_headers, tmp_
     assert kinds == {"거래명세서.pdf": "statement", "기타.pdf": None, "기타2.pdf": None}
 
     assert upload("x.pdf", doc_kind="receipt").status_code == 400  # 알 수 없는 종류
+    invoice = upload("인보이스.pdf", doc_kind="invoice")  # 인보이스도 서류 종류로 저장된다
+    assert invoice.status_code == 201, invoice.text
+    assert {x["label"]: x["doc_kind"] for x in invoice.json()["attachments"]}["인보이스.pdf"] == "invoice"
 
     att_id = next(a["id"] for a in other.json()["attachments"] if a["label"] == "기타.pdf")
     changed = client.put(f"/api/proposals/{p['id']}/attachments/{att_id}/kind", json={"doc_kind": "tax_invoice"}, headers=h)
@@ -436,6 +441,60 @@ def test_order_with_card_or_deposit_creates_payment_and_settles(client, db, staf
     # 입금은 계좌, 법인카드는 카드를 골라야 한다
     assert client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "card"}).status_code == 400
     assert client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "deposit"}).status_code == 400
+
+
+def test_partial_payments_add_and_remove(client, db, staff, auth_headers):
+    """결제 내역을 나눠서 여러 번 추가하고(부분 결제), 잔액을 다 채우면 결제완료, 지우면 잔액이 되살아난다."""
+    h = auth_headers(staff["writer"])
+    p = _purchase(client, h)  # 공급가액 1,000,000 + 부가세 100,000 = 1,100,000
+    pid = p["id"]
+    # 발주 완료 전에는 결제할 수 없다
+    assert client.post(f"/api/proposals/{pid}/payments", headers=h, json={"payment_method": "deposit", "account": "ibk", "amount": 100}).status_code == 400
+    assert client.put(f"/api/proposals/{pid}/order-sent", headers=h, json={"value": True, "online": True}).status_code == 200
+
+    first = client.post(f"/api/proposals/{pid}/payments", headers=h, json={"payment_method": "deposit", "account": "ibk", "amount": 400000})
+    assert first.status_code == 201, first.text
+    body = first.json()
+    assert body["payable_total"] == 1100000
+    assert [(x["method"], x["account"], x["amount"]) for x in body["payments"]] == [("deposit", "ibk", 400000)]
+    (tx,) = _ledger(db, pid)
+    assert tx.settled is False and tx.paid_amount == 400000
+
+    # 잔액보다 큰 금액·0원·알 수 없는 계좌는 거절
+    assert client.post(f"/api/proposals/{pid}/payments", headers=h, json={"payment_method": "deposit", "account": "ibk", "amount": 700001}).status_code == 400
+    assert client.post(f"/api/proposals/{pid}/payments", headers=h, json={"payment_method": "deposit", "account": "ibk", "amount": 0}).status_code == 422
+    assert client.post(f"/api/proposals/{pid}/payments", headers=h, json={"payment_method": "card", "account": "없는카드", "amount": 1000}).status_code == 400
+    # 다른 직원은 결제할 수 없다
+    assert client.post(f"/api/proposals/{pid}/payments", headers=auth_headers(staff["other"]), json={"payment_method": "deposit", "account": "ibk", "amount": 1000}).status_code == 403
+
+    # 부분 결제가 남아 있으면 발송 확인을 취소할 수 없다
+    assert client.put(f"/api/proposals/{pid}/order-sent", headers=h, json={"value": False}).status_code == 400
+
+    # 나머지를 법인카드로 다 채우면 결제완료
+    second = client.post(f"/api/proposals/{pid}/payments", headers=h, json={"payment_method": "card", "account": "bc", "amount": 700000})
+    assert second.status_code == 201, second.text
+    assert sum(x["amount"] for x in second.json()["payments"]) == 1100000
+    db.expire_all()
+    (tx,) = _ledger(db, pid)
+    assert tx.settled is True
+    assert client.post(f"/api/proposals/{pid}/payments", headers=h, json={"payment_method": "card", "account": "bc", "amount": 1}).status_code == 400  # 이미 완납
+
+    # 완납 뒤에는 마지막 결제부터만 지울 수 있다
+    first_id, second_id = (x["id"] for x in second.json()["payments"])
+    assert client.delete(f"/api/proposals/{pid}/payments/{first_id}", headers=h).status_code == 400
+    deleted = client.delete(f"/api/proposals/{pid}/payments/{second_id}", headers=h)
+    assert deleted.status_code == 200, deleted.text
+    assert [x["amount"] for x in deleted.json()["payments"]] == [400000]
+    db.expire_all()
+    (tx,) = _ledger(db, pid)
+    assert tx.settled is False and tx.paid_amount == 400000
+    assert client.delete(f"/api/proposals/{pid}/payments/{first_id}", headers=h).status_code == 200
+    assert client.delete(f"/api/proposals/{pid}/payments/999999", headers=h).status_code == 404
+    db.expire_all()
+    (tx,) = _ledger(db, pid)
+    assert tx.paid_amount == 0 and tx.settled is False
+    # 결제 내역이 모두 지워지면 발송 확인을 다시 취소할 수 있다
+    assert client.put(f"/api/proposals/{pid}/order-sent", headers=h, json={"value": False}).status_code == 200
 
 
 def test_receive_asks_payment_and_applies_to_ledger(client, db, staff, auth_headers):

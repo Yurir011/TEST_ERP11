@@ -24,6 +24,7 @@ import { filterAndSortDocRows } from "./docListView";
 import { filterAndSortProposals } from "../proposals/proposalList";
 import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
 import { OrderChoiceModal } from "../proposals/OrderChoiceModal";
+import { PaymentBox } from "../proposals/PaymentBox";
 import type { OrderPayment } from "../proposals/PaymentPicker";
 import { ReceiveModal } from "../proposals/ReceiveModal";
 import { ProposalAttachmentsModal } from "../proposals/ProposalAttachmentsModal";
@@ -607,19 +608,13 @@ export function ProjectDocumentsPage({
     }
   }
 
-  // 발주 완료된 건의 결제 상태(입금 / 법인카드 / 외상) 변경 → 매입매출관리·입출금관리에도 반영된다
-  async function handleChangePayment(p: Proposal, payment: OrderPayment) {
-    logDebug("ProjectDocuments", `결제 상태 변경: proposal_id=${p.id}, 결제=${payment.payment_method ?? "외상"}`);
-    setBusyId(p.id);
-    try {
-      await apiPut(`/api/proposals/${p.id}/order-payment`, payment);
-      loadPurchaseCards();
-    } catch (err) {
-      logError("ProjectDocuments", "결제 상태 변경 실패", err);
-      notifyError(err instanceof ApiError ? err.message : "결제 상태를 바꾸지 못했습니다.");
-    } finally {
-      setBusyId(null);
-    }
+  // 발주 아이콘·발주 완료 칩: 발주서가 승인되어 발주 완료된 건은 발주서를 바로 열고, 그 밖에는 발주 방법 선택 창을 연다
+  function handleOrderClick(p: Proposal) {
+    const flow = computePurchaseFlow(p, purchaseOrders);
+    const order = flow.orderApproved ? flow.activeOrders.find((d) => d.status === "approved") : undefined;
+    logDebug("ProjectDocuments", `발주 클릭: proposal_id=${p.id}, 발주서=${order ? order.id : "없음"}`);
+    if (order) setDetailDoc(order);
+    else setOrderChoiceId(p.id);
   }
 
   const orderChoiceProposal = purchaseProposals.find((p) => p.id === orderChoiceId) ?? null;
@@ -648,7 +643,7 @@ export function ProjectDocumentsPage({
             canManage={!!user && (p.created_by === user.id || isAdminRole(user.role))}
             busy={busyId === p.id}
             onOpen={() => setProposalDetail(p)}
-            onOrder={() => setOrderChoiceId(p.id)}
+            onOrder={() => handleOrderClick(p)}
             onToggleSent={(sent) => handleToggleSent(p, sent)}
             onToggleReceived={(received) => handleToggleReceived(p, received)}
             onAttach={() => setAttachmentsId(p.id)}
@@ -1026,7 +1021,7 @@ export function ProjectDocumentsPage({
               navigate(`/project-documents/new?type=purchase_order&proposal=${target.id}`);
             }}
             onOnlineDone={(payment) => void handleOnlineOrderDone(target, payment)}
-            onChangePayment={(payment) => void handleChangePayment(target, payment)}
+            onProposalChanged={(updated) => setPurchaseProposals((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))}
             onCancelOrder={() => void handleCancelOrder(target)}
             onOpenOrder={(doc) => {
               setOrderChoiceId(null);
@@ -1131,6 +1126,18 @@ export function ProjectDocumentsPage({
             logDebug("ProjectDocuments", `${PROJECT_DOC_TYPE_LABELS[d.doc_type]} 수정 진입: doc_id=${d.id}, status=${d.status}`);
             navigate(`/project-documents/new?type=${d.doc_type}&edit=${d.id}`);
           }}
+          paymentSlot={(() => {
+            if (detailDoc.doc_type !== "purchase_order" || detailDoc.status !== "approved" || detailDoc.proposal_id === null) return null;
+            const owner = purchaseProposals.find((x) => x.id === detailDoc.proposal_id);
+            if (!owner || !owner.order_sent_at) return null;
+            return (
+              <PaymentBox
+                proposal={owner}
+                canManage={!!user && (owner.created_by === user.id || isAdminRole(user.role))}
+                onChanged={(updated) => setPurchaseProposals((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))}
+              />
+            );
+          })()}
         />
       )}
     </>

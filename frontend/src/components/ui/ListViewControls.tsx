@@ -98,7 +98,7 @@ export function ListViewControls({ view, shown, total, placeholder = "업체명,
           <select id="lv-period" aria-label="조회 기간" value={options.months} onChange={(e) => view.setMonths(Number(e.target.value))} className={box(options.months !== DEFAULT_PERIOD_MONTHS)}>
             {PERIOD_MONTHS.map((m) => (
               <option key={m} value={m}>
-                최근 {m}개월
+                {m === 0 ? "전체" : `최근 ${m}개월`}
               </option>
             ))}
           </select>

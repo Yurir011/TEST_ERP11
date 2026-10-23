@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { calcStageProgress, dateToWeek, diffDays, parseDate, stageDayRange, stageWeekRange, todayFraction, weekSummary } from "./timeline";
+import { calcStageProgress, dateToWeek, diffDays, labelLayout, parseDate, stageDayRange, stageWeekRange, todayFraction, weekSummary } from "./timeline";
 import type { ProgressStage, Project } from "./types";
 
 const stage = (over: Partial<ProgressStage>): ProgressStage => ({ id: 1, name: "단계", progress_percent: 0, start_date: null, end_date: null, ...over }) as ProgressStage;
@@ -91,5 +91,25 @@ describe("calcStageProgress (종합 진행률)", () => {
     expect(calcStageProgress([stage({ progress_percent: 30 }), stage({ progress_percent: 30 }), stage({ progress_percent: 40 })])).toBe(30); // 33.3 → 30
     expect(calcStageProgress([stage({ progress_percent: 20 }), stage({ progress_percent: 30 })])).toBe(30); // 25 → 30
     expect(calcStageProgress([stage({ progress_percent: 100 }), stage({ progress_percent: 0 })])).toBe(50);
+  });
+});
+
+describe("항목 이름 칸 레이아웃", () => {
+  it("짧은 이름이면 가장 긴 이름에 맞춰 줄이고 기본 글씨 크기를 쓴다", () => {
+    const r = labelLayout(["설계", "시제품 제작"]);
+    expect(r.fontPx).toBe(12);
+    expect(r.wrap).toBe(false);
+    expect(r.widthPx).toBeLessThan(240);
+  });
+  it("조금 넘치면 글씨만 줄이되 최소 11px 이상", () => {
+    const r = labelLayout(["가".repeat(20)]);
+    expect(r.widthPx).toBe(240);
+    expect(r.fontPx).toBeGreaterThanOrEqual(11);
+    expect(r.fontPx).toBeLessThan(12);
+    expect(r.wrap).toBe(false);
+  });
+  it("많이 넘치면 11px 로 두고 줄바꿈한다", () => {
+    const r = labelLayout(["가".repeat(40)]);
+    expect(r).toEqual({ widthPx: 240, fontPx: 11, wrap: true });
   });
 });

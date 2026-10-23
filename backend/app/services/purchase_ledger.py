@@ -19,9 +19,11 @@ from app.models.proposal import Proposal
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import User
 from app.services.money import line_amount, vat_amount
-from app.services.payment_accounts import display_name
+from app.services.payment_accounts import display_name, require_account
+from fastapi import HTTPException, status
+
 from app.services.settlement import apply_transaction_payment, undo_payment_effects
-from app.services.transaction_credit import credit_add, credit_remove
+from app.services.transaction_credit import credit_add, credit_remove, remaining_amount
 
 logger = get_logger("PurchaseLedger")
 
@@ -169,3 +171,89 @@ def sync_purchase_transaction(db: Session, p: Proposal, actor: User) -> Transact
 
     logger.debug(f"[PurchaseLedger] 매입 반영: proposal_id={p.id}, tx_id={tx.id}, total={tx.total_amount}, 결제={payment_note(db, p)}")
     return tx
+
+
+# ---------------------------------------------------------------------------------------------
+# 결제 내역(부분 결제): 발주 완료된 품의서의 매입에 출금을 여러 번 나눠 붙인다.
+# 결제는 입출금관리의 출금으로 만들어지고(부분 결제는 partial_transaction_id, 마지막 전액 결제는 settled_payment_id 로 매입에 연결),
+# 이 품의서의 결제 내역 = 그 매입에 연결된 출금 전부다. 별도 표는 두지 않는다.
+# ---------------------------------------------------------------------------------------------
+def purchase_transaction(db: Session, p: Proposal) -> Transaction | None:
+    return db.query(Transaction).filter(Transaction.proposal_id == p.id).first()
+
+
+def linked_payments(db: Session, tx: Transaction) -> list[Payment]:
+    """매입에 연결된 출금(부분 결제 + 전액 결제로 끝낸 마지막 한 건), 오래된 순."""
+    condition = Payment.partial_transaction_id == tx.id
+    if tx.settled_payment_id is not None:
+        condition = condition | (Payment.id == tx.settled_payment_id)
+    return db.query(Payment).filter(condition).order_by(Payment.payment_date, Payment.id).all()
+
+
+def payment_summary(db: Session, p: Proposal) -> tuple[int | None, list[Payment]]:
+    """(결제할 금액(부가세 포함), 결제 내역). 아직 매입이 없으면 (None, [])."""
+    if p.order_sent_at is None:
+        return None, []
+    tx = purchase_transaction(db, p)
+    if tx is None:
+        return None, []
+    return tx.total_amount, linked_payments(db, tx)
+
+
+def has_extra_payments(db: Session, p: Proposal) -> bool:
+    """자동 출금(품의서의 결제 방법으로 만든 것) 말고 따로 추가한 결제 내역이 있는가."""
+    tx = purchase_transaction(db, p)
+    return tx is not None and _manual_payments(db, tx, p.payment_id) > 0
+
+
+def add_purchase_payment(db: Session, p: Proposal, method: str, account: str | None, amount: int, actor: User) -> Payment:
+    """결제 내역을 한 줄 추가한다: amount 만큼 출금을 만들고 매입에 연결한다. 잔액을 다 채우면 매입이 결제완료가 된다."""
+    tx = purchase_transaction(db, p)
+    if tx is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주 완료 후에 결제할 수 있습니다. (원화 품의서만 결제 내역을 관리합니다.)")
+    remaining = remaining_amount(tx)
+    if tx.settled or remaining <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 결제가 끝났습니다.")
+    if amount <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결제 금액은 0보다 커야 합니다.")
+    if amount > remaining:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"잔액(₩{remaining:,})보다 큰 금액은 결제할 수 없습니다.")
+    require_account(db, "bank" if method == "deposit" else "card", account)
+    is_partial = amount < remaining
+    how = f"입금({display_name(db, 'bank', account)})" if method == "deposit" else f"법인카드({display_name(db, 'card', account)})"
+    payment = Payment(
+        type=PaymentType.withdrawal,
+        payment_date=date.today(),
+        category=LEDGER_CATEGORY,
+        description=f"{p.title} (구매 품의서 {p.doc_no})"[:300],
+        amount=amount,
+        method=PaymentMethod.bank_transfer if method == "deposit" else PaymentMethod.corporate_card,
+        client_id=tx.client_id,
+        memo=f"구매 품의서 No. {p.doc_no} · {how}",
+        bank_type=account if method == "deposit" else None,
+        card_type=account if method == "card" else None,
+        card_pending=False,
+        partial_transaction_id=tx.id if is_partial else None,
+        created_by=actor.id,
+    )
+    db.add(payment)
+    apply_transaction_payment(db, payment, tx, partial=is_partial)
+    logger.debug(f"[PurchaseLedger] 결제 내역 추가: proposal_id={p.id}, payment_id={payment.id}, amount={amount}, partial={is_partial}, by={actor.id}")
+    return payment
+
+
+def remove_purchase_payment(db: Session, p: Proposal, payment_id: int) -> None:
+    """결제 내역 한 줄을 지운다 (입출금관리의 출금도 함께 지워지고 매입의 잔액이 되살아난다). 완납된 건은 마지막 결제부터만 지울 수 있다."""
+    tx = purchase_transaction(db, p)
+    payment = next((x for x in linked_payments(db, tx) if x.id == payment_id), None) if tx is not None else None
+    if tx is None or payment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="결제 내역을 찾을 수 없습니다.")
+    undo_payment_effects(db, payment)  # 완납 뒤 중간 줄을 지우려 하면 400
+    if p.payment_id == payment.id:  # 품의서의 결제 방법으로 자동 만든 출금이면 그 표시도 비운다
+        p.payment_id = None
+        p.payment_method = None
+        p.payment_card = None
+        p.payment_bank = None
+    db.delete(payment)
+    db.flush()
+    logger.debug(f"[PurchaseLedger] 결제 내역 삭제: proposal_id={p.id}, payment_id={payment_id}")

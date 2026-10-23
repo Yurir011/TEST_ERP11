@@ -48,7 +48,7 @@ class ProposalLinkAttachmentIn(BaseModel):
 
 
 class AttachmentDocKindIn(BaseModel):
-    """첨부 파일의 서류 종류를 정하거나(statement / tax_invoice) 비운다(null = 기타)."""
+    """첨부 파일의 서류 종류를 정하거나(statement / tax_invoice / invoice) 비운다(null = 기타)."""
 
     doc_kind: str | None = None
 
@@ -60,7 +60,7 @@ class ProposalAttachmentOut(BaseModel):
     kind: ProposalAttachmentKind
     label: str
     url: str | None
-    doc_kind: str | None = None  # 서류 종류: statement(거래명세서) / tax_invoice(세금계산서) / None(기타)
+    doc_kind: str | None = None  # 서류 종류: statement(거래명세서) / tax_invoice(세금계산서) / invoice(인보이스) / None(기타)
     created_by: int
     created_at: datetime
 
@@ -82,6 +82,24 @@ class OrderPaymentIn(BaseModel):
     payment_method: Literal["deposit", "card"] | None = None
     payment_card: str | None = None  # 카드·계좌 관리의 카드 code
     payment_bank: str | None = None  # 카드·계좌 관리의 계좌 code
+
+
+class ProposalPaymentIn(BaseModel):
+    """결제 내역 한 줄 추가: 입금(계좌) 또는 법인카드(카드)로 amount 원."""
+
+    payment_method: Literal["deposit", "card"]
+    account: str  # 카드·계좌 관리의 계좌/카드 code
+    amount: int = Field(gt=0)
+
+
+class ProposalPaymentOut(BaseModel):
+    """품의서의 결제 내역 한 줄 (입출금관리의 출금과 같다)."""
+
+    id: int
+    payment_date: date
+    method: str  # deposit(계좌이체) / card(법인카드) / cash / other
+    account: str | None = None  # 계좌 또는 카드 code
+    amount: int
 
 
 class OrderFlowToggle(BaseModel):
@@ -125,5 +143,8 @@ class ProposalOut(BaseModel):
     payment_method: str | None = None
     payment_card: str | None = None
     payment_bank: str | None = None
+    # 결제 내역(부분 결제): 발주 완료된 원화 품의서만 값이 있다. payable_total 은 부가세 포함 결제할 금액
+    payable_total: int | None = None
+    payments: list[ProposalPaymentOut] = []
     received_at: datetime | None = None
     created_at: datetime

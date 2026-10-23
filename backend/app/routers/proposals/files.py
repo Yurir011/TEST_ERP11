@@ -49,11 +49,11 @@ def download_proposal_pdf(proposal_id: int, db: Session = Depends(get_db), curre
 
 
 def _normalize_doc_kind(value: str | None) -> str | None:
-    """서류 종류 값 검사: 거래명세서(statement)·세금계산서(tax_invoice)만 저장하고, 비었거나 "other"는 종류 없음(None)으로 둔다."""
+    """서류 종류 값 검사: 거래명세서(statement)·세금계산서(tax_invoice)·인보이스(invoice)만 저장하고, 비었거나 "other"는 종류 없음(None)으로 둔다."""
     if value is None or value.strip() in ("", "other"):
         return None
     if value not in ATTACHMENT_DOC_KINDS:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="서류 종류가 올바르지 않습니다. (거래명세서·세금계산서·기타)")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="서류 종류가 올바르지 않습니다. (거래명세서·세금계산서·인보이스·기타)")
     return value
 
 
@@ -171,7 +171,7 @@ def set_attachment_kind(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """이미 올린 첨부 파일의 서류 종류(거래명세서·세금계산서·기타)를 바꾼다. 작성자만, 파일 첨부에만 할 수 있다."""
+    """이미 올린 첨부 파일의 서류 종류(거래명세서·세금계산서·인보이스·기타)를 바꾼다. 작성자만, 파일 첨부에만 할 수 있다."""
     p = _get_or_404(db, proposal_id)
     if p.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 서류 종류를 바꿀 수 있습니다.")

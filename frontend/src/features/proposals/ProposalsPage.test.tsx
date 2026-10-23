@@ -49,11 +49,13 @@ describe("품의서 목록 검색·정렬", () => {
     renderPage();
     await screen.findByRole("table");
     const period = screen.getByLabelText("조회 기간") as HTMLSelectElement;
-    expect(Array.from(period.options).map((o) => o.textContent)).toEqual(["최근 1개월", "최근 2개월", "최근 3개월", "최근 6개월", "최근 12개월"]);
+    expect(Array.from(period.options).map((o) => o.textContent)).toEqual(["최근 1개월", "최근 2개월", "최근 3개월", "최근 6개월", "최근 12개월", "전체"]);
     fireEvent.change(period, { target: { value: "6" } });
     expect(titles()).toHaveLength(3); // 200일 전 것은 6개월(약 180일) 밖
     fireEvent.change(period, { target: { value: "12" } });
     expect(titles()).toHaveLength(4);
+    fireEvent.change(period, { target: { value: "0" } });
+    expect(titles().length).toBeGreaterThanOrEqual(4); // 전체: 기간 제한 없음
   });
 
   it("업체명 또는 품의명으로 검색하고, 맞는 게 없으면 안내한다", async () => {

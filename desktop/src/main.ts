@@ -171,7 +171,16 @@ function hardenWindow(w: BrowserWindow): void {
     }
     return { action: "deny" };
   });
-  wc.on("did-create-window", (child) => hardenWindow(child));
+  wc.on("did-create-window", (child) => {
+    hardenWindow(child);
+    // 첨부파일·PDF·이미지를 연 새 창은 Esc 로 닫는다 (메인 창은 닫지 않는다)
+    child.webContents.on("before-input-event", (event, input) => {
+      if (input.type !== "keyDown" || input.key !== "Escape") return;
+      event.preventDefault();
+      log.debug("[Main] Esc 로 새 창 닫기");
+      child.close();
+    });
+  });
 
   // 브라우저처럼 Ctrl + / Ctrl - / Ctrl 0 으로 화면 확대·축소 (모든 창에 같은 배율, 다음 실행에도 유지)
   wc.on("before-input-event", (event, input) => {

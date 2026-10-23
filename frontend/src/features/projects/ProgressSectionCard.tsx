@@ -6,10 +6,9 @@ import { logDebug, logError } from "../../lib/logger";
 import { PercentPickerPopover } from "./PercentPickerPopover";
 import { PROGRESS_ROW_STYLES, stageColorIndex } from "./progressRowStyles";
 import { MAX_PROGRESS_STAGES, type Project, type ProgressStage } from "./types";
-import { TIMELINE_LABEL_WIDTH, diffDays, formatMonthDay, parseDate, stageDayRange, todayFraction } from "./timeline";
+import { diffDays, formatMonthDay, labelLayout, parseDate, stageDayRange, todayFraction } from "./timeline";
 
 // 항목 이름 칸 + 간격 뒤부터 연필·삭제 버튼 앞까지가 날짜 그래프가 그려지는 영역이다 (주 눈금·오늘 선·바가 같은 영역을 기준으로 맞춘다).
-const TRACK_LEFT = `calc(${TIMELINE_LABEL_WIDTH} + 0.5rem)`;
 const TRACK_RIGHT = "60px";
 // 바가 이 비율보다 좁으면 진행율 글자를 오른쪽 정렬 대신 가운데에 둔다
 const MIN_INSIDE_LABEL_WIDTH = 0.09;
@@ -128,6 +127,8 @@ export function ProgressSectionCard({
   const weeks = hasSchedule ? Array.from({ length: totalWeeks }, (_, i) => i + 1) : [];
   const fraction = hasSchedule ? todayFraction(project.start_date!, totalWeeks) : null;
   const gridStyle = { gridTemplateColumns: `repeat(${totalWeeks}, minmax(0, 1fr))` };
+  const label = labelLayout((stages ?? []).map((s) => s.name));
+  const TRACK_LEFT = `calc(${label.widthPx}px + 0.5rem)`;
   const editingStage = stages?.find((s) => s.id === editingId) ?? null;
   // 색은 항목마다 정해져 있어 위아래로 옮겨도 항목을 따라간다 (만든 순서대로 색을 돌려 쓴다)
   const colorIndexOf = (id: number) => stageColorIndex(stages ?? [], id);
@@ -195,8 +196,8 @@ export function ProgressSectionCard({
                   <div
                     onClick={() => setEditingId(editingId === stage.id ? null : stage.id)}
                     title="클릭하여 기간 수정"
-                    style={{ width: TIMELINE_LABEL_WIDTH }}
-                    className="shrink-0 pr-2 text-xs font-medium truncate cursor-pointer hover:text-primary"
+                    style={{ width: label.widthPx, fontSize: label.fontPx }}
+                    className={`shrink-0 pr-2 font-medium cursor-pointer hover:text-primary ${label.wrap ? "break-all leading-tight" : "whitespace-nowrap"}`}
                   >
                     {stage.name}
                   </div>

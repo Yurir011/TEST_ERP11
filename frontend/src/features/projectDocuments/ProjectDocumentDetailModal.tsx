@@ -1,17 +1,25 @@
-import { ApprovalHistory } from "../../components/approval/ApprovalHistory";
+import { ApprovalNote, ApprovalStampBox } from "../../components/approval/ApprovalStamps";
 import { Check, Download, Eye, Mail, Pencil, Printer, Send, Sheet, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useAuth } from "../../context/useAuth";
+import { koreanNumber } from "../../lib/korean";
 import { lineAmount } from "../../lib/money";
 import { DocumentMailHistory } from "../mail/DocumentMailHistory";
 import { formatDocAmount, itemsSummary, itemsTotal } from "./documentHelpers";
 import { PurchaseOrderAttachments } from "./PurchaseOrderAttachments";
 import { TaxInvoiceImages } from "./TaxInvoiceImages";
 import {
-  PROJECT_DOC_STATUS_LABELS,
-  PROJECT_DOC_STATUS_STYLES,
   PROJECT_DOC_TYPE_LABELS,
+  type ProjectDocType,
   type ProjectDocument,
 } from "./types";
+
+// 문서 표: 품의서 상세와 같은 규칙 (라벨 칸은 연회색·가운데, 바깥 테두리는 진하게)
+const TABLE = "w-full border-collapse text-[13px] outline outline-1 -outline-offset-1 outline-[#b4b3b9]";
+const TH = "border border-border bg-bg px-3 py-3 text-center align-middle text-xs font-semibold text-text-muted whitespace-nowrap w-20";
+const TD = "border border-border px-3 py-3 align-top";
+const DATE_LABELS: Record<ProjectDocType, string> = { quotation: "견적일", statement: "거래일", purchase_order: "발주일", tax_invoice: "작성일" };
+const OWN_LABELS: Record<ProjectDocType, string> = { quotation: "공급자", statement: "공급자", purchase_order: "발주자", tax_invoice: "당사" };
 
 export function ProjectDocumentDetailModal({
   doc,
@@ -27,6 +35,7 @@ export function ProjectDocumentDetailModal({
   onPopbillView,
   onPopbillPdf,
   onEdit,
+  paymentSlot,
 }: {
   doc: ProjectDocument;
   isBusy: boolean;
@@ -41,6 +50,8 @@ export function ProjectDocumentDetailModal({
   onPopbillView: (doc: ProjectDocument) => void;
   onPopbillPdf: (doc: ProjectDocument) => void;
   onEdit: (doc: ProjectDocument) => void;
+  /** 아래 오른쪽에 놓을 영역 (발주서의 결제 내역) */
+  paymentSlot?: ReactNode;
 }) {
   const { user } = useAuth();
   const currentStep = doc.steps.find((st) => st.step_order === doc.current_step);
@@ -56,76 +67,121 @@ export function ProjectDocumentDetailModal({
     !doc.popbill_issued &&
     (doc.doc_type === "tax_invoice" || doc.set_id === null);
 
+  const historyInput = {
+    creatorName: doc.creator_name,
+    createdAt: doc.created_at,
+    summary: `${itemsSummary(doc)} · 합계 ${formatDocAmount(doc, itemsTotal(doc))}`,
+    steps: doc.steps,
+    currentStep: doc.current_step,
+    status: doc.status,
+    finalDecision: doc.is_final_decision,
+    rejectReason: doc.reject_reason,
+    deleteRequested: doc.delete_requested,
+    decidedAt: doc.reviewed_at,
+  };
+  const total = itemsTotal(doc);
+  const totalHangul = doc.currency === "KRW" ? koreanNumber(total) : null;
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-semibold">
-              {PROJECT_DOC_TYPE_LABELS[doc.doc_type]} · {doc.project_name}
-            </h3>
-            <p className="text-xs text-text-muted mt-1">
-              {doc.client_name} · {doc.issue_date}
-            </p>
+      <div className="relative bg-surface rounded-2xl p-6 pb-10 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+        <button onClick={onClose} aria-label="닫기" className="absolute right-4 top-4 text-text-muted hover:text-text">
+          <X size={20} />
+        </button>
+
+        {/* 인쇄된 문서 모양 (품의서 상세와 같은 틀): 왼쪽 위 문서번호·작성일자, 오른쪽 위 결재칸, 가운데 제목 */}
+        <div className="flex items-start justify-between gap-4 pr-8">
+          <div className="text-xs leading-relaxed text-text-muted">
+            {doc.doc_no && <p>No. {doc.doc_no}</p>}
+            <p>작성일자 {doc.issue_date}</p>
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-text">
-            <X size={18} />
-          </button>
+          <ApprovalStampBox {...historyInput} />
         </div>
 
-        <div className="flex items-center gap-2 mb-4">
-          <span
-            className={`text-xs px-2 py-1 font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
-          >
-            {PROJECT_DOC_STATUS_LABELS[doc.status]}
-          </span>
-          {doc.doc_type === "tax_invoice" && (
-            <span className="text-xs text-text-muted">· 작성목적: {doc.purpose_type}</span>
-          )}
+        <h3 className="my-4 text-center text-xl font-extrabold tracking-[0.3em]">{PROJECT_DOC_TYPE_LABELS[doc.doc_type]}</h3>
+
+        <div className="mb-3 empty:hidden">
+          <ApprovalNote {...historyInput} />
         </div>
 
-        {doc.manager_name && <p className="text-xs text-text-muted mb-2">담당자: {doc.manager_name}</p>}
-        {doc.remark && <p className="text-xs text-text-muted mb-2 whitespace-pre-wrap">REMARK: {doc.remark}</p>}
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <table className={TABLE}>
+            <tbody>
+              <tr>
+                <th scope="row" className={TH}>{doc.doc_type === "tax_invoice" ? "거래처" : "수신"}</th>
+                <td className={TD}>
+                  <b>{doc.client_name}</b>
+                  {doc.doc_type !== "tax_invoice" && " 귀하"}
+                </td>
+              </tr>
+              <tr>
+                <th scope="row" className={TH}>제목</th>
+                <td className={TD}>{doc.project_name}</td>
+              </tr>
+              <tr>
+                <th scope="row" className={TH}>{DATE_LABELS[doc.doc_type]}</th>
+                <td className={`${TD} tabular-nums`}>{doc.issue_date}</td>
+              </tr>
+            </tbody>
+          </table>
+          <table className={TABLE}>
+            <tbody>
+              <tr>
+                <th scope="row" className={TH}>{OWN_LABELS[doc.doc_type]}</th>
+                <td className={TD}>
+                  <b>BENCH</b>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row" className={TH}>담당자</th>
+                <td className={TD}>{doc.manager_name || "-"}</td>
+              </tr>
+              <tr>
+                <th scope="row" className={TH}>{doc.doc_type === "tax_invoice" ? "작성목적" : "작성자"}</th>
+                <td className={TD}>{doc.doc_type === "tax_invoice" ? doc.purpose_type : doc.creator_name}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        <div className="bg-bg rounded-xl overflow-hidden mb-4">
-          <table className="w-full text-xs">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-y border-[#b4b3b9] px-1 py-3">
+          <span className="text-xs font-semibold text-text-muted">합계금액</span>
+          {totalHangul && <span className="text-sm font-semibold">일금 {totalHangul} 원정</span>}
+          <span className="text-xl font-extrabold tabular-nums">{formatDocAmount(doc, total)}</span>
+        </div>
+
+        <div className="mb-12 overflow-x-auto">
+          <table className={`${TABLE} min-w-[32rem]`}>
             <thead>
-              <tr className="text-left text-text-muted border-b border-border">
-                <th className="py-2 px-3 font-medium">내용</th>
-                <th className="py-2 px-3 font-medium text-right">수량</th>
-                <th className="py-2 px-3 font-medium text-right">단가</th>
-                <th className="py-2 px-3 font-medium text-right">금액</th>
-                <th className="py-2 px-3 font-medium">비고</th>
+              <tr>
+                <th className={`${TH} !w-11`}>No</th>
+                <th className={TH}>내용</th>
+                <th className={`${TH} text-right`}>수량</th>
+                <th className={`${TH} text-right`}>단가</th>
+                <th className={`${TH} text-right`}>금액</th>
+                <th className={TH}>비고</th>
               </tr>
             </thead>
             <tbody>
-              {doc.items.map((item) => (
-                <tr key={item.id} className="border-b border-border last:border-0">
-                  <td className="py-2 px-3">{item.content}</td>
-                  <td className="py-2 px-3 text-right">{item.quantity.toLocaleString()}</td>
-                  <td className="py-2 px-3 text-right">{formatDocAmount(doc, item.unit_price)}</td>
-                  <td className="py-2 px-3 text-right">{formatDocAmount(doc, lineAmount(item.quantity, item.unit_price))}</td>
-                  <td className="py-2 px-3">{item.note ?? "-"}</td>
+              {doc.items.map((item, i) => (
+                <tr key={item.id}>
+                  <td className={`${TD} text-center tabular-nums`}>{i + 1}</td>
+                  <td className={TD}>{item.content}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{item.quantity.toLocaleString()}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{formatDocAmount(doc, item.unit_price)}</td>
+                  <td className={`${TD} text-right tabular-nums`}>{formatDocAmount(doc, lineAmount(item.quantity, item.unit_price))}</td>
+                  <td className={TD}>{item.note ?? "-"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        <p className="text-right text-sm font-semibold mb-4">합계 {formatDocAmount(doc, itemsTotal(doc))}</p>
-
-        <ApprovalHistory
-          creatorName={doc.creator_name}
-          createdAt={doc.created_at}
-          summary={`${itemsSummary(doc)} · 합계 ${formatDocAmount(doc, itemsTotal(doc))}`}
-          steps={doc.steps}
-          currentStep={doc.current_step}
-          status={doc.status}
-          finalDecision={doc.is_final_decision}
-          rejectReason={doc.reject_reason}
-          deleteRequested={doc.delete_requested}
-          decidedAt={doc.reviewed_at}
-        />
+        {doc.remark && (
+          <p className="mb-8 -mt-8 whitespace-pre-wrap text-xs text-text-muted">
+            <span className="font-semibold">REMARK</span> {doc.remark}
+          </p>
+        )}
 
         {doc.delete_requested && (
           <p className="text-xs text-danger bg-danger/10 rounded-lg px-3 py-2 mb-4">
@@ -198,30 +254,30 @@ export function ProjectDocumentDetailModal({
           </p>
         )}
 
-        {canDecide && (
-          <div className="flex items-center justify-end gap-2 mb-4 pb-4 border-b border-border">
-            <button
-              onClick={() => onReject(doc)}
-              disabled={isBusy}
-              className="flex items-center gap-1 text-xs text-danger border border-danger/30 rounded-lg px-3 py-2 hover:bg-red-50 disabled:opacity-50"
-            >
-              <X size={14} />
-              반려
-            </button>
-            <button
-              onClick={() => onApprove(doc)}
-              disabled={isBusy}
-              className="flex items-center gap-1 text-xs text-success border border-success/30 rounded-lg px-3 py-2 hover:bg-tile-green disabled:opacity-50"
-            >
-              <Check size={14} />
-              승인
-            </button>
-          </div>
-        )}
-
         <DocumentMailHistory docType="project_document" docId={doc.id} />
 
-        <div className="flex items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          {canDecide && (
+            <>
+              <button
+                onClick={() => onApprove(doc)}
+                disabled={isBusy}
+                className="flex items-center gap-1.5 text-xs text-success border border-success/30 rounded-lg px-3 py-2 hover:bg-success/10 disabled:opacity-50"
+              >
+                <Check size={14} />
+                승인
+              </button>
+              <button
+                onClick={() => onReject(doc)}
+                disabled={isBusy}
+                className="flex items-center gap-1.5 text-xs text-danger border border-danger/30 rounded-lg px-3 py-2 hover:bg-danger/10 disabled:opacity-50"
+              >
+                <X size={14} />
+                반려
+              </button>
+            </>
+          )}
           <button
             onClick={() => onDownload(doc)}
             disabled={!approved || isBusy}
@@ -258,6 +314,8 @@ export function ProjectDocumentDetailModal({
             <Mail size={14} />
             발송
           </button>
+        </div>
+        {paymentSlot && <div className="ml-auto w-full sm:w-[380px]">{paymentSlot}</div>}
         </div>
       </div>
     </div>

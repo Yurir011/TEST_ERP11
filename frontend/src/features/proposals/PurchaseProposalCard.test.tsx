@@ -79,7 +79,7 @@ describe("구매 품의서 카드", () => {
     expect(screen.getByText("10/22")).toBeTruthy();
   });
 
-  const docFile = (id: number, doc_kind: "statement" | "tax_invoice" | null) => ({ id, kind: "file" as const, label: `서류${id}.pdf`, url: null, doc_kind, created_by: 1, created_at: "x" });
+  const docFile = (id: number, doc_kind: "statement" | "tax_invoice" | "invoice" | null) => ({ id, kind: "file" as const, label: `서류${id}.pdf`, url: null, doc_kind, created_by: 1, created_at: "x" });
 
   it("복사 아이콘을 누르면 같은 내용으로 새 품의서를 쓰도록 요청한다", () => {
     const h = renderCard(proposal());
@@ -87,29 +87,39 @@ describe("구매 품의서 카드", () => {
     expect(h.onCopy).toHaveBeenCalledTimes(1);
   });
 
-  it("입고 전이라도 문서가 없으면 명세서·계산서 칩이 빨간색(미등록)이다", () => {
+  it("등록된 서류가 없으면 거래처명 옆에 서류 칩이 없고, 첨부 아래는 '없음'이다", () => {
     renderCard(proposal());
-    expect(screen.getByLabelText("명세서 미등록").className).toContain("text-danger");
-    expect(screen.getByLabelText("계산서 미등록").className).toContain("text-danger");
+    expect(screen.queryByLabelText(/등록됨/)).toBeNull();
+    expect(screen.queryByLabelText(/미등록/)).toBeNull(); // 빨간 미등록 칩은 더 이상 없다
+    expect(screen.getByText("없음")).toBeTruthy();
   });
 
-  it("입고 후에는 등록된 서류는 등록됨, 빠진 서류는 미등록으로 보인다", () => {
+  it("등록된 서류만 거래처명 옆에 칩으로 보이고, 첨부 아래는 '있음'이다", () => {
     renderCard(proposal({ order_sent_at: "2026-10-22T01:00:00Z", received_at: "2026-10-23T01:00:00Z", attachments: [docFile(1, "statement")] }));
-    expect(screen.getByLabelText("명세서 등록됨")).toBeTruthy();
-    expect(screen.getByLabelText("계산서 미등록")).toBeTruthy();
+    expect(screen.getByLabelText("거래명세서 등록됨").textContent).toBe("명세서");
+    expect(screen.queryByLabelText("세금계산서 등록됨")).toBeNull();
+    expect(screen.queryByLabelText("인보이스 등록됨")).toBeNull();
+    expect(screen.getByText("있음")).toBeTruthy();
   });
 
-  it("둘 다 등록되면 두 칩 모두 등록됨이다", () => {
-    renderCard(proposal({ order_sent_at: "x", received_at: "y", attachments: [docFile(1, "statement"), docFile(2, "tax_invoice")] }));
-    expect(screen.getByLabelText("명세서 등록됨")).toBeTruthy();
-    expect(screen.getByLabelText("계산서 등록됨")).toBeTruthy();
+  it("명세서·계산서·인보이스가 모두 있으면 세 칩이 모두 보인다", () => {
+    renderCard(proposal({ order_sent_at: "x", received_at: "y", attachments: [docFile(1, "statement"), docFile(2, "tax_invoice"), docFile(3, "invoice")] }));
+    expect(screen.getByLabelText("거래명세서 등록됨").textContent).toBe("명세서");
+    expect(screen.getByLabelText("세금계산서 등록됨").textContent).toBe("계산서");
+    expect(screen.getByLabelText("인보이스 등록됨").textContent).toBe("인보이스");
   });
 
-  it("종류를 정하지 않은 기타 파일은 서류로 세지 않는다 (파일 수는 첨부 아이콘 안내에 나온다)", () => {
+  it("종류를 정하지 않은 기타 파일은 서류 칩으로 세지 않지만 첨부는 '있음'이다 (파일 수는 첨부 아이콘 안내에 나온다)", () => {
     renderCard(proposal({ order_sent_at: "x", received_at: "y", attachments: [docFile(1, null)] }));
-    expect(screen.getByLabelText("명세서 미등록")).toBeTruthy();
-    expect(screen.getByLabelText("계산서 미등록")).toBeTruthy();
+    expect(screen.queryByLabelText(/등록됨/)).toBeNull();
+    expect(screen.getByText("있음")).toBeTruthy();
     expect(screen.getByRole("button", { name: "첨부" }).getAttribute("title")).toContain("파일 1/7");
+  });
+
+  it("발주 완료 칩을 누르면 발주서를 보러 간다 (발주 아이콘과 같은 동작)", () => {
+    const h = renderCard(proposal({ order_sent_at: "2026-10-22T01:00:00Z" }), [order()]);
+    fireEvent.click(screen.getByRole("button", { name: "발주서 보기" }));
+    expect(h.onOrder).toHaveBeenCalledTimes(1);
   });
 
   it("작성자나 관리자가 아니면 발송·입고 확인을 할 수 없다", () => {

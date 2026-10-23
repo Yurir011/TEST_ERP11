@@ -3,7 +3,8 @@ import { FileText, ShoppingBag, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ProjectDocument } from "../projectDocuments/types";
 import { PROJECT_DOC_STATUS_LABELS } from "../projectDocuments/types";
-import { NO_PAYMENT, PaymentPicker, paymentFromProposal, paymentLabel, type OrderPayment } from "./PaymentPicker";
+import { NO_PAYMENT, PaymentPicker, paymentLabel, type OrderPayment } from "./PaymentPicker";
+import { PaymentBox } from "./PaymentBox";
 import type { Proposal } from "./types";
 
 interface OrderChoiceModalProps {
@@ -21,18 +22,17 @@ interface OrderChoiceModalProps {
   onOnlineDone: (payment: OrderPayment) => void;
   /** 발주 취소 (발송 확인·발주 완료를 되돌린다) */
   onCancelOrder: () => void;
-  /** 이미 발주 완료된 건의 결제 상태 변경 */
-  onChangePayment: (payment: OrderPayment) => void;
+  /** 결제 내역을 추가·삭제해서 품의서가 바뀌었다 */
+  onProposalChanged: (updated: Proposal) => void;
   onOpenOrder: (doc: ProjectDocument) => void;
   onClose: () => void;
 }
 
 /** 발주 버튼을 눌렀을 때: 발주서를 작성할지, 발주서 없이 "발주 완료"로 처리할지(온라인 주문 등) 고른다. */
-export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, canManage, busy, onCreateOrder, onOnlineDone, onChangePayment, onCancelOrder, onOpenOrder, onClose }: OrderChoiceModalProps) {
+export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, canManage, busy, onCreateOrder, onOnlineDone, onProposalChanged, onCancelOrder, onOpenOrder, onClose }: OrderChoiceModalProps) {
   usePaymentAccounts(); // 카드·계좌 이름이 로드되면 버튼 글자를 다시 그린다
   const [choosing, setChoosing] = useState(false);
   const [payment, setPayment] = useState<OrderPayment>(NO_PAYMENT);
-  const [editPayment, setEditPayment] = useState<OrderPayment>(() => paymentFromProposal(proposal));
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -122,23 +122,8 @@ export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, c
         </div>
 
         {orderDone && proposal.order_sent_at && (
-          <div className="mt-4 rounded-xl border border-border px-4 py-3">
-            <p className="mb-2 text-xs text-text-muted">
-              결제 상태: <b className="text-text">{paymentLabel(paymentFromProposal(proposal))}</b> (매입매출관리·입출금관리에 반영됩니다)
-            </p>
-            {canManage && (
-              <div className="flex flex-col gap-3">
-                <PaymentPicker value={editPayment} onChange={setEditPayment} />
-                <button
-                  type="button"
-                  onClick={() => onChangePayment(editPayment)}
-                  disabled={busy}
-                  className="self-end rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-bg disabled:opacity-50"
-                >
-                  결제 상태 저장
-                </button>
-              </div>
-            )}
+          <div className="mt-4">
+            <PaymentBox proposal={proposal} canManage={canManage} onChanged={onProposalChanged} />
           </div>
         )}
 

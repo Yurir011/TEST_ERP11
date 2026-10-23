@@ -171,14 +171,11 @@ function ProposalViewButton({ chips, onOpenProposal }: { chips: FlowChip[]; onOp
   );
 }
 
-/** 입고 후 등록해야 하는 서류(거래명세서·세금계산서) 한 장의 등록 여부 칩. 입고 전에는 회색, 입고 후에는 등록됨(초록)/미등록(빨강). */
-function DocChip({ name, registered }: { name: string; registered: boolean }) {
-  // 문서가 올라와 있으면 초록 ✓, 없으면 입고 전후와 상관없이 글자만 빨갛게 보인다.
-  const tone = registered ? "bg-tile-green text-tile-green-fg" : "bg-[#fef2f2] text-danger";
+/** 거래처명 옆에 보여 주는, 등록된 서류(명세서·계산서·인보이스) 칩. 등록된 서류만 나온다. */
+function DocChip({ name, full }: { name: string; full: string }) {
   return (
-    <span title={registered ? `${name} 등록됨` : `${name}이(가) 아직 등록되지 않았습니다`} aria-label={`${name} ${registered ? "등록됨" : "미등록"}`} className={`rounded-full px-2 py-px text-[11px] font-semibold whitespace-nowrap ${tone}`}>
+    <span title={`${full} 등록됨`} aria-label={`${full} 등록됨`} className="rounded-full px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap bg-tile-green text-tile-green-fg">
       {name}
-      {registered ? " ✓" : ""}
     </span>
   );
 }
@@ -384,7 +381,13 @@ export function PurchaseProposalCard({
           title={orderTitle}
           onClick={onOrder}
         >
-          <Badge chip={flow.orderLabel} />
+          {flow.orderDone ? (
+            <button type="button" onClick={onOrder} disabled={busy} title="눌러서 발주서 보기" aria-label="발주서 보기">
+              <Badge chip={flow.orderLabel} />
+            </button>
+          ) : (
+            <Badge chip={flow.orderLabel} />
+          )}
           {flow.canConfirmSent && (
             <button
               type="button"
@@ -435,10 +438,7 @@ export function PurchaseProposalCard({
           title={`거래명세서·세금계산서 등 관련 서류 올리기 (파일 ${fileCountOf(proposal)}/${MAX_PROPOSAL_FILES})`}
           onClick={onAttach}
         >
-          <div className="flex flex-col items-center gap-0.5">
-            <DocChip name="명세서" registered={flow.statementRegistered} />
-            <DocChip name="계산서" registered={flow.taxInvoiceRegistered} />
-          </div>
+          <Badge chip={flow.hasAttachments ? { label: "있음", tone: "green", title: "첨부된 파일이나 링크가 있습니다" } : { label: "없음", tone: "gray", title: "첨부된 파일이나 링크가 없습니다" }} />
         </FlowButton>
         <div className="w-px self-stretch bg-border mx-1.5" />
       </div>
@@ -450,6 +450,13 @@ export function PurchaseProposalCard({
           <p className="min-w-0 flex-1 text-sm font-medium truncate" title={summary?.client}>
             {summary?.client ?? "-"}
           </p>
+          {(flow.statementRegistered || flow.taxInvoiceRegistered || flow.invoiceRegistered) && (
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              {flow.statementRegistered && <DocChip name="명세서" full="거래명세서" />}
+              {flow.taxInvoiceRegistered && <DocChip name="계산서" full="세금계산서" />}
+              {flow.invoiceRegistered && <DocChip name="인보이스" full="인보이스" />}
+            </div>
+          )}
         </div>
         <div className="bg-bg rounded-lg px-2.5 py-1.5 flex items-center gap-3">
           <p className="w-12 shrink-0 text-[11px] text-text-muted">내용</p>

@@ -195,7 +195,7 @@ export function ProposalDetailModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="relative bg-surface rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+      <div className="relative bg-surface rounded-2xl p-6 pb-10 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
         <button onClick={onClose} aria-label="닫기" className="absolute right-4 top-4 text-text-muted hover:text-text">
           <X size={20} />
         </button>
@@ -215,7 +215,7 @@ export function ProposalDetailModal({
           <ApprovalNote {...historyInput} />
         </div>
 
-        <table className="mb-4 w-full border-collapse text-[13px] outline outline-1 -outline-offset-1 outline-[#b4b3b9]">
+        <table className="mb-12 w-full border-collapse text-[13px] outline outline-1 -outline-offset-1 outline-[#b4b3b9]">
           <tbody>
             <tr>
               <th scope="row" className={`${TH} !border-[#b4b3b9]`}>제목</th>
@@ -242,8 +242,8 @@ export function ProposalDetailModal({
               </>
             )}
             <tr>
-              <th scope="row" className={`${TH} !border-t-[#b4b3b9]`}>내용</th>
-              <td colSpan={3} className={`${TD} leading-relaxed !border-t-[#b4b3b9]`}>
+              <th scope="row" className={`${TH} !border-t-[#b4b3b9] !border-b-[#b4b3b9]`}>내용</th>
+              <td colSpan={3} className={`${TD} leading-relaxed !pb-14 !border-t-[#b4b3b9] !border-b-[#b4b3b9]`}>
                 <p>
                   1. 아래와 같이 {proposal.topic}
                   {objectParticle(proposal.topic)} 진행하고자 하오니 검토하여 승인해 주십시오.
@@ -252,8 +252,8 @@ export function ProposalDetailModal({
               </td>
             </tr>
             <tr>
-              <th scope="row" className={TH}>첨부</th>
-              <td colSpan={3} className={TD}>
+              <th scope="row" className={`${TH} !border-t-[#b4b3b9]`}>첨부</th>
+              <td colSpan={3} className={`${TD} !border-t-[#b4b3b9]`}>
                 {proposal.attachments.length === 0 && <p className="text-xs text-text-muted">첨부된 파일/링크가 없습니다.</p>}
                 {proposal.attachments.length > 0 && (
                   <ul className="space-y-1">
@@ -336,7 +336,7 @@ export function ProposalDetailModal({
         )}
         {actionError && <p className="text-xs text-danger mb-3">{actionError}</p>}
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap mt-4">
           {canEdit && (
             <button
               onClick={handleEdit}

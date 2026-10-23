@@ -194,6 +194,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
                 >
                   <option value="statement">거래명세서</option>
                   <option value="tax_invoice">세금계산서</option>
+                  <option value="invoice">인보이스</option>
                   <option value="other">기타</option>
                 </select>
               </label>
@@ -251,6 +252,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
                         <option value="">기타</option>
                         <option value="statement">거래명세서</option>
                         <option value="tax_invoice">세금계산서</option>
+                        <option value="invoice">인보이스</option>
                       </select>
                     ) : (
                       <span className="shrink-0 text-xs text-text-muted">{a.doc_kind ? ATTACHMENT_DOC_KIND_LABELS[a.doc_kind] : "기타"}</span>

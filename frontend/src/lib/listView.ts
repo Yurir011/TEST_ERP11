@@ -1,7 +1,7 @@
 /** 목록 화면 공통: 조회 기간 · 검색 · 정렬 (품의서·견적서·거래명세서 등 모든 결재 문서 목록이 같은 규칙을 쓴다) */
 
-/** 고를 수 있는 조회 기간 (개월). 기본은 1개월 */
-export const PERIOD_MONTHS = [1, 2, 3, 6, 12] as const;
+/** 고를 수 있는 조회 기간 (개월). 0 은 전체 기간. 기본은 1개월 */
+export const PERIOD_MONTHS = [1, 2, 3, 6, 12, 0] as const;
 export const DEFAULT_PERIOD_MONTHS = 1;
 
 export type SortKey = "date" | "vendor" | "amount";
@@ -31,8 +31,9 @@ export interface ListRowValues {
 const pad = (n: number) => String(n).padStart(2, "0");
 const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-/** 오늘로부터 months 개월 전 날짜 (YYYY-MM-DD). 말일이 없는 달이면 그 달 말일로 맞춘다 */
+/** 오늘로부터 months 개월 전 날짜 (YYYY-MM-DD). 말일이 없는 달이면 그 달 말일로 맞춘다. 0(전체)이면 ""(모든 날짜가 이 값 이상) */
 export function periodStart(months: number, today: Date = new Date()): string {
+  if (months <= 0) return "";
   const d = new Date(today.getFullYear(), today.getMonth() - months, 1);
   const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
   d.setDate(Math.min(today.getDate(), lastDay));
