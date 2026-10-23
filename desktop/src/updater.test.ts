@@ -190,6 +190,6 @@ describe("설치 파일 받기·검사", () => {
 
 describe("설치 프로그램 실행 인자", () => {
   it("조용히 설치하고 끝나면 앱을 다시 켠다", () => {
-    expect([...INSTALLER_ARGS]).toEqual(["/S", "--force-run"]);
+    expect([...INSTALLER_ARGS]).toEqual(["/S", "--force-run", "--updated"]);
   });
 });

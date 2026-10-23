@@ -50,7 +50,7 @@ interface Props {
 
 const SELECT = "h-8 rounded-lg border bg-surface px-2 text-[13px] font-semibold outline-none focus:border-primary";
 /** 기본값에서 바꾼 칸은 테두리를 파랗게 해서 걸려 있는 조건을 알아보게 한다 */
-const box = (changed: boolean) => `${SELECT} ${changed ? "border-primary" : "border-border"}`;
+const box = (changed: boolean) => `${SELECT} ${changed ? "border-primary" : "border-transparent"}`;
 const LABEL = "whitespace-nowrap text-xs text-text-muted";
 
 /** 조회 기간 · 검색 · 상태 · 정렬 패널 (모든 결재 문서 목록 공통). 라벨을 칸 옆에 두어 한 줄로 낮게 만든다 */
@@ -59,7 +59,7 @@ export function ListViewControls({ view, shown, total, placeholder = "업체명,
   const status = options.status ?? "";
   return (
     <div className="mb-4">
-      <div role="search" aria-label="문서 검색·정렬" className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl border border-[#c9dafc] bg-[#eef4ff] px-3 py-2 dark:border-border dark:bg-surface">
+      <div role="search" aria-label="문서 검색·정렬" className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl bg-[#efeff2] px-3 py-2">
         <div className="flex min-w-[11rem] flex-1 basis-56 items-center gap-1.5">
           <label htmlFor="lv-query" className={LABEL}>
             검색
@@ -74,7 +74,7 @@ export function ListViewControls({ view, shown, total, placeholder = "업체명,
               onChange={(e) => view.setQuery(e.target.value)}
               placeholder={placeholder}
               autoComplete="off"
-              className={`h-8 w-full rounded-lg border bg-surface pl-8 pr-2 text-[13px] outline-none focus:border-primary ${options.query ? "border-primary" : "border-[#c9dafc] dark:border-border"}`}
+              className={`h-8 w-full rounded-lg border bg-surface pl-8 pr-2 text-[13px] outline-none focus:border-primary ${options.query ? "border-primary" : "border-transparent"}`}
             />
           </div>
         </div>
@@ -136,7 +136,7 @@ export function ListViewControls({ view, shown, total, placeholder = "업체명,
         <button
           type="button"
           onClick={view.reset}
-          className="ml-auto inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#c9dafc] bg-surface px-3 text-xs font-bold text-primary hover:bg-primary/5 dark:border-border"
+          className="ml-auto inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-transparent bg-surface px-3 text-xs font-bold text-text-muted hover:text-text"
         >
           <RotateCcw size={13} aria-hidden="true" />
           필터 초기화

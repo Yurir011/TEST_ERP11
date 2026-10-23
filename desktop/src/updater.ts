@@ -109,8 +109,8 @@ function fail(part: string, error: string): DownloadResult {
   return { ok: false, error };
 }
 
-/** 설치 프로그램을 조용히(/S) 실행하고, 끝나면 앱을 다시 켜게(--force-run) 하는 명령 인자 */
-export const INSTALLER_ARGS = ["/S", "--force-run"] as const;
+/** 설치 프로그램을 조용히(/S) 실행하고, 끝나면 앱을 다시 켜게(--force-run) 하는 명령 인자. --updated 가 있어야 설치 프로그램이 새 앱을 "--updated" 로 켜 준다(이전 앱이 끝날 때까지 기다리고 창을 보여 줌) */
+export const INSTALLER_ARGS = ["/S", "--force-run", "--updated"] as const;
 
 export function describeUpdate(release: PublicRelease): string {
   return `${formatVersion(release.version)} (${Math.round(release.size / 1024 / 1024)}MB)`;
