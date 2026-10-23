@@ -5,9 +5,9 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { INSTALLER_ARGS, type PublicRelease, SETUP_NAME, checkForUpdate, downloadInstaller, parsePublicRelease } from "./updater";
+import { INSTALLER_ARGS, type PublicRelease, SETUP_NAME, checkForUpdate, cleanupUpdateDir, downloadInstaller, parsePublicRelease } from "./updater";
 
 const MB = 1024 * 1024;
 const FAKE_EXE = Buffer.concat([Buffer.from("MZ"), Buffer.alloc(2 * MB, 7)]);
@@ -191,5 +191,27 @@ describe("설치 파일 받기·검사", () => {
 describe("설치 프로그램 실행 인자", () => {
   it("조용히 설치하고 끝나면 앱을 다시 켠다", () => {
     expect([...INSTALLER_ARGS]).toEqual(["/S", "--force-run", "--updated"]);
+  });
+});
+
+describe("cleanupUpdateDir", () => {
+  it("폴더를 지우고 true, 없어도 true", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bench-cleanup-"));
+    fs.writeFileSync(path.join(dir, "a.exe"), "x");
+    expect(cleanupUpdateDir(dir)).toBe(true);
+    expect(fs.existsSync(dir)).toBe(false);
+    expect(cleanupUpdateDir(dir)).toBe(true);
+  });
+
+  it("파일이 잠겨 지우지 못해도 예외를 내지 않고 false 를 돌려준다 (시작이 끊기지 않게)", () => {
+    const spy = vi.spyOn(fs, "rmSync").mockImplementation(() => {
+      throw new Error("EBUSY: resource busy or locked");
+    });
+    try {
+      expect(() => cleanupUpdateDir("C:\temp\bench-update")).not.toThrow();
+      expect(cleanupUpdateDir("C:\temp\bench-update")).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

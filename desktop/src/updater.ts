@@ -109,6 +109,20 @@ function fail(part: string, error: string): DownloadResult {
   return { ok: false, error };
 }
 
+/**
+ * 지난번 업데이트에 쓴 설치 파일 폴더를 지운다. 업데이트 직후에는 설치 프로그램이 아직 끝나지 않아 파일이 잠겨 있을 수 있으므로,
+ * 지우지 못해도 예외를 내지 않고 false 를 돌려준다 (예외가 시작 과정을 끊으면 창이 없는 채로 앱이 떠 있게 된다).
+ */
+export function cleanupUpdateDir(dir: string, log: Logger = silentLogger): boolean {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+    return true;
+  } catch (err) {
+    log.warn(`[Update] 지난 설치 파일을 지우지 못했습니다 (나중에 다시 시도): ${(err as Error).message}`);
+    return false;
+  }
+}
+
 /** 설치 프로그램을 조용히(/S) 실행하고, 끝나면 앱을 다시 켜게(--force-run) 하는 명령 인자. --updated 가 있어야 설치 프로그램이 새 앱을 "--updated" 로 켜 준다(이전 앱이 끝날 때까지 기다리고 창을 보여 줌) */
 export const INSTALLER_ARGS = ["/S", "--force-run", "--updated"] as const;
 

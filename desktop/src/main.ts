@@ -30,7 +30,7 @@ import { MailSync } from "./mail/sync";
 import { loginMessage, performNfcLogin } from "./nfcLogin";
 import { serialPortProvider } from "./nfc/port";
 import { NfcReader, type NfcStatus } from "./nfc/reader";
-import { INSTALLER_ARGS, checkForUpdate, describeUpdate, downloadInstaller } from "./updater";
+import { INSTALLER_ARGS, checkForUpdate, cleanupUpdateDir, describeUpdate, downloadInstaller } from "./updater";
 import { DEFAULT_ZOOM, stepZoom, zoomKeyAction } from "./zoom";
 import { isVisibleOnAnyDisplay } from "./windowPlacement";
 import { type AppConfig, checkHealth, classifySender, decideWindowOpen, isAllowedNavigation, loadConfig, loadDefaultServer, normalizeServerUrl, saveConfig } from "./serverConfig";
@@ -1620,13 +1620,20 @@ function runApp(): void {
       if (preset) config = { ...config, serverUrl: preset };
     }
     registerIpc();
-    startMail();
+    try {
+      startMail();
+    } catch (err) {
+      log.error(`[Mail] 메일 기능을 시작하지 못했습니다 (나머지 기능은 계속 시작합니다): ${(err as Error).message}`);
+    }
     try {
       deviceKey = loadOrCreateDeviceKey(path.join(app.getPath("userData"), "device-key.json"), secretStore, getLogger("Device"));
     } catch (err) {
       log.error(`[Device] 기기 키를 준비하지 못했습니다: ${(err as Error).message}`);
     }
-    fs.rmSync(path.join(app.getPath("temp"), "bench-update"), { recursive: true, force: true }); // 지난번 업데이트에 쓴 설치 파일 정리
+    // 지난번 업데이트에 쓴 설치 파일 정리: 업데이트 직후에는 설치 프로그램이 아직 끝나지 않아 잠겨 있을 수 있다.
+    // 지우지 못해도 시작은 계속하고(예전에는 여기서 예외가 나 창이 없는 채로 앱만 떠 있었다), 잠시 뒤 다시 지운다.
+    const updateDir = path.join(app.getPath("temp"), "bench-update");
+    if (!cleanupUpdateDir(updateDir, log)) setTimeout(() => cleanupUpdateDir(updateDir, log), 60_000).unref();
     if (!SMOKE) await logoutIfNotCleanExit();
     win = createWindow();
     if (!SMOKE) createTray();
@@ -1646,5 +1653,10 @@ function runApp(): void {
       void refreshDevice();
       deviceTimer = setInterval(() => void refreshDevice(), 60_000);
     }
+  }).catch((err: Error) => {
+    // 시작 과정이 어디선가 끊겨도 창 없이 앱만 떠 있는 상태가 되지 않게 창을 띄운다
+    log.error(`[Main] 시작 중 오류: ${err.message}`);
+    if (!win || win.isDestroyed()) win = createWindow();
+    showWindow();
   });
 }
