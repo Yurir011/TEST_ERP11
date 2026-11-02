@@ -7,12 +7,12 @@ import type { Proposal } from "./types";
 interface ReceiveModalProps {
   proposal: Proposal;
   busy: boolean;
-  /** 입고 완료 처리: 대금 결제 여부(외상 / 입금 / 법인카드)를 함께 보낸다 */
+  /** 입고 완료 처리: 대금 결제 여부(외상 / 송금 / 법인카드)를 함께 보낸다 */
   onConfirm: (payment: OrderPayment) => void;
   onClose: () => void;
 }
 
-/** 입고 완료를 누르면 대금을 이미 결제했는지(입금·법인카드) 아직인지(외상) 한 번 확인한다. 결과는 매입매출관리·입출금관리에 반영된다. */
+/** 입고 완료를 누르면 대금을 이미 결제했는지(송금·법인카드) 아직인지(외상) 한 번 확인한다. 결과는 매입매출관리·입출금관리에 반영된다. */
 export function ReceiveModal({ proposal, busy, onConfirm, onClose }: ReceiveModalProps) {
   usePaymentAccounts(); // 카드·계좌 이름이 로드되면 버튼 글자를 다시 그린다
   const [payment, setPayment] = useState<OrderPayment>(() => paymentFromProposal(proposal));
@@ -49,7 +49,7 @@ export function ReceiveModal({ proposal, busy, onConfirm, onClose }: ReceiveModa
         <div className="rounded-xl border border-border bg-bg px-4 py-3 flex flex-col gap-3">
           <p className="text-sm font-medium">대금을 결제하셨나요?</p>
           <p className="text-xs text-text-muted">
-            이미 결제했다면 입금(계좌) 또는 법인카드를 선택해 주세요. 아무것도 선택하지 않으면 <b>외상</b>으로 처리됩니다. 결과는 매입매출관리와 입출금관리에 반영됩니다.
+            결제 방법을 선택해 주세요. 아직 결제하지 않았다면 <b>외상</b>으로 처리됩니다. 결과는 매입매출관리와 입출금관리에 반영됩니다.
           </p>
           <PaymentPicker value={payment} onChange={setPayment} />
         </div>

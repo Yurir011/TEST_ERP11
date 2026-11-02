@@ -33,22 +33,23 @@ describe("발주 방법 선택 팝업", () => {
     expect(h.onOnlineDone).toHaveBeenCalledWith({ payment_method: null, payment_card: null, payment_bank: null });
   });
 
-  it("발주 완료에서 입금이나 법인카드를 고르지 않으면 외상으로 처리한다", () => {
+  it("발주 완료에서 송금이나 법인카드를 고르지 않으면 외상으로 처리한다", () => {
     renderModal();
     fireEvent.click(screen.getByRole("button", { name: /^발주 완료/ }));
     expect(screen.getByText(/외상으로 처리됩니다/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /이 내용으로 처리 \(외상\)/ })).toBeTruthy();
   });
 
-  it("입금을 고르면 입금, 법인카드를 고르면 카드 종류와 함께 보내고 둘은 함께 고를 수 없다", () => {
+  it("송금을 고르면 송금, 법인카드를 고르면 카드 종류와 함께 보내고 둘은 함께 고를 수 없다", () => {
     const h = renderModal();
     fireEvent.click(screen.getByRole("button", { name: /^발주 완료/ }));
-    fireEvent.click(screen.getByLabelText("입금"));
-    fireEvent.click(screen.getByRole("button", { name: /이 내용으로 처리 \(입금 \(기업은행\)\)/ }));
+    fireEvent.click(screen.getByLabelText("송금"));
+    fireEvent.click(screen.getByRole("button", { name: /이 내용으로 처리 \(송금 \(기업은행\)\)/ }));
     expect(h.onOnlineDone).toHaveBeenLastCalledWith({ payment_method: "deposit", payment_card: null, payment_bank: "ibk" });
 
-    fireEvent.change(screen.getByLabelText("법인카드"), { target: { value: "bc" } });
-    expect((screen.getByLabelText("입금") as HTMLInputElement).checked).toBe(false); // 카드를 고르면 입금은 해제된다
+    fireEvent.click(screen.getByLabelText("법인카드"));
+    fireEvent.change(screen.getByLabelText("법인카드 종류"), { target: { value: "bc" } });
+    expect((screen.getByLabelText("송금") as HTMLInputElement).checked).toBe(false); // 카드를 고르면 송금은 해제된다
     fireEvent.click(screen.getByRole("button", { name: /이 내용으로 처리 \(법인카드/ }));
     expect(h.onOnlineDone).toHaveBeenLastCalledWith({ payment_method: "card", payment_card: "bc", payment_bank: null });
   });
@@ -92,12 +93,12 @@ describe("발주 방법 선택 팝업", () => {
     expect(h.onCreateOrder).toHaveBeenCalledTimes(1);
   });
 
-  it("이미 발주 완료로 처리했거나 권한이 없으면 발주 완료를 고를 수 없다", () => {
+  it("이미 발주 완료로 처리했으면 발주 완료를 고를 수 없고, 작성자가 아니어도 고를 수 있다", () => {
     renderModal({ onlineOrdered: true });
     expect((screen.getByRole("button", { name: /^발주 완료/ }) as HTMLButtonElement).disabled).toBe(true);
     cleanup();
     renderModal({ canManage: false });
-    expect((screen.getByRole("button", { name: /^발주 완료/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /^발주 완료/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("발주 완료된 건에는 발주 취소 버튼이 있고 누르면 취소를 요청한다", () => {

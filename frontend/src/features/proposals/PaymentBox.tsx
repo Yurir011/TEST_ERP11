@@ -12,7 +12,7 @@ const digitsOnly = (v: string) => v.replace(/[^0-9]/g, "");
 /** "2026-10-22" → "10-22" */
 const shortDate = (d: string) => d.slice(5, 10);
 
-const METHOD_LABELS: Record<string, string> = { deposit: "입금", card: "법인카드", cash: "현금", other: "기타" };
+const METHOD_LABELS: Record<string, string> = { deposit: "송금", card: "법인카드", cash: "현금", other: "기타" };
 
 /**
  * 발주 건의 결제 내역(부분 결제): 결제를 나눠서 여러 번 추가하고, 합계(부가세 포함)를 다 채우면 결제 완료가 된다.
@@ -58,7 +58,7 @@ export function PaymentBox({ proposal, canManage, onChanged }: { proposal: Propo
       return;
     }
     if (!selectedAccount) {
-      setError(method === "deposit" ? "입금 계좌를 골라 주세요. (카드·계좌 관리에서 추가)" : "법인카드를 골라 주세요. (카드·계좌 관리에서 추가)");
+      setError(method === "deposit" ? "송금 계좌를 골라 주세요. (카드·계좌 관리에서 추가)" : "법인카드를 골라 주세요. (카드·계좌 관리에서 추가)");
       return;
     }
     setError(null);
@@ -128,17 +128,24 @@ export function PaymentBox({ proposal, canManage, onChanged }: { proposal: Propo
 
       {canAdd && (
         <div className="grid grid-cols-2 gap-1.5">
-          <select aria-label="결제 방법" value={method} onChange={(e) => setMethod(e.target.value as "deposit" | "card")} className="min-w-0 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs outline-none focus:border-primary">
-            <option value="deposit">입금</option>
-            <option value="card">법인카드</option>
-          </select>
-          <select aria-label={method === "deposit" ? "입금 계좌" : "법인카드"} value={selectedAccount} onChange={(e) => setAccount(e.target.value)} className="min-w-0 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs outline-none focus:border-primary">
-            {options.map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.nickname}
-              </option>
+          <div className="col-span-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs" role="group" aria-label="결제 방법">
+            {(["deposit", "card"] as const).map((m) => (
+              <label key={m} className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={method === m} onChange={() => setMethod(m)} className="h-3.5 w-3.5 accent-primary" />
+                {METHOD_LABELS[m]}
+              </label>
             ))}
-          </select>
+          </div>
+          <label className="col-span-2 flex items-center gap-2 text-xs text-text-muted">
+            {method === "deposit" ? "계좌" : "카드"}
+            <select aria-label={method === "deposit" ? "송금 계좌" : "법인카드 종류"} value={selectedAccount} onChange={(e) => setAccount(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-text outline-none focus:border-primary">
+              {options.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.nickname}
+                </option>
+              ))}
+            </select>
+          </label>
           <input
             aria-label="결제 금액"
             inputMode="numeric"

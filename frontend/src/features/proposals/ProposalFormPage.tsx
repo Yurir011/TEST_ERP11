@@ -38,7 +38,7 @@ export function ProposalFormPage() {
 
   const [issueDate, setIssueDate] = useState(todayLabel());
   // 품의서 종류: 왼쪽 콤보박스(구매 / 일반) + 오른쪽 입력칸. 구매는 입력칸이 꺼지고, 일반은 종류 이름(예: 출장, 행사)을 적을 수 있다.
-  const [kindMode, setKindMode] = useState<"구매" | "일반">("일반");
+  const [kindMode, setKindMode] = useState<"구매" | "일반">("구매");
   const [kindText, setKindText] = useState("");
   const kind = kindMode === "구매" ? PURCHASE_KIND : kindText.trim(); // 서버에 저장하는 종류 (일반이고 비워 두면 빈 값 = 그냥 '품의서')
   function applyKind(value: string | null) {
@@ -51,7 +51,7 @@ export function ProposalFormPage() {
     }
   }
   const [title, setTitle] = useState("");
-  const [topic, setTopic] = useState("");
+  const [topic, setTopic] = useState(PURCHASE_KIND); // 기본 종류가 구매이므로 도입 문장 진행 내용도 "구매"로 채운다
   const [content, setContent] = useState("");
   const [vendorName, setVendorName] = useState("");
   // 속한 프로젝트 ("" = 일반: 프로젝트와 상관없는 구매, 예: 사무용품). 기본은 일반.

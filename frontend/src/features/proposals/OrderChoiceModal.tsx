@@ -45,14 +45,12 @@ export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, c
 
   const hasOrders = orders.length > 0;
   const createDisabled = busy || orderDone;
-  const onlineDisabled = busy || !canManage || hasOrders || onlineOrdered;
+  const onlineDisabled = busy || hasOrders || onlineOrdered;
   const onlineHint = hasOrders
     ? "이미 발주서가 작성되어 있습니다."
     : onlineOrdered
       ? "이미 발주 완료로 처리되었습니다."
-      : !canManage
-        ? "작성자 또는 관리자만 처리할 수 있습니다."
-        : "온라인 주문처럼 발주서 없이 주문·결제를 마친 경우에 선택합니다.";
+      : "온라인 주문처럼 발주서 없이 주문·결제를 마친 경우에 선택합니다.";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -109,7 +107,7 @@ export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, c
           </button>
           {choosing && !onlineDisabled && (
             <div className="-mt-1 rounded-xl border border-border bg-bg px-4 py-3 flex flex-col gap-3">
-              <p className="text-xs text-text-muted">결제 방법을 확인해 주세요. 아무것도 선택하지 않으면 외상으로 처리됩니다. (매입매출관리·입출금관리에 자동 반영)</p>
+              <p className="text-xs text-text-muted">결제 방법을 선택해 주세요. 아직 결제하지 않았다면 외상으로 처리됩니다. (매입매출관리·입출금관리에 자동 반영)</p>
               <PaymentPicker value={payment} onChange={setPayment} />
               <button
                 type="button"

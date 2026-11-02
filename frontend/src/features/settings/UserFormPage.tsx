@@ -118,173 +118,145 @@ export function UserFormPage() {
     }
   }
 
+  const inputCls = "w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg";
+  const labelCls = "block text-xs text-text-muted mb-1.5";
+  const gradeLabel = GRADE_OPTIONS.find((o) => o.value === grade)?.label ?? "";
+  const titleLabel = TITLE_OPTIONS.find((o) => o.value === title)?.label;
+
   return (
     <MainLayout title={isEdit ? "직원 정보 수정" : "새 직원 등록"}>
       {isLoading ? (
         <p className="text-sm text-text-muted">불러오는 중...</p>
       ) : (
-        <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-xl">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-text-muted mb-1.5">사번</label>
-              <input
-                disabled
-                value={employeeNo || "자동생성 중..."}
-                readOnly
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none bg-bg disabled:opacity-60"
-              />
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)] gap-4 max-w-4xl items-start">
+          {/* 입력한 이름·직급이 바로 보이는 프로필 카드 */}
+          <div className="bg-surface border border-border rounded-2xl p-5 flex flex-col items-center gap-1.5 text-center">
+            <div className="w-16 h-16 rounded-full bg-tile-blue text-tile-blue-fg grid place-items-center text-2xl font-bold">
+              {name.trim().charAt(0) || "?"}
             </div>
-            <div>
-              <label className="block text-xs text-text-muted mb-1.5">이메일 (로그인 ID)</label>
-              <input
-                required
-                type="email"
-                disabled={isEdit}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg disabled:opacity-60"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-text-muted mb-1.5">이름</label>
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-            />
-          </div>
-
-          {!isEdit && (
-            <div>
-              <label className="block text-xs text-text-muted mb-1.5">초기 비밀번호</label>
-              <input
-                required
-                type="text"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="4자 이상"
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-              />
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-text-muted mb-1.5">직급</label>
-              <select
-                value={grade}
-                onChange={(e) => setGrade(e.target.value as JobGrade)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-              >
-                {GRADE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-text-muted mb-1.5">입사일</label>
-              <input
-                type="date"
-                required
-                value={hireDate}
-                onChange={(e) => setHireDate(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-text-muted mb-1.5">생년월일</label>
-              <input
-                type="date"
-                value={birthDate}
-                onChange={(e) => setBirthDate(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-text-muted mb-1.5">주소</label>
-              <input
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-text-muted mb-1.5">직책</label>
-            <div className="flex gap-2">
-              {TITLE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.label}
-                  type="button"
-                  onClick={() => setTitle(opt.value)}
-                  className={`flex-1 rounded-lg border px-4 py-2.5 text-sm transition-colors ${
-                    title === opt.value
-                      ? "border-primary bg-tile-blue text-tile-blue-fg font-medium"
-                      : "border-border text-text-muted hover:bg-bg"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-text-muted mt-1.5">
-              대표로 지정하면 관리자 권한이, 그 외에는 일반직원 권한이 자동으로 부여됩니다.
+            <p className="text-base font-semibold mt-1.5 break-all">{name.trim() || "이름 미입력"}</p>
+            <p className="text-xs text-text-muted">
+              {gradeLabel}
+              {titleLabel && title ? ` · ${titleLabel}` : ""}
             </p>
+            <p className="text-xs text-text-muted">{employeeNo || "사번 생성 중..."}</p>
+            <p className="text-xs text-tile-green-fg mt-1">입사 {hireDate || "-"}</p>
           </div>
 
-          {title !== "ceo" && (
-            <div>
-              <label className="block text-xs text-text-muted mb-1.5">메뉴 열람 권한</label>
-              <div className="grid grid-cols-2 gap-2">
-                {MENU_PERMISSION_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer hover:bg-bg ${
-                      opt.sensitive ? "border-danger/40 text-danger font-medium" : "border-border"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={menuPermissions.includes(opt.value)}
-                      onChange={() => toggleMenuPermission(opt.value)}
-                      className={opt.sensitive ? "accent-danger" : "accent-primary"}
-                    />
-                    {opt.label}
-                  </label>
-                ))}
+          <div className="flex flex-col gap-4 min-w-0">
+            <section className="bg-surface border border-border rounded-2xl p-5">
+              <h2 className="text-sm font-semibold mb-3">계정 정보</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>사번</label>
+                  <input disabled value={employeeNo || "자동생성 중..."} readOnly className={`${inputCls} disabled:opacity-60`} />
+                </div>
+                <div>
+                  <label className={labelCls}>이메일 (로그인 ID)</label>
+                  <input required type="email" disabled={isEdit} value={email} onChange={(e) => setEmail(e.target.value)} className={`${inputCls} disabled:opacity-60`} />
+                </div>
+                <div>
+                  <label className={labelCls}>이름</label>
+                  <input required value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+                </div>
+                {!isEdit && (
+                  <div>
+                    <label className={labelCls}>초기 비밀번호</label>
+                    <input required type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="4자 이상" className={inputCls} />
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-text-muted mt-1.5">
-                체크한 메뉴만 사이드바에 표시되며 해당 화면에 접근할 수 있습니다. 기본값은 전부 비활성화입니다.
-              </p>
+            </section>
+
+            <section className="bg-surface border border-border rounded-2xl p-5">
+              <h2 className="text-sm font-semibold mb-3">인사 정보</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className={labelCls}>직급</label>
+                  <select value={grade} onChange={(e) => setGrade(e.target.value as JobGrade)} className={inputCls}>
+                    {GRADE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>입사일</label>
+                  <input type="date" required value={hireDate} onChange={(e) => setHireDate(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>생년월일</label>
+                  <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className={inputCls} />
+                </div>
+                <div className="sm:col-span-3">
+                  <label className={labelCls}>주소</label>
+                  <input value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls} />
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className={labelCls}>직책</label>
+                <div className="flex flex-wrap gap-2">
+                  {TITLE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => setTitle(opt.value)}
+                      className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${
+                        title === opt.value ? "border-primary bg-tile-blue text-tile-blue-fg font-medium" : "border-border text-text-muted hover:bg-bg"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-text-muted mt-1.5">대표로 지정하면 관리자 권한이, 그 외에는 일반직원 권한이 자동으로 부여됩니다.</p>
+              </div>
+            </section>
+
+            {title !== "ceo" && (
+              <section className="bg-surface border border-border rounded-2xl p-5">
+                <h2 className="text-sm font-semibold mb-3">메뉴 열람 권한</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {MENU_PERMISSION_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer hover:bg-bg ${
+                        opt.sensitive ? "border-danger/40 text-danger font-medium" : "border-border"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={menuPermissions.includes(opt.value)}
+                        onChange={() => toggleMenuPermission(opt.value)}
+                        className={opt.sensitive ? "accent-danger" : "accent-primary"}
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-text-muted mt-2">체크한 메뉴만 사이드바에 표시되며 해당 화면에 접근할 수 있습니다. 기본값은 전부 비활성화입니다.</p>
+              </section>
+            )}
+
+            {error && <p className="text-xs text-danger">{error}</p>}
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="rounded-lg border border-border text-sm text-text-muted px-5 py-2.5 hover:bg-bg transition-colors"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60"
+              >
+                {isSubmitting ? "저장 중..." : isEdit ? "저장" : "직원 등록"}
+              </button>
             </div>
-          )}
-
-          {error && <p className="text-xs text-danger">{error}</p>}
-
-          <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60"
-            >
-              {isSubmitting ? "저장 중..." : "저장"}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="rounded-lg border border-border text-sm text-text-muted px-5 py-2.5 hover:bg-bg transition-colors"
-            >
-              취소
-            </button>
           </div>
         </form>
       )}

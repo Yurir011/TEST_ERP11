@@ -20,22 +20,22 @@ function renderModal(over: Partial<Proposal> = {}) {
 describe("입고 완료 · 대금 결제 확인", () => {
   it("아무것도 고르지 않으면 외상으로 입고 완료 처리한다", () => {
     const h = renderModal();
-    expect(screen.getByText(/아무것도 선택하지 않으면/)).toBeTruthy();
+    expect(screen.getByText(/아직 결제하지 않았다면/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /입고 완료 \(외상\)/ }));
     expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: null, payment_card: null, payment_bank: null });
   });
 
-  it("입금을 고르면 계좌를 함께 보낸다", () => {
+  it("송금을 고르면 계좌를 함께 보낸다", () => {
     const h = renderModal();
-    fireEvent.click(screen.getByLabelText("입금"));
-    fireEvent.change(screen.getByLabelText("입금 계좌"), { target: { value: "woori" } });
-    fireEvent.click(screen.getByRole("button", { name: /입고 완료 \(입금 \(우리은행\)\)/ }));
+    fireEvent.click(screen.getByLabelText("송금"));
+    fireEvent.change(screen.getByLabelText("송금 계좌"), { target: { value: "woori" } });
+    fireEvent.click(screen.getByRole("button", { name: /입고 완료 \(송금 \(우리은행\)\)/ }));
     expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: "deposit", payment_card: null, payment_bank: "woori" });
   });
 
   it("발주 때 이미 결제한 건은 그 결제 상태가 미리 골라져 있다", () => {
     const h = renderModal({ payment_method: "card", payment_card: "bc" } as Partial<Proposal>);
-    expect((screen.getByLabelText("법인카드") as HTMLSelectElement).value).toBe("bc");
+    expect((screen.getByLabelText("법인카드 종류") as HTMLSelectElement).value).toBe("bc");
     fireEvent.click(screen.getByRole("button", { name: /입고 완료 \(법인카드 \(BC카드\)\)/ }));
     expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: "card", payment_card: "bc", payment_bank: null });
   });
