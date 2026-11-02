@@ -92,12 +92,14 @@ def test_order_needs_approved_purchase_proposal(client, staff, auth_headers):
     assert _order(client, h, pending["id"]).status_code == 400  # 아직 승인 전
 
 
-def test_only_author_or_admin_can_confirm(client, staff, auth_headers):
+def test_anyone_can_confirm_but_only_the_doer_can_cancel(client, staff, auth_headers):
     h = auth_headers(staff["writer"])
     p = _proposal(client, h)
     _order(client, h, p["id"])
-    assert client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True}, headers=auth_headers(staff["other"])).status_code == 403
-    assert client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True}, headers=auth_headers(staff["ceo"])).status_code == 200
+    url = f"/api/proposals/{p['id']}/order-sent"
+    assert client.put(url, json={"value": True}, headers=auth_headers(staff["other"])).status_code == 200  # 작성자가 아니어도 발송 확인
+    assert client.put(url, json={"value": False}, headers=h).status_code == 403  # 처리한 본인이 아니면 취소 불가 (작성자도)
+    assert client.put(url, json={"value": False}, headers=auth_headers(staff["other"])).status_code == 200
 
 
 def test_non_purchase_proposal_cannot_use_order_flow(client, staff, auth_headers):

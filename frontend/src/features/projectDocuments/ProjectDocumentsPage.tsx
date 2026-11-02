@@ -18,7 +18,8 @@ import { isAdminRole } from "../../lib/auth";
 import { getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
 import { canComposeDocumentMail, openDocumentMail } from "../mail/documentMail";
-import { ProposalsPage } from "../proposals/ProposalsPage";
+import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { ProposalsPage, type ProposalKindFilter } from "../proposals/ProposalsPage";
 import { ListViewControls, useListView } from "../../components/ui/ListViewControls";
 import { filterAndSortDocRows } from "./docListView";
 import { filterAndSortProposals } from "../proposals/proposalList";
@@ -108,6 +109,7 @@ export function ProjectDocumentsPage({
   const tabParam = searchParams.get("tab");
   const initialTab = lockedDocType ?? (isDocTab(tabParam) ? tabParam : "all");
   const [tab, setTab] = useState<DocTab>(initialTab);
+  const [kindFilter, setKindFilter] = useState<ProposalKindFilter>("all"); // 전체·품의서 화면의 구매/일반 구분 탭
   const [docs, setDocs] = useState<ProjectDocument[] | null>(null);
   const [pendingForMe, setPendingForMe] = useState<ProjectDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -625,7 +627,8 @@ export function ProjectDocumentsPage({
   const visiblePurchase = filterAndSortProposals(purchaseProposals, listView.options);
   const purchaseCards = purchaseProposals.length > 0 && (
     <div className="mb-6">
-      <h3 className="text-sm font-medium text-text-muted mb-2.5">
+      <h3 className="text-sm font-medium text-text-muted mb-2.5 flex items-center gap-2">
+        <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>구매</span>
         구매 품의 진행 ({visiblePurchase.length}
         {visiblePurchase.length !== purchaseProposals.length ? ` / 전체 ${purchaseProposals.length}` : ""})
       </h3>
@@ -641,6 +644,7 @@ export function ProjectDocumentsPage({
             proposal={p}
             orders={purchaseOrders}
             canManage={!!user && (p.created_by === user.id || isAdminRole(user.role))}
+            currentUserId={user?.id}
             busy={busyId === p.id}
             onOpen={() => setProposalDetail(p)}
             onOrder={() => handleOrderClick(p)}
@@ -831,28 +835,38 @@ export function ProjectDocumentsPage({
         </div>
       )}
 
-      {!lockedDocType && tab !== "proposal" && (
+      {!lockedDocType && tab !== "proposal" && tab !== "all" && (
         <ListViewControls
           view={listView}
-          shown={tab === "all" ? visiblePurchase.length : (listRows?.length ?? 0)}
-          total={tab === "all" ? purchaseProposals.length : (mergedRows?.length ?? 0)}
+          shown={listRows?.length ?? 0}
+          total={mergedRows?.length ?? 0}
           placeholder="업체명, 품의명, 프로젝트로 검색"
         />
       )}
 
-      {tab === "proposal" ? (
-        <ProposalsPage embedded excludeKind="구매" view={listView} leading={purchaseCards} extraShown={visiblePurchase.length} extraTotal={purchaseProposals.length} />
+      {tab === "proposal" || (tab === "all" && !lockedDocType) ? (
+        <>
+          <ProposalsPage
+            embedded
+            excludeKind="구매"
+            view={listView}
+            leading={purchaseCards}
+            extraShown={visiblePurchase.length}
+            extraTotal={purchaseProposals.length}
+            kindFilter={kindFilter}
+            onKindFilterChange={setKindFilter}
+          />
+          {tab === "all" && (
+            <div className="bg-surface border border-dashed border-border rounded-2xl p-6 text-center text-sm text-text-muted mt-6">
+              견적서·발주서·거래명세서 목록은 위의 구분을 누르면 나타납니다.
+            </div>
+          )}
+        </>
       ) : (
         <>
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
       {purchaseCards}
-
-      {tab === "all" && !lockedDocType && (
-        <div className="bg-surface border border-dashed border-border rounded-2xl p-6 text-center text-sm text-text-muted">
-          문서 목록은 위의 구분(품의서·견적서·발주서·거래명세서)을 누르면 나타납니다.
-        </div>
-      )}
 
       {lockedDocType === "tax_invoice" && docs !== null && docs.length > 0 && (
         <div ref={listTopRef} className="flex flex-wrap items-center gap-x-16 gap-y-3 mb-4 scroll-mt-4">
@@ -1014,6 +1028,7 @@ export function ProjectDocumentsPage({
             onlineOrdered={flow.onlineOrdered}
             orderDone={flow.orderDone}
             canManage={!!user && (target.created_by === user.id || isAdminRole(user.role))}
+            canCancelOrder={!!user && target.order_sent_by === user.id}
             busy={busyId === target.id}
             onCreateOrder={() => {
               logDebug("ProjectDocuments", `구매 품의서에서 발주서 작성: proposal_id=${target.id}`);

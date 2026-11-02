@@ -140,6 +140,7 @@ class ProposalOut(BaseModel):
     reject_reason: str | None
     delete_requested: bool = False
     order_sent_at: datetime | None = None
+    order_sent_by: int | None = None
     payment_method: str | None = None
     payment_card: str | None = None
     payment_bank: str | None = None
@@ -147,4 +148,5 @@ class ProposalOut(BaseModel):
     payable_total: int | None = None
     payments: list[ProposalPaymentOut] = []
     received_at: datetime | None = None
+    received_by: int | None = None
     created_at: datetime

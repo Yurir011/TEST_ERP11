@@ -16,6 +16,8 @@ interface OrderChoiceModalProps {
   /** 발주 단계가 끝남 (승인된 발주서가 있거나 온라인 주문으로 발주 완료 처리). 끝나면 발주서를 새로 작성할 수 없고 보기만 한다. */
   orderDone: boolean;
   canManage: boolean;
+  /** 발주 취소 가능 여부: 발주 완료 처리한 본인만 (생략하면 canManage 를 따른다) */
+  canCancelOrder?: boolean;
   busy: boolean;
   onCreateOrder: () => void;
   /** 발주 완료 처리 (온라인 주문 등). 고른 결제 방법을 함께 보낸다. */
@@ -29,7 +31,7 @@ interface OrderChoiceModalProps {
 }
 
 /** 발주 버튼을 눌렀을 때: 발주서를 작성할지, 발주서 없이 "발주 완료"로 처리할지(온라인 주문 등) 고른다. */
-export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, canManage, busy, onCreateOrder, onOnlineDone, onProposalChanged, onCancelOrder, onOpenOrder, onClose }: OrderChoiceModalProps) {
+export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, canManage, canCancelOrder = canManage, busy, onCreateOrder, onOnlineDone, onProposalChanged, onCancelOrder, onOpenOrder, onClose }: OrderChoiceModalProps) {
   usePaymentAccounts(); // 카드·계좌 이름이 로드되면 버튼 글자를 다시 그린다
   const [choosing, setChoosing] = useState(false);
   const [payment, setPayment] = useState<OrderPayment>(NO_PAYMENT);
@@ -135,7 +137,7 @@ export function OrderChoiceModal({ proposal, orders, onlineOrdered, orderDone, c
             <button
               type="button"
               onClick={onCancelOrder}
-              disabled={busy || !canManage || !!proposal.received_at}
+              disabled={busy || !canCancelOrder || !!proposal.received_at}
               className="shrink-0 rounded-lg border border-danger/40 px-3 py-1.5 text-sm font-medium text-danger hover:bg-[#fef2f2] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             >
               발주 취소

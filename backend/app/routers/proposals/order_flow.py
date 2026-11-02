@@ -32,10 +32,11 @@ def _set_payment(db: Session, p: Proposal, method: str | None, card: str | None,
     p.payment_bank = bank if method == "deposit" else None
 
 
-def _check_actor_and_kind(p: Proposal, current_user: User) -> None:
+def _check_actor_and_kind(p: Proposal, current_user: User, anyone: bool = False) -> None:
+    """anyone=True 면 작성자·관리자가 아니어도 처리할 수 있다 (발송 확인·입고 확인 버튼)."""
     if p.kind != PURCHASE_KIND:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="구매 품의서에서만 사용할 수 있습니다.")
-    if p.created_by != current_user.id and not is_admin_role(current_user.role):
+    if not anyone and p.created_by != current_user.id and not is_admin_role(current_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자 또는 관리자만 처리할 수 있습니다.")
     if p.status != ProposalStatus.approved or p.delete_requested:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 구매 품의서만 처리할 수 있습니다.")
@@ -48,7 +49,7 @@ def set_order_sent(
     """발주서를 거래처에 보냈음을 확인한다. 승인된 발주서가 1건 이상 있어야 하고(온라인 주문은 online=true 로 발주서 없이 발주 완료 처리),
     입고 확인 후에는 취소할 수 없다."""
     p = _get_or_404(db, proposal_id)
-    _check_actor_and_kind(p, current_user)
+    _check_actor_and_kind(p, current_user, anyone=True)
     logger.debug(f"[Proposals] 발송 확인 변경 시도: id={proposal_id}, sent={payload.value}, by={current_user.id}")
     if payload.value:
         approved_orders = (
@@ -68,6 +69,8 @@ def set_order_sent(
         if p.payment_method is None:
             _set_payment(db, p, payload.payment_method, payload.payment_card, payload.payment_bank)
     else:
+        if p.order_sent_by != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="발주 완료 처리한 본인만 취소할 수 있습니다.")
         if p.received_at is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입고 확인을 먼저 취소해야 합니다.")
         if has_extra_payments(db, p):
@@ -128,7 +131,7 @@ def set_received(
 ):
     """입고(물품 수령)를 확인한다. 발송 확인이 끝난 뒤에만 할 수 있다."""
     p = _get_or_404(db, proposal_id)
-    _check_actor_and_kind(p, current_user)
+    _check_actor_and_kind(p, current_user, anyone=True)
     logger.debug(f"[Proposals] 입고 확인 변경 시도: id={proposal_id}, received={payload.value}, by={current_user.id}")
     if payload.value:
         if p.order_sent_at is None:
@@ -139,6 +142,8 @@ def set_received(
             _set_payment(db, p, payload.payment_method, payload.payment_card, payload.payment_bank)
             sync_purchase_transaction(db, p, current_user)
     else:
+        if p.received_by != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="입고 처리한 본인만 취소할 수 있습니다.")
         p.received_at = None
         p.received_by = None
     db.commit()

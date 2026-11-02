@@ -37,7 +37,7 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
           <col style={{ width: "14%" }} />
           <col style={{ width: "10.5%" }} />
           <col style={{ width: "10%" }} />
-          <col style={{ width: "7.5rem" }} /> {/* 영수증·인쇄·엑셀·삭제 아이콘 4개가 겹치지 않게 고정 폭 */}
+          <col style={{ width: "8.5rem" }} /> {/* 영수증·인쇄·엑셀·삭제 아이콘 4개가 한 줄에 들어가는 고정 폭 */}
         </colgroup>
         <thead>
           <tr className="text-center text-text-muted border-b border-border">
@@ -109,7 +109,7 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
               </td>
               <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap border-r border-text/[0.07]">{formatCurrency(p.amount)}</td>
               <td className="py-2.5 px-2">
-                <div className="flex flex-wrap items-center justify-end gap-x-0.5">
+                <div className="flex flex-nowrap items-center justify-end gap-x-0.5">
                   {/* 영수증이 아직 없는 지출은 나중에 올릴 수 있다: 아이콘을 눌러 사진을 고르거나, 이 줄 위로 사진을 끌어다 놓는다 */}
                   {!p.has_receipt && p.type === "withdrawal" && (
                     <>

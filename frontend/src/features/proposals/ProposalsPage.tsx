@@ -14,6 +14,40 @@ import { formatProposalAmount } from "./purchaseFlow";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, PROPOSAL_TITLE_LABELS, type Proposal } from "./types";
 import { useApprovalActions } from "../../lib/useApprovalActions";
 
+export type ProposalKindFilter = "all" | "purchase" | "general";
+
+const KIND_TABS: { key: ProposalKindFilter; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "purchase", label: "구매" },
+  { key: "general", label: "일반" },
+];
+
+/** 구매 품의서(발주·입고까지 이어지는 종류)인지 일반 품의서인지 */
+function matchesKind(p: Proposal, kind: ProposalKindFilter): boolean {
+  return kind === "all" || (kind === "purchase" ? p.kind === "구매" : p.kind !== "구매");
+}
+
+/** 전체 · 구매 · 일반 구분 탭 (건수는 지금 조건과 상관없는 전체 건수) */
+export function ProposalKindTabs({ value, onChange, counts }: { value: ProposalKindFilter; onChange: (k: ProposalKindFilter) => void; counts: Record<ProposalKindFilter, number> }) {
+  return (
+    <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit mb-4" role="tablist" aria-label="품의서 구분">
+      {KIND_TABS.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          role="tab"
+          aria-selected={value === t.key}
+          onClick={() => onChange(t.key)}
+          className={`px-4 py-1.5 rounded-md text-sm transition-colors ${value === t.key ? "bg-bg font-medium text-text shadow-sm" : "text-text-muted hover:text-text"}`}
+        >
+          {t.label}
+          <span className="ml-1.5 text-xs opacity-70">{counts[t.key]}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function docTitle(p: Proposal): string {
   return p.kind ? `${p.kind}품의서` : "품의서";
 }
@@ -29,6 +63,8 @@ export function ProposalsPage({
   leading,
   extraShown = 0,
   extraTotal = 0,
+  kindFilter,
+  onKindFilterChange,
   openId,
   modalOnly = false,
   onDecided,
@@ -44,6 +80,9 @@ export function ProposalsPage({
   /** 패널의 건수에 더할, 표 밖에서 보여 주는 항목(구매 품의 카드)의 건수 */
   extraShown?: number;
   extraTotal?: number;
+  /** 구분 탭 (부모가 쥐고 있으면 그것을 쓰고, 없으면 스스로 쥔다) */
+  kindFilter?: ProposalKindFilter;
+  onKindFilterChange?: (kind: ProposalKindFilter) => void;
 } & OpenOverlayProps) {
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [pendingForMe, setPendingForMe] = useState<Proposal[]>([]);
@@ -54,7 +93,19 @@ export function ProposalsPage({
   const [openedTarget, setOpenedTarget] = useState(false);
   const ownView = useListView();
   const view = viewProp ?? ownView;
-  const shown = useMemo(() => (proposals ? filterAndSortProposals(proposals, view.options) : null), [proposals, view.options]);
+  const [ownKind, setOwnKind] = useState<ProposalKindFilter>("all");
+  const kind = kindFilter ?? ownKind;
+  const changeKind = (k: ProposalKindFilter) => {
+    logDebug("Proposals", `구분 탭 변경: ${k}`);
+    (onKindFilterChange ?? setOwnKind)(k);
+  };
+  // 표 밖의 카드(구매 품의 진행)는 일반 탭에서는 보이지 않는다
+  const showExtra = kind !== "general";
+  const kindRows = useMemo(() => (proposals ? proposals.filter((p) => matchesKind(p, kind)) : null), [proposals, kind]);
+  const shown = useMemo(() => (kindRows ? filterAndSortProposals(kindRows, view.options) : null), [kindRows, view.options]);
+  const purchaseTotal = (proposals?.filter((p) => p.kind === "구매").length ?? 0) + extraTotal;
+  const generalTotal = (proposals?.length ?? 0) - (proposals?.filter((p) => p.kind === "구매").length ?? 0);
+  const mixed = !excludeKind; // 표에 구매 품의서도 섞여 있으면 구분 열을 보여 준다
 
   // 업무 알림(?open=품의서ID)으로 들어오면 목록을 받은 뒤 해당 품의서 상세를 한 번 연다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
   if (openTargetId !== null && !openedTarget && proposals !== null) {
@@ -203,7 +254,7 @@ export function ProposalsPage({
 
       {error && <p className="text-sm text-danger mb-4">{error}</p>}
 
-      {proposals !== null && proposals.length === 0 && (
+      {proposals !== null && proposals.length === 0 && extraTotal === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <FileSignature className="mx-auto mb-2 text-text-muted" size={24} />
           <p className="text-sm text-text-muted">등록된 품의서가 없습니다.</p>
@@ -211,12 +262,24 @@ export function ProposalsPage({
       )}
 
       {proposals !== null && (proposals.length > 0 || extraTotal > 0) && (
-        <ListViewControls view={view} shown={(shown?.length ?? 0) + extraShown} total={proposals.length + extraTotal} />
+        <ListViewControls
+          view={view}
+          shown={(shown?.length ?? 0) + (showExtra ? extraShown : 0)}
+          total={(kindRows?.length ?? 0) + (showExtra ? extraTotal : 0)}
+        />
       )}
 
-      {leading}
+      {proposals !== null && (proposals.length > 0 || extraTotal > 0) && (
+        <ProposalKindTabs value={kind} onChange={changeKind} counts={{ all: proposals.length + extraTotal, purchase: purchaseTotal, general: generalTotal }} />
+      )}
 
-      {shown !== null && proposals !== null && proposals.length > 0 && shown.length === 0 && (
+      {showExtra && leading}
+
+      {kind === "all" && !mixed && extraTotal > 0 && shown !== null && shown.length > 0 && (
+        <h3 className="text-sm font-medium text-text-muted mb-2.5">일반 품의서 ({shown.length}{shown.length !== generalTotal ? ` / 전체 ${generalTotal}` : ""})</h3>
+      )}
+
+      {shown !== null && kindRows !== null && kindRows.length > 0 && shown.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <p className="text-sm text-text-muted">조건에 맞는 품의서가 없습니다. 기간을 늘리거나 검색어를 바꿔 보세요.</p>
         </div>
@@ -227,6 +290,7 @@ export function ProposalsPage({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-text-muted border-b border-border">
+                {mixed && <th className="py-2.5 px-4 font-medium">구분</th>}
                 <th className="py-2.5 px-4 font-medium">문서번호</th>
                 <th className="py-2.5 px-4 font-medium w-[35%]">제목</th>
                 <th className="py-2.5 px-4 font-medium">업체명</th>
@@ -246,6 +310,11 @@ export function ProposalsPage({
                     onClick={() => setDetail(p)}
                     className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
                   >
+                    {mixed && (
+                      <td className="py-2.5 px-4">
+                        <span className={`text-xs px-2 py-1 font-medium ${p.kind === "구매" ? SOFT_BADGE.orange : SOFT_BADGE.blue}`}>{p.kind === "구매" ? "구매" : "일반"}</span>
+                      </td>
+                    )}
                     <td className="py-2.5 px-4">{p.doc_no}</td>
                     <td className={`py-2.5 px-4 ${CLAMP_CELL}`}>
                       <ClampText>{`${docTitle(p)} · ${p.title}`}</ClampText>

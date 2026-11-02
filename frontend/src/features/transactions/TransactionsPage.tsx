@@ -11,7 +11,7 @@ import { TransactionDetailModal } from "./TransactionDetailModal";
 import { TransactionSettleModal } from "./TransactionSettleModal";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
-import { todayISO, toLocalISODate, toMonthValue } from "../../lib/date";
+import { toLocalISODate, toMonthValue } from "../../lib/date";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
 const TABS: { key: TransactionType | "all"; label: string }[] = [
@@ -20,17 +20,31 @@ const TABS: { key: TransactionType | "all"; label: string }[] = [
   { key: "purchase", label: "매입" },
 ];
 
-const PERIOD_PRESETS = [
-  { months: 1, label: "1개월" },
-  { months: 3, label: "3개월" },
-  { months: 6, label: "6개월" },
-  { months: 12, label: "12개월" },
+// 조회 기간 콤보박스: 전체(기간 제한 없음) / 이번 달 / 지난달 / 최근 3·6·12개월
+type PeriodKey = "all" | "this" | "last" | "3" | "6" | "12";
+const PERIOD_PRESETS: { key: PeriodKey; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "this", label: "이번 달" },
+  { key: "last", label: "지난달" },
+  { key: "3", label: "최근 3개월" },
+  { key: "6", label: "최근 6개월" },
+  { key: "12", label: "최근 12개월" },
 ];
+const DEFAULT_PERIOD: PeriodKey = "this";
 
-function monthsAgoISO(months: number) {
-  const d = new Date();
-  d.setMonth(d.getMonth() - months);
-  return toLocalISODate(d);
+/** 기간 선택에 맞는 조회 시작일·종료일. 전체는 둘 다 비워 기간 제한 없이 조회한다. */
+export function periodRange(key: PeriodKey, today: Date = new Date()): { start: string; end: string } {
+  if (key === "all") return { start: "", end: "" };
+  if (key === "this") return { start: toLocalISODate(new Date(today.getFullYear(), today.getMonth(), 1)), end: toLocalISODate(today) };
+  if (key === "last") {
+    return {
+      start: toLocalISODate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+      end: toLocalISODate(new Date(today.getFullYear(), today.getMonth(), 0)), // 지난달 말일
+    };
+  }
+  const d = new Date(today);
+  d.setMonth(d.getMonth() - Number(key));
+  return { start: toLocalISODate(d), end: toLocalISODate(today) };
 }
 
 export function TransactionsPage() {
@@ -41,9 +55,9 @@ export function TransactionsPage() {
   const [tab, setTab] = useState<TransactionType | "all">("all");
   const [statusTab, setStatusTab] = useState<"all" | "unsettled" | "settled">("all");
 
-  const [startDate, setStartDate] = useState(monthsAgoISO(1));
-  const [endDate, setEndDate] = useState(todayISO());
-  const [activePreset, setActivePreset] = useState<number | null>(1);
+  const [startDate, setStartDate] = useState(periodRange(DEFAULT_PERIOD).start);
+  const [endDate, setEndDate] = useState(periodRange(DEFAULT_PERIOD).end);
+  const [activePreset, setActivePreset] = useState<PeriodKey | null>(DEFAULT_PERIOD);
 
   const [transactions, setTransactions] = useState<Transaction[] | null>(null);
   const [showHometax, setShowHometax] = useState(false);
@@ -64,8 +78,8 @@ export function TransactionsPage() {
   const visibleTotal = (visible ?? []).reduce((sum, t) => sum + t.total_amount, 0);
 
   function loadTransactions() {
-    logDebug("Transactions", `목록 조회: ${startDate} ~ ${endDate}, type=${tab}`);
-    const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+    logDebug("Transactions", `목록 조회: ${startDate || "처음"} ~ ${endDate || "끝"}, type=${tab}`);
+    const params = dateParams();
     if (tab !== "all") params.set("type", tab);
     apiGet<Transaction[]>(`/api/transactions?${params.toString()}`)
       .then(setTransactions)
@@ -73,6 +87,14 @@ export function TransactionsPage() {
         logError("Transactions", "목록 조회 실패", err);
         setError("거래 내역을 불러오지 못했습니다.");
       });
+  }
+
+  /** 조회 기간 조건 (전체는 날짜를 보내지 않는다) */
+  function dateParams() {
+    const params = new URLSearchParams();
+    if (startDate) params.set("start_date", startDate);
+    if (endDate) params.set("end_date", endDate);
+    return params;
   }
 
   function loadReport() {
@@ -105,18 +127,20 @@ export function TransactionsPage() {
     setMonth(m);
   }
 
-  function applyPreset(months: number) {
-    setActivePreset(months);
-    setStartDate(monthsAgoISO(months));
-    setEndDate(todayISO());
+  function applyPreset(key: PeriodKey) {
+    const range = periodRange(key);
+    setActivePreset(key);
+    setStartDate(range.start);
+    setEndDate(range.end);
   }
 
   async function handleExportExcel() {
     setIsExporting(true);
     try {
-      const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+      const params = dateParams();
       if (tab !== "all") params.set("type", tab);
-      await downloadFile(`/api/transactions/export/excel?${params.toString()}`, `매입매출내역_${startDate}~${endDate}.xlsx`);
+      const range = startDate || endDate ? `${startDate || "처음"}~${endDate || "끝"}` : "전체";
+      await downloadFile(`/api/transactions/export/excel?${params.toString()}`, `매입매출내역_${range}.xlsx`);
     } catch (err) {
       logError("Transactions", "목록 엑셀 다운로드 실패", err);
       setError("목록을 다운로드하지 못했습니다.");
@@ -217,26 +241,28 @@ export function TransactionsPage() {
 
       <div className="bg-surface border border-border rounded-2xl p-4 mb-5 flex flex-wrap items-center gap-3">
         <span className="text-xs text-text-muted shrink-0">조회 기간</span>
-        <div className="flex gap-1">
+        <select
+          aria-label="조회 기간"
+          value={activePreset ?? "custom"}
+          onChange={(e) => applyPreset(e.target.value as PeriodKey)}
+          className={`text-sm border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary bg-bg ${activePreset === DEFAULT_PERIOD ? "border-border" : "border-primary"}`}
+        >
           {PERIOD_PRESETS.map((p) => (
-            <button
-              key={p.months}
-              onClick={() => applyPreset(p.months)}
-              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                activePreset === p.months
-                  ? "border border-primary bg-tile-blue text-tile-blue-fg font-medium"
-                  : "border border-border text-text-muted hover:bg-bg"
-              }`}
-            >
+            <option key={p.key} value={p.key}>
               {p.label}
-            </button>
+            </option>
           ))}
-        </div>
+          {activePreset === null && (
+            <option value="custom" disabled>
+              직접 지정
+            </option>
+          )}
+        </select>
         <div className="flex items-center gap-2">
           <input
             type="date"
             value={startDate}
-            max={endDate}
+            max={endDate || undefined}
             onChange={(e) => {
               setStartDate(e.target.value);
               setActivePreset(null);
@@ -247,7 +273,7 @@ export function TransactionsPage() {
           <input
             type="date"
             value={endDate}
-            min={startDate}
+            min={startDate || undefined}
             onChange={(e) => {
               setEndDate(e.target.value);
               setActivePreset(null);

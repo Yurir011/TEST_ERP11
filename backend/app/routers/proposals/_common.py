@@ -108,12 +108,14 @@ def _to_out(p: Proposal) -> ProposalOut:
         reject_reason=p.reject_reason,
         delete_requested=bool(p.delete_requested),
         order_sent_at=p.order_sent_at,
+        order_sent_by=p.order_sent_by,
         payment_method=p.payment_method,
         payment_card=p.payment_card,
         payment_bank=p.payment_bank,
         payable_total=payable_total,
         payments=[_payment_out(x) for x in payments],
         received_at=p.received_at,
+        received_by=p.received_by,
         created_at=p.created_at,
     )
 

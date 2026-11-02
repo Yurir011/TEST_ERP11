@@ -122,9 +122,9 @@ describe("구매 품의서 카드", () => {
     expect(h.onOrder).toHaveBeenCalledTimes(1);
   });
 
-  it("작성자나 관리자가 아니면 발송·입고 확인을 할 수 없다", () => {
+  it("작성자나 관리자가 아니어도 발송·입고 확인을 할 수 있다", () => {
     renderCard(proposal({ order_sent_at: "2026-10-22T01:00:00Z" }), [order()], { canManage: false });
-    expect((screen.getByRole("button", { name: "입고" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "입고" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("첨부 버튼과 카드 본문은 각각 상세를 연다", () => {

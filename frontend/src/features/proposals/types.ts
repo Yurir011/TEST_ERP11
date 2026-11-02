@@ -89,11 +89,13 @@ export interface Proposal {
   reject_reason: string | null;
   delete_requested: boolean; // 승인된 품의서의 삭제 결재가 진행 중
   order_sent_at: string | null; // 구매 품의서: 발주서 발송 확인 시각
+  order_sent_by?: number | null; // 발주 완료 처리한 사용자 id (취소는 본인만)
   payment_method?: "deposit" | "card" | null; // 발주 완료 때 확인한 결제 방법 (없으면 미입금)
   payment_card?: string | null; // 법인카드 code (카드·계좌 관리)
   payment_bank?: string | null; // 입금일 때 계좌 code
   payable_total?: number | null; // 결제할 금액(부가세 포함). 발주 완료된 원화 품의서만 값이 있다
   payments?: ProposalPayment[]; // 결제 내역(부분 결제 가능)
   received_at: string | null; // 구매 품의서: 입고 확인 시각
+  received_by?: number | null; // 입고 처리한 사용자 id (취소는 본인만)
   created_at: string;
 }

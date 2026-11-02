@@ -244,6 +244,8 @@ interface PurchaseProposalCardProps {
   orders: ProjectDocument[];
   /** 작성자 또는 관리자: 발송·입고 확인을 할 수 있다 */
   canManage: boolean;
+  /** 로그인한 사용자 id: 발주 완료·입고 취소는 처리한 본인만 할 수 있다 */
+  currentUserId?: number;
   busy: boolean;
   onOpen: () => void;
   /** 발주 버튼: 발주서 작성 / 발주 완료(온라인 주문 등)를 고르는 팝업을 연다 */
@@ -273,7 +275,7 @@ interface PurchaseProposalCardProps {
 export function PurchaseProposalCard({
   proposal,
   orders,
-  canManage,
+  currentUserId,
   busy,
   onOpen,
   onOrder,
@@ -293,6 +295,8 @@ export function PurchaseProposalCard({
   canDelete,
 }: PurchaseProposalCardProps) {
   const flow = computePurchaseFlow(proposal, orders);
+  const canCancelSent = currentUserId !== undefined && proposal.order_sent_by === currentUserId;
+  const canCancelReceived = currentUserId !== undefined && proposal.received_by === currentUserId;
   // 발주서가 있으면 발주서 값, 없으면 품의서에 적은 거래처·금액
   const summary = summarizeOrders(flow.activeOrders) ?? summarizeProposal(proposal);
   // 저장·출력·엑셀·메일의 대상: 결재가 끝나 파일이 만들어진 문서만
@@ -391,9 +395,9 @@ export function PurchaseProposalCard({
           {flow.canConfirmSent && (
             <button
               type="button"
-              disabled={!canManage || busy}
+              disabled={busy}
               onClick={() => onToggleSent(true)}
-              title={canManage ? "발주서를 거래처에 보낸 뒤 눌러 주세요." : "작성자 또는 관리자만 확인할 수 있습니다."}
+              title="발주서를 거래처에 보낸 뒤 눌러 주세요."
               className="text-[11px] px-2 py-0.5 rounded-md border border-primary text-primary hover:bg-tile-blue disabled:opacity-40 disabled:cursor-not-allowed"
             >
               발송 확인
@@ -402,9 +406,9 @@ export function PurchaseProposalCard({
           {flow.sent && (
             <button
               type="button"
-              disabled={!canManage || busy || flow.received}
+              disabled={busy || flow.received || !canCancelSent}
               onClick={() => onToggleSent(false)}
-              title={flow.received ? "입고 확인을 먼저 취소해야 합니다." : canManage ? "눌러서 취소" : undefined}
+              title={flow.received ? "입고 확인을 먼저 취소해야 합니다." : canCancelSent ? "눌러서 취소" : "발주 완료 처리한 본인만 취소할 수 있습니다."}
               className="text-[11px] text-tile-green-fg disabled:cursor-default"
             >
               {monthDay(proposal.order_sent_at)}
@@ -416,15 +420,15 @@ export function PurchaseProposalCard({
           icon={<Package size={17} />}
           label="입고"
           state={flow.received ? "done" : flow.canReceive ? "ready" : "locked"}
-          disabled={!flow.canReceive || !canManage || busy}
+          disabled={!flow.canReceive || busy || (flow.received && !canCancelReceived)}
           title={
             !flow.canReceive
               ? "발주서 발송 확인 후에 입고 처리를 할 수 있습니다."
-              : !canManage
-                ? "작성자 또는 관리자만 처리할 수 있습니다."
-                : flow.received
+              : flow.received
+                ? canCancelReceived
                   ? "눌러서 입고 확인을 취소"
-                  : "물품을 받았으면 눌러서 입고 완료 처리"
+                  : "입고 처리한 본인만 취소할 수 있습니다."
+                : "물품을 받았으면 눌러서 입고 완료 처리"
           }
           onClick={() => onToggleReceived(!flow.received)}
         >

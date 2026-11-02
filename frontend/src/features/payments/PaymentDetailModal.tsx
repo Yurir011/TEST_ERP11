@@ -100,7 +100,7 @@ export function PaymentDetailModal({ payment, onClose, onAttachReceipt }: { paym
           <Row label="메모" value={payment.memo ?? "-"} />
         </div>
 
-        <div className="flex items-center gap-2 mt-5">
+        <div className="flex flex-wrap items-center gap-2 mt-5">
           {onAttachReceipt && (
             <>
               <input
@@ -124,17 +124,18 @@ export function PaymentDetailModal({ payment, onClose, onAttachReceipt }: { paym
               <button
                 onClick={() => receiptInput.current?.click()}
                 disabled={attaching}
-                className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg disabled:opacity-50"
+                title={payment.has_receipt ? "영수증 사진 바꾸기" : "영수증 사진 첨부"}
+                className="flex items-center gap-1.5 whitespace-nowrap text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg disabled:opacity-50"
               >
                 <Image size={14} />
-                {attaching ? "올리는 중..." : payment.has_receipt ? "영수증 바꾸기" : "영수증 첨부"}
+                {attaching ? "올리는 중..." : payment.has_receipt ? "영수증 변경" : "영수증"}
               </button>
             </>
           )}
           {payment.has_receipt && (
             <button
               onClick={() => openFile(`/api/payments/${payment.id}/receipt`)}
-              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg"
+              className="flex items-center gap-1.5 whitespace-nowrap text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg"
             >
               <Image size={14} />
               영수증 보기
@@ -142,28 +143,29 @@ export function PaymentDetailModal({ payment, onClose, onAttachReceipt }: { paym
           )}
           <button
             onClick={handlePrint}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg"
+            className="flex items-center gap-1.5 whitespace-nowrap text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg"
           >
             <Printer size={14} />
             인쇄
           </button>
           <button
             onClick={handleDownloadExcel}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg"
+            title="엑셀 다운로드"
+            className="flex items-center gap-1.5 whitespace-nowrap text-xs border border-border rounded-lg px-3 py-2 hover:bg-bg"
           >
             <FileSpreadsheet size={14} />
-            엑셀 다운로드
+            엑셀
           </button>
           <button
             onClick={() => navigate(`/payments/${payment.id}/edit`)}
-            className="flex items-center gap-1.5 text-xs bg-primary hover:bg-primary-hover text-white rounded-lg px-3 py-2"
+            className="flex items-center gap-1.5 whitespace-nowrap text-xs bg-primary hover:bg-primary-hover text-white rounded-lg px-3 py-2"
           >
             <Pencil size={14} />
             수정
           </button>
           <button
             onClick={onClose}
-            className="ml-auto text-xs text-text-muted hover:text-text px-3 py-2"
+            className="ml-auto whitespace-nowrap text-xs text-text-muted hover:text-text px-3 py-2"
           >
             닫기
           </button>
