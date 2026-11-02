@@ -49,18 +49,45 @@ function primaryContact(client: Client) {
   return client.contacts[0] ?? null;
 }
 
+// 서류 칩: 파일이 있으면 파란 칩(눌러서 열기), 없으면 회색 칩
 function FileButton({ exists, label, onClick }: { exists: boolean; label: string; onClick: () => void }) {
-  if (!exists) return <span className="text-text-muted">-</span>;
+  if (!exists) {
+    return (
+      <span title={`${label} 없음`} className="inline-flex items-center gap-1 rounded-full bg-text/[0.06] px-2.5 py-1 text-[11px] font-medium text-text-muted whitespace-nowrap">
+        <FileText size={12} />
+        {label}
+      </span>
+    );
+  }
   return (
     <button
       type="button"
       onClick={onClick}
       title={`${label} 보기`}
-      className="inline-flex items-center gap-1 text-xs text-[#4B6199] hover:text-[#3A4F7A] rounded-full px-2.5 py-1 hover:bg-primary/[0.08]"
+      className="inline-flex items-center gap-1 rounded-full bg-tile-blue px-2.5 py-1 text-[11px] font-semibold text-tile-blue-fg whitespace-nowrap hover:brightness-95"
     >
-      <FileText size={13} />
-      보기
+      <FileText size={12} />
+      {label}
     </button>
+  );
+}
+
+// 업체명 앞의 이니셜 아이콘: 업체마다 같은 색이 되도록 첫 글자로 색을 고른다
+const MONO_COLORS = [
+  "from-blue-500 to-blue-700",
+  "from-emerald-400 to-emerald-600",
+  "from-orange-400 to-orange-600",
+  "from-violet-400 to-violet-700",
+  "from-pink-400 to-pink-700",
+];
+
+function Monogram({ name }: { name: string }) {
+  const core = name.replace(/^\s*(\(주\)|㈜|주식회사|\(유\)|유한회사)\s*/, "").trim();
+  const ch = core.charAt(0) || "?";
+  return (
+    <span className={`shrink-0 inline-grid h-[34px] w-[34px] place-items-center rounded-[10px] bg-gradient-to-br text-sm font-bold text-white ${MONO_COLORS[ch.charCodeAt(0) % MONO_COLORS.length]}`}>
+      {ch}
+    </span>
   );
 }
 
@@ -205,17 +232,15 @@ export function ClientsPage() {
           <span className="text-xs text-text-muted">{query ? `검색어 '${query}' 적용 중` : "가나다순"}</span>
         </p>
         <div className="bg-surface rounded-[20px] shadow-sm overflow-x-auto">
-          {/* 열 사이 세로선: 모든 열 경계에 연하게 (첫 열 앞만 제외) */}
-          <table className="w-full min-w-[960px] table-fixed text-sm border-collapse [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-primary/[0.12] [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
+          <table className="w-full min-w-[920px] table-fixed text-sm border-collapse">
             <thead>
-              <tr className="text-center text-xs bg-primary/[0.06]">
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center w-[24%]">업체명</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[14%]">사업자번호</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[14%]">유선번호</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[16%]">담당자</th>
-                <th className="py-3.5 px-4 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[14%]">담당자 연락처</th>
-                <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[9%]">사업자등록증</th>
-                <th className="py-3.5 px-3 font-semibold text-[#3A4F7A] text-center whitespace-nowrap w-[9%]">통장사본</th>
+              {/* 머리글: 진한 남색 띠, 글자는 가로 가운데 */}
+              <tr className="text-center text-xs bg-[#1e2a4a]">
+                <th className="py-3.5 px-4 font-semibold text-white text-center w-[22%]">업체명</th>
+                <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[14%]">사업자번호</th>
+                <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[14%]">유선번호</th>
+                <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[26%]">담당자 · 연락처</th>
+                <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[24%]">서류</th>
               </tr>
             </thead>
             <tbody>
@@ -224,7 +249,7 @@ export function ClientsPage() {
                   {/* 전체 보기에서는 구간 사이를 글자 없이 얇은 띠로만 구분한다. */}
                   {currentTab === ALL_TAB && groupIndex > 0 && (
                     <tr aria-hidden="true">
-                      <td colSpan={7} className="h-2.5 p-0 bg-text/[0.06]" />
+                      <td colSpan={5} className="h-2.5 p-0 bg-text/[0.06]" />
                     </tr>
                   )}
                   {group.items.map((client, index) => {
@@ -233,38 +258,46 @@ export function ClientsPage() {
                   <tr
                     key={client.id}
                     onClick={() => navigate(`/clients/${client.id}`)}
-                    className={`cursor-pointer hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""}`}
+                    className={`cursor-pointer border-b border-border last:border-0 hover:bg-primary/10 ${index % 2 === 1 ? "bg-text/[0.025]" : ""}`}
                   >
-                    <td className="py-3.5 px-4 text-center font-medium [-webkit-text-stroke:0.35px_currentColor] text-text/85 max-w-0 truncate" title={client.name}>{client.name}</td>
-                    <td className="py-3.5 px-4 text-center tabular-nums text-text-muted whitespace-nowrap">{client.biz_reg_no || "-"}</td>
-                    <td className="py-3.5 px-4 text-center tabular-nums text-text-muted whitespace-nowrap">{client.phone || "-"}</td>
-                    <td className="py-3.5 px-4 text-center truncate">
-                      {contact ? (
-                        <>
-                          {contact.name}
-                          {contact.title && ` (${contact.title})`}
-                          {client.contacts.length > 1 && ` 외 ${client.contacts.length - 1}명`}
-                        </>
-                      ) : (
-                        "-"
-                      )}
+                    <td className="py-3 px-4 max-w-0" title={client.name}>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Monogram name={client.name} />
+                        <span className="truncate font-semibold text-text">{client.name}</span>
+                      </div>
                     </td>
-                    <td className="py-3.5 px-4 text-center tabular-nums text-text-muted whitespace-nowrap">
-                      {contact ? contact.mobile_phone || contact.landline_phone || "-" : "-"}
+                    <td className="py-3 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.biz_reg_no || "-"}</td>
+                    <td className="py-3 px-4 tabular-nums text-text-muted whitespace-nowrap">{client.phone || "-"}</td>
+                    <td className="py-3 px-4 max-w-0">
+                      {/* 담당자(직함, 외 N명) 아래에 그 연락처를 한 칸에 두 줄로 */}
+                      <div className="truncate">
+                        {contact ? (
+                          <>
+                            {contact.name}
+                            {contact.title && ` (${contact.title})`}
+                            {client.contacts.length > 1 && <span className="ml-1 text-[11px] font-semibold text-primary">외 {client.contacts.length - 1}명</span>}
+                          </>
+                        ) : (
+                          "-"
+                        )}
+                      </div>
+                      <div className="tabular-nums text-xs text-text-muted whitespace-nowrap">
+                        {contact ? contact.mobile_phone || contact.landline_phone || "-" : "-"}
+                      </div>
                     </td>
-                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                      <FileButton
-                        exists={client.has_biz_reg_image}
-                        label="사업자등록증"
-                        onClick={() => handleOpenFile(client.id, "biz-reg-image")}
-                      />
-                    </td>
-                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                      <FileButton
-                        exists={client.has_bankbook_image}
-                        label="통장사본"
-                        onClick={() => handleOpenFile(client.id, "bankbook-image")}
-                      />
+                    <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-wrap gap-1.5">
+                        <FileButton
+                          exists={client.has_biz_reg_image}
+                          label="사업자등록증"
+                          onClick={() => handleOpenFile(client.id, "biz-reg-image")}
+                        />
+                        <FileButton
+                          exists={client.has_bankbook_image}
+                          label="통장사본"
+                          onClick={() => handleOpenFile(client.id, "bankbook-image")}
+                        />
+                      </div>
                     </td>
                   </tr>
                 );
