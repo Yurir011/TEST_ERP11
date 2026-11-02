@@ -307,7 +307,6 @@ export function TodoPanel() {
       >
         {/* 맨 윗줄은 비워 두고 둘째 줄부터 기록되게 한다. */}
         <div aria-hidden style={{ height: LINE }} />
-        {todos?.length === 0 && <p style={{ fontSize: size, lineHeight: `${LINE}px` }}>메모가 없습니다.</p>}
         {todos?.map((todo) => {
           const rowInk = todo.color ?? ink;
           return (

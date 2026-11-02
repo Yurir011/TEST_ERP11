@@ -126,7 +126,7 @@ export function MessageInput({
           onClick={submit}
           disabled={disabled || (!text.trim() && !staged)}
           aria-label="보내기"
-          className="p-2.5 rounded-lg bg-primary text-white hover:bg-primary-hover disabled:opacity-50"
+          className="p-2.5 rounded-lg bg-[#ffd43b] text-[#3b2f00] hover:bg-[#f5c800] disabled:opacity-50"
         >
           <Send size={18} />
         </button>

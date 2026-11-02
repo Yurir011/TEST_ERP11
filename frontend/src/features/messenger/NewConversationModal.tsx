@@ -131,7 +131,7 @@ export function NewConversationModal({ mode, conversation, onClose, onDone }: Pr
             <button type="button" onClick={onClose} className="rounded-lg border border-border text-sm px-4 py-2 hover:bg-bg">
               취소
             </button>
-            <button type="button" onClick={() => void submit()} disabled={!canSubmit} className="rounded-lg bg-primary text-white text-sm font-medium px-4 py-2 hover:bg-primary-hover disabled:opacity-50">
+            <button type="button" onClick={() => void submit()} disabled={!canSubmit} className="rounded-lg bg-[#fee500] text-[#1d1b0a] text-sm font-bold px-4 py-2 hover:bg-[#f5dc00] disabled:opacity-50">
               {busy ? "처리 중..." : mode === "add" ? "추가" : isGroup ? "그룹 대화 만들기" : "대화 시작"}
             </button>
           </div>

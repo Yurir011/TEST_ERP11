@@ -16,7 +16,7 @@ export function ConversationList({
   return (
     <div className="flex-1 min-h-0 flex flex-col" aria-label="대화방 목록">
       <div className="p-3 border-b border-border">
-        <button type="button" onClick={onNew} className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium py-2.5">
+        <button type="button" onClick={onNew} className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-[#fee500] hover:bg-[#f5dc00] text-[#1d1b0a] text-sm font-bold py-2.5">
           <Plus size={16} />새 대화
         </button>
       </div>
@@ -29,7 +29,7 @@ export function ConversationList({
             type="button"
             onClick={() => onSelect(c.id)}
             aria-current={c.id === activeId ? "true" : undefined}
-            className={`w-full text-left px-4 py-3 border-b border-border last:border-0 flex gap-3 items-start transition-colors ${c.id === activeId ? "bg-bg" : "hover:bg-bg/60"}`}
+            className={`w-full text-left px-4 py-3 border-b border-border last:border-0 flex gap-3 items-start transition-colors ${c.id === activeId ? "bg-[#ffefb8]" : "hover:bg-[#fff6d6]"}`}
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">

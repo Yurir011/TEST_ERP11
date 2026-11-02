@@ -91,12 +91,11 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 shrink-0 bg-sidebar border-r border-border h-screen sticky top-0 flex flex-col">
-      <div className="px-5 py-5">
+      <div className="px-5 py-5 flex flex-col items-center text-center">
         <Logo />
         <p className="text-xs text-text-muted leading-tight mt-1">사내 ERP 시스템</p>
       </div>
 
-      <p className="px-5 pt-2 pb-1 text-xs text-text-muted">Navigation</p>
       <nav className="px-3 space-y-1 shrink-0">
         {visibleItems.map(({ to, label, icon: Icon, end, colorClass, desktopMailOnly }) =>
           desktopMailOnly ? (

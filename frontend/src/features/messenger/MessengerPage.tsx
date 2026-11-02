@@ -89,7 +89,8 @@ export function MessengerPage() {
         </>
       }
     >
-      <div className="flex gap-4 h-[calc(100vh-15rem)] min-h-[420px]">
+      <div className="messenger-theme">
+      <div className="flex gap-4 h-[calc(100vh-15rem-28px)] min-h-[420px]">
         <aside className="w-80 shrink-0 bg-surface border border-border rounded-2xl flex flex-col overflow-hidden">
           <div role="tablist" aria-label="메신저 목록" className="flex border-b border-border">
             {TABS.map(({ key, label }) => {
@@ -102,7 +103,7 @@ export function MessengerPage() {
                   aria-selected={tab === key}
                   onClick={() => setTab(key)}
                   className={`flex-1 py-3 text-sm flex items-center justify-center gap-1.5 border-b-2 -mb-px transition-colors ${
-                    tab === key ? "border-primary text-text font-medium" : "border-transparent text-text-muted hover:text-text"
+                    tab === key ? "border-[#f59f00] text-text font-medium" : "border-transparent text-text-muted hover:text-text"
                   }`}
                 >
                   {label}
@@ -147,6 +148,7 @@ export function MessengerPage() {
           }}
         />
       )}
+      </div>
     </MainLayout>
   );
 }

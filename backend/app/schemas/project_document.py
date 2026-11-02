@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -89,6 +90,10 @@ class ProjectDocumentCreate(BaseModel):
     client_name: str
     manager_name: str | None = None
     remark: str | None = None  # 발주서 REMARK 칸
+    # 구매 품의서에서 발주서를 만들 때 고른 대금 결제 상태 (송금 deposit / 법인카드 card / 없으면 외상). 품의서의 결제 칸에 저장된다.
+    payment_method: Literal["deposit", "card"] | None = None
+    payment_card: str | None = None
+    payment_bank: str | None = None
     items: list[ProjectDocumentItemIn] = Field(default_factory=list)
     is_final_decision: bool = False
     end_title: JobTitle | None = None

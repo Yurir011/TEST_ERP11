@@ -119,7 +119,7 @@ export function MessageBubble({ message, mine, showSender, showTime, unreadCount
         {deleted ? (
           <div className="min-w-0 rounded-2xl px-3.5 py-2 text-sm italic text-text-muted bg-bg border border-dashed border-border">삭제된 메시지입니다.</div>
         ) : (
-          <div className={`min-w-0 rounded-2xl px-3.5 py-2 text-sm space-y-2 ${mine ? "bg-primary text-white rounded-tr-md" : "bg-bg border border-border rounded-tl-md"}`}>
+          <div className={`min-w-0 rounded-2xl px-3.5 py-2 text-sm space-y-2 ${mine ? "bg-[#fee500] text-[#1d1b0a] rounded-tr-md" : "bg-bg border border-border rounded-tl-md"}`}>
             {message.attachments.map((a) => (isImage(a.content_type) && isInlineViewable(a.content_type) ? <ImageAttachment key={a.id} a={a} /> : <FileAttachment key={a.id} a={a} />))}
             {message.body && <MessageText text={message.body} />}
           </div>
@@ -148,7 +148,7 @@ export function MessageBubble({ message, mine, showSender, showTime, unreadCount
 export function PendingBubble({ p, onRetry, onDiscard }: { p: PendingMessage; onRetry: () => void; onDiscard: () => void }) {
   return (
     <div className="flex flex-col items-end">
-      <div className={`max-w-[75%] rounded-2xl rounded-tr-md px-3.5 py-2 text-sm ${p.failed ? "bg-danger/10 border border-danger/40" : "bg-primary/60 text-white"}`}>
+      <div className={`max-w-[75%] rounded-2xl rounded-tr-md px-3.5 py-2 text-sm ${p.failed ? "bg-danger/10 border border-danger/40" : "bg-[#fee500]/60 text-[#1d1b0a]"}`}>
         {p.fileName && (
           <div className="flex items-center gap-1.5 mb-1 text-xs opacity-90">
             <Paperclip size={13} />

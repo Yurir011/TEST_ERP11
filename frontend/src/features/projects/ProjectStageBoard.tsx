@@ -3,7 +3,7 @@ import type { Project, ProjectStatus } from "./types";
 import { todayISO } from "../../lib/date";
 
 const MAX_PER_COLUMN = 4;
-const RING_R = 15;
+const RING_R = 19;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 const COLUMNS: {
@@ -23,27 +23,25 @@ function isOverdue(p: Project, today: string): boolean {
   return p.status === "in_progress" && !!p.end_date && p.end_date < today;
 }
 
+// 진행률 링: 굵은 링 + 같은 색 연한 트랙, 가운데에 큰 숫자 (지연이면 빨강)
 function ProgressRing({ percent, colorVar }: { percent: number; colorVar: string }) {
   const offset = RING_CIRCUMFERENCE * (1 - percent / 100);
   return (
-    <div className="relative w-9 h-9 shrink-0">
-      <svg width="36" height="36" viewBox="0 0 36 36" className="-rotate-90">
-        <circle cx="18" cy="18" r={RING_R} fill="none" stroke="var(--color-border)" strokeWidth="4" />
+    <div className="relative w-[50px] h-[50px] shrink-0" role="img" aria-label={`진행률 ${percent}%`}>
+      <svg width="50" height="50" viewBox="0 0 50 50" className="-rotate-90">
+        <circle cx="25" cy="25" r={RING_R} fill="none" stroke={`color-mix(in srgb, ${colorVar} 20%, var(--color-surface))`} strokeWidth="7" />
         <circle
-          cx="18"
-          cy="18"
+          cx="25"
+          cy="25"
           r={RING_R}
           fill="none"
           stroke={colorVar}
-          strokeWidth="4"
-          strokeLinecap="round"
+          strokeWidth="7"
           strokeDasharray={RING_CIRCUMFERENCE}
           strokeDashoffset={offset}
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold" style={{ color: colorVar }}>
-        {percent}%
-      </span>
+      <span className="absolute inset-0 flex items-center justify-center text-[13px] font-extrabold text-text">{percent}</span>
     </div>
   );
 }

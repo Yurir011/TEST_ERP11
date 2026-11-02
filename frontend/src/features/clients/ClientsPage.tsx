@@ -234,13 +234,13 @@ export function ClientsPage() {
         <div className="bg-surface rounded-[20px] shadow-sm overflow-x-auto">
           <table className="w-full min-w-[920px] table-fixed text-sm border-collapse">
             <thead>
-              {/* 머리글: 진한 남색 띠, 글자는 가로 가운데 */}
-              <tr className="text-center text-xs bg-[#1e2a4a]">
-                <th className="py-3.5 px-4 font-semibold text-white text-center w-[22%]">업체명</th>
-                <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[14%]">사업자번호</th>
-                <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[14%]">유선번호</th>
-                <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[26%]">담당자 · 연락처</th>
-                <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[24%]">서류</th>
+              {/* 머리글: 아주 연한 하늘색 띠에 남색 글씨와 아래선, 글자는 가로 가운데 */}
+              <tr className="text-center text-xs bg-[#eaf0fd] border-b border-[#cfdaf5]">
+                <th className="py-3.5 px-4 font-semibold text-[#2f4680] text-center w-[22%]">업체명</th>
+                <th className="py-3.5 px-4 font-semibold text-[#2f4680] text-center whitespace-nowrap w-[14%]">사업자번호</th>
+                <th className="py-3.5 px-4 font-semibold text-[#2f4680] text-center whitespace-nowrap w-[14%]">유선번호</th>
+                <th className="py-3.5 px-4 font-semibold text-[#2f4680] text-center whitespace-nowrap w-[26%]">담당자 · 연락처</th>
+                <th className="py-3.5 px-4 font-semibold text-[#2f4680] text-center whitespace-nowrap w-[24%]">서류</th>
               </tr>
             </thead>
             <tbody>

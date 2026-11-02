@@ -120,3 +120,30 @@ def test_online_order_can_be_marked_done_without_purchase_order(client, staff, a
     # 승인 전 품의서에서는 불가
     pending = _proposal(client, h, final=False, end_title="dept_head", approver_ids=[staff["dept_head"].id])
     assert client.put(f"/api/proposals/{pending['id']}/order-sent", json={"value": True, "online": True}, headers=h).status_code == 400
+
+
+def _find(client, headers, proposal_id):
+    return next(x for x in client.get("/api/proposals", headers=headers).json() if x["id"] == proposal_id)
+
+
+def test_payment_chosen_when_writing_order_is_saved_on_proposal(client, staff, auth_headers):
+    h = auth_headers(staff["writer"])
+    p = _proposal(client, h)
+    res = client.post(
+        "/api/project-documents",
+        headers=h,
+        json={"project_other_name": "테스트", "doc_type": "purchase_order", "issue_date": "2026-10-20", "client_name": "한솔전자",
+              "items": [{"content": "PCB", "quantity": 10, "unit_price": 1000}], "proposal_id": p["id"],
+              "payment_method": "deposit", "payment_bank": "ibk"},
+    )
+    assert res.status_code == 201, res.text
+    got = _find(client, h, p["id"])
+    assert got["payment_method"] == "deposit" and got["payment_bank"] == "ibk"
+    assert got["order_sent_at"] is None  # 발송 확인 전이므로 아직 발주 완료가 아니다
+
+
+def test_writing_order_without_payment_choice_keeps_credit(client, staff, auth_headers):
+    h = auth_headers(staff["writer"])
+    p = _proposal(client, h)
+    assert _order(client, h, p["id"]).status_code == 201
+    assert _find(client, h, p["id"])["payment_method"] is None

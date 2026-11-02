@@ -63,3 +63,19 @@ textarea {
   outline-offset: 2px;
   border-radius: 0.75rem;
 }
+
+/* 메신저 화면 전용 노랑 테마: 이 안의 색 토큰만 크림·노랑 계열로 바꾼다. (선명한 노랑 버튼·말풍선은 각 컴포넌트에서 지정) */
+.messenger-theme {
+  --color-surface: #fffcf2;
+  --color-bg: #ffffff;
+  --color-border: #f0e2b4;
+  --color-primary: #b7791f;
+  --color-primary-hover: #975a16;
+  --color-badge-bg: #f59f00;
+  --color-badge-fg: #ffffff;
+  --color-badge-border: #f59f00;
+  background: #fff9e6;
+  border: 1px solid #f0e2b4;
+  border-radius: 16px;
+  padding: 14px;
+}

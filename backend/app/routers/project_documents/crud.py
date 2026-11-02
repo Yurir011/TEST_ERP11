@@ -19,6 +19,7 @@ from app.services.project_document_template import next_doc_no
 
 from app.routers.project_documents._common import PREFIX, _TARGET, _get_doc_or_404, _to_out, _to_out_db, logger
 from app.routers.project_documents.approval import _apply_approval_request
+from app.routers.proposals.order_flow import _set_payment
 
 
 router = APIRouter(prefix=PREFIX, tags=["project-documents"])
@@ -62,6 +63,18 @@ def _check_source_proposal(db: Session, payload: ProjectDocumentCreate) -> None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="연결할 품의서를 찾을 수 없습니다.")
     if proposal.kind != PURCHASE_KIND or proposal.status != ProposalStatus.approved:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 구매 품의서에서만 발주서를 만들 수 있습니다.")
+
+
+def _save_proposal_payment(db: Session, payload: ProjectDocumentCreate) -> None:
+    """구매 품의서에서 발주서를 만들 때 고른 결제 상태(송금/법인카드)를 품의서의 결제 칸에 저장한다.
+    이미 결제 상태가 정해진 품의서는 그대로 두고, 외상(선택 없음)이면 아무것도 하지 않는다. 매입·출금 반영은 발송 확인 때 이루어진다."""
+    if payload.proposal_id is None or payload.payment_method is None:
+        return
+    proposal = db.query(Proposal).filter(Proposal.id == payload.proposal_id).first()
+    if proposal is None or proposal.payment_method is not None:
+        return
+    logger.debug(f"[ProjectDocuments] 발주서 작성 결제 상태 저장: proposal_id={proposal.id}, method={payload.payment_method}")
+    _set_payment(db, proposal, payload.payment_method, payload.payment_card, payload.payment_bank)
 
 
 def _new_document(
@@ -129,6 +142,7 @@ def create_project_document(
         f"items={len(payload.items)}, end_title={payload.end_title}, by={current_user.id}"
     )
     doc = _new_document(db, payload, payload.doc_type, project, current_user)
+    _save_proposal_payment(db, payload)
     steps = _apply_approval_request(db, doc, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user)
     db.commit()
 

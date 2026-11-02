@@ -7,6 +7,7 @@ import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPi
 import { useAuth } from "../../context/useAuth";
 import type { Client } from "../clients/types";
 import type { Project } from "../projects/types";
+import { NO_PAYMENT, PaymentPicker, type OrderPayment } from "../proposals/PaymentPicker";
 import { ProposalReferencePanel } from "../proposals/ProposalReferencePanel";
 import { ReferenceProposalPicker } from "../proposals/ReferenceProposalPicker";
 import { isPurchaseProposal } from "../proposals/purchaseFlow";
@@ -69,6 +70,8 @@ export function ProjectDocumentFormPage() {
   const [managerName, setManagerName] = useState("");
   const [remark, setRemark] = useState(""); // 발주서 REMARK 칸
   const [sourceProposal, setSourceProposal] = useState<Proposal | null>(null);
+  // 구매 품의서에서 발주서를 만들 때 고르는 대금 결제 상태 (송금 / 법인카드 / 외상). 기본은 외상.
+  const [payment, setPayment] = useState<OrderPayment>(NO_PAYMENT);
   // 근거 품의서를 보면서 작성할 수 있게 하는 참조용 품의서 (새로 쓸 때는 sourceProposal 과 같고, 수정할 때는 연결된 품의서)
   const [referenceProposal, setReferenceProposal] = useState<Proposal | null>(null);
   const [showReference, setShowReference] = useState(false);
@@ -403,6 +406,7 @@ export function ProjectDocumentFormPage() {
         client_name: clientName,
         manager_name: managerName || null,
         remark: docType === "purchase_order" ? remark.trim() || null : null,
+        ...(docType === "purchase_order" && sourceProposal ? payment : {}),
         items: toItemsPayload(items),
         end_title: endTitle,
         approver_ids: approverIds,
@@ -692,6 +696,17 @@ export function ProjectDocumentFormPage() {
           onRemove={removeItem}
           onUpdate={updateItem}
         />
+
+        {/* 구매 품의서에서 만드는 발주서: 합계 바로 아래에서 대금 결제 상태를 고른다 (발주 완료 때와 같은 선택) */}
+        {docType === "purchase_order" && sourceProposal && (
+          <div className="rounded-xl border border-primary/30 bg-primary/[0.04] p-4 flex flex-col gap-2.5">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold">결제 상태</span>
+              <span className="text-[11px] text-text-muted">발송 확인(발주 완료) 때 매입매출·입출금에 반영됩니다. 아직 결제 전이면 외상으로 두세요.</span>
+            </div>
+            <PaymentPicker value={payment} onChange={setPayment} />
+          </div>
+        )}
 
         {error && <p className="text-xs text-danger">{error}</p>}
 

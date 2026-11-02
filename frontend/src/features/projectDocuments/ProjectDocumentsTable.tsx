@@ -30,6 +30,16 @@ interface ProjectDocumentsTableProps {
 }
 
 // 문서관리 목록 표. "전체" 탭에서는 문서와 품의서가 한 표에 섞여 나온다.
+// 전결·삭제 결재 중 표시는 상태 칸이 아니라 이름(거래처명·제목) 옆에 붙여, 상태 배지가 줄마다 같은 자리에 서도록 한다.
+function ExtraBadges({ isFinal, deleteRequested }: { isFinal: boolean; deleteRequested: boolean }) {
+  return (
+    <>
+      {isFinal && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 font-medium ${SOFT_BADGE.purple}`}>전결</span>}
+      {deleteRequested && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>}
+    </>
+  );
+}
+
 export function ProjectDocumentsTable({
   rows,
   lockedDocType,
@@ -46,6 +56,7 @@ export function ProjectDocumentsTable({
   onProposalDownload,
   onProposalPrint,
 }: ProjectDocumentsTableProps) {
+  const isTaxList = lockedDocType === "tax_invoice";
   return (
     <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
       {/* 표 스타일: 연한 세로선 + 줄무늬 + 톤다운 파랑 머리글 (첫 열 앞만 제외). 짧은 열은 내용 폭에 맞춘다. */}
@@ -61,10 +72,12 @@ export function ProjectDocumentsTable({
               <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">팝빌</th>
             )}
             <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">날짜</th>
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[22%]">프로젝트</th>
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[22%]">거래처명</th>
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">담당자</th>
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[26%]">내용</th>
+            {/* 세금계산서 목록은 프로젝트·담당자 열 없이 날짜 다음에 내용, 그다음 거래처명 순서로 보여 준다 */}
+            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[22%]">프로젝트</th>}
+            {isTaxList && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[40%]">내용</th>}
+            <th className={`py-2.5 px-4 font-semibold text-[#3A4F7A] text-center ${isTaxList ? "w-[28%]" : "w-[22%]"}`}>거래처명</th>
+            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">담당자</th>}
+            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[26%]">내용</th>}
             <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">합계</th>
             <th className="w-px whitespace-nowrap"></th>
           </tr>
@@ -84,30 +97,12 @@ export function ProjectDocumentsTable({
                     <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>{p.kind ? `${p.kind}품의서` : "품의서"}</span>
                   </td>
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                    {(() => {
-                      const extras = (
-                        <>
-                          {p.is_final_decision && p.status === "approved" && (
-                            <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
-                          )}
-                          {p.delete_requested && <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>}
-                        </>
-                      );
-                      return (
-                        <>
-                          <span className="invisible" aria-hidden>
-                            {extras}
-                          </span>
-                          <span
-                            className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}
-                            title={p.status === "rejected" ? p.reject_reason ?? undefined : undefined}
-                          >
-                            {PROPOSAL_STATUS_LABELS[p.status]}
-                          </span>
-                          {extras}
-                        </>
-                      );
-                    })()}
+                    <span
+                      className={`text-xs px-2 py-1 font-medium ${PROPOSAL_STATUS_STYLES[p.status]}`}
+                      title={p.status === "rejected" ? p.reject_reason ?? undefined : undefined}
+                    >
+                      {PROPOSAL_STATUS_LABELS[p.status]}
+                    </span>
                   </td>
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
                     {p.issue_date}
@@ -117,7 +112,12 @@ export function ProjectDocumentsTable({
                   <td className="py-2.5 px-4 text-center text-text-muted">-</td>
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">{p.creator_name}</td>
                   <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
-                    <ClampText>{p.title}</ClampText>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="min-w-0">
+                        <ClampText>{p.title}</ClampText>
+                      </span>
+                      <ExtraBadges isFinal={p.is_final_decision && p.status === "approved"} deleteRequested={p.delete_requested} />
+                    </div>
                   </td>
                   <td className="py-2.5 px-4 text-right text-text-muted whitespace-nowrap">-</td>
                   <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -176,33 +176,12 @@ export function ProjectDocumentsTable({
                   </td>
                 )}
                 <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                  {(() => {
-                    // 상태 배지 오른쪽에 붙는 배지(전결 등)가 있어도 상태 배지가 칼럼 가운데에 같은 줄로 서도록, 왼쪽에 보이지 않는 같은 크기의 자리를 둔다.
-                    const extras = (
-                      <>
-                        {doc.is_final_decision && doc.status === "approved" && (
-                          <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>전결</span>
-                        )}
-                        {doc.delete_requested && (
-                          <span className={`ml-1.5 text-xs px-2 py-1 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>
-                        )}
-                      </>
-                    );
-                    return (
-                      <>
-                        <span className="invisible" aria-hidden>
-                          {extras}
-                        </span>
-                        <span
-                          className={`text-xs px-2 py-1 font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
-                          title={doc.status === "rejected" ? doc.reject_reason ?? undefined : undefined}
-                        >
-                          {PROJECT_DOC_STATUS_LABELS[doc.status]}
-                        </span>
-                        {extras}
-                      </>
-                    );
-                  })()}
+                  <span
+                    className={`text-xs px-2 py-1 font-medium ${PROJECT_DOC_STATUS_STYLES[doc.status]}`}
+                    title={doc.status === "rejected" ? doc.reject_reason ?? undefined : undefined}
+                  >
+                    {PROJECT_DOC_STATUS_LABELS[doc.status]}
+                  </span>
                 </td>
                 {lockedDocType === "tax_invoice" && (
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
@@ -227,16 +206,30 @@ export function ProjectDocumentsTable({
                   {doc.issue_date}
                   {doc.doc_no && <p className="text-xs text-text-muted mt-0.5">No. {doc.doc_no}</p>}
                 </td>
+                {!isTaxList && (
+                  <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
+                    <ClampText>{doc.project_name}</ClampText>
+                  </td>
+                )}
+                {isTaxList && (
+                  <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
+                    <ClampText>{itemsSummary(doc)}</ClampText>
+                  </td>
+                )}
                 <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
-                  <ClampText>{doc.project_name}</ClampText>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span className="min-w-0">
+                      <ClampText>{doc.client_name}</ClampText>
+                    </span>
+                    <ExtraBadges isFinal={doc.is_final_decision && doc.status === "approved"} deleteRequested={doc.delete_requested} />
+                  </div>
                 </td>
-                <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
-                  <ClampText>{doc.client_name}</ClampText>
-                </td>
-                <td className="py-2.5 px-4 text-center whitespace-nowrap">{doc.manager_name ?? "-"}</td>
-                <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
-                  <ClampText>{itemsSummary(doc)}</ClampText>
-                </td>
+                {!isTaxList && <td className="py-2.5 px-4 text-center whitespace-nowrap">{doc.manager_name ?? "-"}</td>}
+                {!isTaxList && (
+                  <td className={`py-2.5 px-4 text-center ${CLAMP_CELL}`}>
+                    <ClampText>{itemsSummary(doc)}</ClampText>
+                  </td>
+                )}
                 <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap">{formatDocAmount(doc, itemsTotal(doc))}</td>
                 <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-1">

@@ -172,11 +172,11 @@ export function ProjectsPage() {
         <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-text-muted border-b border-border">
-                <th className="py-2.5 px-4 font-medium">프로젝트</th>
-                <th className="py-2.5 px-4 font-medium">거래처</th>
-                <th className="py-2.5 px-4 font-medium">진행률</th>
-                <th className="py-2.5 px-4 font-medium">상태</th>
+              <tr className="text-left text-[#2f4680] bg-[#eaf0fd] border-b border-[#cfdaf5]">
+                <th className="py-2.5 px-4 font-semibold">프로젝트</th>
+                <th className="py-2.5 px-4 font-semibold">거래처</th>
+                <th className="py-2.5 px-4 font-semibold">진행률</th>
+                <th className="py-2.5 px-4 font-semibold">상태</th>
               </tr>
             </thead>
             <tbody>
