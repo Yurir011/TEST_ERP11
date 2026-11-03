@@ -60,25 +60,25 @@ export function ProjectDocumentsTable({
   return (
     <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
       {/* 표 스타일: 연한 세로선 + 줄무늬 + 톤다운 파랑 머리글 (첫 열 앞만 제외). 짧은 열은 내용 폭에 맞춘다. */}
-      <table className="w-full text-sm [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-primary/[0.12] [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
+      <table className="w-full text-sm [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-white/20 [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
         <thead>
-          <tr className="text-center bg-primary/[0.06] border-b border-border">
-            {lockedDocType === "tax_invoice" && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">구분</th>}
+          <tr className="text-center bg-[#6a7eb3] border-b border-[#5a6ea3]">
+            {lockedDocType === "tax_invoice" && <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">구분</th>}
             {lockedDocType !== "tax_invoice" && (
-              <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">구분</th>
+              <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">구분</th>
             )}
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">상태</th>
+            <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">상태</th>
             {lockedDocType === "tax_invoice" && (
-              <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">팝빌</th>
+              <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">팝빌</th>
             )}
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">날짜</th>
+            <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">날짜</th>
             {/* 세금계산서 목록은 프로젝트·담당자 열 없이 날짜 다음에 내용, 그다음 거래처명 순서로 보여 준다 */}
-            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[22%]">프로젝트</th>}
-            {isTaxList && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[40%]">내용</th>}
-            <th className={`py-2.5 px-4 font-semibold text-[#3A4F7A] text-center ${isTaxList ? "w-[28%]" : "w-[22%]"}`}>거래처명</th>
-            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">담당자</th>}
-            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-[26%]">내용</th>}
-            <th className="py-2.5 px-4 font-semibold text-[#3A4F7A] text-center w-px whitespace-nowrap">합계</th>
+            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-[22%]">프로젝트</th>}
+            {isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-[40%]">내용</th>}
+            <th className={`py-2.5 px-4 font-semibold text-white text-center ${isTaxList ? "w-[28%]" : "w-[22%]"}`}>거래처명</th>
+            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">담당자</th>}
+            {!isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-[26%]">내용</th>}
+            <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">합계</th>
             <th className="w-px whitespace-nowrap"></th>
           </tr>
         </thead>

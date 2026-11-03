@@ -335,9 +335,21 @@ export function TransactionsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[860px] table-fixed text-sm">
+            {/* 품목·거래처는 좁게, 날짜·금액 칸은 넉넉히. 긴 글자는 줄바꿈한다 */}
+            <colgroup>
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "15%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "15%" }} />
+              <col style={{ width: "5rem" }} />
+            </colgroup>
             <thead>
-              <tr className="text-left text-[#2f4680] bg-[#eaf0fd] border-b border-[#cfdaf5]">
+              <tr className="text-left text-white bg-[#6a7eb3] border-b border-[#5a6ea3]">
                 <th className="py-2.5 px-4 font-semibold">구분</th>
                 <th className="py-2.5 px-4 font-semibold">날짜</th>
                 <th className="py-2.5 px-4 font-semibold">거래처</th>
@@ -357,7 +369,7 @@ export function TransactionsPage() {
                     logDebug("Transactions", `상세 열기: tx_id=${tx.id}`);
                     setDetailTx(tx);
                   }}
-                  className="border-b border-border last:border-0 cursor-pointer hover:bg-primary/10 transition-colors"
+                  className="border-b border-border last:border-0 cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
                 >
                   <td className="py-2.5 px-4">
                     <span className={`text-xs px-2 py-1 font-medium ${TX_TYPE_STYLES[tx.type]}`}>
@@ -365,8 +377,8 @@ export function TransactionsPage() {
                     </span>
                   </td>
                   <td className="py-2.5 px-4">{tx.transaction_date}</td>
-                  <td className="py-2.5 px-4">{tx.client_name ?? tx.counterparty ?? "-"}</td>
-                  <td className="py-2.5 px-4">{tx.item_name}</td>
+                  <td className="py-2.5 px-4 break-words">{tx.client_name ?? tx.counterparty ?? "-"}</td>
+                  <td className="py-2.5 px-4 break-words">{tx.item_name}</td>
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.supply_amount)}</td>
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.vat_amount)}</td>
                   <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(tx.total_amount)}</td>
