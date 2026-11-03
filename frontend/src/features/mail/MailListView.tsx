@@ -57,7 +57,7 @@ export function MailListView(p: Props) {
   return (
     <div className="flex flex-col h-full min-w-0">
       <div className="flex items-center justify-between gap-3 px-6 pt-5 pb-3">
-        <span className="inline-flex items-center rounded-lg bg-primary text-white text-sm font-medium px-4 py-2.5" aria-label="현재 폴더">{p.title}</span>
+        <span className="inline-flex items-center rounded-lg bg-primary text-on-primary text-sm font-medium px-4 py-2.5" aria-label="현재 폴더">{p.title}</span>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 border-y border-border">

@@ -1,7 +1,7 @@
 import { ArrowLeft, BookUser, FileEdit, Folder, Inbox, Layers, Paperclip, Send, SquarePen, Star, Mail as MailIcon, Settings, Trash2, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { ALL_MAIL_FOLDER, type MailAccountEntry, type MailFilter, type MailFolder } from "../../lib/desktop";
-import { MAIL_ACCENTS } from "./mailAccent";
+import { DEFAULT_CUSTOM_COLOR, MAIL_ACCENTS, isCustomAccent } from "./mailAccent";
 import { folderLabel, isSelfMailFolder, sortFolders } from "./mailFormat";
 
 interface Props {
@@ -18,8 +18,6 @@ interface Props {
   onAddressBook: () => void;
   /** 주소록 화면을 보고 있는가 */
   bookActive: boolean;
-  /** ERP 메인 창으로 돌아가기 (앱이 지원할 때만) */
-  onBackToErp?: () => void;
   /** 뒤로가기: 메일 화면(창)을 닫는다 */
   onClose: () => void;
   /** 등록된 메일 계정들과 지금 보는 계정 (계정마다 메일함이 따로다). 없으면 계정 전환 칸을 보여 주지 않는다 */
@@ -57,22 +55,17 @@ const QUICK: { key: "unread" | "flagged" | "attachment"; label: string; icon: Re
 ];
 
 /** 왼쪽 패널: 내 정보, 빠른 조건(안읽음·중요·첨부), 메일쓰기, 폴더 목록 */
-export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive, onBackToErp, onClose, accounts, activeAccountId, onSwitchAccount, onAddAccount, accent, onAccent }: Props) {
+export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive, onClose, accounts, activeAccountId, onSwitchAccount, onAddAccount, accent, onAccent }: Props) {
   const all: MailFolder = { path: ALL_MAIL_FOLDER, name: "전체메일", specialUse: null, unread: 0, total: 0 };
   const sorted = sortFolders(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 0, total: 0 }]);
   const list = [all, ...sorted];
 
   return (
     <aside className="w-72 shrink-0 bg-surface border-r border-border flex flex-col h-full" aria-label="메일 메뉴">
-      <div className="px-4 pt-4 flex items-center justify-between gap-2">
+      <div className="px-4 pt-4">
         <button type="button" onClick={onClose} className="flex items-center gap-1.5 text-xs text-text-muted hover:text-primary" aria-label="메일 화면 닫기" title="메일 화면 닫기">
           <ArrowLeft size={13} /> 뒤로가기
         </button>
-        {onBackToErp && (
-          <button type="button" onClick={onBackToErp} className="text-xs text-text-muted hover:text-primary">
-            ERP 로 돌아가기
-          </button>
-        )}
       </div>
       <div className={`flex items-center gap-3 px-5 pt-3 pb-4`}>
         <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center text-base font-semibold shrink-0" aria-hidden="true">
@@ -138,7 +131,7 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
       </div>
 
       <div className="px-4 pb-4">
-        <div className="flex rounded-xl bg-primary text-white text-sm font-semibold overflow-hidden">
+        <div className="flex rounded-xl bg-primary text-on-primary text-sm font-semibold overflow-hidden">
           <button type="button" onClick={onCompose} className="flex-1 py-3 border-r border-white/30 hover:bg-primary-hover transition-colors">메일쓰기</button>
           <button type="button" onClick={onComposeSelf} className="flex-1 py-3 hover:bg-primary-hover transition-colors">내게쓰기</button>
         </div>
@@ -178,7 +171,7 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
 
       <div className="px-4 py-3 border-t border-border" role="radiogroup" aria-label="메일 색상">
         <p className="text-[11px] text-text-muted mb-2">메일 색상</p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {MAIL_ACCENTS.map((a) => (
             <button
               key={a.id}
@@ -192,6 +185,26 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
               className={`w-6 h-6 rounded-full transition-shadow ${a.id === accent ? "ring-2 ring-offset-2 ring-text/60 ring-offset-surface" : "hover:ring-2 hover:ring-text/20 hover:ring-offset-2 hover:ring-offset-surface"}`}
             />
           ))}
+          {/* 직접 고르기: 누르면 전체 색상표가 열린다. 고른 색이 있으면 그 색을 보여 준다 */}
+          <label
+            title="직접 고르기"
+            className={`relative w-6 h-6 rounded-full cursor-pointer transition-shadow focus-within:ring-2 focus-within:ring-text/40 ${
+              isCustomAccent(accent) ? "ring-2 ring-offset-2 ring-text/60 ring-offset-surface" : "hover:ring-2 hover:ring-text/20 hover:ring-offset-2 hover:ring-offset-surface"
+            }`}
+            style={{
+              background: isCustomAccent(accent)
+                ? accent
+                : "conic-gradient(#ff5f5f, #ffd24a, #5fd35f, #4ac8ff, #7a5fff, #ff5fd0, #ff5f5f)",
+            }}
+          >
+            <input
+              type="color"
+              aria-label="직접 고르기"
+              value={isCustomAccent(accent) ? accent : DEFAULT_CUSTOM_COLOR}
+              onChange={(e) => onAccent(e.target.value.toLowerCase())}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            />
+          </label>
         </div>
       </div>
     </aside>

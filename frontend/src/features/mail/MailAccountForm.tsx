@@ -193,7 +193,7 @@ export function MailAccountForm({ bridge, onSaved, onCancel, initial }: Props) {
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
 
       <div className="flex items-center gap-2">
-        <button type="submit" disabled={busy} className="rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2 transition-colors disabled:opacity-60">
+        <button type="submit" disabled={busy} className="rounded-lg bg-primary hover:bg-primary-hover text-on-primary text-sm font-medium px-5 py-2 transition-colors disabled:opacity-60">
           {busy ? "접속 확인 중..." : "등록"}
         </button>
         {onCancel && (

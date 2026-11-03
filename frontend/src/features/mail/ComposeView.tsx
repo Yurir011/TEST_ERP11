@@ -125,7 +125,7 @@ export function ComposeView({ bridge, fromName, fromEmail, initial, onSent, onCl
     <form onSubmit={(e) => void send(e)} className="flex flex-col h-full min-w-0" aria-label="메일 쓰기" onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void send(); }}>
       <div className="flex items-center gap-2 px-6 pt-5 pb-3">
         <h1 className="text-lg font-semibold mr-3">메일쓰기</h1>
-        <button type="submit" disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60">
+        <button type="submit" disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-on-primary text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60">
           <Send size={15} />
           {busy ? "보내는 중..." : "보내기"}
         </button>

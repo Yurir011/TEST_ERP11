@@ -42,6 +42,8 @@ import { PresenceSelect } from "../../../features/messenger/PresenceSelect";
 import { useMessengerOptional } from "../../../features/messenger/useMessenger";
 import { shouldUseMobile } from "../../../features/mobile/mobileMode";
 import { TITLE_LABELS } from "../../../lib/auth";
+import { resolveMailAccent } from "../../../features/mail/mailAccent";
+import { useMailAccent } from "../../../features/mail/useMailAccent";
 import { Sidebar } from "../Sidebar";
 import { SiteAdminSidebar } from "../SiteAdminSidebar";
 import {
@@ -108,6 +110,20 @@ const SECTION_STYLE: Record<string, { icon: LucideIcon; color: TabColor }> = {
 };
 const DEFAULT_SECTION_STYLE = { icon: FileText, color: "blue" as TabColor };
 
+/** 메일 탭은 사용자가 고른 메일 색을 따른다 (위쪽 줄·바탕·아이콘) */
+function mailTabStyles(accentId: string, isActive: boolean) {
+  const a = resolveMailAccent(accentId);
+  return {
+    tab: {
+      borderTopColor: a.primary,
+      ...(isActive ? { backgroundColor: `color-mix(in srgb, ${a.primary} 12%, var(--color-surface))` } : {}),
+    },
+    icon: isActive
+      ? { backgroundColor: a.primary, color: a.on }
+      : { backgroundColor: `color-mix(in srgb, ${a.primary} 16%, var(--color-surface))`, color: a.text },
+  };
+}
+
 /** 오른쪽 위의 내 상태 콤보박스(메신저와 같은 값). 상태와 실시간 변경을 받으려면 메신저의 직원 목록 구독이 필요해 켜 둔다. */
 function TopBarStatus() {
   const messenger = useMessengerOptional();
@@ -171,6 +187,7 @@ export function TabShell({ routes }: { routes: ReactNode }) {
   const outer = useLocation();
   const outerNavigate = useNavigate();
   const [state, dispatch] = useReducer(tabsReducer, pathSearch(outer), initialTabsState);
+  const mailAccent = useMailAccent(); // 메일 탭 색
   const stateRef = useRef(state);
   const scrollByTab = useRef(new Map<number, number>());
   const shownTabId = useRef(state.activeId);
@@ -230,8 +247,10 @@ export function TabShell({ routes }: { routes: ReactNode }) {
               {state.tabs.map((tab) => {
                 const isActive = tab.id === state.activeId;
                 // 메뉴마다 아이콘과 색이 달라 탭이 여러 개여도 한눈에 구분된다. 보고 있는 탭은 그 색으로 채워진다.
-                const style = SECTION_STYLE[sectionOf(currentLocation(tab).pathname)] ?? DEFAULT_SECTION_STYLE;
+                const section = sectionOf(currentLocation(tab).pathname);
+                const style = SECTION_STYLE[section] ?? DEFAULT_SECTION_STYLE;
                 const color = TAB_COLORS[style.color];
+                const mailStyles = section === "mail" ? mailTabStyles(mailAccent, isActive) : null;
                 const Icon = style.icon;
                 return (
                   // 탭이 많아지면 익스플로러·크롬처럼 폭이 고르게 좁아져서 모두 보인다 (기본 220px → 최소 34px, 보고 있는 탭은 88px).
@@ -240,11 +259,12 @@ export function TabShell({ routes }: { routes: ReactNode }) {
                     key={tab.id}
                     onClick={() => dispatch({ type: "activate", id: tab.id })}
                     title={tabLabel(tab)}
+                    style={mailStyles?.tab}
                     className={`@container/tab group flex items-center gap-2 min-w-0 flex-[0_1_220px] ${isActive ? "min-w-[88px]" : "min-w-[34px]"} cursor-pointer rounded-t-lg border border-b-0 border-t-[3px] border-border ${color.stripe} pl-2.5 pr-2 pt-2 text-sm text-text ${
                       isActive ? `${color.on} -mb-px pb-2.5 font-semibold` : `${color.idle} pb-2 opacity-75 hover:opacity-100`
                     }`}
                   >
-                    <span className={`grid place-items-center w-[22px] h-[22px] rounded-md shrink-0 ${isActive ? color.iconOn : color.icon}`}>
+                    <span style={mailStyles?.icon} className={`grid place-items-center w-[22px] h-[22px] rounded-md shrink-0 ${isActive ? color.iconOn : color.icon}`}>
                       <Icon size={13} />
                     </span>
                     <button

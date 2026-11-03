@@ -110,7 +110,7 @@ export function AddressBookView({ bridge, onCompose, onBack }: Props) {
           <ArrowLeft size={15} /> 뒤로
         </button>
         <h1 className="text-lg font-semibold mr-2">주소록</h1>
-        <button type="button" onClick={() => { setFormError(null); setDraft({ name: "", address: "", memo: "" }); }} className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5">
+        <button type="button" onClick={() => { setFormError(null); setDraft({ name: "", address: "", memo: "" }); }} className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-on-primary text-sm font-medium px-4 py-2.5">
           <Plus size={15} /> 연락처 추가
         </button>
         <button type="button" disabled={picked.length === 0} onClick={() => onCompose(appendContacts("", picked))} className="flex items-center gap-1.5 rounded-lg border border-border text-sm px-4 py-2.5 hover:bg-bg disabled:opacity-40">
@@ -197,7 +197,7 @@ export function AddressBookView({ bridge, onCompose, onBack }: Props) {
               <button type="button" onClick={() => setDraft(null)} className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-bg">
                 취소
               </button>
-              <button type="submit" disabled={saving} className="rounded-lg bg-primary hover:bg-primary-hover text-white px-5 py-2 text-sm font-medium disabled:opacity-60">
+              <button type="submit" disabled={saving} className="rounded-lg bg-primary hover:bg-primary-hover text-on-primary px-5 py-2 text-sm font-medium disabled:opacity-60">
                 {saving ? "저장 중..." : "저장"}
               </button>
             </div>

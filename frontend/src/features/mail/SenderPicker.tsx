@@ -189,7 +189,7 @@ export function SenderManager({ bridge, settings, account, onSaved, onClose }: M
           <button type="button" onClick={onClose} className="rounded-lg border border-border px-4 py-2 text-sm hover:bg-bg">
             취소
           </button>
-          <button type="button" onClick={() => void save()} disabled={busy} className="rounded-lg bg-primary hover:bg-primary-hover text-white px-5 py-2 text-sm font-medium disabled:opacity-60">
+          <button type="button" onClick={() => void save()} disabled={busy} className="rounded-lg bg-primary hover:bg-primary-hover text-on-primary px-5 py-2 text-sm font-medium disabled:opacity-60">
             {busy ? "저장 중..." : "저장"}
           </button>
         </div>

@@ -555,7 +555,7 @@ function MailApp({ accountId, accounts, onSwitchAccount, onAddAccount, onCancelA
   const title = folderLabel(currentFolder ?? { path: folder, name: folder, specialUse: null });
 
   return (
-    <div className="h-screen flex bg-surface text-text" style={mailAccentStyle(accent)}>
+    <div className="h-screen flex bg-surface text-text [&_.text-primary]:text-[var(--mail-accent-text)]" style={mailAccentStyle(accent)}>
       <MailSidebar
         accent={accent}
         onAccent={(id) => {
@@ -579,7 +579,6 @@ function MailApp({ accountId, accounts, onSwitchAccount, onAddAccount, onCancelA
           logDebug("Mail", "뒤로가기: 메일 화면 닫기");
           window.close();
         }}
-        onBackToErp={getBenchClient()?.focusMain ? () => void getBenchClient()?.focusMain?.() : undefined}
         accounts={accounts}
         activeAccountId={accountId}
         onSwitchAccount={(id) => void leaveCompose().then((ok) => ok && onSwitchAccount(id))}

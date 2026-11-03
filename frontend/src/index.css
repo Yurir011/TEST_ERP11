@@ -9,6 +9,8 @@
   --color-text-muted: #6b6b70;
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
+  /* 강조색 버튼 위의 글자색. 메일 화면에서 밝은 색을 고르면 어두운 글자로 바뀐다 */
+  --color-on-primary: #ffffff;
   --color-success: #16a34a;
   --color-danger: #dc2626;
   /* 대시보드 업무알림/내 업무알림 전용 강조색 (반려 등 danger와는 별도로 구분). */
