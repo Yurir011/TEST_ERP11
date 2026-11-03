@@ -11,3 +11,18 @@ export const SOFT_BADGE = {
   red: "rounded-md bg-[color-mix(in_srgb,#fef2f2_70%,var(--color-surface))] text-[color-mix(in_srgb,var(--color-danger)_72%,var(--color-text))]",
   gray: "rounded-md bg-[color-mix(in_srgb,#f1f2f4_70%,var(--color-surface))] text-[color-mix(in_srgb,#4b5563_72%,var(--color-text))]",
 } as const;
+
+/**
+ * 코드 에디터 색감 배지 (2026-11-03 시안 1안): 옅은 바탕(색 22%) + 같은 색에 검정을 섞은 글씨(58%).
+ * 세금계산서·매입매출·입출금 목록에서 쓴다. 색을 더 넓힐 때는 이 목록에 키를 추가한다.
+ */
+export const CODE_BADGE = {
+  blue: "rounded-md bg-[color-mix(in_srgb,#79c0ff_22%,var(--color-surface))] text-[color-mix(in_srgb,#79c0ff_58%,#000)]",
+  green: "rounded-md bg-[color-mix(in_srgb,#4ec9b0_22%,var(--color-surface))] text-[color-mix(in_srgb,#4ec9b0_58%,#000)]",
+  orange: "rounded-md bg-[color-mix(in_srgb,#ffa657_22%,var(--color-surface))] text-[color-mix(in_srgb,#ffa657_58%,#000)]",
+  purple: "rounded-md bg-[color-mix(in_srgb,#d2a8ff_22%,var(--color-surface))] text-[color-mix(in_srgb,#d2a8ff_58%,#000)]",
+  red: "rounded-md bg-[color-mix(in_srgb,#ff7b72_22%,var(--color-surface))] text-[color-mix(in_srgb,#ff7b72_58%,#000)]",
+  gray: "rounded-md bg-[color-mix(in_srgb,#9aa3b2_22%,var(--color-surface))] text-[color-mix(in_srgb,#9aa3b2_58%,#000)]",
+  yellow: "rounded-md bg-[color-mix(in_srgb,#ffd700_22%,var(--color-surface))] text-[color-mix(in_srgb,#ffd700_58%,#000)]",
+  pink: "rounded-md bg-[color-mix(in_srgb,#c586c0_22%,var(--color-surface))] text-[color-mix(in_srgb,#c586c0_58%,#000)]",
+} as const;

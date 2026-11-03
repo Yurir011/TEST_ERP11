@@ -10,7 +10,7 @@ import { ReportDetailModal, type ReportCardKind } from "./ReportDetailModal";
 import { TransactionDetailModal } from "./TransactionDetailModal";
 import { TransactionSettleModal } from "./TransactionSettleModal";
 import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
-import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { CODE_BADGE } from "../../components/ui/softBadge";
 import { toLocalISODate, toMonthValue } from "../../lib/date";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
@@ -381,15 +381,15 @@ export function TransactionsPage() {
                   <td className="py-2.5 px-4 break-words">{tx.item_name}</td>
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.supply_amount)}</td>
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.vat_amount)}</td>
-                  <td className="py-2.5 px-4 text-right font-medium">{formatCurrency(tx.total_amount)}</td>
+                  <td className={`py-2.5 px-4 text-right font-semibold ${tx.type === "sales" ? "text-success" : "text-[#8b2942]"}`}>{formatCurrency(tx.total_amount)}</td>
                   <td className="py-2.5 px-4 whitespace-nowrap">
                     {tx.settled ? (
-                      <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.green}`}>
+                      <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.green}`}>
                         {tx.type === "sales" ? "입금완료" : "결제완료"}
                         {tx.settled_date ? ` ${tx.settled_date.slice(2).replace(/-/g, ".")}` : ""}
                       </span>
                     ) : (
-                      <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>
+                      <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.orange}`}>
                         {tx.paid_amount > 0
                           ? tx.type === "sales"
                             ? "수금(일부)"

@@ -1,5 +1,5 @@
 import type { ApprovalStep } from "../../components/approval/types";
-import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { CODE_BADGE } from "../../components/ui/softBadge";
 
 export type ProjectDocType = "quotation" | "statement" | "tax_invoice" | "purchase_order";
 
@@ -20,10 +20,10 @@ export const PROJECT_DOC_STATUS_LABELS: Record<ProjectDocumentStatus, string> = 
 };
 
 export const PROJECT_DOC_STATUS_STYLES: Record<ProjectDocumentStatus, string> = {
-  draft: SOFT_BADGE.orange,
-  pending: SOFT_BADGE.blue,
-  approved: SOFT_BADGE.green,
-  rejected: SOFT_BADGE.red,
+  draft: CODE_BADGE.yellow,
+  pending: CODE_BADGE.blue,
+  approved: CODE_BADGE.green,
+  rejected: CODE_BADGE.red,
 };
 
 export interface Approver {

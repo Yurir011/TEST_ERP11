@@ -1,6 +1,6 @@
 import { FileSpreadsheet, Image, ImagePlus, Printer, Trash2 } from "lucide-react";
 import { useRef } from "react";
-import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { CODE_BADGE } from "../../components/ui/softBadge";
 import { openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { AccountName } from "./AccountName";
@@ -94,11 +94,11 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
                 ) : (
                   paymentMethodDetailLabel(p, names)
                 )}
-                {p.card_pending && <span className={`ml-1 text-[11px] px-1.5 py-0.5 font-medium ${SOFT_BADGE.orange}`}>결제예정</span>}
+                {p.card_pending && <span className={`ml-1 text-[11px] px-1.5 py-0.5 font-medium ${CODE_BADGE.orange}`}>결제예정</span>}
               </td>
               <td className="text-center py-2.5 px-2 break-words">
                 {p.proof_type ? (
-                  <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.purple}`}>
+                  <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.purple}`}>
                     {p.proof_type === "other" && p.proof_type_detail ? p.proof_type_detail : PROOF_TYPE_LABELS[p.proof_type]}
                   </span>
                 ) : p.method === "bank_transfer" || p.method === "cash" ? (
@@ -107,7 +107,7 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
                   <span className="text-xs text-text-muted">-</span>
                 )}
               </td>
-              <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap border-r border-text/[0.07]">{formatCurrency(p.amount)}</td>
+              <td className={`py-2.5 px-4 text-right font-semibold whitespace-nowrap ${p.type === "deposit" ? "text-success" : "text-[#8b2942]"} border-r border-text/[0.07]`}>{formatCurrency(p.amount)}</td>
               <td className="py-2.5 px-2">
                 <div className="flex flex-nowrap items-center justify-end gap-x-0.5">
                   {/* 영수증이 아직 없는 지출은 나중에 올릴 수 있다: 아이콘을 눌러 사진을 고르거나, 이 줄 위로 사진을 끌어다 놓는다 */}

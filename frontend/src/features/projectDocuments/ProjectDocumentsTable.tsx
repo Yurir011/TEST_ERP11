@@ -1,6 +1,6 @@
 import { Download, Mail, Printer, Sheet, Trash2 } from "lucide-react";
 import { CLAMP_CELL, ClampText } from "../../components/ui/ClampText";
-import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { CODE_BADGE } from "../../components/ui/softBadge";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal } from "../proposals/types";
 import { formatDocAmount, isDocApproved, itemsSummary, itemsTotal, type DocListRow } from "./documentHelpers";
 import {
@@ -34,8 +34,8 @@ interface ProjectDocumentsTableProps {
 function ExtraBadges({ isFinal, deleteRequested }: { isFinal: boolean; deleteRequested: boolean }) {
   return (
     <>
-      {isFinal && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 font-medium ${SOFT_BADGE.purple}`}>전결</span>}
-      {deleteRequested && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 font-medium ${SOFT_BADGE.red}`}>삭제 결재 중</span>}
+      {isFinal && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 font-medium ${CODE_BADGE.purple}`}>전결</span>}
+      {deleteRequested && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 font-medium ${CODE_BADGE.red}`}>삭제 결재 중</span>}
     </>
   );
 }
@@ -71,14 +71,14 @@ export function ProjectDocumentsTable({
             {lockedDocType === "tax_invoice" && (
               <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">팝빌</th>
             )}
-            <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">날짜</th>
+            <th className={`py-2.5 px-4 font-semibold text-white text-center whitespace-nowrap ${isTaxList ? "w-[13%] min-w-[8.5rem]" : "w-px"}`}>날짜</th>
             {/* 세금계산서 목록은 프로젝트·담당자 열 없이 날짜 다음에 내용, 그다음 거래처명 순서로 보여 준다 */}
             {!isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-[22%]">프로젝트</th>}
-            {isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-[40%]">내용</th>}
-            <th className={`py-2.5 px-4 font-semibold text-white text-center ${isTaxList ? "w-[28%]" : "w-[22%]"}`}>거래처명</th>
+            {isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-[31%]">내용</th>}
+            <th className={`py-2.5 px-4 font-semibold text-white text-center ${isTaxList ? "w-[20%]" : "w-[22%]"}`}>거래처명</th>
             {!isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">담당자</th>}
             {!isTaxList && <th className="py-2.5 px-4 font-semibold text-white text-center w-[26%]">내용</th>}
-            <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">합계</th>
+            <th className={`py-2.5 px-4 font-semibold text-white text-center whitespace-nowrap ${isTaxList ? "w-[13%] min-w-[8.5rem]" : "w-px"}`}>합계</th>
             <th className="w-px whitespace-nowrap"></th>
           </tr>
         </thead>
@@ -94,7 +94,7 @@ export function ProjectDocumentsTable({
                   className="cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
                 >
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                    <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`}>{p.kind ? `${p.kind}품의서` : "품의서"}</span>
+                    <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.orange}`}>{p.kind ? `${p.kind}품의서` : "품의서"}</span>
                   </td>
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
                     <span
@@ -156,11 +156,11 @@ export function ProjectDocumentsTable({
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
                     {/* 종이 세금계산서는 항상 매입이므로 "매입" 배지 없이 "종이"만 표시한다. */}
                     {doc.is_paper ? (
-                      <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.gray}`}>종이</span>
+                      <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.gray}`}>종이</span>
                     ) : (
                       <span
                         className={`text-xs px-2 py-1 font-medium ${
-                          doc.direction === "purchase" ? SOFT_BADGE.orange : SOFT_BADGE.purple
+                          doc.direction === "purchase" ? CODE_BADGE.orange : CODE_BADGE.purple
                         }`}
                       >
                         {doc.direction === "purchase" ? "매입" : "매출"}
@@ -170,7 +170,7 @@ export function ProjectDocumentsTable({
                 )}
                 {lockedDocType !== "tax_invoice" && (
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
-                    <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.blue}`}>
+                    <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.blue}`}>
                       {PROJECT_DOC_TYPE_LABELS[doc.doc_type]}
                     </span>
                   </td>
@@ -188,13 +188,13 @@ export function ProjectDocumentsTable({
                     {/* 팝빌 발행 대상은 매출 세금계산서뿐이다. 발행됨 / 승인되어 발행 대기 / 그 외(-) 로 나눈다. */}
                     {doc.popbill_issued ? (
                       <span
-                        className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.green}`}
+                        className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.green}`}
                         title={`국세청 승인번호 ${doc.popbill_nts_confirm_num}`}
                       >
                         발행
                       </span>
                     ) : doc.direction !== "purchase" && doc.status === "approved" && !doc.delete_requested ? (
-                      <span className={`text-xs px-2 py-1 font-medium ${SOFT_BADGE.orange}`} title="승인되었으나 아직 팝빌로 발행하지 않았습니다.">
+                      <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.pink}`} title="승인되었으나 아직 팝빌로 발행하지 않았습니다.">
                         대기
                       </span>
                     ) : (
@@ -230,7 +230,7 @@ export function ProjectDocumentsTable({
                     <ClampText>{itemsSummary(doc)}</ClampText>
                   </td>
                 )}
-                <td className="py-2.5 px-4 text-right font-medium whitespace-nowrap">{formatDocAmount(doc, itemsTotal(doc))}</td>
+                <td className={`py-2.5 px-4 text-right font-semibold whitespace-nowrap ${isTaxList ? (doc.direction === "sales" ? "text-success" : doc.direction === "purchase" ? "text-[#8b2942]" : "") : ""}`}>{formatDocAmount(doc, itemsTotal(doc))}</td>
                 <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-1">
                     {doc.status === "rejected" && doc.created_by === userId && (
