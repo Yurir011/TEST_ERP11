@@ -80,7 +80,7 @@ export function ProjectStageBoard({ projects }: ProjectStageBoardProps) {
               </span>
             </div>
 
-            {shown.length === 0 && <p className={`text-xs px-1 ${col.text} opacity-60`}>해당 프로젝트가 없습니다.</p>}
+            {shown.length === 0 && <p className={`text-sm px-1 ${col.text} opacity-60`}>해당 프로젝트가 없습니다.</p>}
 
             <div className="space-y-2">
               {shown.map((p) => {
@@ -96,10 +96,10 @@ export function ProjectStageBoard({ projects }: ProjectStageBoardProps) {
                   >
                     <ProgressRing percent={p.progress_percent} colorVar={ringColor} />
                     <div className="min-w-0">
-                      <p className={`text-xs font-semibold truncate ${overdue ? "text-danger" : "text-text"}`}>
+                      <p className={`text-sm font-semibold truncate ${overdue ? "text-danger" : "text-text"}`}>
                         {p.name}
                       </p>
-                      <p className="text-[11px] text-text-muted truncate mt-0.5">
+                      <p className="text-xs text-text-muted truncate mt-0.5">
                         {p.client_name}
                         {overdue && <span className="text-danger"> · 지연</span>}
                       </p>
@@ -108,7 +108,7 @@ export function ProjectStageBoard({ projects }: ProjectStageBoardProps) {
                 );
               })}
               {hiddenCount > 0 && (
-                <p className={`text-[11px] text-center pt-1 ${col.text} opacity-70`}>+{hiddenCount}개 더</p>
+                <p className={`text-xs text-center pt-1 ${col.text} opacity-70`}>+{hiddenCount}개 더</p>
               )}
             </div>
           </div>

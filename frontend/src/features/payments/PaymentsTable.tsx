@@ -40,15 +40,15 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
           <col style={{ width: "8.5rem" }} /> {/* 영수증·인쇄·엑셀·삭제 아이콘 4개가 한 줄에 들어가는 고정 폭 */}
         </colgroup>
         <thead>
-          <tr className="text-center text-text-muted border-b border-border">
-            <th className="py-2.5 px-2 font-medium whitespace-nowrap">구분</th>
-            <th className="py-2.5 px-2 font-medium whitespace-nowrap">날짜</th>
-            <th className="py-2.5 px-2 font-medium whitespace-nowrap">분류</th>
-            <th className="py-2.5 px-4 font-medium">내용</th>
-            <th className="py-2.5 px-2 font-medium whitespace-nowrap">거래처</th>
-            <th className="py-2.5 px-2 font-medium whitespace-nowrap">수단</th>
-            <th className="py-2.5 px-2 font-medium whitespace-nowrap">증빙발행</th>
-            <th className="py-2.5 px-4 font-medium text-center whitespace-nowrap border-r border-text/[0.07]">금액</th>
+          <tr className="text-center text-[#2f4680] bg-[#eaf0fd] border-b border-[#cfdaf5]">
+            <th className="py-2.5 px-2 font-semibold whitespace-nowrap">구분</th>
+            <th className="py-2.5 px-2 font-semibold whitespace-nowrap">날짜</th>
+            <th className="py-2.5 px-2 font-semibold whitespace-nowrap">분류</th>
+            <th className="py-2.5 px-4 font-semibold">내용</th>
+            <th className="py-2.5 px-2 font-semibold whitespace-nowrap">거래처</th>
+            <th className="py-2.5 px-2 font-semibold whitespace-nowrap">수단</th>
+            <th className="py-2.5 px-2 font-semibold whitespace-nowrap">증빙발행</th>
+            <th className="py-2.5 px-4 font-semibold text-center whitespace-nowrap border-r border-text/[0.07]">금액</th>
             <th></th>
           </tr>
         </thead>

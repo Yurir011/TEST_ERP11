@@ -12,11 +12,12 @@ function isOverdue(p: Project, today: string): boolean {
   return p.status === "in_progress" && !!p.end_date && p.end_date < today;
 }
 
-const BAR_COLOR: Record<ProjectStatus, string> = {
-  estimate: "bg-tile-orange-fg",
-  in_progress: "bg-tile-blue-fg",
-  completed: "bg-tile-green-fg",
-  discarded: "bg-text-faint",
+// 행 배경에 깔리는 진행 막대의 색 (상태별, 지연이면 빨강)
+const FILL_COLOR: Record<ProjectStatus, string> = {
+  estimate: "var(--color-tile-orange-fg)",
+  in_progress: "var(--color-tile-blue-fg)",
+  completed: "var(--color-tile-green-fg)",
+  discarded: "var(--color-text-muted)",
 };
 
 const TABS: { key: ProjectStatus | "all"; label: string }[] = [
@@ -169,51 +170,47 @@ export function ProjectsPage() {
       )}
 
       {projects !== null && projects.length > 0 && (
-        <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[#2f4680] bg-[#eaf0fd] border-b border-[#cfdaf5]">
-                <th className="py-2.5 px-4 font-semibold">프로젝트</th>
-                <th className="py-2.5 px-4 font-semibold">거래처</th>
-                <th className="py-2.5 px-4 font-semibold">진행률</th>
-                <th className="py-2.5 px-4 font-semibold">상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((p) => {
-                const overdue = isOverdue(p, today);
-                return (
-                  <tr
-                    key={p.id}
-                    onClick={() => navigate(`/projects/${p.id}`)}
-                    className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
-                  >
-                    <td className={`py-3 px-4 font-medium ${overdue ? "text-danger" : "text-text"}`}>
-                      {p.name}
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+          {projects.map((p) => {
+            const overdue = isOverdue(p, today);
+            const color = overdue ? "var(--color-danger)" : FILL_COLOR[p.status];
+            return (
+              // 이름 바로 아래 밑줄이 진행 게이지다: 이름 칸 전체 폭(거래처 바로 앞까지)이 100%
+              <div
+                key={p.id}
+                onClick={() => navigate(`/projects/${p.id}`)}
+                className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
+              >
+                <div className="flex items-center gap-4 px-[18px] py-3.5">
+                  <div className="min-w-0 flex-1">
+                    <div className={`text-sm font-semibold ${overdue ? "text-danger" : "text-text"}`}>
+                      <span className="break-words">{p.name}</span>
                       {overdue && <span className="text-[11px] font-normal ml-1.5">· 지연</span>}
-                    </td>
-                    <td className="py-3 px-4 text-text-muted">{p.client_name}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 h-1.5 rounded-full bg-bg overflow-hidden shrink-0">
-                          <div
-                            className={`h-full rounded-full ${overdue ? "bg-danger" : BAR_COLOR[p.status]}`}
-                            style={{ width: `${p.progress_percent}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-text-muted tabular-nums">{p.progress_percent}%</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`text-xs px-2.5 py-1 font-medium ${PROJECT_STATUS_STYLES[p.status]}`}>
-                        {PROJECT_STATUS_LABELS[p.status]}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </div>
+                    <div
+                      className="mt-[7px] h-1 w-full overflow-hidden rounded-full bg-text/[0.08]"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={p.progress_percent}
+                      aria-label={`${p.name} 진행률`}
+                    >
+                      <div className="h-full rounded-full" style={{ width: `${p.progress_percent}%`, background: color }} />
+                    </div>
+                  </div>
+                  <span className="w-[140px] shrink-0 truncate text-[13px] text-text-muted" title={p.client_name}>
+                    {p.client_name}
+                  </span>
+                  <b className="w-12 shrink-0 text-right text-sm tabular-nums" style={{ color }}>
+                    {p.progress_percent}%
+                  </b>
+                  <span className={`shrink-0 text-xs px-2.5 py-1 font-medium ${PROJECT_STATUS_STYLES[p.status]}`}>
+                    {PROJECT_STATUS_LABELS[p.status]}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </MainLayout>

@@ -337,15 +337,15 @@ export function TransactionsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-text-muted border-b border-border">
-                <th className="py-2.5 px-4 font-medium">구분</th>
-                <th className="py-2.5 px-4 font-medium">날짜</th>
-                <th className="py-2.5 px-4 font-medium">거래처</th>
-                <th className="py-2.5 px-4 font-medium">품목</th>
-                <th className="py-2.5 px-4 font-medium text-right">공급가액</th>
-                <th className="py-2.5 px-4 font-medium text-right">부가세</th>
-                <th className="py-2.5 px-4 font-medium text-right">합계</th>
-                <th className="py-2.5 px-4 font-medium">결제</th>
+              <tr className="text-left text-[#2f4680] bg-[#eaf0fd] border-b border-[#cfdaf5]">
+                <th className="py-2.5 px-4 font-semibold">구분</th>
+                <th className="py-2.5 px-4 font-semibold">날짜</th>
+                <th className="py-2.5 px-4 font-semibold">거래처</th>
+                <th className="py-2.5 px-4 font-semibold">품목</th>
+                <th className="py-2.5 px-4 font-semibold text-right">공급가액</th>
+                <th className="py-2.5 px-4 font-semibold text-right">부가세</th>
+                <th className="py-2.5 px-4 font-semibold text-right">합계</th>
+                <th className="py-2.5 px-4 font-semibold">결제</th>
                 <th className="w-20"></th>
               </tr>
             </thead>

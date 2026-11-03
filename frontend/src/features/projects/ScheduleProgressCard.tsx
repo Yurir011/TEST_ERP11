@@ -100,14 +100,15 @@ export function ScheduleProgressCard({
       </button>
 
       <div className="mt-5">
-        <div className="flex items-center justify-between mb-1.5">
+        {/* 바가 너무 길면 시선이 흩어져서 이전 폭의 약 2/3로 줄였다 (제목·% 줄도 같은 폭) */}
+        <div className="flex items-center justify-between mb-1.5 w-2/3 min-w-[240px]">
           <label className="text-xs text-text-muted">종합 진행률</label>
           <span className="text-xs tabular-nums">
             {weekSummary(project) && <span className="text-text-muted mr-2">{weekSummary(project)}</span>}
             <span className="font-bold text-progress-4-fg">{project.progress_percent}%</span>
           </span>
         </div>
-        <div className="relative">
+        <div className="relative w-2/3 min-w-[240px]">
           <div
             onClick={() => setPickerOpen(true)}
             title="클릭하여 진행율을 선택합니다 (진행상황 항목 비율로 자동 계산되기도 합니다)"

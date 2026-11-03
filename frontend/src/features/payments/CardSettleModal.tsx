@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useState } from "react";
 import { ApiError, apiPost } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
@@ -57,8 +58,11 @@ export function CardSettleModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="bg-surface rounded-2xl p-6 w-full max-w-lg">
-        <h3 className="text-sm font-semibold mb-1">카드 결제일 일괄처리</h3>
+      <div className="relative bg-surface rounded-2xl p-6 w-full max-w-lg">
+        <button type="button" onClick={onClose} aria-label="닫기" title="닫기" className="absolute right-4 top-4 text-text-muted hover:text-text">
+          <X size={20} />
+        </button>
+        <h3 className="text-sm font-semibold mb-1 pr-8">카드 결제일 일괄처리</h3>
         <p className="text-xs text-text-muted mb-4">
           법인카드 사용내역은 결제 전까지 '결제예정'으로 쌓입니다. 사용기간은 매월 1일~말일이고 다음 달 결제일(휴일이면 다음 영업일)에 청구됩니다. 일괄 처리하면 출금 내역으로 확정되고 입출금 날짜가 결제일로 바뀝니다.
         </p>
