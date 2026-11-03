@@ -6,6 +6,7 @@ from app.models.schedule import EVENT_COLORS
 
 RECURRENCE_FREQS = ("none", "daily", "weekly", "yearly")
 MAX_OCCURRENCES = 366
+REMIND_DAYS_CHOICES = (0, 1, 3, 7)
 
 
 class ScheduleEventCreate(BaseModel):
@@ -21,6 +22,14 @@ class ScheduleEventCreate(BaseModel):
     # 음력 + 매년 반복일 때, 프런트(lunar-javascript)에서 음력 기준으로 계산한 각 회차의 양력 날짜 목록.
     # 음력은 해마다 대응 양력 날짜가 달라 서버에서 solar+N년 방식으로 생성할 수 없어 이 목록을 그대로 사용한다.
     lunar_occurrence_dates: list[date] | None = None
+    remind_days_before: int | None = None  # None=알림 없음, 0=당일, 1·3·7=며칠 전
+
+    @field_validator("remind_days_before")
+    @classmethod
+    def validate_remind(cls, v: int | None) -> int | None:
+        if v is not None and v not in REMIND_DAYS_CHOICES:
+            raise ValueError(f"remind_days_before must be one of {REMIND_DAYS_CHOICES} or null")
+        return v
 
     @field_validator("color")
     @classmethod
@@ -72,6 +81,7 @@ class ScheduleEventOut(BaseModel):
     is_lunar: bool
     is_completed: bool
     sort_order: int
+    remind_days_before: int | None = None
     recurrence_group_id: str | None
     created_by: int
     created_by_name: str

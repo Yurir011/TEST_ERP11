@@ -112,6 +112,7 @@ export function CalendarPage() {
         end_date: newEnd,
         color: ev.color,
         is_lunar: ev.is_lunar,
+        remind_days_before: ev.remind_days_before,
       });
       loadEvents();
     } catch (err) {

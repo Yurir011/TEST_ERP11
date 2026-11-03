@@ -8,6 +8,7 @@ import { useAuth } from "./context/useAuth";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SiteAdminDashboardPage } from "./features/dashboard/SiteAdminDashboardPage";
 import { LoginPage } from "./features/auth/LoginPage";
+import { ScheduleReminderPopup } from "./features/schedule/ScheduleReminderPopup";
 import { useOpenConversationFromDesktop } from "./features/messenger/useOpenConversationFromDesktop";
 import { useFileDrop } from "./lib/fileDrop";
 
@@ -380,6 +381,7 @@ function App() {
   useFileDrop(); // 파일 첨부 칸 위에 파일을 끌어다 놓으면 첨부
   return (
     <Suspense fallback={pageFallback}>
+    <ScheduleReminderPopup />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 

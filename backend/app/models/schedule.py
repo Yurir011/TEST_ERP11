@@ -38,6 +38,8 @@ class ScheduleEvent(Base):
     is_lunar: Mapped[bool] = mapped_column(Boolean, default=False)  # 음력 날짜로 입력된 일정인지 (저장은 항상 환산된 양력 날짜)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # 알림: 시작일 며칠 전부터 팝업으로 알릴지 (None=알림 없음, 0=당일, 1·3·7=그 일수 전)
+    remind_days_before: Mapped[int | None] = mapped_column(Integer, nullable=True)
     recurrence_group_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

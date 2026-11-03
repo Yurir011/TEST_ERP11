@@ -51,6 +51,7 @@ export interface ScheduleEvent {
   is_lunar: boolean;
   is_completed: boolean;
   sort_order: number;
+  remind_days_before: number | null;
   recurrence_group_id: string | null;
   created_by: number;
   created_by_name: string;
@@ -70,6 +71,16 @@ export interface ScheduleEventInput {
   recurrence_weekdays?: number[] | null;
   recurrence_until?: string | null;
   lunar_occurrence_dates?: string[] | null;
+  remind_days_before?: number | null;
 }
+
+/** 알림 시점 선택지: null=없음, 0=당일, 그 외=며칠 전 */
+export const REMIND_CHOICES: { value: number | null; label: string }[] = [
+  { value: null, label: "없음" },
+  { value: 0, label: "당일" },
+  { value: 1, label: "하루 전" },
+  { value: 3, label: "3일 전" },
+  { value: 7, label: "1주 전" },
+];
 
 export type CalendarView = "month" | "week" | "day";

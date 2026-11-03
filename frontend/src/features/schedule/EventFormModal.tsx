@@ -10,6 +10,7 @@ import {
 } from "./lunarUtils";
 import {
   EVENT_COLOR_STYLES,
+  REMIND_CHOICES,
   EVENT_COLORS,
   type EventColor,
   type RecurrenceFreq,
@@ -43,6 +44,7 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
   const [startDate, setStartDate] = useState(event?.start_date ?? initialDate);
   const [endDate, setEndDate] = useState(event?.end_date ?? initialDate);
   const [color, setColor] = useState<EventColor>(event?.color ?? "grayblue");
+  const [remindDays, setRemindDays] = useState<number | null>(event?.remind_days_before ?? null);
   const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFreq>("none");
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
   const [recurrenceUntil, setRecurrenceUntil] = useState(initialDate);
@@ -138,6 +140,7 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
         recurrence_weekdays: recurrenceFreq === "weekly" ? recurrenceWeekdays : null,
         recurrence_until: recurrenceFreq !== "none" ? recurrenceUntil : null,
         lunar_occurrence_dates: lunarOccurrenceDates,
+        remind_days_before: remindDays,
       });
     } catch {
       setError("저장 중 오류가 발생했습니다.");
@@ -332,6 +335,27 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
               )}
             </div>
           )}
+
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">알림 (해당일이 되면 팝업으로 알려요)</label>
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="알림">
+              {REMIND_CHOICES.map((c) => (
+                <button
+                  key={String(c.value)}
+                  type="button"
+                  role="radio"
+                  aria-checked={remindDays === c.value}
+                  disabled={!canEdit}
+                  onClick={() => setRemindDays(c.value)}
+                  className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-60 ${
+                    remindDays === c.value ? "border-primary bg-primary/10 text-primary font-semibold" : "border-border text-text-muted hover:bg-bg"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div>
             <label className="block text-xs text-text-muted mb-1.5">색상</label>

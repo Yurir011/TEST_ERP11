@@ -26,6 +26,7 @@ def _to_out(event: ScheduleEvent) -> ScheduleEventOut:
         is_lunar=event.is_lunar,
         is_completed=event.is_completed,
         sort_order=event.sort_order,
+        remind_days_before=event.remind_days_before,
         recurrence_group_id=event.recurrence_group_id,
         created_by=event.created_by,
         created_by_name=event.creator.name,
@@ -54,6 +55,30 @@ def list_events(
         .all()
     )
     return [_to_out(e) for e in events]
+
+
+@router.get("/reminders", response_model=list[ScheduleEventOut])
+def list_reminders(
+    on: date = Query(..., description="기준 날짜(보통 오늘). 알림 시작일 <= 기준일 <= 종료일인 일정을 돌려준다"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """오늘 팝업으로 알려야 할 내 일정. 알림을 켠 일정 중 (시작일 - N일) 이 지났고 아직 끝나지 않았으며 완료로 표시하지 않은 것."""
+    candidates = (
+        db.query(ScheduleEvent)
+        .options(joinedload(ScheduleEvent.creator))
+        .filter(
+            ScheduleEvent.created_by == current_user.id,
+            ScheduleEvent.remind_days_before.is_not(None),
+            ScheduleEvent.is_completed.is_(False),
+            ScheduleEvent.end_date >= on,
+        )
+        .order_by(ScheduleEvent.start_date, ScheduleEvent.sort_order, ScheduleEvent.id)
+        .all()
+    )
+    due = [e for e in candidates if e.start_date - timedelta(days=e.remind_days_before or 0) <= on]
+    logger.debug(f"[Schedule] 알림 조회: on={on}, 대상={len(due)}건, by={current_user.id}")
+    return [_to_out(e) for e in due]
 
 
 def _to_js_weekday(d: date) -> int:
@@ -130,6 +155,7 @@ def create_event(
             end_date=occ_start + timedelta(days=duration),
             color=payload.color,
             is_lunar=payload.is_lunar,
+            remind_days_before=payload.remind_days_before,
             recurrence_group_id=group_id,
             created_by=current_user.id,
         )
@@ -173,6 +199,7 @@ def update_event(
     event.end_date = payload.end_date
     event.color = payload.color
     event.is_lunar = payload.is_lunar
+    event.remind_days_before = payload.remind_days_before
     db.commit()
     db.refresh(event)
     logger.debug(f"[Schedule] 일정 수정: id={event_id}, by={current_user.id}")
