@@ -81,3 +81,21 @@ textarea {
   border-radius: 16px;
   padding: 14px;
 }
+
+/* 메일 색 선택 창의 색상 막대: 손잡이만 동그랗게 (트랙은 무지개 배경) */
+.mail-hue::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.mail-hue::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.45);
+}

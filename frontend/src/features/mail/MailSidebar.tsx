@@ -1,7 +1,8 @@
 import { ArrowLeft, BookUser, FileEdit, Folder, Inbox, Layers, Paperclip, Send, SquarePen, Star, Mail as MailIcon, Settings, Trash2, ShieldAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ALL_MAIL_FOLDER, type MailAccountEntry, type MailFilter, type MailFolder } from "../../lib/desktop";
-import { DEFAULT_CUSTOM_COLOR, MAIL_ACCENTS, isCustomAccent } from "./mailAccent";
+import { MailColorPicker } from "./MailColorPicker";
+import { MAIL_ACCENTS, isCustomAccent, resolveMailAccent } from "./mailAccent";
 import { folderLabel, isSelfMailFolder, sortFolders } from "./mailFormat";
 
 interface Props {
@@ -56,6 +57,7 @@ const QUICK: { key: "unread" | "flagged" | "attachment"; label: string; icon: Re
 
 /** 왼쪽 패널: 내 정보, 빠른 조건(안읽음·중요·첨부), 메일쓰기, 폴더 목록 */
 export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive, onClose, accounts, activeAccountId, onSwitchAccount, onAddAccount, accent, onAccent }: Props) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const all: MailFolder = { path: ALL_MAIL_FOLDER, name: "전체메일", specialUse: null, unread: 0, total: 0 };
   const sorted = sortFolders(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 0, total: 0 }]);
   const list = [all, ...sorted];
@@ -169,7 +171,17 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-border" role="radiogroup" aria-label="메일 색상">
+      <div className="relative px-4 py-3 border-t border-border" role="radiogroup" aria-label="메일 색상">
+        {pickerOpen && (
+          <MailColorPicker
+            initial={resolveMailAccent(accent).primary}
+            onConfirm={(hex) => {
+              onAccent(hex);
+              setPickerOpen(false);
+            }}
+            onCancel={() => setPickerOpen(false)}
+          />
+        )}
         <p className="text-[11px] text-text-muted mb-2">메일 색상</p>
         <div className="flex flex-wrap gap-2">
           {MAIL_ACCENTS.map((a) => (
@@ -185,10 +197,15 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
               className={`w-6 h-6 rounded-full transition-shadow ${a.id === accent ? "ring-2 ring-offset-2 ring-text/60 ring-offset-surface" : "hover:ring-2 hover:ring-text/20 hover:ring-offset-2 hover:ring-offset-surface"}`}
             />
           ))}
-          {/* 직접 고르기: 누르면 전체 색상표가 열린다. 고른 색이 있으면 그 색을 보여 준다 */}
-          <label
+          {/* 직접 고르기: 누르면 작은 색 선택 창이 열리고 [확인]을 눌러야 적용된다 */}
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={pickerOpen}
+            aria-label="직접 고르기"
             title="직접 고르기"
-            className={`relative w-6 h-6 rounded-full cursor-pointer transition-shadow focus-within:ring-2 focus-within:ring-text/40 ${
+            onClick={() => setPickerOpen((open) => !open)}
+            className={`w-6 h-6 rounded-full transition-shadow ${
               isCustomAccent(accent) ? "ring-2 ring-offset-2 ring-text/60 ring-offset-surface" : "hover:ring-2 hover:ring-text/20 hover:ring-offset-2 hover:ring-offset-surface"
             }`}
             style={{
@@ -196,15 +213,7 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
                 ? accent
                 : "conic-gradient(#ff5f5f, #ffd24a, #5fd35f, #4ac8ff, #7a5fff, #ff5fd0, #ff5f5f)",
             }}
-          >
-            <input
-              type="color"
-              aria-label="직접 고르기"
-              value={isCustomAccent(accent) ? accent : DEFAULT_CUSTOM_COLOR}
-              onChange={(e) => onAccent(e.target.value.toLowerCase())}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            />
-          </label>
+          />
         </div>
       </div>
     </aside>
