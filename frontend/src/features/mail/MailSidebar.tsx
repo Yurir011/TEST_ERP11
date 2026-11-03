@@ -1,6 +1,7 @@
 import { ArrowLeft, BookUser, FileEdit, Folder, Inbox, Layers, Paperclip, Send, SquarePen, Star, Mail as MailIcon, Settings, Trash2, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { ALL_MAIL_FOLDER, type MailAccountEntry, type MailFilter, type MailFolder } from "../../lib/desktop";
+import { MAIL_ACCENTS } from "./mailAccent";
 import { folderLabel, isSelfMailFolder, sortFolders } from "./mailFormat";
 
 interface Props {
@@ -24,6 +25,9 @@ interface Props {
   activeAccountId?: string;
   onSwitchAccount?: (id: string) => void;
   onAddAccount?: () => void;
+  /** 메일 화면 강조색 (mailAccent.ts 의 id) 과 바꾸는 함수 */
+  accent: string;
+  onAccent: (id: string) => void;
 }
 
 function folderIcon(f: MailFolder): ReactNode {
@@ -51,7 +55,7 @@ const QUICK: { key: "unread" | "flagged" | "attachment"; label: string; icon: Re
 ];
 
 /** 왼쪽 패널: 내 정보, 빠른 조건(안읽음·중요·첨부), 메일쓰기, 폴더 목록 */
-export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive, onBackToErp, accounts, activeAccountId, onSwitchAccount, onAddAccount }: Props) {
+export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive, onBackToErp, accounts, activeAccountId, onSwitchAccount, onAddAccount, accent, onAccent }: Props) {
   const all: MailFolder = { path: ALL_MAIL_FOLDER, name: "전체메일", specialUse: null, unread: 0, total: 0 };
   const sorted = sortFolders(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 0, total: 0 }]);
   const list = [all, ...sorted];
@@ -166,6 +170,25 @@ export function MailSidebar({ userName, email, folders, folder, onSelectFolder, 
           </button>
         ))}
       </nav>
+
+      <div className="px-4 py-3 border-t border-border" role="radiogroup" aria-label="메일 색상">
+        <p className="text-[11px] text-text-muted mb-2">메일 색상</p>
+        <div className="flex gap-2">
+          {MAIL_ACCENTS.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              role="radio"
+              aria-checked={a.id === accent}
+              aria-label={a.label}
+              title={a.label}
+              onClick={() => onAccent(a.id)}
+              style={{ backgroundColor: a.primary }}
+              className={`w-6 h-6 rounded-full transition-shadow ${a.id === accent ? "ring-2 ring-offset-2 ring-text/60 ring-offset-surface" : "hover:ring-2 hover:ring-text/20 hover:ring-offset-2 hover:ring-offset-surface"}`}
+            />
+          ))}
+        </div>
+      </div>
     </aside>
   );
 }

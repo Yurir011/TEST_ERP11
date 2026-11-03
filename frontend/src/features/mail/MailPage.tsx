@@ -12,6 +12,7 @@ import { MailAccountForm } from "./MailAccountForm";
 import { MailListView } from "./MailListView";
 import { MailReader } from "./MailReader";
 import { MailSidebar } from "./MailSidebar";
+import { loadMailAccent, mailAccentStyle, saveMailAccent } from "./mailAccent";
 import { DEFAULT_PAGE_SIZE, folderLabel, isJunkFolder, isTrashFolder, sortFolders } from "./mailFormat";
 
 type QuickFilter = { unread?: boolean; flagged?: boolean; attachment?: boolean };
@@ -159,6 +160,7 @@ function MailApp({ accountId, accounts, onSwitchAccount, onAddAccount, onCancelA
   const dialog = useDialog();
   const [account, setAccount] = useState<MailAccountInfo | null | undefined>(undefined); // undefined = 확인 중
   const [editing, setEditing] = useState(false);
+  const [accent, setAccent] = useState(loadMailAccent); // 사용자가 고른 강조색
   const [folders, setFolders] = useState<MailFolder[]>([]);
   const [folder, setFolder] = useState("INBOX");
   const [filter, setFilter] = useState<QuickFilter>({});
@@ -553,8 +555,14 @@ function MailApp({ accountId, accounts, onSwitchAccount, onAddAccount, onCancelA
   const title = folderLabel(currentFolder ?? { path: folder, name: folder, specialUse: null });
 
   return (
-    <div className="h-screen flex bg-surface text-text">
+    <div className="h-screen flex bg-surface text-text" style={mailAccentStyle(accent)}>
       <MailSidebar
+        accent={accent}
+        onAccent={(id) => {
+          logDebug("Mail", `강조색 변경: ${id}`);
+          setAccent(id);
+          saveMailAccent(id);
+        }}
         userName={user?.name ?? account.email}
         email={account.email}
         folders={folders}
