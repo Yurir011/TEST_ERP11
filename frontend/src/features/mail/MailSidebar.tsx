@@ -20,6 +20,8 @@ interface Props {
   bookActive: boolean;
   /** ERP 메인 창으로 돌아가기 (앱이 지원할 때만) */
   onBackToErp?: () => void;
+  /** 뒤로가기: 메일 화면(창)을 닫는다 */
+  onClose: () => void;
   /** 등록된 메일 계정들과 지금 보는 계정 (계정마다 메일함이 따로다). 없으면 계정 전환 칸을 보여 주지 않는다 */
   accounts?: MailAccountEntry[];
   activeAccountId?: string;
@@ -55,21 +57,24 @@ const QUICK: { key: "unread" | "flagged" | "attachment"; label: string; icon: Re
 ];
 
 /** 왼쪽 패널: 내 정보, 빠른 조건(안읽음·중요·첨부), 메일쓰기, 폴더 목록 */
-export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive, onBackToErp, accounts, activeAccountId, onSwitchAccount, onAddAccount, accent, onAccent }: Props) {
+export function MailSidebar({ userName, email, folders, folder, onSelectFolder, filter, onToggleFilter, onSettings, onCompose, onComposeSelf, onAddressBook, bookActive, onBackToErp, onClose, accounts, activeAccountId, onSwitchAccount, onAddAccount, accent, onAccent }: Props) {
   const all: MailFolder = { path: ALL_MAIL_FOLDER, name: "전체메일", specialUse: null, unread: 0, total: 0 };
   const sorted = sortFolders(folders.length ? folders : [{ path: "INBOX", name: "INBOX", specialUse: "\\Inbox", unread: 0, total: 0 }]);
   const list = [all, ...sorted];
 
   return (
     <aside className="w-72 shrink-0 bg-surface border-r border-border flex flex-col h-full" aria-label="메일 메뉴">
-      {onBackToErp && (
-        <div className="px-4 pt-4">
-          <button type="button" onClick={onBackToErp} className="flex items-center gap-1.5 text-xs text-text-muted hover:text-primary">
-            <ArrowLeft size={13} /> ERP 로 돌아가기
+      <div className="px-4 pt-4 flex items-center justify-between gap-2">
+        <button type="button" onClick={onClose} className="flex items-center gap-1.5 text-xs text-text-muted hover:text-primary" aria-label="메일 화면 닫기" title="메일 화면 닫기">
+          <ArrowLeft size={13} /> 뒤로가기
+        </button>
+        {onBackToErp && (
+          <button type="button" onClick={onBackToErp} className="text-xs text-text-muted hover:text-primary">
+            ERP 로 돌아가기
           </button>
-        </div>
-      )}
-      <div className={`flex items-center gap-3 px-5 ${onBackToErp ? "pt-3" : "pt-6"} pb-4`}>
+        )}
+      </div>
+      <div className={`flex items-center gap-3 px-5 pt-3 pb-4`}>
         <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center text-base font-semibold shrink-0" aria-hidden="true">
           {userName.slice(0, 1) || "?"}
         </div>

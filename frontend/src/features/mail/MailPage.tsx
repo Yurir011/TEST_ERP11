@@ -575,6 +575,10 @@ function MailApp({ accountId, accounts, onSwitchAccount, onAddAccount, onCancelA
         onComposeSelf={() => void openCompose("self")}
         onAddressBook={() => void leaveCompose().then((ok) => ok && setShowBook(true))}
         bookActive={showBook && !composing}
+        onClose={() => {
+          logDebug("Mail", "뒤로가기: 메일 화면 닫기");
+          window.close();
+        }}
         onBackToErp={getBenchClient()?.focusMain ? () => void getBenchClient()?.focusMain?.() : undefined}
         accounts={accounts}
         activeAccountId={accountId}

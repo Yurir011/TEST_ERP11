@@ -1136,6 +1136,15 @@ describe("주소록", () => {
     expect(await screen.findByRole("list", { name: "메일 목록" })).toBeTruthy();
   });
 
+  it("사이드바 [뒤로가기]는 메일 화면(창)을 닫는다", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    installMail();
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "메일 화면 닫기" }));
+    expect(close).toHaveBeenCalledTimes(1);
+    close.mockRestore();
+  });
+
   it("[ERP 로 돌아가기]는 ERP 메인 창을 앞으로 가져온다 (앱이 지원할 때만 보인다)", async () => {
     const focusMain = vi.fn().mockResolvedValue(undefined);
     installMail();
