@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeTaxInvoiceStats, documentMailDraft, filterTaxInvoices, itemsSummary, itemsTotal, type TaxInvoiceFilters } from "./documentHelpers";
+import { computeTaxInvoiceStats, documentMailDraft, filterTaxInvoices, itemsSummary, itemsTotal, shortKindLabel, type TaxInvoiceFilters } from "./documentHelpers";
 import type { ProjectDocument } from "./types";
 
 const doc = (over: Partial<ProjectDocument> = {}): ProjectDocument =>
@@ -126,5 +126,18 @@ describe("문서 메일 초안", () => {
     expect(d.body).toContain("한빛통신 담당자님,");
     expect(d.body).not.toContain("()");
     expect(d.subject.length).toBe(255);
+  });
+});
+
+describe("shortKindLabel", () => {
+  it("4글자까지는 그대로, 넘으면 4글자 뒤를 …로 줄인다", () => {
+    expect(shortKindLabel("영수증")).toBe("영수증");
+    expect(shortKindLabel("계약서류들")).toBe("계약서류…");
+    expect(shortKindLabel("가나다라")).toBe("가나다라");
+    expect(shortKindLabel("  건축허가서  ")).toBe("건축허가…");
+  });
+
+  it("이모지처럼 두 칸을 차지하는 글자도 한 글자로 센다", () => {
+    expect(shortKindLabel("📄📄📄📄📄")).toBe("📄📄📄📄…");
   });
 });

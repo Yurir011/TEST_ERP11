@@ -110,6 +110,12 @@ const SECTION_STYLE: Record<string, { icon: LucideIcon; color: TabColor }> = {
 };
 const DEFAULT_SECTION_STYLE = { icon: FileText, color: "blue" as TabColor };
 
+/** 메신저 탭은 메신저 화면과 같은 노랑으로 맞춘다 (위쪽 줄·크림 바탕·아이콘) */
+const MESSENGER_TAB_STYLES = (isActive: boolean) => ({
+  tab: { borderTopColor: "#f5c400", ...(isActive ? { backgroundColor: "#fffcf2" } : {}) },
+  icon: isActive ? { backgroundColor: "#fee500", color: "#3a2e00" } : { backgroundColor: "#fff4bf", color: "#8a6500" },
+});
+
 /** 메일 탭은 사용자가 고른 메일 색을 따른다 (위쪽 줄·바탕·아이콘) */
 function mailTabStyles(accentId: string, isActive: boolean) {
   const a = resolveMailAccent(accentId);
@@ -250,7 +256,8 @@ export function TabShell({ routes }: { routes: ReactNode }) {
                 const section = sectionOf(currentLocation(tab).pathname);
                 const style = SECTION_STYLE[section] ?? DEFAULT_SECTION_STYLE;
                 const color = TAB_COLORS[style.color];
-                const mailStyles = section === "mail" ? mailTabStyles(mailAccent, isActive) : null;
+                const mailStyles =
+                  section === "mail" ? mailTabStyles(mailAccent, isActive) : section === "messenger" ? MESSENGER_TAB_STYLES(isActive) : null; // 메일·메신저 탭은 각자의 색
                 const Icon = style.icon;
                 return (
                   // 탭이 많아지면 익스플로러·크롬처럼 폭이 고르게 좁아져서 모두 보인다 (기본 220px → 최소 34px, 보고 있는 탭은 88px).

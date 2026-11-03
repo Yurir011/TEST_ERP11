@@ -96,6 +96,7 @@ def _new_document(
         direction=payload.direction if doc_type == ProjectDocType.tax_invoice else None,
         approval_no=payload.approval_no if doc_type == ProjectDocType.tax_invoice else None,
         is_paper=payload.is_paper if doc_type == ProjectDocType.tax_invoice else False,
+        kind_label=(payload.kind_label or "").strip() or None if doc_type == ProjectDocType.tax_invoice else None,
     )
     if doc.is_paper:
         doc.direction = "purchase"  # 종이 세금계산서는 받은(매입) 세금계산서다
@@ -223,6 +224,8 @@ def update_project_document(
         doc.is_paper = payload.is_paper
         if payload.is_paper:
             doc.direction = "purchase"
+    if payload.kind_label is not None and doc.doc_type == ProjectDocType.tax_invoice:
+        doc.kind_label = payload.kind_label.strip() or None
     doc.issue_date = payload.issue_date
     doc.currency = payload.currency.value
     doc.purpose_type = payload.purpose_type.value

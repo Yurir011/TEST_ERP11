@@ -2,7 +2,7 @@ import { Download, Mail, Printer, Sheet, Trash2 } from "lucide-react";
 import { CLAMP_CELL, ClampText } from "../../components/ui/ClampText";
 import { CODE_BADGE } from "../../components/ui/softBadge";
 import { PROPOSAL_STATUS_LABELS, PROPOSAL_STATUS_STYLES, type Proposal } from "../proposals/types";
-import { formatDocAmount, isDocApproved, itemsSummary, itemsTotal, type DocListRow } from "./documentHelpers";
+import { formatDocAmount, isDocApproved, itemsSummary, itemsTotal, shortKindLabel, type DocListRow } from "./documentHelpers";
 import {
   PROJECT_DOC_STATUS_LABELS,
   PROJECT_DOC_STATUS_STYLES,
@@ -155,7 +155,12 @@ export function ProjectDocumentsTable({
                 {lockedDocType === "tax_invoice" && (
                   <td className="py-2.5 px-4 text-center whitespace-nowrap">
                     {/* 종이 세금계산서는 항상 매입이므로 "매입" 배지 없이 "종이"만 표시한다. */}
-                    {doc.is_paper ? (
+                    {doc.kind_label ? (
+                      // 세금계산서가 아닌 서류는 직접 적은 종류 이름을 보여 준다 (4글자를 넘으면 …로 줄임)
+                      <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.gray}`} title={doc.kind_label}>
+                        {shortKindLabel(doc.kind_label)}
+                      </span>
+                    ) : doc.is_paper ? (
                       <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.gray}`}>종이</span>
                     ) : (
                       <span

@@ -102,6 +102,7 @@ class ProjectDocumentCreate(BaseModel):
     direction: str | None = None  # 세금계산서 등록: "sales" / "purchase" (사진 인식으로 판별된 값)
     approval_no: str | None = None  # 세금계산서 등록: 국세청 승인번호
     is_paper: bool = False  # 세금계산서 등록: 종이로 받은 매입 세금계산서 (팝빌 등록 대상 아님)
+    kind_label: str | None = Field(default=None, max_length=30)  # 세금계산서 등록: 세금계산서가 아닌 서류일 때 직접 적는 종류 이름
     counterparty: TaxInvoicePartyIn | None = None  # 세금계산서 등록: 사진에서 인식한 상대방 정보
 
     @field_validator("items")
@@ -144,6 +145,7 @@ class ProjectDocumentUpdate(BaseModel):
     project_id: int | None = None
     project_other_name: str | None = None
     is_paper: bool | None = None  # 세금계산서: 종이 세금계산서 여부 (None이면 변경하지 않는다)
+    kind_label: str | None = Field(default=None, max_length=30)  # 세금계산서: 서류 종류 이름 (None이면 변경하지 않고, 빈 문자열이면 지운다)
     update_project: bool = False  # True일 때만 project_id / project_other_name을 반영한다
     request_approval: bool = False
     is_final_decision: bool = False
@@ -224,6 +226,7 @@ class ProjectDocumentOut(BaseModel):
     direction: str | None = None
     approval_no: str | None = None
     is_paper: bool = False
+    kind_label: str | None = None
     delete_requested: bool = False
     images: list[ProjectDocumentImageOut] = Field(default_factory=list)
 

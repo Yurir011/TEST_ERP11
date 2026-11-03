@@ -94,6 +94,7 @@ export function ProjectDocumentFormPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanSummary, setScanSummary] = useState<TaxInvoiceOcrResult | null>(null);
   const [direction, setDirection] = useState<"sales" | "purchase" | null>(null);
+  const [kindLabel, setKindLabel] = useState(""); // 세금계산서가 아닌 서류일 때 직접 적는 서류 종류 이름
   const [isPaper, setIsPaper] = useState(false); // 종이로 받은 매입 세금계산서 (팝빌 등록 대상 아님)
   const [approvalNo, setApprovalNo] = useState<string | null>(null);
 
@@ -139,6 +140,7 @@ export function ProjectDocumentFormPage() {
         setCurrency(target.currency);
         setPurposeType(target.purpose_type);
         setIsPaper(target.is_paper);
+        setKindLabel(target.kind_label ?? "");
         setOriginalAttachments(target.images);
         setExistingAttachments(target.images);
         if (target.doc_type === "purchase_order" && target.proposal_id !== null) {
@@ -385,6 +387,7 @@ export function ProjectDocumentFormPage() {
           remark: docType === "purchase_order" ? remark.trim() || null : null,
           items: toItemsPayload(items),
           is_paper: isPaper,
+          kind_label: docType === "tax_invoice" ? kindLabel.trim() : undefined,
           request_approval: true,
           end_title: endTitle,
           approver_ids: approverIds,
@@ -414,6 +417,7 @@ export function ProjectDocumentFormPage() {
         received,
         direction: docType === "tax_invoice" ? (isPaper ? "purchase" : direction) : null,
         is_paper: docType === "tax_invoice" ? isPaper : false,
+        kind_label: docType === "tax_invoice" ? kindLabel.trim() || null : null,
         approval_no: docType === "tax_invoice" ? approvalNo : null,
         // 사진에서 인식한 상대방(우리 회사가 아닌 쪽) 정보 - 거래처관리에 없는 거래처여도 엑셀/PDF 양식을 채우는 데 쓴다.
         counterparty: scannedCounterparty(docType, scanSummary, direction),
@@ -685,6 +689,23 @@ export function ProjectDocumentFormPage() {
                 </span>
               </span>
             </label>
+
+            <div className="mt-3">
+              <label htmlFor="doc-kind-label" className="block text-xs font-medium mb-1">
+                서류 종류 직접 쓰기 (선택)
+              </label>
+              <input
+                id="doc-kind-label"
+                value={kindLabel}
+                maxLength={30}
+                onChange={(e) => setKindLabel(e.target.value)}
+                placeholder="예: 영수증, 계약서"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+              />
+              <p className="text-[11px] text-text-muted mt-1">
+                올린 파일이 세금계산서가 아닐 때 서류 종류를 적으면 목록의 구분 칸에 그 이름이 나옵니다. 4글자를 넘으면 …로 줄여서 보여 줍니다.
+              </p>
+            </div>
           </div>
         )}
 

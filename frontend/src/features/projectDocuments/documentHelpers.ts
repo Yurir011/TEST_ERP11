@@ -8,6 +8,12 @@ import { DOC_CURRENCY_SYMBOLS, PROJECT_DOC_TYPE_LABELS, type ProjectDocument, ty
 export type DocListRow = { kind: "doc"; doc: ProjectDocument } | { kind: "proposal"; proposal: Proposal };
 
 /** 결재가 끝나 PDF 가 만들어진 문서만 저장·출력·발송할 수 있다. */
+/** 목록 구분 스티커에 쓰는 서류 종류 이름: 글자 수(max)를 넘으면 그 뒤를 …로 줄인다 (전체 이름은 마우스를 올리면 보인다) */
+export function shortKindLabel(label: string, max = 4): string {
+  const chars = Array.from(label.trim());
+  return chars.length > max ? `${chars.slice(0, max).join("")}…` : chars.join("");
+}
+
 export function isDocApproved(doc: ProjectDocument): boolean {
   return doc.status === "approved" && doc.has_pdf;
 }

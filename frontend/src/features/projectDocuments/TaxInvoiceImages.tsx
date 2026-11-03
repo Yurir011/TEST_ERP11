@@ -53,6 +53,7 @@ export function TaxInvoiceImages({ doc }: { doc: ProjectDocument }) {
         {doc.approval_no && <span> · 승인번호 {doc.approval_no}</span>}
         {doc.direction === "purchase" && <span> · 받은 세금계산서(매입)</span>}
         {doc.is_paper && <span> · 종이 세금계산서(팝빌 미등록)</span>}
+        {doc.kind_label && <span> · 서류 종류: {doc.kind_label}</span>}
       </p>
       <div className="grid grid-cols-3 gap-2">
         {doc.images.map((image) => (

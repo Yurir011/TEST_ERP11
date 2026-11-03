@@ -91,6 +91,7 @@ def _to_out(doc: ProjectDocument, steps: list[ApprovalStep]) -> ProjectDocumentO
         direction=doc.direction,
         approval_no=doc.approval_no,
         is_paper=bool(doc.is_paper),
+        kind_label=doc.kind_label,
         delete_requested=bool(doc.delete_requested),
         images=doc.images,
     )
