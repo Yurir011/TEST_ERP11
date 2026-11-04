@@ -12,6 +12,7 @@ from app.logging_config import get_logger, setup_logging
 from app.version import APP_VERSION, format_version
 from app.services.recurring_payment import generate_recurring_payments
 from app.routers import (
+    approvals,
     attendance,
     audit_logs,
     auth,
@@ -73,6 +74,7 @@ app.include_router(client_app.router)
 app.include_router(client_public.router)
 app.include_router(nfc_auth.router)
 app.include_router(audit_logs.router)
+app.include_router(approvals.router)
 app.include_router(notices.router)
 app.include_router(notifications.router)
 app.include_router(attendance.router)

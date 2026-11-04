@@ -31,59 +31,63 @@ async function safeGet<T>(path: string): Promise<T[]> {
 }
 
 /** 내 결재함(결재 대기)을 4종류(연차/증빙서류/문서관리/품의서)에서 모아 최신순으로 돌려준다. */
+export async function loadApprovalItems(): Promise<ApprovalItem[]> {
+  const [leaves, docs, projectDocs, proposals] = await Promise.all([
+    safeGet<LeaveRecord>("/api/leaves?status=pending&approver_mine=true"),
+    safeGet<DocumentRecord>("/api/documents?status=pending&approver_mine=true"),
+    safeGet<ProjectDocument>("/api/project-documents?status=pending&approver_mine=true"),
+    safeGet<Proposal>("/api/proposals?status=pending&approver_mine=true"),
+  ]);
+  return [
+    ...leaves.map<ApprovalItem>((l) => ({
+      key: `leave-${l.id}`,
+      kind: "leave",
+      id: l.id,
+      kindLabel: "연차",
+      title: `${l.start_date} ~ ${l.end_date} (${l.days}일)`,
+      subtitle: `${l.user_name} · ${l.reason}`,
+      date: l.created_at,
+      basePath: `/api/leaves/${l.id}`,
+    })),
+    ...docs.map<ApprovalItem>((d) => ({
+      key: `document-${d.id}`,
+      kind: "document",
+      id: d.id,
+      kindLabel: "증빙서류",
+      title: DOC_TYPE_LABELS[d.doc_type],
+      subtitle: `${d.user_name}${d.purpose ? ` · ${d.purpose}` : ""}`,
+      date: d.issued_at,
+      basePath: `/api/documents/${d.id}`,
+    })),
+    ...projectDocs.map<ApprovalItem>((d) => ({
+      key: `project-${d.id}`,
+      kind: "project",
+      id: d.id,
+      kindLabel: PROJECT_DOC_TYPE_LABELS[d.doc_type],
+      title: d.project_name,
+      subtitle: `${d.client_name}${d.doc_no ? ` · ${d.doc_no}` : ""}`,
+      date: d.created_at,
+      basePath: `/api/project-documents/${d.id}`,
+    })),
+    ...proposals.map<ApprovalItem>((p) => ({
+      key: `proposal-${p.id}`,
+      kind: "proposal",
+      id: p.id,
+      kindLabel: p.kind ? `품의서(${p.kind})` : "품의서",
+      title: p.title,
+      subtitle: `${p.creator_name} · ${p.doc_no}`,
+      date: p.created_at,
+      basePath: `/api/proposals/${p.id}`,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+}
+
 export function useApprovalQueue() {
   const [items, setItems] = useState<ApprovalItem[] | null>(null);
 
   const reload = useCallback(() => {
     logDebug("MobileApproval", "내 결재함 조회 시작");
-    Promise.all([
-      safeGet<LeaveRecord>("/api/leaves?status=pending&approver_mine=true"),
-      safeGet<DocumentRecord>("/api/documents?status=pending&approver_mine=true"),
-      safeGet<ProjectDocument>("/api/project-documents?status=pending&approver_mine=true"),
-      safeGet<Proposal>("/api/proposals?status=pending&approver_mine=true"),
-    ]).then(([leaves, docs, projectDocs, proposals]) => {
-      const list: ApprovalItem[] = [
-        ...leaves.map<ApprovalItem>((l) => ({
-          key: `leave-${l.id}`,
-          kind: "leave",
-          id: l.id,
-          kindLabel: "연차",
-          title: `${l.start_date} ~ ${l.end_date} (${l.days}일)`,
-          subtitle: `${l.user_name} · ${l.reason}`,
-          date: l.created_at,
-          basePath: `/api/leaves/${l.id}`,
-        })),
-        ...docs.map<ApprovalItem>((d) => ({
-          key: `document-${d.id}`,
-          kind: "document",
-          id: d.id,
-          kindLabel: "증빙서류",
-          title: DOC_TYPE_LABELS[d.doc_type],
-          subtitle: `${d.user_name}${d.purpose ? ` · ${d.purpose}` : ""}`,
-          date: d.issued_at,
-          basePath: `/api/documents/${d.id}`,
-        })),
-        ...projectDocs.map<ApprovalItem>((d) => ({
-          key: `project-${d.id}`,
-          kind: "project",
-          id: d.id,
-          kindLabel: PROJECT_DOC_TYPE_LABELS[d.doc_type],
-          title: d.project_name,
-          subtitle: `${d.client_name}${d.doc_no ? ` · ${d.doc_no}` : ""}`,
-          date: d.created_at,
-          basePath: `/api/project-documents/${d.id}`,
-        })),
-        ...proposals.map<ApprovalItem>((p) => ({
-          key: `proposal-${p.id}`,
-          kind: "proposal",
-          id: p.id,
-          kindLabel: p.kind ? `품의서(${p.kind})` : "품의서",
-          title: p.title,
-          subtitle: `${p.creator_name} · ${p.doc_no}`,
-          date: p.created_at,
-          basePath: `/api/proposals/${p.id}`,
-        })),
-      ].sort((a, b) => b.date.localeCompare(a.date));
+    loadApprovalItems().then((list) => {
       logDebug("MobileApproval", `내 결재함 ${list.length}건`);
       setItems(list);
     });

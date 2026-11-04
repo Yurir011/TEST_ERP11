@@ -1,6 +1,7 @@
 import { ChevronLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { MobileTabBar } from "./MobileTabBar";
 import { useViewportLock } from "./useViewportLock";
 
 interface MobileLayoutProps {
@@ -8,11 +9,13 @@ interface MobileLayoutProps {
   /** 지정하면 왼쪽 위에 뒤로가기 버튼을 보여준다 (기본 경로로 이동, 없으면 이전 화면). */
   backTo?: string;
   right?: ReactNode;
+  /** true 면 하단 탭을 숨긴다 (대화방처럼 화면 아래를 입력창이 쓰는 경우) */
+  hideTabs?: boolean;
   children: ReactNode;
 }
 
-/** 모바일 하위 화면의 공통 틀: 상단 제목줄(뒤로가기) + 본문. 노치/홈바 안전영역을 반영한다. */
-export function MobileLayout({ title, backTo = "/m", right, children }: MobileLayoutProps) {
+/** 모바일 하위 화면의 공통 틀: 상단 제목줄(뒤로가기) + 본문 + 하단 탭. 노치/홈바 안전영역을 반영한다. */
+export function MobileLayout({ title, backTo = "/m", right, hideTabs = false, children }: MobileLayoutProps) {
   const navigate = useNavigate();
   useViewportLock();
   return (
@@ -31,7 +34,8 @@ export function MobileLayout({ title, backTo = "/m", right, children }: MobileLa
           {right}
         </div>
       </header>
-      <main className="max-w-lg mx-auto px-4 py-4 pb-[calc(2rem+env(safe-area-inset-bottom))] space-y-4">{children}</main>
+      <main className={`max-w-lg mx-auto px-4 py-4 space-y-4 ${hideTabs ? "pb-[calc(2rem+env(safe-area-inset-bottom))]" : "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"}`}>{children}</main>
+      {!hideTabs && <MobileTabBar />}
     </div>
   );
 }

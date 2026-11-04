@@ -1,4 +1,4 @@
-import { Bell, Building2, CalendarCheck, CalendarDays, Clock, FileCheck, Megaphone, Monitor, type LucideIcon } from "lucide-react";
+import { Bell, Building2, CalendarCheck, CalendarDays, Clock, FileCheck, Folder, Megaphone, MessageCircle, Monitor, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
@@ -10,9 +10,11 @@ import { formatTime } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "../attendance/types";
 import { toISODate } from "../schedule/dateUtils";
+import { useMessengerOptional } from "../messenger/useMessenger";
 import { eventColorStyle, type ScheduleEvent } from "../schedule/types";
 import { useApprovalQueue } from "./approvalQueue";
 import { MobileCard } from "./MobileLayout";
+import { MobileTabBar } from "./MobileTabBar";
 import { setForcePc } from "./mobileMode";
 import { useViewportLock } from "./useViewportLock";
 
@@ -38,6 +40,7 @@ export function MobileHome() {
   const [events, setEvents] = useState<ScheduleEvent[] | null>(null);
   const { items: approvals } = useApprovalQueue();
   const isSiteAdmin = user?.role === "site_admin";
+  const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
 
   useEffect(() => {
     logDebug("MobileHome", "홈 데이터 조회 시작");
@@ -92,13 +95,15 @@ export function MobileHome() {
     { to: "/m/notices", label: "공지", icon: Megaphone, tile: "bg-tile-purple", fg: "text-tile-purple-fg", show: hasMenuPermission(user, "notices") },
     { to: "/m/schedule", label: "일정", icon: CalendarDays, tile: "bg-tile-orange", fg: "text-tile-orange-fg", show: true },
     { to: "/m/clients", label: "거래처", icon: Building2, tile: "bg-tile-blue", fg: "text-tile-blue-fg", show: hasMenuPermission(user, "clients") && !isSiteAdmin },
-    { to: "/m/notifications", label: "알림", icon: Bell, tile: "bg-tile-orange", fg: "text-tile-orange-fg", badge: unread, show: true },
+    { to: "/m/documents", label: "서류", icon: Folder, tile: "bg-tile-purple", fg: "text-tile-purple-fg", show: !isSiteAdmin },
     { to: "/m/approvals", label: "결재", icon: FileCheck, tile: "bg-tile-green", fg: "text-tile-green-fg", badge: approvals?.length ?? 0, show: !isSiteAdmin },
+    { to: "/m/notifications", label: "알림", icon: Bell, tile: "bg-tile-orange", fg: "text-tile-orange-fg", badge: unread, show: true },
+    { to: "/m/messenger", label: "메신저", icon: MessageCircle, tile: "bg-tile-orange", fg: "text-tile-orange-fg", badge: messengerUnread, show: true },
   ];
 
   return (
     <div className="min-h-screen bg-bg">
-      <div className="max-w-lg mx-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(2rem+env(safe-area-inset-bottom))] space-y-4">
+      <div className="max-w-lg mx-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(5.5rem+env(safe-area-inset-bottom))] space-y-4">
         <div className="flex items-center justify-between">
           <Logo iconSize={22} textSize={18} />
           <Link
@@ -204,6 +209,7 @@ export function MobileHome() {
           </button>
         </div>
       </div>
+      <MobileTabBar />
     </div>
   );
 }

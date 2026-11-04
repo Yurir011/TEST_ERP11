@@ -1,9 +1,13 @@
 import { FileText } from "lucide-react";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ApiError, apiPut, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { useApprovalQueue, type ApprovalItem } from "./approvalQueue";
+import { MobileApprovalHistory } from "./MobileApprovalHistory";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
+import { MobileMyApprovals } from "./MobileMyApprovals";
+import { invalidateMobileBadges } from "./useMobileBadges";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
@@ -19,7 +23,7 @@ function previewPath(item: ApprovalItem): string | null {
   return null;
 }
 
-export function MobileApprovalsPage() {
+function PendingTab() {
   const { confirm } = useDialog();
   const { items, reload } = useApprovalQueue();
   const [rejectingKey, setRejectingKey] = useState<string | null>(null);
@@ -34,6 +38,7 @@ export function MobileApprovalsPage() {
     try {
       logDebug("MobileApproval", `승인 시도: ${item.key}`);
       await apiPut(`${item.basePath}/approve`);
+      invalidateMobileBadges();
       reload();
     } catch (err) {
       logError("MobileApproval", `승인 실패: ${item.key}`, err);
@@ -55,6 +60,7 @@ export function MobileApprovalsPage() {
       await apiPut(`${item.basePath}/reject`, { reason: reason.trim() });
       setRejectingKey(null);
       setReason("");
+      invalidateMobileBadges();
       reload();
     } catch (err) {
       logError("MobileApproval", `반려 실패: ${item.key}`, err);
@@ -76,7 +82,7 @@ export function MobileApprovalsPage() {
   }
 
   return (
-    <MobileLayout title="결재">
+    <>
       {error && <p className="text-xs text-danger px-1">{error}</p>}
 
       {items === null ? (
@@ -169,6 +175,45 @@ export function MobileApprovalsPage() {
           })}
         </>
       )}
+    </>
+  );
+}
+
+type Tab = "wait" | "mine" | "done";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "wait", label: "결재할 문서" },
+  { key: "mine", label: "내가 올린 문서" },
+  { key: "done", label: "처리 내역" },
+];
+
+/** 모바일 결재: 결재할 문서(승인·반려), 내가 올린 문서(진행 상태·회수), 내가 처리한 내역을 세 칸으로 나눠 보여 준다. */
+export function MobileApprovalsPage() {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("tab");
+  const tab: Tab = raw === "mine" || raw === "done" ? raw : "wait";
+
+  return (
+    <MobileLayout title="결재">
+      <div role="group" aria-label="결재 보기" className="grid grid-cols-3 gap-0.5 bg-bg border border-border rounded-xl p-0.5">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            aria-pressed={tab === t.key}
+            onClick={() => {
+              logDebug("MobileApproval", `결재 보기 전환: ${t.key}`);
+              setParams(t.key === "wait" ? {} : { tab: t.key }, { replace: true });
+            }}
+            className={`py-2 rounded-[10px] text-[12.5px] font-semibold ${tab === t.key ? "bg-surface text-text shadow-sm" : "text-text-muted"}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "wait" && <PendingTab />}
+      {tab === "mine" && <MobileMyApprovals />}
+      {tab === "done" && <MobileApprovalHistory />}
     </MobileLayout>
   );
 }

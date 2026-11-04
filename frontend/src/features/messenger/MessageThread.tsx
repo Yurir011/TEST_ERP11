@@ -33,7 +33,8 @@ function isViewing(): boolean {
  * - 내가 보낸 메시지는 저장될 때까지 "보내는 중"으로 먼저 보이고, 실패하면 다시 보내거나 지울 수 있다.
  *   다시 보내도 같은 client_msg_id 를 쓰므로 서버에 두 번 저장되지 않는다.
  */
-export function MessageThread({ conversation, meId }: { conversation: ConversationSummary; meId: number }) {
+/** leaveTo: 그룹 대화에서 나간 뒤 돌아갈 주소 (모바일 메신저는 자기 목록으로 돌려보낸다) */
+export function MessageThread({ conversation, meId, leaveTo = "/messenger" }: { conversation: ConversationSummary; meId: number; leaveTo?: string }) {
   const id = conversation.id;
   const { subscribe, connection, setActiveConversation, refresh } = useMessenger();
   const dialog = useDialog();
@@ -250,7 +251,7 @@ export function MessageThread({ conversation, meId }: { conversation: Conversati
     try {
       await apiDelete(`/api/messenger/conversations/${id}/members/me`);
       await refresh();
-      navigate("/messenger", { replace: true });
+      navigate(leaveTo, { replace: true });
     } catch (err) {
       dialog.notifyError(err instanceof ApiError ? err.message : "나가지 못했습니다.");
     }

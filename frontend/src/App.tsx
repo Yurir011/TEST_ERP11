@@ -24,6 +24,8 @@ function lazyPage<K extends string, C extends AnyComponent>(load: () => Promise<
 const MobileApprovalsPage = lazyPage(() => import("./features/mobile/MobileApprovalsPage"), "MobileApprovalsPage");
 const MobileAttendancePage = lazyPage(() => import("./features/mobile/MobileAttendancePage"), "MobileAttendancePage");
 const MobileClientsPage = lazyPage(() => import("./features/mobile/MobileClientsPage"), "MobileClientsPage");
+const MobileDocumentsPage = lazyPage(() => import("./features/mobile/MobileDocumentsPage"), "MobileDocumentsPage");
+const MobileMessengerPage = lazyPage(() => import("./features/mobile/MobileMessengerPage"), "MobileMessengerPage");
 const MobileLeavesPage = lazyPage(() => import("./features/mobile/MobileLeavesPage"), "MobileLeavesPage");
 const MobileNoticesPage = lazyPage(() => import("./features/mobile/MobileNoticesPage"), "MobileNoticesPage");
 const MobileNotificationsPage = lazyPage(() => import("./features/mobile/MobileNotificationsPage"), "MobileNotificationsPage");
@@ -393,6 +395,9 @@ function App() {
       <Route path="/m/clients" element={mobileRoute(<MobileClientsPage />, { menuKey: "clients" })} />
       <Route path="/m/notifications" element={mobileRoute(<MobileNotificationsPage />, { siteAdminAllowed: true })} />
       <Route path="/m/approvals" element={mobileRoute(<MobileApprovalsPage />)} />
+      <Route path="/m/documents" element={mobileRoute(<MobileDocumentsPage />)} />
+      <Route path="/m/messenger" element={mobileRoute(<MobileMessengerPage />, { siteAdminAllowed: true })} />
+      <Route path="/m/messenger/:conversationId" element={mobileRoute(<MobileMessengerPage />, { siteAdminAllowed: true })} />
 
       <Route
         path="/*"
