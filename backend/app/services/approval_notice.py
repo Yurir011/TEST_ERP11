@@ -45,3 +45,22 @@ def create_request_notification(
     )
     db.add(notification)
     return notification
+
+
+def create_withdraw_notification(
+    db: Session,
+    *,
+    target_user_id: int,
+    requester_name: str,
+    doc_label: str,
+    link: str | None = None,
+) -> Notification:
+    """기안자가 결재 요청을 회수했을 때, 결재 대기 중이던 결재권자에게 알린다."""
+    notification = Notification(
+        user_id=target_user_id,
+        title=f"{doc_label} 결재 회수",
+        message=f"{requester_name}님이 {doc_label} 결재 요청을 회수했습니다.",
+        link=link,
+    )
+    db.add(notification)
+    return notification

@@ -13,7 +13,7 @@ export function purchaseSteps(proposal: Proposal, flow: PurchaseFlow): { label: 
   const rejected = proposal.status === "rejected";
   const approved = proposal.status === "approved";
   return [
-    { label: "품의", state: rejected ? "fail" : approved ? "done" : "now" },
+    { label: "품의", state: rejected ? "fail" : approved ? "done" : proposal.status === "withdrawn" ? "idle" : "now" },
     { label: "발주", state: flow.orderDone ? "done" : flow.canOrder ? "now" : "idle" },
     { label: "입고", state: flow.received ? "done" : flow.sent || flow.onlineOrdered ? "now" : "idle" },
   ];
@@ -22,6 +22,7 @@ export function purchaseSteps(proposal: Proposal, flow: PurchaseFlow): { label: 
 /** 줄 오른쪽에 보여 줄 현재 상태 글자들 (가장 시급한 것부터) */
 export function purchaseStatusChips(proposal: Proposal, flow: PurchaseFlow): { label: string; tone: "green" | "red" | "orange" | "blue" | "gray" }[] {
   if (proposal.status === "rejected") return [{ label: "반려됨", tone: "red" }];
+  if (proposal.status === "withdrawn") return [{ label: "회수됨", tone: "gray" }];
   if (proposal.status === "pending") return [{ label: "결재 중", tone: "orange" }];
   if (!flow.orderDone) return [{ label: "미발주", tone: "red" }];
   if (flow.received) return [flow.docsMissing ? { label: "서류 미등록", tone: "red" } : { label: "서류 등록 완료", tone: "green" }];

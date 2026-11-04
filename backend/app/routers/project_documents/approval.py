@@ -9,7 +9,16 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.approval import advance_chain_self_approvals, approve_current_step, build_chain_steps, get_steps, reject_current_step, validate_chain_approvers
+from app.core.approval import (
+    advance_chain_self_approvals,
+    approve_current_step,
+    assert_withdrawable,
+    build_chain_steps,
+    get_steps,
+    pending_approver_id,
+    reject_current_step,
+    validate_chain_approvers,
+)
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus
@@ -19,7 +28,7 @@ from app.models.transaction import Transaction
 from app.models.user import JobTitle, User, is_admin_role
 from app.schemas.project_document import ApprovalRequestIn, ProjectDocumentOut, RejectIn
 from app.services import project_document_files as doc_files
-from app.services.approval_notice import create_decision_notification, create_request_notification
+from app.services.approval_notice import create_decision_notification, create_request_notification, create_withdraw_notification
 from app.services.tax_invoice_ledger import record_tax_invoice_transaction
 from app.services.transaction_credit import credit_remove
 
@@ -174,6 +183,55 @@ def _restore_after_delete_rejected(db: Session, doc: ProjectDocument) -> None:
     doc.reject_reason = None
     doc.delete_requested = False
     doc.delete_prev_steps = None
+
+
+def _withdraw_one(db: Session, doc: ProjectDocument) -> None:
+    """문서 1건의 결재 요청을 회수한다 (commit은 호출자가). 일반 결재는 결재선을 지우고 '작성 중'으로 되돌리고,
+    삭제 결재는 요청 전의 승인 상태로 되돌린다."""
+    if doc.delete_requested:
+        _restore_after_delete_rejected(db, doc)
+        return
+    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == doc.id).delete()
+    doc.status = ProjectDocumentStatus.draft
+    doc.approver_id = None
+    doc.current_step = 1
+    doc.is_final_decision = False
+    doc.reject_reason = None
+    doc.reviewed_at = None
+
+
+@router.post("/{doc_id}/withdraw", response_model=ProjectDocumentOut)
+def withdraw_approval(doc_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """승인 전인 문서의 결재 요청을 회수한다. 문서는 '작성 중'으로 돌아가 수정해 다시 요청하거나 삭제할 수 있다.
+    견적서+거래명세서 묶음은 함께 회수한다."""
+    doc = _get_doc_or_404(db, doc_id)
+    if doc.created_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 회수할 수 있습니다.")
+    if doc.status != ProjectDocumentStatus.pending:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 대기 중인 문서만 회수할 수 있습니다.")
+    targets = [doc] + [s for s in _set_siblings(db, doc) if s.status == ProjectDocumentStatus.pending]
+    # 하나라도 회수할 수 없으면 아무것도 바꾸지 않는다.
+    for target in targets:
+        assert_withdrawable(get_steps(db, _TARGET, target.id), current_user.id)
+    logger.debug(f"[ProjectDocuments] 회수 시도: doc_id={doc_id}, by={current_user.id}, count={len(targets)}")
+
+    waiting_id = pending_approver_id(get_steps(db, _TARGET, doc.id))
+    if waiting_id is not None:
+        label = _delete_label(doc) if doc.delete_requested else f"{DOC_TYPE_LABELS_KO[doc.doc_type]}({doc.client_name})"
+        create_withdraw_notification(
+            db, target_user_id=waiting_id, requester_name=current_user.name, doc_label=label, link=_doc_link(doc.doc_type, doc.id)
+        )
+    for target in targets:
+        _withdraw_one(db, target)
+    db.commit()
+
+    for target in targets:
+        refreshed = _get_doc_or_404(db, target.id)
+        doc_files.regenerate_documents(db, refreshed)
+        db.commit()
+    doc = _get_doc_or_404(db, doc_id)
+    logger.debug(f"[ProjectDocuments] 회수 완료: doc_id={doc_id}, by={current_user.id}, status={doc.status}")
+    return _to_out(doc, get_steps(db, _TARGET, doc.id))
 
 
 @router.post("/{doc_id}/request-delete", response_model=ProjectDocumentOut)

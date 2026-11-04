@@ -28,6 +28,7 @@ class ProposalStatus(str, enum.Enum):
     pending = "pending"  # 결재 대기 중 (현재 단계 결재권자의 승인 대기)
     approved = "approved"  # 전 단계 결재 완료
     rejected = "rejected"  # 반려됨
+    withdrawn = "withdrawn"  # 기안자가 승인 전에 회수함 - 수정해 다시 결재를 올리거나 삭제할 수 있다
 
 
 class Proposal(Base):

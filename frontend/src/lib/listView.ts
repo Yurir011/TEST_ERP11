@@ -55,6 +55,7 @@ export const STATUS_CHOICES = [
   { value: "pending", label: "결재 대기" },
   { value: "approved", label: "승인" },
   { value: "rejected", label: "반려" },
+  { value: "withdrawn", label: "회수됨" },
 ] as const;
 
 export interface ListViewOptions {

@@ -2,7 +2,7 @@ import type { ApprovalStep } from "../../components/approval/types";
 
 export type DocumentType = "employment" | "career" | "employment_en";
 
-export type DocumentApprovalStatus = "pending" | "approved" | "rejected";
+export type DocumentApprovalStatus = "pending" | "approved" | "rejected" | "withdrawn";
 
 export interface DocumentRecord {
   id: number;

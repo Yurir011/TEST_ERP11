@@ -1,9 +1,11 @@
 import { Check, Download, FileText, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
+import { WITHDRAW_CONFIRM_MESSAGE, canWithdrawApproval } from "../../components/approval/withdraw";
+import { useAuth } from "../../context/useAuth";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { StatusBadge } from "../../components/ui/StatusBadge";
-import { ApiError, apiGet, apiPost, downloadFile } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
@@ -17,13 +19,16 @@ interface DocumentsPageProps extends OpenOverlayProps {
 }
 
 export function DocumentsPage({ embedded = false, openId, modalOnly = false, onDecided, onModalClose }: DocumentsPageProps) {
-  const { notify } = useDialog();
+  const { notify, confirm } = useDialog();
+  const { user } = useAuth();
   const [docType, setDocType] = useState<DocumentType>("employment");
   const [purpose, setPurpose] = useState("");
   const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
   const [approverIds, setApproverIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 회수한 신청을 수정해 다시 올리는 중이면 그 신청 id (없으면 새 신청)
+  const [resubmitId, setResubmitId] = useState<number | null>(null);
 
   const [history, setHistory] = useState<DocumentRecord[] | null>(null);
   const [pendingForMe, setPendingForMe] = useState<DocumentRecord[]>([]);
@@ -88,12 +93,20 @@ export function DocumentsPage({ embedded = false, openId, modalOnly = false, onD
     }
     setIsSubmitting(true);
     try {
-      const created = await apiPost<DocumentRecord>("/api/documents/request", {
+      const body = {
         doc_type: docType,
         purpose: purpose || null,
         end_title: endTitle,
         approver_ids: approverIds.map(Number),
-      });
+      };
+      let created: DocumentRecord;
+      if (resubmitId !== null) {
+        logDebug("Documents", `회수한 신청 재신청: id=${resubmitId}`);
+        created = await apiPut<DocumentRecord>(`/api/documents/${resubmitId}`, body);
+        setResubmitId(null);
+      } else {
+        created = await apiPost<DocumentRecord>("/api/documents/request", body);
+      }
       logDebug("Documents", `발급 신청 완료: id=${created.id}, status=${created.status}`);
       reloadAll();
       notify("결재 요청이 완료되었습니다.");
@@ -108,6 +121,44 @@ export function DocumentsPage({ embedded = false, openId, modalOnly = false, onD
       setError(err instanceof ApiError ? err.message : "발급 신청 중 오류가 발생했습니다.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleWithdraw(id: number) {
+    if (!(await confirm(WITHDRAW_CONFIRM_MESSAGE, { okLabel: "회수" }))) return;
+    logDebug("Documents", `회수 요청: id=${id}`);
+    try {
+      await apiPost(`/api/documents/${id}/withdraw`);
+      reloadAll();
+      logDebug("Documents", `회수 완료: id=${id}`);
+    } catch (err) {
+      logError("Documents", "회수 실패", err);
+      notify(err instanceof ApiError ? err.message : "회수 중 오류가 발생했습니다.");
+    }
+  }
+
+  /** 회수한 신청의 내용을 신청 양식에 채워 넣는다 (결재선은 다시 고른다). */
+  function startResubmit(record: DocumentRecord) {
+    logDebug("Documents", `수정 후 재신청 시작: id=${record.id}`);
+    setResubmitId(record.id);
+    setDocType(record.doc_type);
+    setPurpose(record.purpose ?? "");
+    setEndTitle(null);
+    setApproverIds([]);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handleDiscard(id: number) {
+    if (!(await confirm("회수한 신청을 폐기할까요?", { okLabel: "폐기", danger: true }))) return;
+    logDebug("Documents", `폐기 요청: id=${id}`);
+    try {
+      await apiDelete(`/api/documents/${id}`);
+      if (resubmitId === id) setResubmitId(null);
+      reloadAll();
+    } catch (err) {
+      logError("Documents", "폐기 실패", err);
+      notify(err instanceof ApiError ? err.message : "폐기 중 오류가 발생했습니다.");
     }
   }
 
@@ -132,12 +183,21 @@ export function DocumentsPage({ embedded = false, openId, modalOnly = false, onD
       onApprove={handleApprove}
       onReject={handleReject}
       onDownload={handleDownload}
+      onWithdraw={handleWithdraw}
     />
   );
 
   const content = (
     <>
       <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 mb-8 max-w-xl">
+        {resubmitId !== null && (
+          <div className="flex items-center justify-between gap-3 text-xs text-text-muted bg-bg rounded-lg px-3 py-2">
+            <span>회수한 신청을 수정하는 중입니다. 결재선을 다시 고르고 [다시 결재 요청]을 눌러주세요.</span>
+            <button type="button" onClick={() => setResubmitId(null)} className="shrink-0 hover:text-text underline">
+              새 신청으로 돌아가기
+            </button>
+          </div>
+        )}
         <div>
           <label className="block text-xs text-text-muted mb-1.5">문서 종류</label>
           <div className="flex gap-2">
@@ -179,7 +239,7 @@ export function DocumentsPage({ embedded = false, openId, modalOnly = false, onD
           disabled={isSubmitting}
           className="rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60"
         >
-          {isSubmitting ? "신청 중..." : "결재 요청"}
+          {isSubmitting ? "신청 중..." : resubmitId !== null ? "다시 결재 요청" : "결재 요청"}
         </button>
       </form>
 
@@ -265,18 +325,54 @@ export function DocumentsPage({ embedded = false, openId, modalOnly = false, onD
                   <p className="text-xs text-danger mt-0.5">반려 사유: {doc.reject_reason}</p>
                 )}
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDownload(doc);
-                }}
-                disabled={!doc.has_pdf || downloadingId === doc.id}
-                title={doc.has_pdf ? undefined : "결재 승인 후 다운로드할 수 있습니다."}
-                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5 disabled:opacity-50"
-              >
-                <Download size={14} />
-                {downloadingId === doc.id ? "다운로드 중..." : "다운로드"}
-              </button>
+              {doc.status === "withdrawn" ? (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startResubmit(doc);
+                    }}
+                    className="text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-tile-blue"
+                  >
+                    수정 후 재신청
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDiscard(doc.id);
+                    }}
+                    className="text-xs text-text-muted hover:text-danger border border-border rounded-lg px-3 py-1.5"
+                  >
+                    폐기
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 shrink-0">
+                  {canWithdrawApproval({ status: doc.status, creatorId: doc.user_id, userId: user?.id, steps: doc.steps }) && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleWithdraw(doc.id);
+                      }}
+                      className="text-xs text-text-muted hover:text-primary border border-border rounded-lg px-3 py-1.5"
+                    >
+                      회수
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownload(doc);
+                    }}
+                    disabled={!doc.has_pdf || downloadingId === doc.id}
+                    title={doc.has_pdf ? undefined : "결재 승인 후 다운로드할 수 있습니다."}
+                    className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text border border-border rounded-lg px-3 py-1.5 disabled:opacity-50"
+                  >
+                    <Download size={14} />
+                    {downloadingId === doc.id ? "다운로드 중..." : "다운로드"}
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -238,7 +238,7 @@ export function ProjectDocumentsTable({
                 <td className={`py-2.5 px-4 text-right font-semibold whitespace-nowrap ${isTaxList ? (doc.is_paper || doc.direction === "purchase" ? "text-[#8b2942]" : "text-success") : ""}`}>{formatDocAmount(doc, itemsTotal(doc))}</td>
                 <td className="py-2.5 px-2 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-1">
-                    {doc.status === "rejected" && doc.created_by === userId && (
+                    {(doc.status === "rejected" || doc.status === "draft") && doc.created_by === userId && (
                       <button
                         onClick={() => onResubmit(doc)}
                         className="text-xs text-primary hover:opacity-80 border border-primary/30 rounded-lg px-2 py-1 whitespace-nowrap shrink-0"

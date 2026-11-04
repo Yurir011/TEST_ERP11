@@ -125,3 +125,18 @@ def reject_current_step(steps: list[ApprovalStep], current_step: int) -> None:
     current = next(s for s in steps if s.step_order == current_step)
     current.status = ApprovalStepStatus.rejected
     current.decided_at = datetime.now(timezone.utc)
+
+
+def assert_withdrawable(steps: list[ApprovalStep], drafter_id: int) -> None:
+    """회수 가능 여부 검사: 다른 결재자가 이미 승인한 단계가 하나라도 있으면 회수할 수 없다.
+    기안자 본인이 결재권자로 지정되어 자동 승인된 단계(자기결재)는 승인으로 보지 않는다."""
+    if any(s.status == ApprovalStepStatus.approved and s.approver_id != drafter_id for s in steps):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="이미 다른 결재자가 승인한 문서는 회수할 수 없습니다."
+        )
+
+
+def pending_approver_id(steps: list[ApprovalStep]) -> int | None:
+    """현재 결재 대기 중인 단계의 결재자 id (회수 알림 대상). 대기 단계가 없으면 None."""
+    step = next((s for s in steps if s.status == ApprovalStepStatus.pending), None)
+    return step.approver_id if step else None

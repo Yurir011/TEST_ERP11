@@ -16,6 +16,7 @@ class LeaveStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+    withdrawn = "withdrawn"  # 기안자가 결재 승인 전에 회수함 - 수정해 다시 신청하거나 폐기할 수 있다
 
 
 class LeaveAdjustment(Base):

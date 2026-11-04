@@ -1,5 +1,6 @@
-import { Check, X } from "lucide-react";
+import { Check, Undo2, X } from "lucide-react";
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
+import { canWithdrawApproval } from "../../components/approval/withdraw";
 import { useAuth } from "../../context/useAuth";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { formatDate } from "../../lib/format";
@@ -13,16 +14,19 @@ export function LeaveDetailModal({
   onClose,
   onApprove,
   onReject,
+  onWithdraw,
 }: {
   leave: LeaveRecord;
   isBusy: boolean;
   onClose: () => void;
   onApprove: (id: number) => void;
   onReject: (id: number) => void;
+  onWithdraw?: (id: number) => void;
 }) {
   const { user } = useAuth();
   const currentStep = leave.steps.find((s) => s.step_order === leave.current_step);
   const canDecide = leave.status === "pending" && currentStep?.approver_id === user?.id;
+  const canWithdraw = !!onWithdraw && canWithdrawApproval({ status: leave.status, creatorId: leave.user_id, userId: user?.id, steps: leave.steps });
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
@@ -77,6 +81,19 @@ export function LeaveDetailModal({
 
         {leave.status === "rejected" && leave.reject_reason && (
           <p className="text-sm text-danger bg-red-50 rounded-xl px-4 py-3 mb-4">반려 사유: {leave.reject_reason}</p>
+        )}
+
+        {canWithdraw && (
+          <div className="flex items-center justify-end mb-2">
+            <button
+              onClick={() => onWithdraw?.(leave.id)}
+              disabled={isBusy}
+              className="flex items-center gap-1 text-xs text-text-muted border border-border rounded-lg px-3 py-2 hover:text-primary disabled:opacity-50"
+            >
+              <Undo2 size={14} />
+              회수
+            </button>
+          </div>
         )}
 
         {canDecide && (

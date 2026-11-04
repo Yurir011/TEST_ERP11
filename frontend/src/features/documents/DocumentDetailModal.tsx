@@ -1,5 +1,6 @@
-import { Check, Download, X } from "lucide-react";
+import { Check, Download, Undo2, X } from "lucide-react";
 import { ApprovalStampTable } from "../../components/approval/ApprovalStampTable";
+import { canWithdrawApproval } from "../../components/approval/withdraw";
 import { useAuth } from "../../context/useAuth";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { formatDate } from "../../lib/format";
@@ -15,6 +16,7 @@ export function DocumentDetailModal({
   onApprove,
   onReject,
   onDownload,
+  onWithdraw,
 }: {
   doc: DocumentRecord;
   isBusy: boolean;
@@ -23,10 +25,12 @@ export function DocumentDetailModal({
   onApprove: (id: number) => void;
   onReject: (id: number) => void;
   onDownload: (doc: DocumentRecord) => void;
+  onWithdraw?: (id: number) => void;
 }) {
   const { user } = useAuth();
   const currentStep = doc.steps.find((s) => s.step_order === doc.current_step);
   const canDecide = doc.status === "pending" && currentStep?.approver_id === user?.id;
+  const canWithdraw = !!onWithdraw && canWithdrawApproval({ status: doc.status, creatorId: doc.user_id, userId: user?.id, steps: doc.steps });
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
@@ -86,6 +90,16 @@ export function DocumentDetailModal({
             >
               <Download size={14} />
               {isDownloading ? "다운로드 중..." : "PDF 다운로드"}
+            </button>
+          )}
+          {canWithdraw && (
+            <button
+              onClick={() => onWithdraw?.(doc.id)}
+              disabled={isBusy}
+              className="flex items-center gap-1 text-xs text-text-muted border border-border rounded-lg px-3 py-2 hover:text-primary disabled:opacity-50"
+            >
+              <Undo2 size={14} />
+              회수
             </button>
           )}
           {canDecide && (

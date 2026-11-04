@@ -31,6 +31,7 @@ EXPECTED_OPERATIONS = [
     ('POST', '/api/proposals/{proposal_id}/attachments/link', 'add_attachment_link_api_proposals__proposal_id__attachments_link_post', ['201', '422']),
     ('POST', '/api/proposals/{proposal_id}/payments', 'add_payment_api_proposals__proposal_id__payments_post', ['201', '422']),
     ('POST', '/api/proposals/{proposal_id}/request-delete', 'request_delete_proposal_api_proposals__proposal_id__request_delete_post', ['200', '422']),
+    ('POST', '/api/proposals/{proposal_id}/withdraw', 'withdraw_proposal_api_proposals__proposal_id__withdraw_post', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}', 'update_proposal_api_proposals__proposal_id__put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/order-payment', 'set_order_payment_api_proposals__proposal_id__order_payment_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/order-sent', 'set_order_sent_api_proposals__proposal_id__order_sent_put', ['200', '422']),

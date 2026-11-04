@@ -1,6 +1,6 @@
 import type { ApprovalStep } from "../../components/approval/types";
 
-export type LeaveStatus = "pending" | "approved" | "rejected";
+export type LeaveStatus = "pending" | "approved" | "rejected" | "withdrawn";
 
 export interface LeaveRecord {
   id: number;

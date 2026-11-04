@@ -1,17 +1,19 @@
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
-export type ProposalStatus = "pending" | "approved" | "rejected";
+export type ProposalStatus = "pending" | "approved" | "rejected" | "withdrawn";
 
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
   pending: "결재 대기",
   approved: "승인됨",
   rejected: "반려됨",
+  withdrawn: "회수됨",
 };
 
 export const PROPOSAL_STATUS_STYLES: Record<ProposalStatus, string> = {
   pending: SOFT_BADGE.blue,
   approved: SOFT_BADGE.green,
   rejected: SOFT_BADGE.red,
+  withdrawn: SOFT_BADGE.gray,
 };
 
 export type ProposalStepStatus = "pending" | "approved" | "rejected";

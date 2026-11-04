@@ -2,9 +2,10 @@ import { CalendarRange, ChevronLeft, ChevronRight, Check, Plus, X } from "lucide
 import { useEffect, useState, type FormEvent } from "react";
 import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCheckbox";
+import { WITHDRAW_CONFIRM_MESSAGE, canWithdrawApproval } from "../../components/approval/withdraw";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { StatusBadge } from "../../components/ui/StatusBadge";
-import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { openTargetDomId, useOpenTarget, useScrollToOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
 import { LeaveAdminPanel } from "./LeaveAdminPanel";
@@ -34,6 +35,8 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
   const [teamCalendar, setTeamCalendar] = useState<LeaveRecord[]>([]);
 
   const [showForm, setShowForm] = useState(false);
+  // 회수한 신청을 수정해 다시 올리는 중이면 그 신청 id (없으면 새 신청)
+  const [resubmitId, setResubmitId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
@@ -115,15 +118,22 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
     }
     setIsSubmitting(true);
     try {
-      await apiPost("/api/leaves", {
+      const body = {
         start_date: startDate,
         end_date: endDate,
         reason,
         is_final_decision: isFinalDecision,
         end_title: isFinalDecision ? null : endTitle,
         approver_ids: isFinalDecision ? [] : approverIds.map(Number),
-      });
+      };
+      if (resubmitId !== null) {
+        logDebug("Leaves", `회수한 신청 재신청: id=${resubmitId}`);
+        await apiPut(`/api/leaves/${resubmitId}`, body);
+      } else {
+        await apiPost("/api/leaves", body);
+      }
       setShowForm(false);
+      setResubmitId(null);
       setStartDate("");
       setEndDate("");
       setReason("");
@@ -134,7 +144,7 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
       loadMyLeaves();
       loadPending();
       logDebug("Leaves", "신청 완료, 목록 새로고침");
-      notify("연차 신청이 완료되었습니다.");
+      notify(resubmitId !== null ? "수정한 연차 신청을 다시 올렸습니다." : "연차 신청이 완료되었습니다.");
     } catch (err) {
       logError("Leaves", "신청 실패", err);
       setFormError(err instanceof ApiError ? err.message : "신청 중 오류가 발생했습니다.");
@@ -152,6 +162,43 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
     } catch (err) {
       logError("Leaves", "취소 실패", err);
     }
+  }
+
+  async function handleWithdraw(id: number) {
+    if (!(await confirm(WITHDRAW_CONFIRM_MESSAGE, { okLabel: "회수" }))) return;
+    logDebug("Leaves", `회수 요청: id=${id}`);
+    try {
+      await apiPost(`/api/leaves/${id}/withdraw`);
+      setDetail(null);
+      loadBalance();
+      loadMyLeaves();
+      loadPending();
+      loadTeamCalendar();
+      logDebug("Leaves", `회수 완료: id=${id}`);
+    } catch (err) {
+      logError("Leaves", "회수 실패", err);
+      notify(err instanceof ApiError ? err.message : "회수 중 오류가 발생했습니다.");
+    }
+  }
+
+  /** 회수한 신청의 내용을 신청 양식에 채워 넣고 연다 (결재선은 다시 고른다). */
+  function startResubmit(l: LeaveRecord) {
+    logDebug("Leaves", `수정 후 재신청 시작: id=${l.id}`);
+    setResubmitId(l.id);
+    setStartDate(l.start_date);
+    setEndDate(l.end_date);
+    setReason(l.reason);
+    setEndTitle(null);
+    setApproverIds([]);
+    setIsFinalDecision(false);
+    setFormError(null);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function toggleForm() {
+    if (showForm) setResubmitId(null);
+    setShowForm((v) => !v);
   }
 
   const { approve: handleApprove, reject: handleReject } = useApprovalActions<number>({
@@ -179,6 +226,7 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
       }}
       onApprove={handleApprove}
       onReject={handleReject}
+      onWithdraw={handleWithdraw}
     />
   );
 
@@ -186,7 +234,7 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
     <>
       <div className="flex justify-end mb-4">
         <button
-          onClick={() => setShowForm((v) => !v)}
+          onClick={toggleForm}
           className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           {showForm ? <X size={16} /> : <Plus size={16} />}
@@ -230,6 +278,9 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 mb-8 max-w-xl">
+          {resubmitId !== null && (
+            <p className="text-xs text-text-muted bg-bg rounded-lg px-3 py-2">회수한 신청을 수정하는 중입니다. 결재선을 다시 고르고 [다시 신청하기]를 눌러주세요.</p>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-text-muted mb-1.5">시작일</label>
@@ -278,7 +329,7 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
             disabled={isSubmitting}
             className="rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60"
           >
-            {isSubmitting ? "신청 중..." : "신청하기"}
+            {isSubmitting ? "신청 중..." : resubmitId !== null ? "다시 신청하기" : "신청하기"}
           </button>
         </form>
       )}
@@ -359,12 +410,37 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
                   )}
                 </div>
                 {l.status === "pending" && (
-                  <button
-                    onClick={() => handleCancel(l.id)}
-                    className="text-xs text-text-muted hover:text-danger border border-border rounded-lg px-3 py-1.5 shrink-0"
-                  >
-                    취소
-                  </button>
+                  canWithdrawApproval({ status: l.status, creatorId: l.user_id, userId: user?.id, steps: l.steps }) ? (
+                    <button
+                      onClick={() => handleWithdraw(l.id)}
+                      className="text-xs text-text-muted hover:text-primary border border-border rounded-lg px-3 py-1.5 shrink-0"
+                    >
+                      회수
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleCancel(l.id)}
+                      className="text-xs text-text-muted hover:text-danger border border-border rounded-lg px-3 py-1.5 shrink-0"
+                    >
+                      취소
+                    </button>
+                  )
+                )}
+                {l.status === "withdrawn" && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => startResubmit(l)}
+                      className="text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-tile-blue"
+                    >
+                      수정 후 재신청
+                    </button>
+                    <button
+                      onClick={() => handleCancel(l.id)}
+                      className="text-xs text-text-muted hover:text-danger border border-border rounded-lg px-3 py-1.5"
+                    >
+                      폐기
+                    </button>
+                  </div>
                 )}
               </div>
             ))}

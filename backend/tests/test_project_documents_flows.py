@@ -82,6 +82,7 @@ EXPECTED_OPERATIONS = [
     ("POST", "/api/project-documents/{doc_id}/images", ["201", "422"]),
     ("POST", "/api/project-documents/{doc_id}/popbill/issue", ["200", "422"]),
     ("POST", "/api/project-documents/{doc_id}/request-approval", ["200", "422"]),
+    ("POST", "/api/project-documents/{doc_id}/withdraw", ["200", "422"]),
     ("POST", "/api/project-documents/{doc_id}/request-delete", ["200", "422"]),
     ("PUT", "/api/project-documents/{doc_id}", ["200", "422"]),
     ("PUT", "/api/project-documents/{doc_id}/approve", ["200", "422"]),

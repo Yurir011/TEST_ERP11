@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.approval import (
     advance_chain_self_approvals,
     approve_current_step,
+    assert_withdrawable,
     build_chain_steps,
     get_steps,
     get_steps_map,
+    pending_approver_id,
     reject_current_step,
     validate_chain_approvers,
 )
@@ -31,7 +33,7 @@ from app.schemas.leave import (
     RejectIn,
 )
 from app.services.leave_balance import compute_balance
-from app.services.approval_notice import create_decision_notification, create_request_notification
+from app.services.approval_notice import create_decision_notification, create_request_notification, create_withdraw_notification
 
 router = APIRouter(prefix="/api/leaves", tags=["leaves"])
 logger = get_logger("Leaves")
@@ -165,12 +167,8 @@ def delete_adjustment(adjustment_id: int, db: Session = Depends(get_db), current
     return None
 
 
-@router.post("", response_model=LeaveOut, status_code=status.HTTP_201_CREATED)
-def create_leave(
-    payload: LeaveCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
-):
-    logger.debug(f"[Leaves] 신청 시도: user_id={current_user.id}, {payload.start_date}~{payload.end_date}")
-
+def _validate_leave_request(db: Session, payload: LeaveCreate, current_user: User) -> int:
+    """신청 기간·잔여 연차를 검증하고 연차 일수(평일 수)를 돌려준다."""
     if payload.end_date < payload.start_date:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="종료일은 시작일보다 빠를 수 없습니다.")
 
@@ -187,25 +185,17 @@ def create_leave(
         )
     if days > balance.remaining:
         logger.debug(f"[Leaves] 연차 당겨 쓰기 신청: user_id={current_user.id}, 잔여={balance.remaining}, 신청={days}")
+    return days
 
+
+def _submit_leave(db: Session, record: LeaveRequest, payload: LeaveCreate, days: int, current_user: User) -> list[ApprovalStep]:
+    """record(id 확보됨)에 결재선을 만들고 결재를 올린다. 새 신청과 회수 후 재신청이 함께 쓴다."""
     doc_label = f"연차 ({payload.start_date} ~ {payload.end_date}, {days}일)"
     steps: list[ApprovalStep] = []
-
+    chain = approvers = None
     if not payload.is_final_decision:
         chain, approvers = validate_chain_approvers(db, payload.end_title, payload.approver_ids)
 
-    record = LeaveRequest(
-        user_id=current_user.id,
-        start_date=payload.start_date,
-        end_date=payload.end_date,
-        days=days,
-        reason=payload.reason,
-        status=LeaveStatus.pending,
-        is_final_decision=payload.is_final_decision,
-    )
-    record.user = current_user
-    db.add(record)
-    db.flush()  # id 확보 (ApprovalStep.target_id에 필요)
     _add_leave_schedule_event(db, record)
 
     if payload.is_final_decision:
@@ -248,6 +238,31 @@ def create_leave(
                 db, target_user_id=pending_step.approver_id, requester_name=current_user.name, doc_label=doc_label, link=f"/leaves?open={record.id}"
             )
             logger.debug(f"[Leaves] 결재 요청 알림 발송: approver_id={pending_step.approver_id}")
+    return steps
+
+
+@router.post("", response_model=LeaveOut, status_code=status.HTTP_201_CREATED)
+def create_leave(
+    payload: LeaveCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    logger.debug(f"[Leaves] 신청 시도: user_id={current_user.id}, {payload.start_date}~{payload.end_date}")
+    days = _validate_leave_request(db, payload, current_user)
+    if not payload.is_final_decision:
+        validate_chain_approvers(db, payload.end_title, payload.approver_ids)  # 기록을 만들기 전에 결재선부터 검증
+
+    record = LeaveRequest(
+        user_id=current_user.id,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        days=days,
+        reason=payload.reason,
+        status=LeaveStatus.pending,
+        is_final_decision=payload.is_final_decision,
+    )
+    record.user = current_user
+    db.add(record)
+    db.flush()  # id 확보 (ApprovalStep.target_id에 필요)
+    steps = _submit_leave(db, record, payload, days, current_user)
 
     db.commit()
     db.refresh(record)
@@ -355,14 +370,78 @@ def _get_owned_leave(db: Session, leave_id: int, current_user: User) -> LeaveReq
 @router.delete("/{leave_id}", status_code=status.HTTP_204_NO_CONTENT)
 def cancel_leave(leave_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     record = _get_owned_leave(db, leave_id, current_user)
-    if record.status != LeaveStatus.pending:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인 대기 중인 신청만 취소할 수 있습니다.")
+    if record.status not in (LeaveStatus.pending, LeaveStatus.withdrawn):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인 대기 중이거나 회수한 신청만 취소할 수 있습니다.")
     db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == record.id).delete()
     _remove_leave_schedule_event(db, record.id)
     db.delete(record)
     db.commit()
     logger.debug(f"[Leaves] 취소 완료: id={leave_id}, user_id={current_user.id}")
     return None
+
+
+@router.post("/{leave_id}/withdraw", response_model=LeaveOut)
+def withdraw_leave(leave_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """승인 전인 연차 신청을 회수한다. 결재선은 초기화되고 내 일정의 연차 표시도 사라진다.
+    이후 수정해 다시 신청하거나 취소(폐기)할 수 있다."""
+    logger.debug(f"[Leaves] 회수 시도: id={leave_id}, by={current_user.id}")
+    record = _get_owned_leave(db, leave_id, current_user)
+    if record.status != LeaveStatus.pending:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인 대기 중인 신청만 회수할 수 있습니다.")
+    steps = get_steps(db, _TARGET, record.id)
+    assert_withdrawable(steps, current_user.id)
+
+    waiting_id = pending_approver_id(steps)
+    if waiting_id is not None:
+        create_withdraw_notification(
+            db,
+            target_user_id=waiting_id,
+            requester_name=current_user.name,
+            doc_label=f"연차 ({record.start_date} ~ {record.end_date}, {record.days}일)",
+            link=f"/leaves?open={record.id}",
+        )
+    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == record.id).delete()
+    _remove_leave_schedule_event(db, record.id)
+    record.status = LeaveStatus.withdrawn
+    record.approver_id = None
+    record.current_step = 1
+    record.is_final_decision = False
+    record.reject_reason = None
+    record.reviewed_by = None
+    record.reviewed_at = None
+    db.commit()
+    db.refresh(record)
+    logger.debug(f"[Leaves] 회수 완료: id={leave_id}, by={current_user.id}")
+    return _to_out(record, [])
+
+
+@router.put("/{leave_id}", response_model=LeaveOut)
+def resubmit_leave(
+    leave_id: int, payload: LeaveCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """회수한 연차 신청을 수정해 결재를 다시 올린다."""
+    logger.debug(f"[Leaves] 재신청 시도: id={leave_id}, by={current_user.id}, {payload.start_date}~{payload.end_date}")
+    record = _get_owned_leave(db, leave_id, current_user)
+    if record.status != LeaveStatus.withdrawn:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="회수한 신청만 수정해서 다시 신청할 수 있습니다.")
+    days = _validate_leave_request(db, payload, current_user)
+    if not payload.is_final_decision:
+        validate_chain_approvers(db, payload.end_title, payload.approver_ids)
+
+    record.start_date = payload.start_date
+    record.end_date = payload.end_date
+    record.days = days
+    record.reason = payload.reason
+    record.is_final_decision = payload.is_final_decision
+    record.status = LeaveStatus.pending
+    record.reject_reason = None
+    steps = _submit_leave(db, record, payload, days, current_user)
+
+    db.commit()
+    db.refresh(record)
+    record.user = current_user
+    logger.debug(f"[Leaves] 재신청 완료: id={leave_id}, days={days}, approver_id={record.approver_id}")
+    return _to_out(record, steps)
 
 
 def _get_leave_for_approver(db: Session, leave_id: int, current_user: User) -> LeaveRequest:

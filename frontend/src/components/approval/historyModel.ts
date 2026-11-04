@@ -17,7 +17,7 @@ export interface HistoryInput {
   summary: string;
   steps: HistoryStep[];
   currentStep: number;
-  status: ApprovalStepStatus | "draft";
+  status: ApprovalStepStatus | "draft" | "withdrawn";
   finalDecision: boolean;
   rejectReason: string | null;
   deleteRequested: boolean;
@@ -109,6 +109,14 @@ export function buildHistory(input: HistoryInput, now: Date = new Date()): Histo
       at: formatHistoryTime(last?.decided_at ?? input.decidedAt),
       who: last ? `${last.approver_name} ${roleOf(last)}` : input.finalDecision ? `${input.creatorName} (전결)` : "-",
       say: "결재가 모두 완료되었습니다.",
+    };
+  } else if (status === "withdrawn") {
+    nowCard = {
+      kind: "draft",
+      tag: "회수됨",
+      at: "-",
+      who: input.creatorName,
+      say: "작성자가 결재 요청을 회수했습니다. 수정해서 다시 올리거나 폐기할 수 있습니다.",
     };
   } else if (status === "draft") {
     nowCard = { kind: "draft", tag: "작성 중", at: "-", who: input.creatorName, say: "아직 결재를 올리지 않았습니다." };

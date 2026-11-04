@@ -57,6 +57,8 @@ export function computePurchaseFlow(proposal: Proposal, orders: ProjectDocument[
   const approval: FlowChip[] = [];
   if (proposal.status === "rejected") {
     approval.push({ label: "반려됨", tone: "red", title: proposal.reject_reason ?? undefined });
+  } else if (proposal.status === "withdrawn") {
+    approval.push({ label: "회수됨", tone: "gray" });
   } else if (proposal.status === "approved") {
     approval.push({ label: "승인됨", tone: "green" });
     if (proposal.is_final_decision) approval.push({ label: "전결", tone: "purple" });

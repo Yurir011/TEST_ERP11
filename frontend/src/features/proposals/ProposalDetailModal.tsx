@@ -1,7 +1,8 @@
-import { Check, Download, ExternalLink, Paperclip, Pencil, Printer, Link as LinkIcon, Trash2, X } from "lucide-react";
+import { Check, Download, ExternalLink, Paperclip, Pencil, Printer, Link as LinkIcon, Trash2, Undo2, X } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApprovalNote, ApprovalStampBox } from "../../components/approval/ApprovalStamps";
+import { WITHDRAW_CONFIRM_MESSAGE, canWithdrawApproval } from "../../components/approval/withdraw";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { openAttachment } from "../../lib/openAttachment";
@@ -49,6 +50,9 @@ export function ProposalDetailModal({
   const canEdit = isMine && proposal.status !== "pending" && !proposal.delete_requested;
   // 승인된 품의서는 삭제 결재를 거쳐야 삭제된다. 그 외에는 작성자가 바로 삭제할 수 있다.
   const canDelete = !proposal.delete_requested && (isMine || (proposal.status === "approved" && isAdminRole(user?.role)));
+  // 결재 대기 중이고 아직 다른 결재자가 승인하지 않았으면 작성자가 회수할 수 있다 (삭제 결재도 회수하면 승인 상태로 돌아간다).
+  const canWithdraw = canWithdrawApproval({ status: proposal.status, creatorId: proposal.created_by, userId: user?.id, steps: proposal.steps });
+  const isWithdrawn = proposal.status === "withdrawn";
   const [showDeletePicker, setShowDeletePicker] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -58,6 +62,23 @@ export function ProposalDetailModal({
     navigate(`/proposals/new?edit=${proposal.id}`);
   }
 
+  async function handleWithdraw() {
+    setActionError(null);
+    if (!(await confirm(WITHDRAW_CONFIRM_MESSAGE, { okLabel: "회수" }))) return;
+    setDeleteBusy(true);
+    logDebug("Proposals", `회수 요청: id=${proposal.id}`);
+    try {
+      const updated = await apiPost<Proposal>(`/api/proposals/${proposal.id}/withdraw`);
+      logDebug("Proposals", `회수 완료: id=${proposal.id}, status=${updated.status}`);
+      onAttachmentsChanged(updated);
+    } catch (err) {
+      logError("Proposals", "회수 실패", err);
+      setActionError(err instanceof ApiError ? err.message : "회수 중 오류가 발생했습니다.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   async function handleDeleteClick() {
     setActionError(null);
     if (proposal.status === "approved") {
@@ -65,7 +86,7 @@ export function ProposalDetailModal({
       setShowDeletePicker(true);
       return;
     }
-    if (!(await confirm("이 품의서를 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
+    if (!(await confirm(isWithdrawn ? "회수한 품의서를 폐기(삭제)할까요?" : "이 품의서를 삭제할까요?", { okLabel: isWithdrawn ? "폐기" : "삭제", danger: true }))) return;
     setDeleteBusy(true);
     try {
       await apiDelete(`/api/proposals/${proposal.id}`);
@@ -348,15 +369,26 @@ export function ProposalDetailModal({
               수정{proposal.status === "approved" ? " (재결재 필요)" : " 후 재요청"}
             </button>
           )}
+          {canWithdraw && (
+            <button
+              onClick={handleWithdraw}
+              disabled={isBusy || deleteBusy}
+              title="결재 요청을 되돌립니다. 수정해서 다시 올리거나 폐기할 수 있습니다."
+              className="flex items-center gap-1 text-xs text-text-muted border border-border rounded-lg px-3 py-1.5 hover:bg-bg disabled:opacity-50"
+            >
+              <Undo2 size={14} />
+              회수
+            </button>
+          )}
           {canDelete && (
             <button
               onClick={handleDeleteClick}
               disabled={isBusy || deleteBusy}
-              title={proposal.status === "approved" ? "삭제 결재 요청" : "삭제"}
+              title={proposal.status === "approved" ? "삭제 결재 요청" : isWithdrawn ? "폐기" : "삭제"}
               className="flex items-center gap-1 text-xs text-danger border border-danger/30 rounded-lg px-3 py-1.5 hover:bg-danger/10 disabled:opacity-50"
             >
               <Trash2 size={14} />
-              {proposal.status === "approved" ? "삭제 결재 요청" : "삭제"}
+              {proposal.status === "approved" ? "삭제 결재 요청" : isWithdrawn ? "폐기" : "삭제"}
             </button>
           )}
           {canDecide && (

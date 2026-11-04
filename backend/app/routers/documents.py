@@ -9,9 +9,11 @@ from app.config import settings
 from app.core.approval import (
     advance_chain_self_approvals,
     approve_current_step,
+    assert_withdrawable,
     build_chain_steps,
     get_steps,
     get_steps_map,
+    pending_approver_id,
     reject_current_step,
     validate_chain_approvers,
 )
@@ -23,7 +25,7 @@ from app.models.document import DocumentIssue, DocumentStatus
 from app.models.user import User, is_admin_role
 from app.schemas.approval import to_approval_step_out
 from app.schemas.document import DocumentIssueRequest, DocumentOut, RejectIn
-from app.services.approval_notice import create_decision_notification, create_request_notification
+from app.services.approval_notice import create_decision_notification, create_request_notification, create_withdraw_notification
 from app.services.certificate_pdf import DOC_TITLES, generate_certificate_pdf
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -75,30 +77,12 @@ def _issue_pdf(record: DocumentIssue, user: User) -> None:
     logger.debug(f"[Documents] PDF 생성: id={record.id}, file={file_path}")
 
 
-@router.post("/request", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
-def request_document(
-    payload: DocumentIssueRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    logger.debug(f"[Documents] 발급 신청: user_id={current_user.id}, type={payload.doc_type}, end_title={payload.end_title}")
+def _submit_document(
+    db: Session, record: DocumentIssue, payload: DocumentIssueRequest, chain, approvers, current_user: User
+) -> list[ApprovalStep]:
+    """record(id 확보됨)에 결재선을 만들고 결재를 올린다. 새 신청과 회수 후 재신청이 함께 쓴다."""
     doc_label = DOC_TITLES[payload.doc_type]
     steps: list[ApprovalStep] = []
-
-    if payload.is_final_decision:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="재직/경력증명서는 전결로 처리할 수 없습니다.")
-    chain, approvers = validate_chain_approvers(db, payload.end_title, payload.approver_ids)
-
-    record = DocumentIssue(
-        user_id=current_user.id,
-        doc_type=payload.doc_type,
-        purpose=payload.purpose,
-        status=DocumentStatus.pending,
-        is_final_decision=payload.is_final_decision,
-    )
-    record.user = current_user
-    db.add(record)
-    db.flush()  # id 확보 (ApprovalStep.target_id / PDF 파일명에 필요)
 
     if payload.is_final_decision:
         record.status = DocumentStatus.approved
@@ -130,11 +114,116 @@ def request_document(
                 db, target_user_id=pending_step.approver_id, requester_name=current_user.name, doc_label=doc_label, link=f"/documents?open={record.id}"
             )
             logger.debug(f"[Documents] 결재 요청 알림 발송: approver_id={pending_step.approver_id}")
+    return steps
+
+
+@router.post("/request", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
+def request_document(
+    payload: DocumentIssueRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    logger.debug(f"[Documents] 발급 신청: user_id={current_user.id}, type={payload.doc_type}, end_title={payload.end_title}")
+    if payload.is_final_decision:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="재직/경력증명서는 전결로 처리할 수 없습니다.")
+    chain, approvers = validate_chain_approvers(db, payload.end_title, payload.approver_ids)
+
+    record = DocumentIssue(
+        user_id=current_user.id,
+        doc_type=payload.doc_type,
+        purpose=payload.purpose,
+        status=DocumentStatus.pending,
+        is_final_decision=payload.is_final_decision,
+    )
+    record.user = current_user
+    db.add(record)
+    db.flush()  # id 확보 (ApprovalStep.target_id / PDF 파일명에 필요)
+    steps = _submit_document(db, record, payload, chain, approvers, current_user)
 
     db.commit()
     db.refresh(record)
     logger.debug(f"[Documents] 발급 신청 완료: id={record.id}")
     return _to_out(record, steps)
+
+
+def _get_owned_doc(db: Session, doc_id: int, current_user: User) -> DocumentIssue:
+    record = _get_doc_or_404(db, doc_id)
+    if record.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="신청자 본인만 처리할 수 있습니다.")
+    return record
+
+
+@router.post("/{doc_id}/withdraw", response_model=DocumentOut)
+def withdraw_document(doc_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """승인 전인 증명서 신청을 회수한다. 결재선은 초기화된다. 이후 수정해 다시 신청하거나 폐기할 수 있다."""
+    logger.debug(f"[Documents] 회수 시도: id={doc_id}, by={current_user.id}")
+    record = _get_owned_doc(db, doc_id, current_user)
+    if record.status != DocumentStatus.pending:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 대기 중인 신청만 회수할 수 있습니다.")
+    steps = get_steps(db, _TARGET, record.id)
+    assert_withdrawable(steps, current_user.id)
+
+    waiting_id = pending_approver_id(steps)
+    if waiting_id is not None:
+        create_withdraw_notification(
+            db,
+            target_user_id=waiting_id,
+            requester_name=current_user.name,
+            doc_label=DOC_TITLES[record.doc_type],
+            link=f"/documents?open={record.id}",
+        )
+    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == record.id).delete()
+    record.status = DocumentStatus.withdrawn
+    record.approver_id = None
+    record.current_step = 1
+    record.reject_reason = None
+    record.reviewed_at = None
+    db.commit()
+    db.refresh(record)
+    logger.debug(f"[Documents] 회수 완료: id={doc_id}, by={current_user.id}")
+    return _to_out(record, [])
+
+
+@router.put("/{doc_id}", response_model=DocumentOut)
+def resubmit_document(
+    doc_id: int,
+    payload: DocumentIssueRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """회수한 증명서 신청을 수정해 결재를 다시 올린다."""
+    logger.debug(f"[Documents] 재신청 시도: id={doc_id}, by={current_user.id}, type={payload.doc_type}")
+    record = _get_owned_doc(db, doc_id, current_user)
+    if record.status != DocumentStatus.withdrawn:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="회수한 신청만 수정해서 다시 신청할 수 있습니다.")
+    if payload.is_final_decision:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="재직/경력증명서는 전결로 처리할 수 없습니다.")
+    chain, approvers = validate_chain_approvers(db, payload.end_title, payload.approver_ids)
+
+    record.doc_type = payload.doc_type
+    record.purpose = payload.purpose
+    record.is_final_decision = payload.is_final_decision
+    record.status = DocumentStatus.pending
+    record.reject_reason = None
+    steps = _submit_document(db, record, payload, chain, approvers, current_user)
+
+    db.commit()
+    db.refresh(record)
+    logger.debug(f"[Documents] 재신청 완료: id={doc_id}")
+    return _to_out(record, steps)
+
+
+@router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def discard_document(doc_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """회수한 증명서 신청을 폐기(삭제)한다."""
+    record = _get_owned_doc(db, doc_id, current_user)
+    if record.status != DocumentStatus.withdrawn:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="회수한 신청만 폐기할 수 있습니다.")
+    db.query(ApprovalStep).filter(ApprovalStep.target_type == _TARGET, ApprovalStep.target_id == record.id).delete()
+    db.delete(record)
+    db.commit()
+    logger.debug(f"[Documents] 폐기 완료: id={doc_id}, by={current_user.id}")
+    return None
 
 
 @router.get("", response_model=list[DocumentOut])

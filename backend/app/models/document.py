@@ -22,6 +22,7 @@ class DocumentStatus(str, enum.Enum):
     pending = "pending"  # 결재 요청됨, 승인 대기 중
     approved = "approved"  # 결재 승인 완료 - PDF 발급됨, 다운로드 가능
     rejected = "rejected"  # 반려됨
+    withdrawn = "withdrawn"  # 기안자가 승인 전에 회수함 - 수정해 다시 신청하거나 폐기할 수 있다
 
 
 class DocumentIssue(Base):

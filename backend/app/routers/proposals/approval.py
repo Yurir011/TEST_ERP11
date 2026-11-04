@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.approval import validate_chain_approvers
+from app.core.approval import assert_withdrawable, pending_approver_id, validate_chain_approvers
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
@@ -22,7 +22,7 @@ from app.routers.proposals._common import (
 )
 from app.schemas.proposal import ProposalDeleteRequestIn, ProposalOut, RejectIn
 from app.services import proposal_files
-from app.services.approval_notice import create_decision_notification, create_request_notification
+from app.services.approval_notice import create_decision_notification, create_request_notification, create_withdraw_notification
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
 
@@ -130,6 +130,46 @@ def reject_proposal(
     db.commit()
     db.refresh(p)
     logger.debug(f"[Proposals] 결재 반려: id={proposal_id}, by={current_user.id}, reason={payload.reason}")
+    return _to_out(p)
+
+
+@router.post("/{proposal_id}/withdraw", response_model=ProposalOut)
+def withdraw_proposal(proposal_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """승인 전인 품의서의 결재 요청을 회수한다. 일반 결재는 '회수됨' 상태가 되어 수정해 다시 올리거나 삭제할 수 있고,
+    삭제 결재는 요청 전의 승인 상태로 되돌아간다."""
+    p = _get_or_404(db, proposal_id)
+    if p.created_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 회수할 수 있습니다.")
+    if p.status != ProposalStatus.pending:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결재 대기 중인 품의서만 회수할 수 있습니다.")
+    assert_withdrawable(p.steps, current_user.id)
+    logger.debug(f"[Proposals] 회수 시도: id={proposal_id}, by={current_user.id}, delete_requested={p.delete_requested}")
+
+    waiting_id = pending_approver_id(p.steps)
+    if waiting_id is not None:
+        create_withdraw_notification(
+            db,
+            target_user_id=waiting_id,
+            requester_name=current_user.name,
+            doc_label=_delete_label(p) if p.delete_requested else f"품의서({p.title})",
+            link=f"/project-documents?tab=proposal&open={p.id}",
+        )
+
+    if p.delete_requested:
+        _restore_after_delete_rejected(p)
+    else:
+        p.steps = []
+        p.status = ProposalStatus.withdrawn
+        p.current_step = 1
+        p.is_final_decision = False
+        p.reject_reason = None
+    db.commit()
+
+    p = _get_or_404(db, p.id)
+    proposal_files.regenerate_pdf(p)
+    db.commit()
+    db.refresh(p)
+    logger.debug(f"[Proposals] 회수 완료: id={proposal_id}, by={current_user.id}, status={p.status}")
     return _to_out(p)
 
 

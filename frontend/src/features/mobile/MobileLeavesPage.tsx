@@ -2,8 +2,10 @@ import { Plus } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ApprovalChainPicker, type ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { FinalDecisionCheckbox } from "../../components/approval/FinalDecisionCheckbox";
+import { WITHDRAW_CONFIRM_MESSAGE, canWithdrawApproval } from "../../components/approval/withdraw";
+import { useAuth } from "../../context/useAuth";
 import { StatusBadge } from "../../components/ui/StatusBadge";
-import { ApiError, apiDelete, apiGet, apiPost } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { LeaveBalance, LeaveRecord } from "../leaves/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
@@ -11,9 +13,12 @@ import { useDialog } from "../../components/ui/dialog/useDialog";
 
 export function MobileLeavesPage() {
   const { confirm, notify, notifyError } = useDialog();
+  const { user } = useAuth();
   const [balance, setBalance] = useState<LeaveBalance | null>(null);
   const [leaves, setLeaves] = useState<LeaveRecord[] | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // 회수한 신청을 수정해 다시 올리는 중이면 그 신청 id (없으면 새 신청)
+  const [resubmitId, setResubmitId] = useState<number | null>(null);
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -49,14 +54,21 @@ export function MobileLeavesPage() {
     setIsSubmitting(true);
     try {
       logDebug("MobileLeaves", `연차 신청 시도: ${startDate}~${endDate}`);
-      await apiPost("/api/leaves", {
+      const body = {
         start_date: startDate,
         end_date: endDate || startDate,
         reason,
         is_final_decision: isFinalDecision,
         end_title: isFinalDecision ? null : endTitle,
         approver_ids: isFinalDecision ? [] : approverIds.map(Number),
-      });
+      };
+      if (resubmitId !== null) {
+        logDebug("MobileLeaves", `회수한 신청 재신청: id=${resubmitId}`);
+        await apiPut(`/api/leaves/${resubmitId}`, body);
+      } else {
+        await apiPost("/api/leaves", body);
+      }
+      setResubmitId(null);
       setShowForm(false);
       setStartDate("");
       setEndDate("");
@@ -72,6 +84,33 @@ export function MobileLeavesPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function handleWithdraw(id: number) {
+    if (!(await confirm(WITHDRAW_CONFIRM_MESSAGE, { okLabel: "회수" }))) return;
+    logDebug("MobileLeaves", `회수 요청: id=${id}`);
+    try {
+      await apiPost(`/api/leaves/${id}/withdraw`);
+      load();
+    } catch (err) {
+      logError("MobileLeaves", "연차 회수 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "회수하지 못했습니다.");
+    }
+  }
+
+  /** 회수한 신청의 내용을 신청 양식에 채워 넣고 연다 (결재선은 다시 고른다). */
+  function startResubmit(l: LeaveRecord) {
+    logDebug("MobileLeaves", `수정 후 재신청 시작: id=${l.id}`);
+    setResubmitId(l.id);
+    setStartDate(l.start_date);
+    setEndDate(l.end_date);
+    setReason(l.reason);
+    setEndTitle(null);
+    setApproverIds([]);
+    setIsFinalDecision(false);
+    setFormError(null);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleCancel(id: number) {
@@ -177,7 +216,10 @@ export function MobileLeavesPage() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={() => {
+                  setShowForm(false);
+                  setResubmitId(null);
+                }}
                 className="flex-1 border border-border rounded-xl py-3 text-sm text-text-muted"
               >
                 취소
@@ -187,7 +229,7 @@ export function MobileLeavesPage() {
                 disabled={isSubmitting}
                 className="flex-1 bg-primary text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-60"
               >
-                {isSubmitting ? "신청 중..." : "신청"}
+                {isSubmitting ? "신청 중..." : resubmitId !== null ? "다시 신청" : "신청"}
               </button>
             </div>
           </form>
@@ -214,10 +256,25 @@ export function MobileLeavesPage() {
                 {l.status === "rejected" && l.reject_reason && (
                   <p className="text-xs text-danger mt-1">반려 사유: {l.reject_reason}</p>
                 )}
-                {l.status === "pending" && (
-                  <button type="button" onClick={() => handleCancel(l.id)} className="text-xs text-text-muted underline mt-2">
-                    신청 취소
-                  </button>
+                {l.status === "pending" &&
+                  (canWithdrawApproval({ status: l.status, creatorId: l.user_id, userId: user?.id, steps: l.steps }) ? (
+                    <button type="button" onClick={() => handleWithdraw(l.id)} className="text-xs text-text-muted underline mt-2">
+                      회수
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => handleCancel(l.id)} className="text-xs text-text-muted underline mt-2">
+                      신청 취소
+                    </button>
+                  ))}
+                {l.status === "withdrawn" && (
+                  <div className="flex items-center gap-4 mt-2">
+                    <button type="button" onClick={() => startResubmit(l)} className="text-xs text-primary underline">
+                      수정 후 재신청
+                    </button>
+                    <button type="button" onClick={() => handleCancel(l.id)} className="text-xs text-text-muted underline">
+                      폐기
+                    </button>
+                  </div>
                 )}
               </li>
             ))}

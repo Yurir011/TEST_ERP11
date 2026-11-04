@@ -1,5 +1,6 @@
 import { ApprovalNote, ApprovalStampBox } from "../../components/approval/ApprovalStamps";
-import { Check, Download, Eye, Mail, Pencil, Printer, Send, Sheet, X } from "lucide-react";
+import { canWithdrawApproval } from "../../components/approval/withdraw";
+import { Check, Download, Eye, Mail, Pencil, Printer, Send, Sheet, Undo2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "../../context/useAuth";
 import { koreanNumber } from "../../lib/korean";
@@ -35,6 +36,7 @@ export function ProjectDocumentDetailModal({
   onPopbillView,
   onPopbillPdf,
   onEdit,
+  onWithdraw,
   paymentSlot,
 }: {
   doc: ProjectDocument;
@@ -50,12 +52,16 @@ export function ProjectDocumentDetailModal({
   onPopbillView: (doc: ProjectDocument) => void;
   onPopbillPdf: (doc: ProjectDocument) => void;
   onEdit: (doc: ProjectDocument) => void;
+  /** 승인 전 결재 요청을 회수한다 (작성 중 상태로 돌아간다) */
+  onWithdraw?: (doc: ProjectDocument) => void;
   /** 아래 오른쪽에 놓을 영역 (발주서의 결제 내역) */
   paymentSlot?: ReactNode;
 }) {
   const { user } = useAuth();
   const currentStep = doc.steps.find((st) => st.step_order === doc.current_step);
   const canDecide = doc.status === "pending" && currentStep?.approver_id === user?.id;
+  // 결재 대기 중이고 아직 다른 결재자가 승인하지 않았으면 작성자가 회수할 수 있다 (삭제 결재도 회수하면 승인 상태로 돌아간다).
+  const canWithdraw = !!onWithdraw && canWithdrawApproval({ status: doc.status, creatorId: doc.created_by, userId: user?.id, steps: doc.steps });
   const approved = doc.status === "approved" && doc.has_pdf;
   const disabledTitle = "결재 승인 후 이용 가능합니다.";
   // 작성자는 결재 대기 중이 아니고 삭제 결재가 진행 중이 아니면 수정할 수 있다. 승인된 문서는 수정 후 결재를 다시 받아야 한다.
@@ -245,6 +251,18 @@ export function ProjectDocumentDetailModal({
           >
             <Pencil size={13} />
             수정{doc.status === "approved" ? " (재결재 필요)" : doc.status === "rejected" ? " 후 재요청" : ""}
+          </button>
+        )}
+
+        {canWithdraw && (
+          <button
+            onClick={() => onWithdraw?.(doc)}
+            disabled={isBusy}
+            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 mb-4 hover:bg-bg disabled:opacity-50"
+            title="결재 요청을 되돌립니다. 작성 중 상태로 돌아가 수정해서 다시 요청하거나 삭제할 수 있습니다."
+          >
+            <Undo2 size={13} />
+            회수
           </button>
         )}
 

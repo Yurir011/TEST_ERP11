@@ -301,6 +301,24 @@ export function ProjectDocumentsPage({
     onError: setError,
   });
 
+  async function handleWithdraw(doc: ProjectDocument) {
+    const label = PROJECT_DOC_TYPE_LABELS[doc.doc_type];
+    if (!(await confirm(`${label} 결재 요청을 회수할까요?\n회수하면 결재선이 초기화되고 작성 중 상태로 돌아갑니다. 수정해서 다시 요청하거나 삭제할 수 있습니다.`, { okLabel: "회수" }))) return;
+    logDebug("ProjectDocuments", `회수 요청: doc_id=${doc.id}`);
+    setBusyId(doc.id);
+    try {
+      await apiPost(`/api/project-documents/${doc.id}/withdraw`);
+      logDebug("ProjectDocuments", `회수 완료: doc_id=${doc.id}`);
+      setDetailDoc(null);
+      reloadAll();
+    } catch (err) {
+      logError("ProjectDocuments", "회수 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "회수 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleResubmit(endTitle: ApprovalEndTitle | null, approverIds: number[], isFinalDecision: boolean) {
     if (!resubmitDoc) return;
     const received = null;
@@ -1137,6 +1155,7 @@ export function ProjectDocumentsPage({
           onPopbillIssue={handlePopbillIssue}
           onPopbillView={handlePopbillView}
           onPopbillPdf={handlePopbillPdf}
+          onWithdraw={handleWithdraw}
           onEdit={(d) => {
             logDebug("ProjectDocuments", `${PROJECT_DOC_TYPE_LABELS[d.doc_type]} 수정 진입: doc_id=${d.id}, status=${d.status}`);
             navigate(`/project-documents/new?type=${d.doc_type}&edit=${d.id}`);
