@@ -4,7 +4,8 @@ import { Logo } from "../../components/ui/Logo";
 import { PasswordInput } from "../../components/ui/PasswordInput";
 import { useAuth } from "../../context/useAuth";
 import { ApiError } from "../../lib/api";
-import { logError } from "../../lib/logger";
+import { logDebug, logError } from "../../lib/logger";
+import { shouldUseMobile } from "../mobile/mobileMode";
 import { DesktopDownloadLink } from "../desktop/DesktopDownloadLink";
 import { NfcLoginPanel } from "./NfcLoginPanel";
 import { PasskeyLoginButton } from "./PasskeyLoginButton";
@@ -17,13 +18,24 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 로그인 뒤 첫 화면. 폰 폭이면 화면 전환(SPA) 대신 /m 을 새로 불러온다:
+  // 로그인 화면에서 이어서 옮기면 iOS 가 화면 폭·확대 상태를 이전 화면 기준으로 유지해 오른쪽이 잘리는 일이 있다 (직접 /m 을 열면 정상).
+  const goHome = useCallback(() => {
+    if (shouldUseMobile()) {
+      logDebug("LoginPage", "폰 화면: /m 을 새로 불러와 이동");
+      window.location.replace("/m");
+      return;
+    }
+    navigate("/", { replace: true });
+  }, [navigate]);
+
   // 카드 로그인: 앱이 서버에서 받아 온 토큰으로 로그인 상태를 만들고 첫 화면으로 간다
   const handleNfcToken = useCallback(
     async (token: string) => {
       await loginWithToken(token);
-      navigate("/", { replace: true });
+      goHome();
     },
-    [loginWithToken, navigate],
+    [loginWithToken, goHome],
   );
 
   async function handleSubmit(e: FormEvent) {
@@ -32,7 +44,7 @@ export function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
-      navigate("/", { replace: true });
+      goHome();
     } catch (err) {
       logError("LoginPage", "로그인 실패", err);
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
