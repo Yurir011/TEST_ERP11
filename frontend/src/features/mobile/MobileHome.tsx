@@ -16,6 +16,7 @@ import { useApprovalQueue } from "./approvalQueue";
 import { MobileCard } from "./MobileLayout";
 import { MobileTabBar } from "./MobileTabBar";
 import { setForcePc } from "./mobileMode";
+import { useSwipeNavigation } from "./useSwipeNavigation";
 import { useViewportLock } from "./useViewportLock";
 
 interface MenuTile {
@@ -33,6 +34,7 @@ export function MobileHome() {
   const navigate = useNavigate();
   const dialog = useDialog();
   useViewportLock();
+  useSwipeNavigation(); // 홈은 뒤로 갈 곳이 없어 옆 탭 이동만
   const [today, setToday] = useState<AttendanceRecord | null | undefined>(undefined);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

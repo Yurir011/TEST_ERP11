@@ -2,6 +2,7 @@ import { ChevronLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { MobileTabBar } from "./MobileTabBar";
+import { useSwipeNavigation } from "./useSwipeNavigation";
 import { useViewportLock } from "./useViewportLock";
 
 interface MobileLayoutProps {
@@ -18,6 +19,7 @@ interface MobileLayoutProps {
 export function MobileLayout({ title, backTo = "/m", right, hideTabs = false, children }: MobileLayoutProps) {
   const navigate = useNavigate();
   useViewportLock();
+  useSwipeNavigation(backTo);
   return (
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-10 bg-bg/90 backdrop-blur border-b border-border pt-[env(safe-area-inset-top)]">

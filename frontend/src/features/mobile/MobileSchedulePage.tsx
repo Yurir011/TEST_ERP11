@@ -91,7 +91,7 @@ export function MobileSchedulePage() {
     if (!start) return;
     const dx = e.changedTouches[0].clientX - start.x;
     const dy = e.changedTouches[0].clientY - start.y;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.2) {
       logDebug("MobileSchedule", `스와이프: ${dx < 0 ? "다음 달" : "이전 달"}`);
       shiftMonth(dx < 0 ? 1 : -1);
     }
@@ -123,7 +123,7 @@ export function MobileSchedulePage() {
               <ChevronRight size={20} />
             </button>
           </div>
-          <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ touchAction: "pan-y" }}>
             <div className="grid grid-cols-7 mb-1">
               {WEEKDAY_LABELS.map((w, i) => (
                 <span key={w} className={`text-center text-[11px] py-1 ${i === 0 ? "text-danger" : i === 6 ? "text-primary" : "text-text-muted"}`}>

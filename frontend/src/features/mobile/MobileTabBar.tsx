@@ -20,6 +20,11 @@ const TABS: TabDef[] = [
   { to: "/m/notifications", label: "알림", icon: Bell, siteAdmin: true },
 ];
 
+/** 하단 탭 화면의 경로 (보이는 순서대로). 스와이프로 옆 탭에 갈 때 쓴다. */
+export function tabPaths(isSiteAdmin: boolean): string[] {
+  return TABS.filter((t) => !isSiteAdmin || t.siteAdmin).map((t) => t.to);
+}
+
 /** 모바일 화면 하단 탭: 홈·결재·서류·알림. 결재·알림은 처리할 개수를 숫자로 보여 준다. */
 export function MobileTabBar() {
   const { user } = useAuth();

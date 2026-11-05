@@ -13,6 +13,14 @@ npx cap open ios                                        # Xcode 열기
 ```
 Xcode 에서: App 타깃 → Signing & Capabilities → Team 에 개발자 계정 선택, Bundle Identifier 확인(`kr.co.bench.erp`) → 아이폰 연결 후 Run.
 
+## 앱 아이콘
+`assets/icon-only.png`(1024×1024, 흰 바탕에 원형 마크)가 앱 아이콘 원본이다. `cap add ios` 뒤에 한 번 실행하면 iOS 아이콘이 만들어진다.
+```
+npm install --save-dev @capacitor/assets
+npx capacitor-assets generate --ios
+```
+iOS 가 모서리를 알아서 둥글게 깎으므로 원본은 네모 그대로 둔다(투명 배경 금지).
+
 ## http(HTTPS 없음) 로 접속하려면
 iOS 는 기본적으로 http 통신을 막습니다(ATS). `ios/App/App/Info.plist` 에 아래를 추가하세요.
 ```
