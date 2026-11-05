@@ -1,0 +1,26 @@
+# BENCH ERP - HTTPS 문지기 (Caddy) 설정
+#
+# 하는 일: 인터넷에서 오는 https://www.epik.bio 접속을 받아 자물쇠(인증서)를 관리하고, 안쪽 ERP 서버로 전달한다.
+# 인증서는 Caddy 가 Let's Encrypt 에서 자동으로 받고 만료 전에 알아서 갱신한다 (80, 443 포트가 인터넷에서 열려 있어야 한다).
+# 설치와 실행 순서는 docs/server-https-setup.md 를 본다.
+
+{
+	# 인증서가 문제 생기면 알림을 받을 메일 주소 (선택). 쓰려면 앞의 # 를 지운다.
+	# email 담당자@epik-bio.com
+}
+
+# 직원들이 폰 주소창에 치는 주소. 이 주소가 .env 의 WEBAUTHN_ORIGINS 와 같아야 한다.
+www.epik.bio {
+	encode zstd gzip
+
+	# 안쪽 ERP 서버 주소.
+	# 지금 밖에서 쓰는 3102 포트가 서버 PC 의 몇 번 포트로 연결되는지 확인해서 맞춘다 (docs/server-https-setup.md 2단계).
+	#   - 보통(Vite 화면 서버로 연결): 127.0.0.1:5173
+	#   - 서버 PC 에서 3102 로 직접 받고 있다면: 127.0.0.1:3102
+	# 화면과 API, 메신저 실시간 연결(WebSocket)이 모두 이 한 줄로 전달된다.
+	reverse_proxy 127.0.0.1:5173
+
+	# 주의: HSTS(Strict-Transport-Security) 헤더는 켜지 않는다.
+	# 켜면 브라우저와 직원 PC 앱이 예전 주소(http://www.epik.bio:3102)를 https 로 바꿔 부르려 해서 접속이 끊길 수 있다.
+	# 예전 주소를 쓰는 PC 앱이 모두 새 주소로 옮겨 간 뒤에 검토한다.
+}

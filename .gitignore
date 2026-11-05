@@ -29,3 +29,6 @@ Doc/
 # 직원에게 내려줄 데스크톱 앱 설치 파일 (용량이 커서 저장소에 올리지 않는다. 안내 문서만 올린다)
 /release/*
 !/release/README.md
+
+# HTTPS 문지기(Caddy) 실행 파일 (직접 내려받아 deploy 폴더에 둔다. 설정 파일 Caddyfile 만 올린다)
+/deploy/caddy.exe

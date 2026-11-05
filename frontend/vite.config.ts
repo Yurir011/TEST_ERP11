@@ -15,7 +15,9 @@ export default defineConfig({
     host: true, // 같은 네트워크의 다른 PC에서도 접속 가능하게 0.0.0.0으로 바인딩
     proxy: {
       // 메신저 실시간 알림(WebSocket, /api/ws)도 같은 프록시로 전달한다
-      '/api': { target: 'http://localhost:8000', ws: true },
+      // xfwd: 접속자의 실제 주소를 X-Forwarded-For 로 백엔드에 전달한다. 없으면 백엔드는 모든 접속을 이 화면 서버(127.0.0.1)로 보아
+      // 로그인 실패 제한(IP 기준)이 직원 전체에 한꺼번에 걸리고 감사 로그의 접속 주소도 모두 같아진다.
+      '/api': { target: 'http://localhost:8000', ws: true, xfwd: true },
     },
   },
 })

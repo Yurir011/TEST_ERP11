@@ -7,6 +7,7 @@ import { ApiError } from "../../lib/api";
 import { logError } from "../../lib/logger";
 import { DesktopDownloadLink } from "../desktop/DesktopDownloadLink";
 import { NfcLoginPanel } from "./NfcLoginPanel";
+import { PasskeyLoginButton } from "./PasskeyLoginButton";
 
 export function LoginPage() {
   const { login, loginWithToken } = useAuth();
@@ -94,6 +95,8 @@ export function LoginPage() {
             {isSubmitting ? "로그인 중..." : "로그인"}
           </button>
         </form>
+
+        <PasskeyLoginButton onToken={handleNfcToken} />
 
         <NfcLoginPanel onToken={handleNfcToken} />
 

@@ -25,6 +25,7 @@ const MobileApprovalsPage = lazyPage(() => import("./features/mobile/MobileAppro
 const MobileAttendancePage = lazyPage(() => import("./features/mobile/MobileAttendancePage"), "MobileAttendancePage");
 const MobileClientsPage = lazyPage(() => import("./features/mobile/MobileClientsPage"), "MobileClientsPage");
 const MobileDocumentsPage = lazyPage(() => import("./features/mobile/MobileDocumentsPage"), "MobileDocumentsPage");
+const MobileMePage = lazyPage(() => import("./features/mobile/MobileMePage"), "MobileMePage");
 const MobileMessengerPage = lazyPage(() => import("./features/mobile/MobileMessengerPage"), "MobileMessengerPage");
 const MobileLeavesPage = lazyPage(() => import("./features/mobile/MobileLeavesPage"), "MobileLeavesPage");
 const MobileNoticesPage = lazyPage(() => import("./features/mobile/MobileNoticesPage"), "MobileNoticesPage");
@@ -396,6 +397,7 @@ function App() {
       <Route path="/m/notifications" element={mobileRoute(<MobileNotificationsPage />, { siteAdminAllowed: true })} />
       <Route path="/m/approvals" element={mobileRoute(<MobileApprovalsPage />)} />
       <Route path="/m/documents" element={mobileRoute(<MobileDocumentsPage />)} />
+      <Route path="/m/me" element={mobileRoute(<MobileMePage />, { siteAdminAllowed: true })} />
       <Route path="/m/messenger" element={mobileRoute(<MobileMessengerPage />, { siteAdminAllowed: true })} />
       <Route path="/m/messenger/:conversationId" element={mobileRoute(<MobileMessengerPage />, { siteAdminAllowed: true })} />
 

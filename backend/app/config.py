@@ -32,9 +32,13 @@ class Settings(BaseSettings):
     nfc_challenge_ttl_seconds: int = 60
     nfc_token_expire_minutes: int = 60 * 8
 
-    # NFC 카드 번호(UID)를 DB 에 저장할 때 쓰는 비밀키(HMAC). 운영에서는 .env 에 NFC_UID_SECRET 으로 32자 이상 지정한다.
-    # 비어 있으면 JWT 비밀키에서 파생한 값을 쓴다. 이 값이 바뀌면 이미 등록한 카드를 알아볼 수 없으므로 한 번 정하면 바꾸지 않는다.
-    nfc_uid_secret: str = ""
+    # 패스키(지문·얼굴 로그인). 패스키는 도메인에 묶이고 HTTPS 에서만 동작한다(개발 PC 의 localhost 는 예외).
+    # WEBAUTHN_RP_ID: 사이트 도메인 (예: epik.bio). WEBAUTHN_ORIGINS: 브라우저 주소창에 보이는 주소 목록, JSON 배열 (예: ["https://erp.epik.bio"]).
+    # 둘 중 하나라도 비어 있으면 패스키 기능이 꺼진다. 한 번 등록한 뒤 도메인을 바꾸면 직원이 패스키를 다시 등록해야 하므로 신중히 정한다.
+    webauthn_rp_id: str = ""
+    webauthn_rp_name: str = "BENCH ERP"
+    webauthn_origins: list[str] = []
+    webauthn_challenge_ttl_seconds: int = 120  # 등록·로그인 확인값 유효 시간(초)
 
     # 증명서 발급에 표시할 회사 정보. 설정 화면이 생기기 전까지는 .env로 관리한다.
     company_name: str = "BENCH"

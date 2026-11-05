@@ -1,4 +1,4 @@
-import { Bell, Building2, CalendarCheck, CalendarDays, Clock, FileCheck, Folder, Megaphone, MessageCircle, Monitor, type LucideIcon } from "lucide-react";
+import { Bell, Building2, CalendarCheck, CalendarDays, Clock, FileCheck, Folder, Megaphone, MessageCircle, Monitor, User, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
@@ -106,14 +106,23 @@ export function MobileHome() {
       <div className="max-w-lg mx-auto px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(5.5rem+env(safe-area-inset-bottom))] space-y-4">
         <div className="flex items-center justify-between">
           <Logo iconSize={22} textSize={18} />
-          <Link
-            to="/m/notifications"
-            aria-label="알림"
-            className="relative w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center"
-          >
-            <Bell size={18} />
-            {unread > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-notify" />}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/m/me"
+              aria-label="내 정보"
+              className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center"
+            >
+              <User size={18} />
+            </Link>
+            <Link
+              to="/m/notifications"
+              aria-label="알림"
+              className="relative w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center"
+            >
+              <Bell size={18} />
+              {unread > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-notify" />}
+            </Link>
+          </div>
         </div>
 
         <div>

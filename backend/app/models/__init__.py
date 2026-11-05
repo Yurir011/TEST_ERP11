@@ -25,6 +25,7 @@ from app.models.sales_document import SalesDocument, SalesDocumentItem
 from app.models.schedule import ScheduleEvent
 from app.models.todo import TodoItem
 from app.models.transaction import Transaction
+from app.models.passkey import PasskeyCredential
 from app.models.user import User
 
 __all__ = [

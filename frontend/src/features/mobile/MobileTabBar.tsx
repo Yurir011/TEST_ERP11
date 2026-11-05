@@ -1,6 +1,7 @@
 import { Bell, FileCheck, Folder, Home, type LucideIcon } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
+import { LayoutDebug } from "./LayoutDebug";
 import { useMobileBadges } from "./useMobileBadges";
 
 interface TabDef {
@@ -27,6 +28,8 @@ export function MobileTabBar() {
   const count = (to: string) => (to === "/m/approvals" ? badges.approvals : to === "/m/notifications" ? badges.unread : 0);
 
   return (
+    <>
+    <LayoutDebug />
     <nav
       aria-label="하단 메뉴"
       className="fixed bottom-0 inset-x-0 z-20 bg-surface border-t border-border pb-[env(safe-area-inset-bottom)]"
@@ -56,5 +59,6 @@ export function MobileTabBar() {
         })}
       </ul>
     </nav>
+    </>
   );
 }

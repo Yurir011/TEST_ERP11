@@ -2,6 +2,14 @@
 
 버전 표기와 올리는 규칙은 [`docs/version-policy.md`](docs/version-policy.md). 새 버전은 맨 위에 추가한다.
 
+## V.0.72.038 — 2026-11-05
+
+### 패스키(지문·얼굴 로그인)와 모바일 화면 보강 (DB 구조 변경 — 서버에 올릴 때 DB 백업 후 `alembic upgrade head` 필요)
+- **패스키 로그인**: 로그인 화면의 패스키 버튼, 설정의 패스키 등록·관리, 서버 API(`/api/passkeys`). HTTPS 주소에서만 동작하며 `WEBAUTHN_RP_ID`·`WEBAUTHN_ORIGINS` 가 `.env` 에 있어야 켜진다(없으면 기능이 꺼지고 비밀번호 로그인은 그대로).
+- **DB 구조 변경**: 패스키 표 추가(마이그레이션 `0027_passkey_credentials`).
+- **모바일**: 내 정보 화면(`/m/me`), 하단 탭·화면 폭 고정 보강.
+- **HTTPS 준비 문서**: `deploy/`(Caddy 설정), `docs/server-https-setup.md`, `docs/mobile-external-release.md`, 직원용 패스키 안내.
+
 ## V.0.72.037 — 2026-11-04
 
 ### 모바일 앱 1단계: 하단 탭·결재 내역·서류 찾기·메신저 (서버 화면과 API만 변경, 앱 코드·DB 구조 변경 없음 — 설치 파일 새로 배포 불필요)

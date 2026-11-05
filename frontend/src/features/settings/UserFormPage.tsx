@@ -6,6 +6,7 @@ import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logError } from "../../lib/logger";
 import { todayISO } from "../../lib/date";
 import { NfcCardsSection } from "./NfcCardsSection";
+import { PasskeysSection } from "./PasskeysSection";
 
 const GRADE_OPTIONS: { value: JobGrade; label: string }[] = [
   { value: "staff", label: "사원" },
@@ -261,6 +262,7 @@ export function UserFormPage() {
         </form>
       )}
       {isEdit && !isLoading && savedName && <NfcCardsSection key={id} userId={Number(id)} userName={savedName} />}
+      {isEdit && !isLoading && savedName && <PasskeysSection key={`pk-${id}`} userId={Number(id)} userName={savedName} />}
     </MainLayout>
   );
 }

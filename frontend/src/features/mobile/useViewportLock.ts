@@ -14,8 +14,14 @@ export function useViewportLock() {
     meta?.setAttribute("content", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover");
 
     const html = document.documentElement;
+    const body = document.body;
     const originalTouchAction = html.style.touchAction;
     html.style.touchAction = "pan-x pan-y"; // 스크롤은 허용, 핀치/더블탭 줌은 차단
+    // 가로로 넘치는 내용이 있어도 화면 폭을 넓히거나 옆으로 밀리지 않게 한다
+    const originalHtmlOverflowX = html.style.overflowX;
+    const originalBodyOverflowX = body.style.overflowX;
+    html.style.overflowX = "hidden";
+    body.style.overflowX = "hidden";
 
     const blockGesture = (e: Event) => e.preventDefault();
     const blockMultiTouch = (e: TouchEvent) => {
@@ -29,6 +35,8 @@ export function useViewportLock() {
     return () => {
       if (meta && original !== null) meta.setAttribute("content", original);
       html.style.touchAction = originalTouchAction;
+      html.style.overflowX = originalHtmlOverflowX;
+      body.style.overflowX = originalBodyOverflowX;
       document.removeEventListener("gesturestart", blockGesture);
       document.removeEventListener("gesturechange", blockGesture);
       document.removeEventListener("touchmove", blockMultiTouch);
