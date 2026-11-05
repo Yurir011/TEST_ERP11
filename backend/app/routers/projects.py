@@ -12,6 +12,7 @@ from app.models.project import Project, ProjectStatus
 from app.models.user import User
 from app.schemas.project import (
     ProjectCreate,
+    ProjectNameUpdate,
     ProjectOut,
     ProjectProgressUpdate,
     ProjectScheduleUpdate,
@@ -119,6 +120,23 @@ def create_project(
     db.refresh(project)
     project.client = client
     project.creator = current_user
+    return _to_out(project)
+
+
+@router.put("/{project_id}/name", response_model=ProjectOut)
+def update_project_name(
+    project_id: int,
+    payload: ProjectNameUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = _get_project_or_404(project_id, db)
+    old_name = project.name
+    project.name = payload.name
+    db.commit()
+    db.refresh(project)
+    # 견적서·품의서·구매 등은 프로젝트 이름을 저장하지 않고 그때그때 불러 쓰므로 따로 고칠 것이 없다.
+    logger.debug(f"[Projects] 이름 변경: id={project_id}, '{old_name}' -> '{project.name}', by={current_user.id}")
     return _to_out(project)
 
 

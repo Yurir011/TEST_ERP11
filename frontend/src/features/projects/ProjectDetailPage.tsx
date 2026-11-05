@@ -1,8 +1,8 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { apiGet, apiPut, downloadFile } from "../../lib/api";
+import { ApiError, apiGet, apiPut, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
@@ -31,6 +31,10 @@ export function ProjectDetailPage() {
   const [stages, setStages] = useState<ProgressStage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [isSavingName, setIsSavingName] = useState(false);
 
   function loadProject() {
     apiGet<Project>(`/api/projects/${id}`)
@@ -61,6 +65,37 @@ export function ProjectDetailPage() {
       setShowDiscardForm(false);
     } catch (err) {
       logError("ProjectDetail", "상태 변경 실패", err);
+    }
+  }
+
+  function startRename() {
+    setNameDraft(project?.name ?? "");
+    setNameError(null);
+    setIsRenaming(true);
+  }
+
+  async function handleRename() {
+    const name = nameDraft.trim();
+    if (!name) {
+      setNameError("프로젝트 이름을 입력해주세요.");
+      return;
+    }
+    if (name === project?.name) {
+      setIsRenaming(false);
+      return;
+    }
+    logDebug("ProjectDetail", `이름 변경 시도: project_id=${id}, name=${name}`);
+    setIsSavingName(true);
+    try {
+      const updated = await apiPut<Project>(`/api/projects/${id}/name`, { name });
+      setProject(updated);
+      setIsRenaming(false);
+      logDebug("ProjectDetail", `이름 변경 성공: project_id=${id}`);
+    } catch (err) {
+      logError("ProjectDetail", "이름 변경 실패", err);
+      setNameError(err instanceof ApiError ? err.message : "이름 변경 중 오류가 발생했습니다.");
+    } finally {
+      setIsSavingName(false);
     }
   }
 
@@ -101,8 +136,54 @@ export function ProjectDetailPage() {
         <>
           <div className="bg-surface border border-border rounded-2xl p-6 mb-6">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-xl font-semibold">{project.name}</h1>
+              <div className="min-w-0 flex-1">
+                {isRenaming ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleRename();
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      id="project-name-input"
+                      aria-label="프로젝트 이름"
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      maxLength={200}
+                      autoFocus
+                      className="flex-1 min-w-0 rounded-lg border border-border px-3 py-1.5 text-xl font-semibold outline-none focus:border-primary bg-bg"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSavingName}
+                      className="text-sm font-medium bg-primary hover:bg-primary-hover disabled:opacity-60 text-white rounded-lg px-4 py-2 transition-colors shrink-0"
+                    >
+                      {isSavingName ? "저장 중..." : "저장"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsRenaming(false)}
+                      className="text-sm text-text-muted hover:text-text px-2 py-2 shrink-0"
+                    >
+                      취소
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h1 className="text-xl font-semibold break-words min-w-0">{project.name}</h1>
+                    <button
+                      type="button"
+                      onClick={startRename}
+                      aria-label="프로젝트 이름 변경"
+                      title="이름 변경"
+                      className="p-1.5 rounded-lg text-text-faint hover:text-text hover:bg-bg shrink-0"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  </div>
+                )}
+                {nameError && <p className="text-xs text-danger mt-1">{nameError}</p>}
                 <p className="text-sm text-text-muted mt-1">거래처: {project.client_name}</p>
                 {project.memo && <p className="text-sm text-text-muted mt-2">{project.memo}</p>}
                 {project.status === "discarded" && (

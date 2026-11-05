@@ -27,6 +27,19 @@ class ProjectStatusUpdate(BaseModel):
     reason: str | None = None  # 폐기 사유 (상태가 discarded일 때만 저장)
 
 
+class ProjectNameUpdate(BaseModel):
+    name: str
+
+    @model_validator(mode="after")
+    def _validate_name(self):
+        self.name = " ".join(self.name.split())
+        if not self.name:
+            raise ValueError("프로젝트 이름을 입력해주세요.")
+        if len(self.name) > 200:
+            raise ValueError("프로젝트 이름은 200자 이하로 입력해주세요.")
+        return self
+
+
 class ProjectScheduleUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
