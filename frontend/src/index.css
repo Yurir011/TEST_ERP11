@@ -28,6 +28,14 @@
   --color-tile-purple-fg: #7c3aed;
   --color-tile-orange: #fff7ed;
   --color-tile-orange-fg: #ea580c;
+  --color-tile-sky: #e0f2fe;
+  --color-tile-sky-fg: #0284c7;
+  --color-tile-teal: #ccfbf1;
+  --color-tile-teal-fg: #0f766e;
+  --color-tile-rose: #ffe4e6;
+  --color-tile-rose-fg: #e11d48;
+  --color-tile-yellow: #fef9c3;
+  --color-tile-yellow-fg: #ca8a04;
   /* 연한 빨강/회색 배지의 바탕·글자색 (모바일 다크 테마에서 덮어쓴다) */
   --color-tile-red: #fef2f2;
   --color-tile-gray: #f1f2f4;
@@ -125,3 +133,7 @@ html[data-mobile-theme="vivid"] [data-tone="blue"] { background: #2f6bff; color:
 html[data-mobile-theme="vivid"] [data-tone="green"] { background: #00b86e; color: #fff; }
 html[data-mobile-theme="vivid"] [data-tone="purple"] { background: #8b3dff; color: #fff; }
 html[data-mobile-theme="vivid"] [data-tone="orange"] { background: #ff7a1a; color: #fff; }
+html[data-mobile-theme="vivid"] [data-tone="sky"] { background: #00a3e0; color: #fff; }
+html[data-mobile-theme="vivid"] [data-tone="teal"] { background: #00a89a; color: #fff; }
+html[data-mobile-theme="vivid"] [data-tone="rose"] { background: #ff3b5c; color: #fff; }
+html[data-mobile-theme="vivid"] [data-tone="yellow"] { background: #ffc400; color: #3b2f00; }

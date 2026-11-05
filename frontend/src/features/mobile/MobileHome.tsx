@@ -92,12 +92,12 @@ export function MobileHome() {
   const tiles: MenuTile[] = [
     { to: "/m/leaves", label: "연차", icon: CalendarCheck, tile: "bg-tile-green", fg: "text-tile-green-fg", show: !isSiteAdmin },
     { to: "/m/notices", label: "공지", icon: Megaphone, tile: "bg-tile-purple", fg: "text-tile-purple-fg", show: hasMenuPermission(user, "notices") },
-    { to: "/m/schedule", label: "일정", icon: CalendarDays, tile: "bg-tile-orange", fg: "text-tile-orange-fg", show: true },
+    { to: "/m/schedule", label: "일정", icon: CalendarDays, tile: "bg-tile-sky", fg: "text-tile-sky-fg", show: true },
     { to: "/m/clients", label: "거래처", icon: Building2, tile: "bg-tile-blue", fg: "text-tile-blue-fg", show: hasMenuPermission(user, "clients") && !isSiteAdmin },
-    { to: "/m/documents", label: "서류", icon: Folder, tile: "bg-tile-purple", fg: "text-tile-purple-fg", show: !isSiteAdmin },
-    { to: "/m/approvals", label: "결재", icon: FileCheck, tile: "bg-tile-green", fg: "text-tile-green-fg", badge: approvals?.length ?? 0, show: !isSiteAdmin },
-    { to: "/m/notifications", label: "알림", icon: Bell, tile: "bg-tile-orange", fg: "text-tile-orange-fg", badge: unread, show: true },
-    { to: "/m/messenger", label: "메신저", icon: MessageCircle, tile: "bg-tile-orange", fg: "text-tile-orange-fg", badge: messengerUnread, show: true },
+    { to: "/m/documents", label: "서류", icon: Folder, tile: "bg-tile-orange", fg: "text-tile-orange-fg", show: !isSiteAdmin },
+    { to: "/m/approvals", label: "결재", icon: FileCheck, tile: "bg-tile-teal", fg: "text-tile-teal-fg", badge: approvals?.length ?? 0, show: !isSiteAdmin },
+    { to: "/m/notifications", label: "알림", icon: Bell, tile: "bg-tile-rose", fg: "text-tile-rose-fg", badge: unread, show: true },
+    { to: "/m/messenger", label: "메신저", icon: MessageCircle, tile: "bg-tile-yellow", fg: "text-tile-yellow-fg", badge: messengerUnread, show: true },
   ];
 
   return (
@@ -171,7 +171,7 @@ export function MobileHome() {
                   </span>
                   <span className="text-xs font-medium">{t.label}</span>
                   {!!t.badge && (
-                    <span className="absolute -top-1 right-1.5 min-w-5 h-5 px-1.5 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[11px] font-semibold flex items-center justify-center">
+                    <span className="absolute -top-1 right-1.5 min-w-5 h-5 px-1.5 rounded-full bg-badge-bg border border-badge-border ring-2 ring-surface text-badge-fg text-[11px] font-semibold flex items-center justify-center">
                       {t.badge}
                     </span>
                   )}
