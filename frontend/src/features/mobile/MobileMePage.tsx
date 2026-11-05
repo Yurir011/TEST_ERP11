@@ -7,6 +7,7 @@ import { ApiError, apiDelete, apiGet } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { defaultPasskeyName, fetchPasskeyEnabled, passkeyErrorMessage, passkeySupported, registerPasskey, type PasskeyInfo } from "../../lib/passkey";
 import { MobileCard, MobileLayout } from "./MobileLayout";
+import { MOBILE_THEMES, applyMobileTheme, loadMobileTheme, saveMobileTheme, type MobileThemeKey } from "./mobileTheme";
 
 function formatDate(iso: string | null): string {
   return iso ? iso.slice(0, 10) : "-";
@@ -23,6 +24,14 @@ export function MobileMePage() {
   const [name, setName] = useState(() => defaultPasskeyName(typeof navigator === "undefined" ? "" : navigator.userAgent));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<MobileThemeKey>(() => loadMobileTheme());
+
+  function handleTheme(key: MobileThemeKey) {
+    logDebug("MobileMe", `테마 선택: ${key}`);
+    setTheme(key);
+    saveMobileTheme(key);
+    applyMobileTheme(key);
+  }
 
   const load = useCallback(() => {
     apiGet<PasskeyInfo[]>("/api/passkeys")
@@ -79,6 +88,36 @@ export function MobileMePage() {
         </p>
       </MobileCard>
 
+      <h2 className="text-sm font-semibold px-1">화면 테마</h2>
+      <MobileCard className="py-1">
+        <div role="radiogroup" aria-label="화면 테마" className="divide-y divide-border">
+          {MOBILE_THEMES.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="radio"
+              aria-checked={theme === t.key}
+              onClick={() => handleTheme(t.key)}
+              className="w-full flex items-center gap-3 py-3 text-left"
+            >
+              <span className="flex shrink-0" aria-hidden>
+                {t.swatch.map((c, i) => (
+                  <span key={i} className={`w-4 h-4 rounded-full border border-border ${i > 0 ? "-ml-1" : ""}`} style={{ backgroundColor: c }} />
+                ))}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold">{t.label}</span>
+                <span className="block text-[11px] text-text-muted">{t.description}</span>
+              </span>
+              <span
+                aria-hidden
+                className={`w-4 h-4 rounded-full border-2 shrink-0 ${theme === t.key ? "border-primary bg-primary" : "border-border"}`}
+              />
+            </button>
+          ))}
+        </div>
+      </MobileCard>
+
       <h2 className="text-sm font-semibold px-1">지문·얼굴 로그인 (패스키)</h2>
       <MobileCard className="space-y-3">
         {enabled === false && <p className="text-xs text-text-muted">패스키 로그인이 아직 설정되지 않았습니다. 관리자에게 문의해주세요.</p>}
@@ -127,7 +166,7 @@ export function MobileMePage() {
               type="button"
               onClick={handleAdd}
               disabled={busy}
-              className="w-full flex items-center justify-center gap-1.5 bg-primary hover:bg-primary-hover text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-60"
+              className="w-full flex items-center justify-center gap-1.5 bg-primary hover:bg-primary-hover text-on-primary rounded-xl py-3 text-sm font-semibold disabled:opacity-60"
             >
               <Plus size={16} aria-hidden />
               {busy ? "확인 중..." : "이 폰에 패스키 추가"}

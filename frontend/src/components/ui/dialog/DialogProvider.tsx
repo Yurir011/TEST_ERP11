@@ -76,7 +76,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role={t.error ? "alert" : "status"}
-            className={`flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 text-sm text-white shadow-lg ${t.error ? "bg-[#3b1414]" : "bg-text"}`}
+            className={`flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 text-sm shadow-lg ${t.error ? "bg-[#3b1414] text-white" : "bg-text text-bg"}`}
           >
             <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${t.error ? "bg-red-400" : "bg-green-400"}`} aria-hidden="true" />
             <span className="min-w-0 flex-1 whitespace-pre-line break-words">{t.message}</span>
@@ -177,7 +177,7 @@ function DialogBox({ pending, onClose }: { pending: Pending; onClose: (result: b
           <button
             ref={okRef}
             type="submit"
-            className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${danger ? "bg-danger hover:opacity-90" : "bg-primary hover:bg-primary-hover"}`}
+            className={`rounded-lg px-4 py-2 text-sm font-medium ${danger ? "bg-danger text-white hover:opacity-90" : "bg-primary text-on-primary hover:bg-primary-hover"}`}
           >
             {okLabel}
           </button>

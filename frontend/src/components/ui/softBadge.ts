@@ -8,8 +8,8 @@ export const SOFT_BADGE = {
   green: "rounded-md bg-[color-mix(in_srgb,var(--color-tile-green)_70%,var(--color-surface))] text-[color-mix(in_srgb,var(--color-tile-green-fg)_72%,var(--color-text))]",
   orange: "rounded-md bg-[color-mix(in_srgb,var(--color-tile-orange)_70%,var(--color-surface))] text-[color-mix(in_srgb,var(--color-tile-orange-fg)_72%,var(--color-text))]",
   purple: "rounded-md bg-[color-mix(in_srgb,var(--color-tile-purple)_70%,var(--color-surface))] text-[color-mix(in_srgb,var(--color-tile-purple-fg)_72%,var(--color-text))]",
-  red: "rounded-md bg-[color-mix(in_srgb,#fef2f2_70%,var(--color-surface))] text-[color-mix(in_srgb,var(--color-danger)_72%,var(--color-text))]",
-  gray: "rounded-md bg-[color-mix(in_srgb,#f1f2f4_70%,var(--color-surface))] text-[color-mix(in_srgb,#4b5563_72%,var(--color-text))]",
+  red: "rounded-md bg-[color-mix(in_srgb,var(--color-tile-red)_70%,var(--color-surface))] text-[color-mix(in_srgb,var(--color-danger)_72%,var(--color-text))]",
+  gray: "rounded-md bg-[color-mix(in_srgb,var(--color-tile-gray)_70%,var(--color-surface))] text-[color-mix(in_srgb,var(--color-tile-gray-fg)_72%,var(--color-text))]",
 } as const;
 
 /**

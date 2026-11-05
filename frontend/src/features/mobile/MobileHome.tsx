@@ -1,4 +1,4 @@
-import { Bell, Building2, CalendarCheck, CalendarDays, Clock, FileCheck, Folder, Megaphone, MessageCircle, Monitor, User, type LucideIcon } from "lucide-react";
+import { Bell, Building2, ChevronRight, CalendarCheck, CalendarDays, Clock, FileCheck, Folder, Megaphone, MessageCircle, Monitor, User, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
@@ -90,7 +90,6 @@ export function MobileHome() {
   }
 
   const tiles: MenuTile[] = [
-    { to: "/m/attendance", label: "출퇴근", icon: Clock, tile: "bg-tile-blue", fg: "text-tile-blue-fg", show: !isSiteAdmin },
     { to: "/m/leaves", label: "연차", icon: CalendarCheck, tile: "bg-tile-green", fg: "text-tile-green-fg", show: !isSiteAdmin },
     { to: "/m/notices", label: "공지", icon: Megaphone, tile: "bg-tile-purple", fg: "text-tile-purple-fg", show: hasMenuPermission(user, "notices") },
     { to: "/m/schedule", label: "일정", icon: CalendarDays, tile: "bg-tile-orange", fg: "text-tile-orange-fg", show: true },
@@ -134,22 +133,26 @@ export function MobileHome() {
 
         {!isSiteAdmin && today !== undefined && (
           <MobileCard className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-tile-green text-tile-green-fg flex items-center justify-center shrink-0">
-              <Clock size={20} />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-text-muted truncate">
-                {today?.clock_in
-                  ? `오늘 ${formatTime(today.clock_in)} 출근${today.clock_out ? ` · ${formatTime(today.clock_out)} 퇴근` : ""}`
-                  : "오늘 아직 출근 전이에요"}
-              </p>
-              <p className="text-sm font-semibold">{isDone ? "퇴근 완료" : isWorking ? "근무 중" : "출근 전"}</p>
-            </div>
+            {/* 카드의 왼쪽(아이콘·글자)을 누르면 월별 출퇴근 기록으로 간다 */}
+            <Link to="/m/attendance" aria-label="출퇴근 기록 보기" className="flex flex-1 min-w-0 items-center gap-3">
+              <span data-tone="green" className="w-10 h-10 rounded-xl bg-tile-green text-tile-green-fg flex items-center justify-center shrink-0">
+                <Clock size={20} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-text-muted truncate">
+                  {today?.clock_in
+                    ? `오늘 ${formatTime(today.clock_in)} 출근${today.clock_out ? ` · ${formatTime(today.clock_out)} 퇴근` : ""}`
+                    : "오늘 아직 출근 전이에요"}
+                </p>
+                <p className="text-sm font-semibold">{isDone ? "퇴근 완료" : isWorking ? "근무 중" : "출근 전"}</p>
+              </div>
+              <ChevronRight size={16} className="text-text-muted shrink-0" aria-hidden />
+            </Link>
             <button
               type="button"
               onClick={handleClock}
               disabled={isBusy || isDone}
-              className="bg-primary hover:bg-primary-hover text-white text-sm font-semibold px-5 py-2.5 rounded-xl disabled:opacity-40"
+              className="bg-primary hover:bg-primary-hover text-on-primary text-sm font-semibold px-5 py-2.5 rounded-xl disabled:opacity-40"
             >
               {isWorking ? "퇴근" : "출근"}
             </button>
@@ -163,7 +166,7 @@ export function MobileHome() {
               .filter((t) => t.show)
               .map((t) => (
                 <Link key={t.to} to={t.to} className="flex flex-col items-center gap-1.5 relative active:opacity-60">
-                  <span className={`w-14 h-14 rounded-2xl flex items-center justify-center ${t.tile} ${t.fg}`}>
+                  <span data-tone={t.tile.replace("bg-tile-", "")} className={`w-14 h-14 rounded-2xl flex items-center justify-center ${t.tile} ${t.fg}`}>
                     <t.icon size={26} />
                   </span>
                   <span className="text-xs font-medium">{t.label}</span>

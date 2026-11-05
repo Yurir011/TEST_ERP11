@@ -69,7 +69,7 @@ export function MobileDocumentsPage() {
               setShown(PAGE_SIZE);
             }}
             className={`shrink-0 px-3 py-1.5 rounded-full border text-xs font-semibold ${
-              filter === f.key ? "bg-primary border-primary text-white" : "bg-surface border-border text-text-muted"
+              filter === f.key ? "bg-primary border-primary text-on-primary" : "bg-surface border-border text-text-muted"
             }`}
           >
             {f.label}

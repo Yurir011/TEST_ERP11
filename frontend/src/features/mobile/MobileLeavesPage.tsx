@@ -149,7 +149,7 @@ export function MobileLeavesPage() {
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="w-full flex items-center justify-center gap-1.5 bg-primary hover:bg-primary-hover text-white font-semibold py-3.5 rounded-xl"
+          className="w-full flex items-center justify-center gap-1.5 bg-primary hover:bg-primary-hover text-on-primary font-semibold py-3.5 rounded-xl"
         >
           <Plus size={18} />
           연차 신청하기
@@ -227,7 +227,7 @@ export function MobileLeavesPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 bg-primary text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-60"
+                className="flex-1 bg-primary text-on-primary rounded-xl py-3 text-sm font-semibold disabled:opacity-60"
               >
                 {isSubmitting ? "신청 중..." : resubmitId !== null ? "다시 신청" : "신청"}
               </button>

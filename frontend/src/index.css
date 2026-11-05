@@ -28,6 +28,10 @@
   --color-tile-purple-fg: #7c3aed;
   --color-tile-orange: #fff7ed;
   --color-tile-orange-fg: #ea580c;
+  /* 연한 빨강/회색 배지의 바탕·글자색 (모바일 다크 테마에서 덮어쓴다) */
+  --color-tile-red: #fef2f2;
+  --color-tile-gray: #f1f2f4;
+  --color-tile-gray-fg: #4b5563;
 
   --color-progress-1: #ffe8f0;
   --color-progress-1-fg: #ec4899;
@@ -76,6 +80,9 @@ textarea {
   --color-badge-bg: #f59f00;
   --color-badge-fg: #ffffff;
   --color-badge-border: #f59f00;
+  /* 대화방 목록의 선택·마우스 올림 색 */
+  --messenger-active: #ffefb8;
+  --messenger-hover: #fff6d6;
   background: #fff9e6;
   border: 1px solid #f0e2b4;
   border-radius: 16px;
@@ -99,3 +106,22 @@ textarea {
   background: #fff;
   border: 2px solid rgba(0, 0, 0, 0.45);
 }
+
+/* 모바일 슬레이트 다크 테마: 메신저의 크림색 바탕을 어두운 노랑 계열로 바꾼다 */
+html[data-mobile-theme="slate"] .messenger-theme {
+  --color-surface: #2a2619;
+  --color-bg: #1d1b14;
+  --color-border: #4a4126;
+  --color-primary: #f0c040;
+  --color-primary-hover: #f5cf63;
+  --messenger-active: #4a3f1c;
+  --messenger-hover: #35301d;
+  background: #1d1b14;
+  border-color: #4a4126;
+}
+
+/* 모바일 비비드 테마: 홈 메뉴 아이콘은 진한 색 바탕에 흰 아이콘으로 채운다 */
+html[data-mobile-theme="vivid"] [data-tone="blue"] { background: #2f6bff; color: #fff; }
+html[data-mobile-theme="vivid"] [data-tone="green"] { background: #00b86e; color: #fff; }
+html[data-mobile-theme="vivid"] [data-tone="purple"] { background: #8b3dff; color: #fff; }
+html[data-mobile-theme="vivid"] [data-tone="orange"] { background: #ff7a1a; color: #fff; }

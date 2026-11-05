@@ -203,7 +203,7 @@ export function MobileSchedulePage() {
                 aria-label="일정 제목"
                 className="flex-1 min-w-0 rounded-xl border border-border px-3 py-2.5 text-base outline-none focus:border-primary bg-bg"
               />
-              <button type="submit" className="bg-primary text-white text-sm font-semibold px-4 rounded-xl">
+              <button type="submit" className="bg-primary text-on-primary text-sm font-semibold px-4 rounded-xl">
                 저장
               </button>
             </form>

@@ -97,7 +97,7 @@ export function MobileAttendancePage() {
           type="button"
           onClick={handleClock}
           disabled={isBusy || isDone || today === undefined}
-          className="w-full bg-primary hover:bg-primary-hover text-white font-semibold py-3.5 rounded-xl disabled:opacity-40"
+          className="w-full bg-primary hover:bg-primary-hover text-on-primary font-semibold py-3.5 rounded-xl disabled:opacity-40"
         >
           {isDone ? "퇴근 완료" : isWorking ? "퇴근하기" : "출근하기"}
         </button>

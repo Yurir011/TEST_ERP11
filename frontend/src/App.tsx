@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, type ComponentType, type ReactNode } from "r
 import { Navigate, Route, Routes } from "react-router-dom";
 import type { MenuPermissionKey } from "./lib/auth";
 import { MobileHome } from "./features/mobile/MobileHome";
+import { useMobileThemeSync } from "./features/mobile/mobileTheme";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { TabShell } from "./components/layout/tabs/TabShell";
 import { useAuth } from "./context/useAuth";
@@ -382,6 +383,7 @@ function App() {
   usePrefetchPages(user !== null);
   useOpenConversationFromDesktop(); // 앱에서 메시지 알림을 누르면 그 대화방으로
   useFileDrop(); // 파일 첨부 칸 위에 파일을 끌어다 놓으면 첨부
+  useMobileThemeSync(); // 모바일 화면(/m)에서만 직원이 고른 테마 색을 쓴다
   return (
     <Suspense fallback={pageFallback}>
     <ScheduleReminderPopup />

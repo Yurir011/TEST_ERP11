@@ -164,7 +164,7 @@ function PendingTab() {
                       type="button"
                       disabled={busy}
                       onClick={() => handleApprove(item)}
-                      className="flex-1 bg-primary hover:bg-primary-hover text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-60"
+                      className="flex-1 bg-primary hover:bg-primary-hover text-on-primary rounded-xl py-2.5 text-sm font-semibold disabled:opacity-60"
                     >
                       승인
                     </button>

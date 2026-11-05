@@ -29,7 +29,7 @@ export function ConversationList({
             type="button"
             onClick={() => onSelect(c.id)}
             aria-current={c.id === activeId ? "true" : undefined}
-            className={`w-full text-left px-4 py-3 border-b border-border last:border-0 flex gap-3 items-start transition-colors ${c.id === activeId ? "bg-[#ffefb8]" : "hover:bg-[#fff6d6]"}`}
+            className={`w-full text-left px-4 py-3 border-b border-border last:border-0 flex gap-3 items-start transition-colors ${c.id === activeId ? "bg-[var(--messenger-active)]" : "hover:bg-[var(--messenger-hover)]"}`}
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
