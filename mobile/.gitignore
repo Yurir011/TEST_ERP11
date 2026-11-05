@@ -1,0 +1,7 @@
+node_modules/
+# 맥에서 만든 네이티브 프로젝트의 빌드 산출물 (ios/ 폴더 자체는 커밋한다)
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+*.xcuserstate
+xcuserdata/

@@ -53,6 +53,10 @@ npm run dev
 - 프론트엔드: http://localhost:5173
 - 백엔드 헬스체크: http://localhost:8000/api/health (또는 프록시 경유 http://localhost:5173/api/health)
 - DB 접속 정보는 `backend/.env` 참고 (PostgreSQL, DB명 `erp_db`, 계정 `erp_user`)
+
+### HTTPS 정책
+- **현재는 HTTPS를 사용하지 않아도 된다.** 사내망 HTTP 접속(nginx 3102 포트)을 기본으로 하며, HTTPS·도메인 설정(Caddy, `WEBAUTHN_RP_ID` 등)을 서버에 요구하거나 필수 작업으로 안내하지 않는다.
+- HTTPS가 있어야만 되는 기능(패스키 로그인, 폰 홈 화면 앱(PWA) 설치)은 HTTPS 없이는 쓸 수 없는 선택 기능으로 둔다. 관련 코드·문서(`deploy/Caddyfile` 등)는 나중을 위해 남겨 둔다.
 - PostgreSQL 슈퍼유저(`postgres`) 비밀번호는 winget 설치 시 설정된 `postgres` — 운영 배포 전 반드시 변경할 것
 
 ---

@@ -248,13 +248,13 @@ describe("파일 보내기", () => {
     fireEvent.click(screen.getByLabelText("보내기"));
   };
 
-  it("20MB 가 넘으면 서버로 보내지 않고 안내한다", async () => {
+  it("100MB 가 넘으면 서버로 보내지 않고 안내한다", async () => {
     setup();
     await screen.findByText(/아직 메시지가 없습니다/);
     const big = new File(["x"], "큰파일.zip", { type: "application/zip" });
-    Object.defineProperty(big, "size", { value: 21 * 1024 * 1024 });
+    Object.defineProperty(big, "size", { value: 101 * 1024 * 1024 });
     attach(big);
-    expect(await screen.findByText(/20\.0MB를 넘을 수 없습니다/)).toBeTruthy();
+    expect(await screen.findByText(/100.0MB를 넘을 수 없습니다/)).toBeTruthy();
     expect(api.apiUploadForm).not.toHaveBeenCalled();
   });
 

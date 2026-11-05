@@ -49,7 +49,7 @@ from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
 router = APIRouter(prefix="/api/messenger", tags=["messenger"])
 logger = get_logger("Messenger")
 
-MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
 PAGE_SIZE_DEFAULT = 50
 PAGE_SIZE_MAX = 100
 CATCH_UP_LIMIT = 200  # 다시 연결했을 때 한 번에 받아 가는 최대 개수

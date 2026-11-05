@@ -1,9 +1,11 @@
 import { Paperclip, Send, X } from "lucide-react";
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { MAX_ATTACHMENT_BYTES, MAX_BODY_LENGTH, formatBytes } from "./messengerState";
 
 // 서버가 받는 형식 (backend/app/services/upload_check.py 의 ATTACHMENT_TYPES). 최종 확인은 서버가 파일 내용으로 한다.
 const ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt";
+
+const PASTE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 /**
  * 메시지 입력칸. Enter 로 보내고 Shift+Enter 로 줄바꿈한다. 한글 조합(IME) 중의 Enter 는 보내지 않는다 (마지막 글자가 중복되거나 잘리는 것을 막는다).
@@ -14,38 +16,61 @@ export function MessageInput({
   onSend,
   onAttach,
   disabled = false,
+  droppedFiles = null,
 }: {
   onSend: (text: string) => void;
   /** 올려 둔 파일과 (있으면) 함께 쓴 글을 보낸다 */
   onAttach: (file: File, caption: string) => void;
   disabled?: boolean;
+  /** 채팅창에 끌어다 놓은 파일들 (id 가 바뀔 때마다 새로 올린다) */
+  droppedFiles?: { files: File[]; id: number } | null;
 }) {
   const [text, setText] = useState("");
-  const [staged, setStaged] = useState<File | null>(null);
+  const [staged, setStaged] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function pickFile(file: File) {
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      setFileError(`파일 크기는 ${formatBytes(MAX_ATTACHMENT_BYTES)}를 넘을 수 없습니다. (${file.name}: ${formatBytes(file.size)})`);
-      return;
-    }
-    setFileError(null);
-    setStaged(file);
+  /** 파일들을 "보낼 파일"에 더한다. 크기 제한을 넘는 파일은 빼고 이유를 보여 준다. */
+  function pickFiles(files: File[]) {
+    const tooBig = files.filter((f) => f.size > MAX_ATTACHMENT_BYTES);
+    const ok = files.filter((f) => f.size <= MAX_ATTACHMENT_BYTES);
+    setFileError(
+      tooBig.length
+        ? `파일 크기는 ${formatBytes(MAX_ATTACHMENT_BYTES)}를 넘을 수 없습니다. (${tooBig.map((f) => `${f.name}: ${formatBytes(f.size)}`).join(", ")})`
+        : null,
+    );
+    if (ok.length) setStaged((prev) => [...prev, ...ok]);
   }
+
+  useEffect(() => {
+    if (droppedFiles && !disabled) pickFiles(droppedFiles.files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 끌어다 놓을 때(id 변경)만 실행
+  }, [droppedFiles?.id]);
 
   function submit() {
     if (disabled) return;
     const body = text.trim();
-    if (staged) {
-      onAttach(staged, body);
-      setStaged(null);
+    if (staged.length) {
+      // 입력한 글은 첫 번째 파일의 설명으로만 보낸다
+      staged.forEach((f, i) => onAttach(f, i === 0 ? body : ""));
+      setStaged([]);
       setText("");
       return;
     }
     if (!body) return;
     onSend(body);
     setText("");
+  }
+
+  /** 클립보드의 이미지(캡처 등)를 Ctrl+V 로 붙여 넣으면 파일 첨부와 같이 "보낼 파일"로 올린다. 글자만 있는 붙여넣기는 그대로 둔다. */
+  function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+    const image = Array.from(e.clipboardData.files).find((f) => PASTE_IMAGE_TYPES.has(f.type));
+    if (!image || disabled) return;
+    e.preventDefault();
+    const ext = image.type === "image/jpeg" ? "jpg" : image.type.slice("image/".length);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
+    console.debug(`[Messenger] 클립보드 이미지 붙여넣기: ${image.type}, ${image.size}B`);
+    pickFiles([new File([image], `붙여넣은 이미지_${stamp}.${ext}`, { type: image.type })]);
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -56,27 +81,28 @@ export function MessageInput({
 
   return (
     <div className="border-t border-border bg-surface">
-      {(staged || fileError) && (
+      {(staged.length > 0 || fileError) && (
         <div className="px-3 pt-3">
-          {staged && (
-            <div
-              className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-bg pl-3 pr-1.5 py-1.5 text-sm"
-              aria-label="보낼 파일"
-            >
-              <Paperclip size={14} className="shrink-0 text-text-muted" />
-              <span className="truncate" title={staged.name}>
-                {staged.name}
-              </span>
-              <span className="shrink-0 text-xs text-text-muted">{formatBytes(staged.size)}</span>
-              <button
-                type="button"
-                aria-label="보낼 파일 빼기"
-                title="파일 빼기"
-                onClick={() => setStaged(null)}
-                className="shrink-0 rounded p-1 text-text-muted hover:bg-border hover:text-text"
-              >
-                <X size={13} />
-              </button>
+          {staged.length > 0 && (
+            <div className="flex flex-wrap gap-2" aria-label="보낼 파일">
+              {staged.map((f, idx) => (
+                <div key={`${f.name}-${idx}`} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-bg pl-3 pr-1.5 py-1.5 text-sm">
+                  <Paperclip size={14} className="shrink-0 text-text-muted" />
+                  <span className="truncate" title={f.name}>
+                    {f.name}
+                  </span>
+                  <span className="shrink-0 text-xs text-text-muted">{formatBytes(f.size)}</span>
+                  <button
+                    type="button"
+                    aria-label="보낼 파일 빼기"
+                    title="파일 빼기"
+                    onClick={() => setStaged((prev) => prev.filter((_, i) => i !== idx))}
+                    className="shrink-0 rounded p-1 text-text-muted hover:bg-border hover:text-text"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
           {fileError && (
@@ -89,7 +115,7 @@ export function MessageInput({
       <div className="p-3 flex items-end gap-2">
         <button
           type="button"
-          title="파일 첨부 (20MB까지)"
+          title="파일 첨부 (100MB까지)"
           aria-label="파일 첨부"
           disabled={disabled}
           onClick={() => fileRef.current?.click()}
@@ -101,21 +127,23 @@ export function MessageInput({
           ref={fileRef}
           type="file"
           accept={ACCEPT}
+          multiple
           hidden
           aria-label="첨부할 파일"
           onChange={(e) => {
-            const file = e.target.files?.[0];
+            const files = Array.from(e.target.files ?? []);
             e.target.value = ""; // 같은 파일을 다시 골라도 동작하게
-            if (file) pickFile(file);
+            if (files.length) pickFiles(files);
           }}
         />
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           rows={1}
           maxLength={MAX_BODY_LENGTH}
-          placeholder={staged ? "파일과 함께 보낼 글 (선택)" : "메시지를 입력하세요 (Enter 보내기, Shift+Enter 줄바꿈)"}
+          placeholder={staged.length ? "파일과 함께 보낼 글 (선택)" : "메시지를 입력하세요 (Enter 보내기, Shift+Enter 줄바꿈)"}
           aria-label="메시지 입력"
           disabled={disabled}
           className="flex-1 resize-none rounded-lg border border-border bg-bg px-3 py-2.5 text-sm outline-none focus:border-primary max-h-32 min-h-[42px] disabled:opacity-60"
@@ -124,7 +152,7 @@ export function MessageInput({
         <button
           type="button"
           onClick={submit}
-          disabled={disabled || (!text.trim() && !staged)}
+          disabled={disabled || (!text.trim() && !staged.length)}
           aria-label="보내기"
           className="p-2.5 rounded-lg bg-[#ffd43b] text-[#3b2f00] hover:bg-[#f5c800] disabled:opacity-50"
         >

@@ -170,7 +170,7 @@ export function isImage(contentType: string): boolean {
   return contentType.startsWith("image/");
 }
 
-export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 export const MAX_BODY_LENGTH = 4000;
 
 export function newClientMsgId(): string {

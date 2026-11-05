@@ -1,4 +1,5 @@
 import { Bell, BellOff, LogOut, UserPlus } from "lucide-react";
+import type { DragEvent } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDialog } from "../../components/ui/dialog/useDialog";
@@ -257,11 +258,39 @@ export function MessageThread({ conversation, meId, leaveTo = "/messenger" }: { 
     }
   }
 
+  const [dragging, setDragging] = useState(false);
+  const [dropped, setDropped] = useState<{ files: File[]; id: number } | null>(null);
+
   const items = useMemo(() => buildThreadItems(messages ?? [], meId), [messages, meId]);
   const isGroup = conversation.kind === "group";
 
+  const hasFiles = (e: DragEvent<HTMLDivElement>) => Array.from(e.dataTransfer.types).includes("Files");
+
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div
+      className="relative flex flex-col h-full min-h-0"
+      onDragOver={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault(); // 브라우저가 파일을 열어 버리지 않게 하고, 놓을 수 있다는 표시를 낸다
+        setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        setDragging(false);
+        const files = Array.from(e.dataTransfer.files);
+        logDebug("Messenger", `파일 끌어다 놓기: ${files.length}개`);
+        if (files.length) setDropped({ files, id: Date.now() });
+      }}
+    >
+      {dragging && (
+        <div className="absolute inset-2 z-20 rounded-xl border-2 border-dashed border-primary bg-surface/85 flex items-center justify-center text-sm font-medium text-primary pointer-events-none">
+          여기에 놓으면 보낼 파일로 올라갑니다
+        </div>
+      )}
       <header className="px-5 py-3 border-b border-border flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold truncate">{conversation.title}</h2>
@@ -324,7 +353,7 @@ export function MessageThread({ conversation, meId, leaveTo = "/messenger" }: { 
         ))}
       </div>
 
-      <MessageInput onSend={(text) => enqueue({ body: text })} onAttach={attach} />
+      <MessageInput onSend={(text) => enqueue({ body: text })} onAttach={attach} droppedFiles={dropped} />
 
       {showAdd && (
         <NewConversationModal

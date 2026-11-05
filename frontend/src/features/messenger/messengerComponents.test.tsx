@@ -72,6 +72,30 @@ describe("MessageInput", () => {
     expect(onSend).toHaveBeenCalledWith("버튼");
   });
 
+  it("클립보드 이미지를 붙여 넣으면 보낼 파일로 올리고, 글자만 붙여 넣을 때는 건드리지 않는다", () => {
+    const onAttach = vi.fn();
+    render(<MessageInput onSend={vi.fn()} onAttach={onAttach} />);
+    const image = new File(["x"], "image.png", { type: "image/png" });
+    expect(fireEvent.paste(box(), { clipboardData: { files: [image] } })).toBe(false); // 기본 붙여넣기 취소됨
+    expect(screen.getByLabelText("보낼 파일").textContent).toContain("붙여넣은 이미지_");
+    fireEvent.click(screen.getByLabelText("보내기"));
+    expect(onAttach).toHaveBeenCalledTimes(1);
+    expect(onAttach.mock.calls[0][0].type).toBe("image/png");
+    expect(fireEvent.paste(box(), { clipboardData: { files: [] } })).toBe(true);
+  });
+
+  it("채팅창에 끌어다 놓은 파일(droppedFile)을 보낼 파일로 올린다", () => {
+    const onAttach = vi.fn();
+    const files = [new File(["x"], "끌어온.pdf", { type: "application/pdf" }), new File(["y"], "두번째.png", { type: "image/png" })];
+    render(<MessageInput onSend={vi.fn()} onAttach={onAttach} droppedFiles={{ files, id: 1 }} />);
+    expect(screen.getByLabelText("보낼 파일").textContent).toContain("끌어온.pdf");
+    expect(screen.getByLabelText("보낼 파일").textContent).toContain("두번째.png");
+    fireEvent.change(box(), { target: { value: "설명" } });
+    fireEvent.click(screen.getByLabelText("보내기"));
+    expect(onAttach).toHaveBeenCalledTimes(2);
+    expect(onAttach.mock.calls.map((c) => c[1])).toEqual(["설명", ""]); // 글은 첫 파일에만
+  });
+
   it("파일을 고르면 바로 보내지 않고 보낼 파일로 올려 두며, [보내기]를 눌러야 전송된다", () => {
     const onAttach = vi.fn();
     const onSend = vi.fn();
@@ -109,12 +133,12 @@ describe("MessageInput", () => {
     expect(onAttach).not.toHaveBeenCalled();
   });
 
-  it("20MB 가 넘는 파일은 올려 두지 않고 안내한다", () => {
+  it("100MB 가 넘는 파일은 올려 두지 않고 안내한다", () => {
     render(<MessageInput onSend={vi.fn()} onAttach={vi.fn()} />);
     const big = new File(["x"], "큰파일.zip", { type: "application/zip" });
-    Object.defineProperty(big, "size", { value: 21 * 1024 * 1024 });
+    Object.defineProperty(big, "size", { value: 101 * 1024 * 1024 });
     fireEvent.change(screen.getByLabelText("첨부할 파일"), { target: { files: [big] } });
-    expect(screen.getByRole("alert").textContent).toMatch(/20\.0MB를 넘을 수 없습니다/);
+    expect(screen.getByRole("alert").textContent).toMatch(/100.0MB를 넘을 수 없습니다/);
     expect(screen.queryByLabelText("보낼 파일")).toBeNull();
   });
 
