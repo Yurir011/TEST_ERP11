@@ -10,10 +10,32 @@ import { DesktopDownloadLink } from "../desktop/DesktopDownloadLink";
 import { NfcLoginPanel } from "./NfcLoginPanel";
 import { PasskeyLoginButton } from "./PasskeyLoginButton";
 
+const SAVED_ID_KEY = "bench.login.savedId";
+
+/** 저장해 둔 아이디(이메일). 저장소가 막힌 환경(사생활 보호 모드 등)에서는 없는 것으로 본다. 비밀번호는 저장하지 않는다. */
+function readSavedId(): string | null {
+  try {
+    return localStorage.getItem(SAVED_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedId(id: string | null) {
+  try {
+    if (id) localStorage.setItem(SAVED_ID_KEY, id);
+    else localStorage.removeItem(SAVED_ID_KEY);
+  } catch {
+    /* 저장하지 못해도 로그인에는 지장 없다 */
+  }
+}
+
 export function LoginPage() {
   const { login, loginWithToken } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [savedId] = useState(readSavedId);
+  const [email, setEmail] = useState(savedId ?? "");
+  const [rememberId, setRememberId] = useState(true);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,6 +66,9 @@ export function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email, password);
+      // 로그인에 성공했을 때만 아이디를 저장한다 (체크를 풀고 로그인하면 저장해 둔 아이디도 지운다)
+      writeSavedId(rememberId ? email.trim() : null);
+      logDebug("LoginPage", `아이디 저장: ${rememberId ? "저장" : "삭제"}`);
       goHome();
     } catch (err) {
       logError("LoginPage", "로그인 실패", err);
@@ -76,7 +101,8 @@ export function LoginPage() {
               id="email"
               type="email"
               required
-              autoFocus
+              autoFocus={!savedId}
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
@@ -90,12 +116,18 @@ export function LoginPage() {
             <PasswordInput
               id="password"
               required
+              autoFocus={!!savedId}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
               placeholder="••••••••"
             />
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-text-muted select-none">
+            <input id="remember-id" type="checkbox" checked={rememberId} onChange={(e) => setRememberId(e.target.checked)} className="w-4 h-4 accent-primary" />
+            아이디 저장
+          </label>
 
           {error && <p className="text-xs text-danger">{error}</p>}
 
