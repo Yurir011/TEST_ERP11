@@ -996,7 +996,7 @@ export function ProjectDocumentsPage({
         <ListViewControls view={listView} shown={listRows.length} total={mergedRows.length} placeholder="업체명, 품의명, 프로젝트로 검색" />
       )}
 
-      {tab !== "all" && listRows !== null && listRows.length === 0 && (
+      {tab !== "all" && lockedDocType !== "tax_invoice" && listRows !== null && listRows.length === 0 && (
         <div className="bg-surface border border-dashed border-border rounded-2xl p-10 text-center">
           <FileText className="mx-auto mb-2 text-text-muted" size={24} />
           <p className="text-sm text-text-muted">
@@ -1005,7 +1005,8 @@ export function ProjectDocumentsPage({
         </div>
       )}
 
-      {tab !== "all" && listRows !== null && listRows.length > 0 && lockedDocType === "tax_invoice" && (
+      {/* 세금계산서는 하나도 없을 때도 매입·매출 2단을 그대로 보여 준다 */}
+      {tab !== "all" && listRows !== null && lockedDocType === "tax_invoice" && (
         <TaxInvoiceSplitList
           docs={listRows.flatMap((r) => (r.kind === "doc" ? [r.doc] : []))}
           userId={user?.id}
