@@ -1,4 +1,3 @@
-import { ChevronLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDialog } from "../../components/ui/dialog/useDialog";
@@ -143,15 +142,18 @@ function ThreadScreen({ id }: { id: number }) {
 
   return (
     <div className="messenger-theme h-dvh flex flex-col bg-bg pt-[env(safe-area-inset-top)]">
-      <div className="shrink-0 h-11 flex items-center px-1 border-b border-border">
-        <button type="button" onClick={() => navigate(LIST_PATH)} aria-label="대화목록으로" className="h-10 pl-1 pr-3 flex items-center text-primary text-sm font-medium">
-          <ChevronLeft size={22} />
-          대화목록
-        </button>
-      </div>
       <div className="flex-1 min-h-0 bg-surface pb-[env(safe-area-inset-bottom)]">
         {active ? (
-          <MessageThread key={active.id} conversation={active} meId={user.id} leaveTo={LIST_PATH} />
+          <MessageThread
+            key={active.id}
+            conversation={active}
+            meId={user.id}
+            leaveTo={LIST_PATH}
+            onBack={() => {
+              logDebug("MobileMessenger", "대화방 → 대화목록 (헤더 뒤로가기)");
+              navigate(LIST_PATH);
+            }}
+          />
         ) : (
           <p className="p-6 text-sm text-text-muted text-center">불러오는 중...</p>
         )}

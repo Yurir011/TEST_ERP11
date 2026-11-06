@@ -27,7 +27,8 @@ export function classifySwipe(startX: number, startY: number, endX: number, endY
 /** 스와이프를 시작한 곳이 입력칸이거나 옆으로 스크롤되는 영역이면 화면 이동으로 쓰지 않는다 (글 선택·표 스크롤과 겹치지 않게). */
 export function isSwipeBlocked(target: EventTarget | null): boolean {
   let el = target instanceof Element ? target : null;
-  while (el && el !== document.body) {
+  // html/body/#root 는 제외: 폭 문제로 내용이 넘쳐도 화면 전체가 "옆으로 스크롤되는 영역"으로 오인되어 스와이프가 막히지 않게 한다
+  while (el && el !== document.body && el.id !== "root") {
     if (el.matches("input, textarea, select, [data-no-swipe]")) return true;
     if (el.scrollWidth > el.clientWidth + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowX)) return true;
     el = el.parentElement;
@@ -47,7 +48,8 @@ export function useSwipeNavigation(backTo?: string) {
 
   useEffect(() => {
     const tabs = tabPaths(isSiteAdmin);
-    let start: { x: number; y: number; t: number; blocked: boolean } | null = null;
+    // lastX/lastY: touchmove 로 갱신. iOS 는 가로로 밀 때 touchend 대신 touchcancel 을 보내기도 해서 마지막 위치를 따로 기억한다.
+    let start: { x: number; y: number; t: number; blocked: boolean; lastX: number; lastY: number } | null = null;
 
     const onStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) {
@@ -55,14 +57,26 @@ export function useSwipeNavigation(backTo?: string) {
         return;
       }
       const t = e.touches[0];
-      start = { x: t.clientX, y: t.clientY, t: Date.now(), blocked: isSwipeBlocked(e.target) };
+      start = { x: t.clientX, y: t.clientY, t: Date.now(), blocked: isSwipeBlocked(e.target), lastX: t.clientX, lastY: t.clientY };
     };
-    const onEnd = (e: TouchEvent) => {
+    const onMove = (e: TouchEvent) => {
+      if (!start) return;
+      if (e.touches.length !== 1) {
+        start = null;
+        return;
+      }
+      start.lastX = e.touches[0].clientX;
+      start.lastY = e.touches[0].clientY;
+    };
+    const finish = (e: TouchEvent) => {
       const s = start;
       start = null;
-      if (!s || s.blocked || e.changedTouches.length === 0) return;
+      if (!s || s.blocked) return;
       const t = e.changedTouches[0];
-      const kind = classifySwipe(s.x, s.y, t.clientX, t.clientY, Date.now() - s.t);
+      const endX = t ? t.clientX : s.lastX;
+      const endY = t ? t.clientY : s.lastY;
+      const kind = classifySwipe(s.x, s.y, endX, endY, Date.now() - s.t);
+      logDebug("MobileSwipe", `터치 종료(${e.type}): dx=${Math.round(endX - s.x)} dy=${Math.round(endY - s.y)} → ${kind ?? "무시"}`);
       if (!kind) return;
       if (kind === "back") {
         if (!backTo) return;
@@ -79,11 +93,14 @@ export function useSwipeNavigation(backTo?: string) {
     };
 
     document.addEventListener("touchstart", onStart, { passive: true });
-    document.addEventListener("touchend", onEnd, { passive: true });
-    document.addEventListener("touchcancel", () => (start = null), { passive: true });
+    document.addEventListener("touchmove", onMove, { passive: true });
+    document.addEventListener("touchend", finish, { passive: true });
+    document.addEventListener("touchcancel", finish, { passive: true });
     return () => {
       document.removeEventListener("touchstart", onStart);
-      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", finish);
+      document.removeEventListener("touchcancel", finish);
     };
   }, [navigate, pathname, backTo, isSiteAdmin]);
 }

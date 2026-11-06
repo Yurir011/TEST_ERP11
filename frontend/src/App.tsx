@@ -25,7 +25,10 @@ function lazyPage<K extends string, C extends AnyComponent>(load: () => Promise<
 const MobileApprovalsPage = lazyPage(() => import("./features/mobile/MobileApprovalsPage"), "MobileApprovalsPage");
 const MobileAttendancePage = lazyPage(() => import("./features/mobile/MobileAttendancePage"), "MobileAttendancePage");
 const MobileClientsPage = lazyPage(() => import("./features/mobile/MobileClientsPage"), "MobileClientsPage");
-const MobileDocumentsPage = lazyPage(() => import("./features/mobile/MobileDocumentsPage"), "MobileDocumentsPage");
+const MobileContactsPage = lazyPage(() => import("./features/mobile/MobileContactsPage"), "MobileContactsPage");
+const MobileCardPage = lazyPage(() => import("./features/mobile/MobileCardPage"), "MobileCardPage");
+const ContactsPage = lazyPage(() => import("./features/contacts/ContactsPage"), "ContactsPage");
+const MobileDocumentsPage =lazyPage(() => import("./features/mobile/MobileDocumentsPage"), "MobileDocumentsPage");
 const MobileMePage = lazyPage(() => import("./features/mobile/MobileMePage"), "MobileMePage");
 const MobileMessengerPage = lazyPage(() => import("./features/mobile/MobileMessengerPage"), "MobileMessengerPage");
 const MobileLeavesPage = lazyPage(() => import("./features/mobile/MobileLeavesPage"), "MobileLeavesPage");
@@ -185,6 +188,14 @@ const desktopRoutes = (
         element={
           <ProtectedRoute>
             <ProposalFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/contacts"
+        element={
+          <ProtectedRoute>
+            <ContactsPage />
           </ProtectedRoute>
         }
       />
@@ -396,7 +407,9 @@ function App() {
       <Route path="/m/notices" element={mobileRoute(<MobileNoticesPage />, { menuKey: "notices", siteAdminAllowed: true })} />
       <Route path="/m/schedule" element={mobileRoute(<MobileSchedulePage />, { siteAdminAllowed: true })} />
       <Route path="/m/clients" element={mobileRoute(<MobileClientsPage />, { menuKey: "clients" })} />
-      <Route path="/m/notifications" element={mobileRoute(<MobileNotificationsPage />, { siteAdminAllowed: true })} />
+      <Route path="/m/contacts" element={mobileRoute(<MobileContactsPage />)} />
+      <Route path="/m/card" element={mobileRoute(<MobileCardPage />, { menuKey: "payments" })} />
+      <Route path="/m/notifications"element={mobileRoute(<MobileNotificationsPage />, { siteAdminAllowed: true })} />
       <Route path="/m/approvals" element={mobileRoute(<MobileApprovalsPage />)} />
       <Route path="/m/documents" element={mobileRoute(<MobileDocumentsPage />)} />
       <Route path="/m/me" element={mobileRoute(<MobileMePage />, { siteAdminAllowed: true })} />

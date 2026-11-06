@@ -13,6 +13,7 @@ from app.models.client import Client, ClientContact
 from app.models.user import User
 from app.schemas.client import BankbookOcrOut, BusinessRegOcrOut, ClientCreate, ClientOut
 from app.services.balance_history import BalanceHistoryEntry, build_balance_history
+from app.services.contact_sync import sync_client_contacts
 from app.services.bankbook_ocr import recognize_bankbook
 from app.services.business_reg_ocr import recognize_business_registration
 from app.services.client_list_excel import generate_client_list_excel
@@ -176,6 +177,8 @@ def create_client(
     client = Client(**data, created_by=current_user.id)
     _apply_contacts(client, payload.contacts)
     db.add(client)
+    db.flush()
+    sync_client_contacts(db, client, current_user.id)  # 담당자 휴대폰 번호를 연락처에 자동 등록
     db.commit()
     db.refresh(client)
     return client
@@ -195,6 +198,8 @@ def update_client(
     for key, value in payload.model_dump(exclude={"contacts"}).items():
         setattr(client, key, value)
     _apply_contacts(client, payload.contacts)
+    db.flush()
+    sync_client_contacts(db, client, current_user.id)  # 담당자 휴대폰 번호를 연락처에 자동 등록
     db.commit()
     db.refresh(client)
     logger.debug(f"[Clients] 수정: id={client_id}, contacts={len(payload.contacts)}, by={current_user.id}")

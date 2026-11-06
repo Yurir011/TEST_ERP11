@@ -20,6 +20,7 @@ from app.routers import (
     client_app,
     client_public,
     clients,
+    contacts,
     devices,
     documents,
     leaves,
@@ -83,6 +84,7 @@ app.include_router(attendance.router)
 app.include_router(leaves.router)
 app.include_router(documents.router)
 app.include_router(clients.router)
+app.include_router(contacts.router)
 app.include_router(projects.router)
 app.include_router(project_documents.router)
 app.include_router(proposals.router)

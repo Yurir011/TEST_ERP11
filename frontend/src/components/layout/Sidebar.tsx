@@ -1,6 +1,7 @@
 import {
   Banknote,
   Bell,
+  BookUser,
   Building2,
   CalendarDays,
   FileSignature,
@@ -46,6 +47,7 @@ const menuItems: {
   { to: "/", label: "대시보드", icon: LayoutGrid, end: true, adminOnly: false, colorClass: "" },
   { to: "/schedule", label: "일정관리", icon: CalendarDays, adminOnly: false, colorClass: "" },
   { to: "/messenger", label: "메신저", icon: MessageCircle, adminOnly: false, colorClass: "" },
+  { to: "/contacts", label: "연락처", icon: BookUser, adminOnly: false, colorClass: "" },
   { to: "/mail", label: "메일", icon: Mail, adminOnly: false, desktopMailOnly: true, colorClass: "" },
   { to: "/approval", label: "전자결재", icon: FileSignature, adminOnly: false, colorClass: "" },
   { to: "/projects", label: "프로젝트관리", icon: FileText, adminOnly: false, menuKey: "projects", colorClass: "" },

@@ -1,4 +1,4 @@
-import { Bell, BellOff, LogOut, UserPlus } from "lucide-react";
+import { Bell, BellOff, ChevronLeft, LogOut, UserPlus } from "lucide-react";
 import type { DragEvent } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -35,7 +35,8 @@ function isViewing(): boolean {
  *   다시 보내도 같은 client_msg_id 를 쓰므로 서버에 두 번 저장되지 않는다.
  */
 /** leaveTo: 그룹 대화에서 나간 뒤 돌아갈 주소 (모바일 메신저는 자기 목록으로 돌려보낸다) */
-export function MessageThread({ conversation, meId, leaveTo = "/messenger" }: { conversation: ConversationSummary; meId: number; leaveTo?: string }) {
+/** onBack: 주면 헤더 왼쪽에 뒤로가기 화살표를 보여 준다 (모바일 대화방) */
+export function MessageThread({ conversation, meId, leaveTo = "/messenger", onBack }: { conversation: ConversationSummary; meId: number; leaveTo?: string; onBack?: () => void }) {
   const id = conversation.id;
   const { subscribe, connection, setActiveConversation, refresh } = useMessenger();
   const dialog = useDialog();
@@ -291,7 +292,12 @@ export function MessageThread({ conversation, meId, leaveTo = "/messenger" }: { 
           여기에 놓으면 보낼 파일로 올라갑니다
         </div>
       )}
-      <header className="px-5 py-3 border-b border-border flex items-center gap-3">
+      <header className={`${onBack ? "pl-1 pr-3" : "px-5"} py-3 border-b border-border flex items-center gap-3`}>
+        {onBack && (
+          <button type="button" onClick={onBack} aria-label="대화목록으로" className="w-11 h-11 -my-1 shrink-0 flex items-center justify-center text-primary">
+            <ChevronLeft size={26} strokeWidth={2.4} />
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold truncate">{conversation.title}</h2>
           {isGroup && <p className="text-xs text-text-muted truncate">참여자 {conversation.members.length}명: {conversation.members.map((m) => m.name).join(", ")}</p>}
