@@ -12,6 +12,7 @@ import { favoritesOf } from "../messenger/presence";
 import type { ConversationSummary } from "../messenger/types";
 import { useMessenger } from "../messenger/useMessenger";
 import { MobileLayout } from "./MobileLayout";
+import { useSwipeNavigation } from "./useSwipeNavigation";
 import { useViewportLock } from "./useViewportLock";
 
 const LIST_PATH = "/m/messenger";
@@ -61,7 +62,9 @@ function ListScreen() {
   const favorites = favoritesOf(directory);
   const connected = connection.state === "connected";
 
+  // 시안 C: 회색 바탕·연노랑 상자·카드 겹을 없애고 화면 가득 흰 바탕에 목록만 보여 준다 (노랑은 버튼·밑줄·배지에만)
   return (
+    <div className="messenger-theme p-0! border-0! rounded-none! bg-transparent!">
     <MobileLayout
       title="메신저"
       right={
@@ -71,8 +74,8 @@ function ListScreen() {
         </span>
       }
     >
-      <div className="messenger-theme">
-        <div className="bg-surface border border-border rounded-2xl overflow-hidden flex flex-col h-[calc(100dvh-13rem)] min-h-[320px]">
+      <div className="-mx-4 -my-4">
+        <div className="bg-bg overflow-hidden flex flex-col h-[calc(100dvh-11rem)] min-h-[320px]">
           <div role="tablist" aria-label="메신저 목록" className="flex border-b border-border shrink-0">
             {LIST_TABS.map(({ key, label }) => {
               const count = key === "chats" ? unreadTotal : key === "favorites" ? favorites.length : 0;
@@ -121,6 +124,7 @@ function ListScreen() {
         />
       )}
     </MobileLayout>
+    </div>
   );
 }
 
@@ -129,6 +133,7 @@ function ThreadScreen({ id }: { id: number }) {
   const navigate = useNavigate();
   const { conversations } = useMessenger();
   useViewportLock();
+  useSwipeNavigation(LIST_PATH); // 대화방에서도 왼쪽 가장자리에서 밀면 대화목록으로
 
   const active = conversations?.find((c) => c.id === id) ?? null;
   const missing = conversations !== null && active === null;
@@ -141,22 +146,26 @@ function ThreadScreen({ id }: { id: number }) {
   if (!user) return null;
 
   return (
-    <div className="messenger-theme h-dvh flex flex-col bg-bg pt-[env(safe-area-inset-top)]">
-      <div className="flex-1 min-h-0 bg-surface pb-[env(safe-area-inset-bottom)]">
-        {active ? (
-          <MessageThread
-            key={active.id}
-            conversation={active}
-            meId={user.id}
-            leaveTo={LIST_PATH}
-            onBack={() => {
-              logDebug("MobileMessenger", "대화방 → 대화목록 (헤더 뒤로가기)");
-              navigate(LIST_PATH);
-            }}
-          />
-        ) : (
-          <p className="p-6 text-sm text-text-muted text-center">불러오는 중...</p>
-        )}
+    // 화면에 고정(fixed)해서 문서가 따로 스크롤되며 윗부분이 상태 표시줄 아래로 밀려 올라가는 일이 없게 한다.
+    // 위쪽 여백은 안전영역(상태 표시줄·노치)만큼 줘서 대화목록의 제목줄과 같은 높이에서 시작한다.
+    <div className="messenger-theme fixed inset-0 rounded-none! border-0! p-0! flex flex-col bg-bg pt-[env(safe-area-inset-top)]">
+      <div className="relative flex-1 min-h-0 bg-surface pb-[env(safe-area-inset-bottom)]">
+        <div className="absolute inset-x-0 top-0 bottom-[env(safe-area-inset-bottom)]">
+          {active ? (
+            <MessageThread
+              key={active.id}
+              conversation={active}
+              meId={user.id}
+              leaveTo={LIST_PATH}
+              onBack={() => {
+                logDebug("MobileMessenger", "대화방 → 대화목록 (헤더 뒤로가기)");
+                navigate(LIST_PATH);
+              }}
+            />
+          ) : (
+            <p className="p-6 text-sm text-text-muted text-center">불러오는 중...</p>
+          )}
+        </div>
       </div>
     </div>
   );

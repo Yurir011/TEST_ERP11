@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
+import { NumberInput } from "../../components/ui/NumberInput";
 import { ApiError, apiDelete, apiPost } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { usePaymentAccounts } from "../payments/paymentAccounts";
@@ -146,11 +147,10 @@ export function PaymentBox({ proposal, canManage, onChanged }: { proposal: Propo
               ))}
             </select>
           </label>
-          <input
+          <NumberInput
             aria-label="결제 금액"
-            inputMode="numeric"
-            value={amount === "" ? "" : Number(digitsOnly(amount)).toLocaleString()}
-            onChange={(e) => setAmount(digitsOnly(e.target.value))}
+            value={amount}
+            onChange={setAmount}
             className="col-span-2 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-right text-xs font-bold tabular-nums outline-none focus:border-primary"
           />
           <button type="button" onClick={() => void handleAdd()} disabled={busy} className="col-span-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary-hover disabled:opacity-50">

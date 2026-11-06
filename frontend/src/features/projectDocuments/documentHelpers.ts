@@ -115,7 +115,7 @@ export function filterTaxInvoices(docs: ProjectDocument[], f: TaxInvoiceFilters,
     if (f.month === "last" && monthKey(doc.issue_date) !== lastMonthKey) return false;
     if (f.dateFrom && doc.issue_date < f.dateFrom) return false;
     if (f.dateTo && doc.issue_date > f.dateTo) return false;
-    if (q && !`${doc.project_name} ${doc.client_name} ${doc.manager_name ?? ""} ${doc.doc_no ?? ""}`.toLowerCase().includes(q)) {
+    if (q && !`${doc.project_name} ${doc.client_name} ${doc.manager_name ?? ""} ${doc.doc_no ?? ""} ${doc.items.map((i) => i.content).join(" ")}`.toLowerCase().includes(q)) {
       return false;
     }
     return true;

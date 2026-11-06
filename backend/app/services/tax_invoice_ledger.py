@@ -70,6 +70,17 @@ def record_tax_invoice_transaction(db: Session, doc: ProjectDocument, current_us
                     f"amount={payment.amount}, type={payment.type.value}"
                 )
             return
+    if doc.proposal_id is not None and tx_type == TransactionType.purchase:
+        # 구매 품의서에서 이미 매입을 기록했으면 같은 건을 두 번 만들지 않고, 그 매입에 세금계산서를 연결한다 (금액·결제 상태는 그대로).
+        linked = db.query(Transaction).filter(Transaction.proposal_id == doc.proposal_id).first()
+        if linked is not None:
+            linked.tax_invoice_no = linked.tax_invoice_no or doc.approval_no or doc.doc_no
+            doc.ledger_transaction_id = linked.id
+            logger.debug(
+                f"[ProjectDocuments] 세금계산서 → 구매 품의서 매입에 연결(새로 만들지 않음): doc_id={doc.id}, "
+                f"proposal_id={doc.proposal_id}, tx_id={linked.id}, tax_invoice_no={linked.tax_invoice_no}"
+            )
+            return
     tx = Transaction(
         type=tx_type,
         transaction_date=doc.issue_date,

@@ -13,6 +13,7 @@ import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import type { Client } from "../clients/types";
 import type { Proposal } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
+import { NumberInput } from "../../components/ui/NumberInput";
 import { objectParticle } from "../../lib/korean";
 
 const DEPARTMENT_NAME = "연구개발팀";
@@ -347,14 +348,12 @@ export function ProposalFormPage() {
                   <option value="USD">달러 ($)</option>
                   <option value="JPY">엔 (¥)</option>
                 </select>
-                <input
+                <NumberInput
                   id="proposal-amount"
-                  type="number"
-                  min={0}
-                  step="any"
+                  allowDecimal
                   required={isPurchase}
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={setAmount}
                   placeholder="0"
                   className="min-w-0 flex-1 rounded-lg border border-border px-3 py-2 text-sm text-right tabular-nums outline-none focus:border-primary bg-bg"
                 />

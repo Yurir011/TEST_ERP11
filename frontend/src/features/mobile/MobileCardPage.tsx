@@ -1,5 +1,6 @@
 import { Camera, Check, ImagePlus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { NumberInput } from "../../components/ui/NumberInput";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost, apiUpload } from "../../lib/api";
 import { todayISO } from "../../lib/date";
@@ -206,11 +207,10 @@ export function MobileCardPage() {
           </label>
           <label className="block">
             <span className="text-xs text-text-muted">금액 (원)</span>
-            <input
+            <NumberInput
               id="card-amount"
-              inputMode="numeric"
-              value={amount ? Number(amount.replace(/[^0-9]/g, "")).toLocaleString("ko-KR") : ""}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
+              value={amount}
+              onChange={setAmount}
               placeholder="0"
               className={`${inputCls} text-right tabular-nums text-lg font-semibold`}
             />

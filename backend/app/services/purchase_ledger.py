@@ -94,8 +94,27 @@ def sync_purchase_transaction(db: Session, p: Proposal, actor: User) -> Transact
     if not LEDGER_SYNC_ENABLED:
         return None
     tx = db.query(Transaction).filter(Transaction.proposal_id == p.id).first()
+    # 이 품의서에서 등록한 세금계산서가 먼저 승인되어 매입이 이미 있으면 그 매입을 이어받는다 (같은 건이 두 번 잡히지 않도록).
+    doc = (
+        db.query(ProjectDocument)
+        .filter(
+            ProjectDocument.proposal_id == p.id,
+            ProjectDocument.doc_type == ProjectDocType.tax_invoice,
+            ProjectDocument.ledger_transaction_id.isnot(None),
+        )
+        .first()
+    )
+    if tx is None and doc is not None and p.order_sent_at is not None:
+        tx = db.get(Transaction, doc.ledger_transaction_id)
+        if tx is not None:
+            tx.proposal_id = p.id
+            logger.debug(f"[PurchaseLedger] 세금계산서가 먼저 만든 매입을 이어받음: proposal_id={p.id}, tx_id={tx.id}")
 
     if p.order_sent_at is None:
+        if tx is not None and doc is not None and tx.id == doc.ledger_transaction_id:
+            tx.proposal_id = None  # 세금계산서가 만든(또는 연결된) 매입은 발주를 취소해도 지우지 않고 품의서와의 연결만 푼다
+            logger.debug(f"[PurchaseLedger] 발주 취소: 세금계산서 연결 매입은 유지, 품의서 연결만 해제: proposal_id={p.id}, tx_id={tx.id}")
+            return None
         if tx is not None and _manual_payments(db, tx, p.payment_id) == 0:
             _drop_auto_payment(db, p)
             credit_remove(db, tx)

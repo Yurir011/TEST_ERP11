@@ -39,6 +39,7 @@ import { ProjectDocumentDetailModal } from "./ProjectDocumentDetailModal";
 import { ProjectSearchBox } from "./ProjectSearchBox";
 import { TaxInvoiceStatsCard } from "./TaxInvoiceStatsCard";
 import { PendingApprovalBox } from "./PendingApprovalBox";
+import { TaxInvoiceSplitList } from "./TaxInvoiceSplitList";
 import { ProjectDocumentsTable } from "./ProjectDocumentsTable";
 import {
   documentMailDraft,
@@ -891,15 +892,6 @@ export function ProjectDocumentsPage({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] text-text-muted">구분</span>
             <select
-              value={directionFilter}
-              onChange={(e) => setDirectionFilter(e.target.value as typeof directionFilter)}
-              className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
-            >
-              <option value="all">매입/매출 전체</option>
-              <option value="sales">매출</option>
-              <option value="purchase">매입</option>
-            </select>
-            <select
               value={paperFilter}
               onChange={(e) => setPaperFilter(e.target.value as typeof paperFilter)}
               className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface outline-none focus:border-primary"
@@ -1013,7 +1005,17 @@ export function ProjectDocumentsPage({
         </div>
       )}
 
-      {tab !== "all" && listRows !== null && listRows.length > 0 && (
+      {tab !== "all" && listRows !== null && listRows.length > 0 && lockedDocType === "tax_invoice" && (
+        <TaxInvoiceSplitList
+          docs={listRows.flatMap((r) => (r.kind === "doc" ? [r.doc] : []))}
+          userId={user?.id}
+          onOpenDoc={setDetailDoc}
+          onResubmit={setResubmitDoc}
+          onDelete={handleDeleteClick}
+        />
+      )}
+
+      {tab !== "all" && listRows !== null && listRows.length > 0 && lockedDocType !== "tax_invoice" && (
         <ProjectDocumentsTable
           rows={listRows}
           lockedDocType={lockedDocType}

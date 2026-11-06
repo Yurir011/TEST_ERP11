@@ -31,7 +31,7 @@ interface ProjectDocumentsTableProps {
 
 // 문서관리 목록 표. "전체" 탭에서는 문서와 품의서가 한 표에 섞여 나온다.
 // 전결·삭제 결재 중 표시는 상태 칸이 아니라 이름(거래처명·제목) 옆에 붙여, 상태 배지가 줄마다 같은 자리에 서도록 한다.
-function ExtraBadges({ isFinal, deleteRequested }: { isFinal: boolean; deleteRequested: boolean }) {
+export function ExtraBadges({ isFinal, deleteRequested }: { isFinal: boolean; deleteRequested: boolean }) {
   return (
     <>
       {isFinal && <span className={`shrink-0 text-[11px] px-1.5 py-0.5 font-medium ${CODE_BADGE.purple}`}>전결</span>}

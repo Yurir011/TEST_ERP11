@@ -22,7 +22,7 @@ from app.routers.proposals._common import (
     logger,
 )
 from app.schemas.proposal import AttachmentDocKindIn, ProposalLinkAttachmentIn, ProposalOut
-from app.services import proposal_files
+from app.services import proposal_files, proposal_tax_invoice
 from app.services.proposal_excel import generate_proposal_excel
 from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
 
@@ -107,6 +107,8 @@ def upload_attachment_file(
         created_by=current_user.id,
     )
     db.add(attachment)
+    db.flush()
+    proposal_tax_invoice.register_from_attachment(db, p, attachment, current_user)  # 세금계산서로 올렸으면 세금계산서 목록에도 등록
     db.commit()
     logger.debug(f"[Proposals] 첨부파일 업로드: proposal_id={proposal_id}, filename={file.filename}, by={current_user.id}")
 
@@ -181,6 +183,10 @@ def set_attachment_kind(
     if attachment.kind != ProposalAttachmentKind.file:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 첨부만 서류 종류를 정할 수 있습니다.")
     attachment.doc_kind = _normalize_doc_kind(payload.doc_kind)
+    if attachment.doc_kind == "tax_invoice":
+        proposal_tax_invoice.register_from_attachment(db, p, attachment, current_user)
+    else:
+        proposal_tax_invoice.unregister_for_attachment(db, attachment.id)  # 세금계산서가 아니게 되면 결재 전 자동 등록 문서는 치운다
     db.commit()
     logger.debug(f"[Proposals] 첨부 서류 종류 변경: proposal_id={proposal_id}, attachment_id={attachment_id}, doc_kind={attachment.doc_kind}, by={current_user.id}")
     return _to_out(_get_or_404(db, proposal_id))
@@ -199,6 +205,7 @@ def delete_attachment(
 
     if attachment.file_path and os.path.exists(attachment.file_path):
         os.remove(attachment.file_path)
+    proposal_tax_invoice.unregister_for_attachment(db, attachment.id)
     db.delete(attachment)
     db.commit()
     logger.debug(f"[Proposals] 첨부파일 삭제: proposal_id={proposal_id}, attachment_id={attachment_id}, by={current_user.id}")
