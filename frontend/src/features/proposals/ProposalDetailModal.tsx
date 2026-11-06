@@ -6,7 +6,7 @@ import { WITHDRAW_CONFIRM_MESSAGE, canWithdrawApproval } from "../../components/
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
 import { openAttachment } from "../../lib/openAttachment";
-import { isAdminRole } from "../../lib/auth";
+import { canModifyProposalAttachment, isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
 import { objectParticle } from "../../lib/korean";
@@ -43,7 +43,7 @@ export function ProposalDetailModal({
   const { user } = useAuth();
   const currentStep = proposal.steps.find((s) => s.step_order === proposal.current_step);
   const canDecide = proposal.status === "pending" && currentStep?.approver_id === user?.id;
-  const canManageAttachments = proposal.created_by === user?.id;
+  const canAddAttachments = !!user; // 올리기는 로그인한 직원 누구나
   const navigate = useNavigate();
   const isMine = proposal.created_by === user?.id;
   // 반려/승인된 품의서는 작성자가 수정할 수 있다 (승인된 품의서는 수정 후 결재를 다시 받아야 한다).
@@ -295,7 +295,7 @@ export function ProposalDetailModal({
                               <Download size={14} />
                             </button>
                           )}
-                          {canManageAttachments && (
+                          {canModifyProposalAttachment(user, a.created_by, proposal.created_by) && (
                             <button
                               type="button"
                               onClick={() => handleDeleteAttachment(a)}
@@ -313,7 +313,7 @@ export function ProposalDetailModal({
                   </ul>
                 )}
 
-                {canManageAttachments && (
+                {canAddAttachments && (
                   <div className="mt-2 space-y-2">
                     <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-primary hover:opacity-80">
                       <Paperclip size={13} />

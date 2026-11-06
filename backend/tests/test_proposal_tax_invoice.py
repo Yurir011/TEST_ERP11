@@ -118,3 +118,46 @@ def test_invoice_approved_before_order_is_adopted_by_order(client, db, make_user
     db.expire_all()
     (tx,) = db.query(Transaction).all()  # 발주 완료로 같은 매입을 이어받고 두 번째 매입을 만들지 않는다
     assert tx.proposal_id == p["id"]
+
+
+def test_anyone_can_upload_but_only_uploader_creator_admin_or_chief_can_delete(client, make_user, auth_headers):
+    writer, other, third = make_user(name="기안자"), make_user(name="다른직원"), make_user(name="제3직원")
+    hw, ho, ht = auth_headers(writer), auth_headers(other), auth_headers(third)
+    p = _purchase(client, hw)
+    body = _upload(client, ho, p["id"], kind="statement", name="남이올림.pdf")  # 작성자가 아니어도 올릴 수 있다
+    att_id = body["attachments"][0]["id"]
+    assert client.post(f"/api/proposals/{p['id']}/attachments/link", json={"url": "https://example.com"}, headers=ht).status_code == 201
+    assert client.delete(f"/api/proposals/{p['id']}/attachments/{att_id}", headers=ht).status_code == 403  # 상관없는 사람은 지울 수 없다
+    assert client.put(f"/api/proposals/{p['id']}/attachments/{att_id}/kind", json={"doc_kind": "invoice"}, headers=ht).status_code == 403
+    assert client.put(f"/api/proposals/{p['id']}/attachments/{att_id}/kind", json={"doc_kind": "invoice"}, headers=ho).status_code == 200  # 올린 사람
+    assert client.delete(f"/api/proposals/{p['id']}/attachments/{att_id}", headers=hw).status_code == 200  # 품의서 작성자
+
+
+def test_chief_can_delete_others_attachment(client, make_user, auth_headers, db):
+    from app.models.user import JobGrade
+
+    writer, chief = make_user(name="기안자"), make_user(name="소장님")
+    chief.grade = JobGrade.chief
+    db.commit()
+    hw, hc = auth_headers(writer), auth_headers(chief)
+    p = _purchase(client, hw)
+    att_id = _upload(client, hw, p["id"], kind="statement")["attachments"][0]["id"]
+    assert client.delete(f"/api/proposals/{p['id']}/attachments/{att_id}", headers=hc).status_code == 200
+
+
+def test_dept_head_and_ceo_can_delete_but_team_lead_cannot(client, make_user, auth_headers):
+    from app.models.user import JobTitle
+
+    writer = make_user(name="기안자")
+    dept, ceo, team = make_user(title=JobTitle.dept_head, name="부서장"), make_user(title=JobTitle.ceo, name="대표"), make_user(title=JobTitle.team_lead, name="팀장")
+    hw = auth_headers(writer)
+    p = _purchase(client, hw)
+
+    def new_att():
+        return _upload(client, hw, p["id"], kind="statement", name="a.pdf")["attachments"][-1]["id"]
+
+    a1 = new_att()
+    assert client.delete(f"/api/proposals/{p['id']}/attachments/{a1}", headers=auth_headers(team)).status_code == 403  # 직책 순서: 팀장 < 부서장 < 대표
+    assert client.delete(f"/api/proposals/{p['id']}/attachments/{a1}", headers=auth_headers(dept)).status_code == 200
+    a2 = new_att()
+    assert client.delete(f"/api/proposals/{p['id']}/attachments/{a2}", headers=auth_headers(ceo)).status_code == 200

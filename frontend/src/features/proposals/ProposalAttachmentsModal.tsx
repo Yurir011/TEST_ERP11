@@ -48,14 +48,17 @@ export function pickUploadable(files: File[], remaining: number): { accepted: Fi
 
 interface Props {
   proposal: Proposal;
-  /** 작성자만 올리고 지울 수 있다 (서버 규칙) */
+  /** 로그인한 직원 누구나 파일을 올릴 수 있다 (서버 규칙) */
   canEdit: boolean;
+  /** 서류 종류를 바꾸고 지울 수 있는 첨부 (올린 사람·품의서 작성자·관리자). 없으면 canEdit 와 같다. */
+  canModify?: (attachment: ProposalAttachment) => boolean;
   onChanged: (updated: Proposal) => void;
   onClose: () => void;
 }
 
 /** 구매 품의서 카드의 첨부 버튼: 거래명세서·세금계산서 등 관련 서류를 올린다 (최대 7개). */
-export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose }: Props) {
+export function ProposalAttachmentsModal({ proposal, canEdit, canModify, onChanged, onClose }: Props) {
+  const canModifyAttachment = (a: ProposalAttachment) => (canModify ? canModify(a) : canEdit);
   const { confirm } = useDialog();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -211,7 +214,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
               <input ref={fileRef} type="file" multiple accept={PROPOSAL_FILE_ACCEPT} hidden aria-label="올릴 파일" onChange={(e) => void handleSelect(e)} />
             </>
           ) : (
-            <span className="text-xs text-text-muted">작성자만 파일을 올릴 수 있습니다.</span>
+            <span className="text-xs text-text-muted">로그인한 뒤에 파일을 올릴 수 있습니다.</span>
           )}
         </div>
 
@@ -242,7 +245,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
                     {a.label}
                   </button>
                   {a.kind === "file" &&
-                    (canEdit ? (
+                    (canModifyAttachment(a) ? (
                       <select
                         aria-label={`${a.label} 서류 종류`}
                         value={a.doc_kind ?? ""}
@@ -270,7 +273,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, onChanged, onClose
                       <Download size={14} />
                     </button>
                   )}
-                  {canEdit && (
+                  {canModifyAttachment(a) && (
                     <button
                       type="button"
                       onClick={() => void handleDelete(a)}

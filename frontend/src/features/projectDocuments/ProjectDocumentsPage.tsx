@@ -14,7 +14,7 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile, openFile } from "../../lib/api";
-import { isAdminRole } from "../../lib/auth";
+import { canModifyProposalAttachment, isAdminRole } from "../../lib/auth";
 import { getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
 import { canComposeDocumentMail, openDocumentMail } from "../mail/documentMail";
@@ -1080,7 +1080,8 @@ export function ProjectDocumentsPage({
       {attachmentsProposal && (
         <ProposalAttachmentsModal
           proposal={attachmentsProposal}
-          canEdit={!!user && attachmentsProposal.created_by === user.id}
+          canEdit={!!user}
+          canModify={(a) => canModifyProposalAttachment(user, a.created_by, attachmentsProposal.created_by)}
           onChanged={(updated) => setPurchaseProposals((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))}
           onClose={() => setAttachmentsId(null)}
         />

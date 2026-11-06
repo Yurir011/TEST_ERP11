@@ -54,12 +54,12 @@ describe("품의서 상세의 첨부파일 저장 버튼", () => {
     expect(downloadFile).toHaveBeenCalledWith("/api/proposals/9/attachments/3/file", "견적서.xlsx");
   });
 
-  it("작성자가 아니어도 저장할 수 있고, 삭제 버튼은 작성자에게만 보인다", () => {
+  it("작성자가 아니어도 저장할 수 있고, 삭제 버튼은 관리자·작성자 등에게 보인다 (이 테스트의 사용자는 관리자)", () => {
     renderModal({ ...proposal, created_by: 2 } as Proposal);
     expect(screen.getByRole("button", { name: "견적서.xlsx 저장" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "견적서.xlsx 삭제" })).toBeNull();
+    expect(screen.getByRole("button", { name: "견적서.xlsx 삭제" })).toBeTruthy(); // 관리자
     cleanup();
     renderModal();
-    expect(screen.getByRole("button", { name: "견적서.xlsx 삭제" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "견적서.xlsx 삭제" })).toBeTruthy(); // 작성자
   });
 });

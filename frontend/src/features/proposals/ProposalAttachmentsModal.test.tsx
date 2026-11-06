@@ -32,12 +32,12 @@ const file = (name: string, size = 10) => {
   return f;
 };
 
-function renderModal(p: Proposal, canEdit = true) {
+function renderModal(p: Proposal, canEdit = true, canModify?: (a: Proposal["attachments"][number]) => boolean) {
   const onChanged = vi.fn();
   const onClose = vi.fn();
   render(
     <DialogProvider>
-      <ProposalAttachmentsModal proposal={p} canEdit={canEdit} onChanged={onChanged} onClose={onClose} />
+      <ProposalAttachmentsModal proposal={p} canEdit={canEdit} canModify={canModify} onChanged={onChanged} onClose={onClose} />
     </DialogProvider>,
   );
   return { onChanged, onClose };
@@ -118,11 +118,11 @@ describe("첨부 파일 팝업", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("최대 7개까지 올릴 수 있습니다.");
   });
 
-  it("작성자가 아니면 올리기·삭제가 없다", () => {
+  it("로그인하지 않았으면 올리기·삭제가 없다", () => {
     renderModal(proposal(1), false);
     expect(screen.queryByRole("button", { name: /파일 올리기/ })).toBeNull();
     expect(screen.queryByLabelText("서류1.pdf 삭제")).toBeNull();
-    expect(screen.getByText("작성자만 파일을 올릴 수 있습니다.")).toBeTruthy();
+    expect(screen.getByText("로그인한 뒤에 파일을 올릴 수 있습니다.")).toBeTruthy();
   });
 
   it("삭제는 확인 후 서버에 요청한다", async () => {
@@ -187,6 +187,13 @@ describe("서류 종류 (거래명세서·세금계산서)", () => {
     expect(onChanged).toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("서류1.pdf 서류 종류"), { target: { value: "" } });
     await waitFor(() => expect(api.apiPut).toHaveBeenLastCalledWith("/api/proposals/1/attachments/1/kind", { doc_kind: null }));
+  });
+
+  it("작성자가 아니어도 올릴 수 있고, 남이 올린 첨부는 종류 변경·삭제가 없다", () => {
+    renderModal(proposal(1), true, () => false);
+    expect(screen.getByRole("button", { name: /파일 올리기/ })).toBeTruthy();
+    expect(screen.queryByLabelText("서류1.pdf 삭제")).toBeNull();
+    expect(screen.queryByLabelText("서류1.pdf 서류 종류")).toBeNull();
   });
 
   it("작성자가 아니면 종류를 바꿀 수 없고 글자로만 보인다", () => {

@@ -79,3 +79,13 @@ export function isDeptHeadOrAbove(user: CurrentUser | null | undefined): boolean
 export function canDeleteClient(user: CurrentUser | null | undefined): boolean {
   return hasMenuPermission(user, "clients") && isDeptHeadOrAbove(user);
 }
+
+/**
+ * 품의서 첨부의 서류 종류 변경·삭제: 올린 사람, 품의서 작성자, 관리자, 직급 소장, 직책 부서장 이상(부서장·대표)만 할 수 있다.
+ * 파일·링크 올리기는 로그인한 직원 누구나 한다. 서버(routers/proposals/files.py)와 같은 규칙이다.
+ */
+export function canModifyProposalAttachment(user: CurrentUser | null | undefined, uploaderId: number, proposalCreatorId: number): boolean {
+  if (!user) return false;
+  if (user.id === uploaderId || user.id === proposalCreatorId) return true;
+  return isAdminRole(user.role) || user.grade === "chief" || user.title === "dept_head" || user.title === "ceo";
+}

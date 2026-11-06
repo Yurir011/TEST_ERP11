@@ -11,7 +11,7 @@ from app.config import settings
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models.proposal import ATTACHMENT_DOC_KINDS, ProposalAttachment, ProposalAttachmentKind, ProposalStatus
-from app.models.user import User
+from app.models.user import JobGrade, JobTitle, User, is_admin_role
 from app.routers.proposals._common import (
     ALLOWED_ATTACHMENT_TYPES,
     MAX_ATTACHMENT_FILES,
@@ -27,6 +27,11 @@ from app.services.proposal_excel import generate_proposal_excel
 from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
+
+
+def _can_modify(p, attachment: ProposalAttachment, user: User) -> bool:
+    """첨부를 올리는 것은 로그인한 직원 누구나 할 수 있고, 서류 종류를 바꾸거나 지우는 것은 올린 사람·품의서 작성자·관리자·직급 소장·직책 부서장 이상(부서장·대표)만 한다."""
+    return user.id in (attachment.created_by, p.created_by) or is_admin_role(user.role) or user.grade == JobGrade.chief or user.title in (JobTitle.dept_head, JobTitle.ceo)
 
 
 @router.get("/{proposal_id}/pdf")
@@ -82,8 +87,6 @@ def upload_attachment_file(
 ):
     p = _get_or_404(db, proposal_id)
     kind_value = _normalize_doc_kind(doc_kind)
-    if p.created_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 첨부파일을 추가할 수 있습니다.")
     if file.content_type not in ALLOWED_ATTACHMENT_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="지원하지 않는 파일 형식입니다. (PNG·JPG·PDF·XLS·XLSX·DOC·DOCX·PPT·PPTX·TXT)")
     if sum(1 for a in p.attachments if a.kind == ProposalAttachmentKind.file) >= MAX_ATTACHMENT_FILES:
@@ -127,8 +130,6 @@ def add_attachment_link(
     current_user: User = Depends(get_current_user),
 ):
     p = _get_or_404(db, proposal_id)
-    if p.created_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 첨부링크를 추가할 수 있습니다.")
 
     attachment = ProposalAttachment(
         proposal_id=p.id,
@@ -175,11 +176,11 @@ def set_attachment_kind(
 ):
     """이미 올린 첨부 파일의 서류 종류(거래명세서·세금계산서·인보이스·기타)를 바꾼다. 작성자만, 파일 첨부에만 할 수 있다."""
     p = _get_or_404(db, proposal_id)
-    if p.created_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 서류 종류를 바꿀 수 있습니다.")
     attachment = next((a for a in p.attachments if a.id == attachment_id), None)
     if attachment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="첨부파일을 찾을 수 없습니다.")
+    if not _can_modify(p, attachment, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="올린 사람·작성자·관리자·소장만 서류 종류를 바꿀 수 있습니다.")
     if attachment.kind != ProposalAttachmentKind.file:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="파일 첨부만 서류 종류를 정할 수 있습니다.")
     attachment.doc_kind = _normalize_doc_kind(payload.doc_kind)
@@ -197,11 +198,11 @@ def delete_attachment(
     proposal_id: int, attachment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     p = _get_or_404(db, proposal_id)
-    if p.created_by != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자만 첨부파일을 삭제할 수 있습니다.")
     attachment = next((a for a in p.attachments if a.id == attachment_id), None)
     if attachment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="첨부파일을 찾을 수 없습니다.")
+    if not _can_modify(p, attachment, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="올린 사람·작성자·관리자·소장만 첨부파일을 삭제할 수 있습니다.")
 
     if attachment.file_path and os.path.exists(attachment.file_path):
         os.remove(attachment.file_path)
