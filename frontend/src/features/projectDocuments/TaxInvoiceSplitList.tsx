@@ -57,7 +57,7 @@ function Pane({
       </div>
       <div className="overflow-x-auto">
         {/* 날짜·금액은 길이가 비슷해 폭을 고정하고, 거래처명과 품목이 남는 폭을 나눠 쓴다 */}
-        <table className="w-full table-fixed min-w-[34rem] text-sm [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-white/20 [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
+        <table className="w-full table-fixed min-w-[26rem] text-sm [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-white/20 [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
           <colgroup>
             <col style={{ width: "6.25rem" }} />
             <col style={{ width: "34%" }} />
@@ -173,7 +173,7 @@ export function TaxInvoiceSplitList({ docs, userId, onOpenDoc, onResubmit, onDel
           <p className="text-base font-semibold tabular-nums">{pending}건</p>
         </div>
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-2 gap-4 items-start">
         <Pane title="받은 세금계산서" tone="purchase" docs={purchase} userId={userId} onOpenDoc={onOpenDoc} onResubmit={onResubmit} onDelete={onDelete} />
         <Pane title="발행한 세금계산서" tone="sales" docs={sales} userId={userId} onOpenDoc={onOpenDoc} onResubmit={onResubmit} onDelete={onDelete} />
       </div>
