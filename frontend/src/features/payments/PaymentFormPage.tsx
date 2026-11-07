@@ -42,7 +42,7 @@ export function PaymentFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
-  const { cards, banks } = usePaymentAccounts();
+  const { usableCards: cards, banks } = usePaymentAccounts(); // 법인카드는 내가 쓸 수 있는 카드만 고른다
   const cardLabels = Object.fromEntries(cards.map((c) => [c.code, c.nickname]));
   const bankLabels = Object.fromEntries(banks.map((b) => [b.code, b.nickname]));
 

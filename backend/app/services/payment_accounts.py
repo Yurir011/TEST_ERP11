@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.payment import Payment
-from app.models.payment_account import PaymentAccount
+from app.models.payment_account import PaymentAccount, PaymentAccountDelegate
 from app.models.proposal import Proposal
 from app.models.recurring_payment import RecurringPayment
+from app.models.user import User, is_admin_role
 
 KIND_LABELS = {"card": "카드", "bank": "계좌"}
 
@@ -60,3 +61,28 @@ def usage_count(db: Session, account: PaymentAccount) -> int:
         + db.query(RecurringPayment).filter(RecurringPayment.bank_type == account.code).count()
         + db.query(Proposal).filter(Proposal.payment_bank == account.code).count()
     )
+
+
+def delegate_ids(db: Session, account: PaymentAccount) -> list[int]:
+    return [r.user_id for r in db.query(PaymentAccountDelegate).filter(PaymentAccountDelegate.account_id == account.id).order_by(PaymentAccountDelegate.id)]
+
+
+def can_use_card(db: Session, user: User, account: PaymentAccount | None) -> bool:
+    """이 법인카드로 입출금 내역을 등록·수정할 수 있는가: 관리자, 소유 직원, 허용받은 직원. 소유 직원이 없는 카드는 누구나."""
+    if account is None or account.kind != "card" or account.owner_user_id is None:
+        return True
+    if is_admin_role(user.role) or account.owner_user_id == user.id:
+        return True
+    return db.query(PaymentAccountDelegate.id).filter(PaymentAccountDelegate.account_id == account.id, PaymentAccountDelegate.user_id == user.id).first() is not None
+
+
+def can_manage_card_access(user: User, account: PaymentAccount) -> bool:
+    """사용 권한을 허용·회수할 수 있는가: 카드 소유 직원과 관리자."""
+    return account.kind == "card" and (is_admin_role(user.role) or account.owner_user_id == user.id)
+
+
+def require_card_use(db: Session, user: User, code: str | None) -> None:
+    """카드 사용 권한이 없으면 403. 카드가 없거나 소유 직원이 없으면 통과한다."""
+    account = get_account(db, "card", code)
+    if not can_use_card(db, user, account):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="이 법인카드는 소유 직원과 사용을 허용받은 직원만 등록·수정할 수 있습니다.")

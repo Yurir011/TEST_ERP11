@@ -28,7 +28,7 @@ from app.services.settlement import (
 from app.services.transaction_credit import remaining_amount
 from app.models.user import User
 from app.services import card_pending as card_pending_service
-from app.services.payment_accounts import list_accounts, require_account
+from app.services.payment_accounts import list_accounts, require_account, require_card_use
 from app.services.payment_query import build_payment_query, monthly_total, occurred_dates
 from app.services.recurring_payment import generate_recurring_payments
 from app.schemas.payment import (
@@ -213,6 +213,8 @@ def create_payment(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="존재하지 않는 거래처입니다.")
 
     _check_method_accounts(db, payload)
+    if payload.method == PaymentMethod.corporate_card:
+        require_card_use(db, current_user, payload.card_type)  # 소유 직원·허용받은 직원·관리자만 법인카드 내역을 등록한다
 
     linked_tx = None
     if payload.transaction_id is not None:
@@ -270,6 +272,7 @@ def import_card_statement(
     current_user: User = Depends(require_payments_access),
 ):
     require_account(db, "card", card_type)
+    require_card_use(db, current_user, card_type)
     raw = file.file.read()
     logger.debug(f"[Payments] CSV 업로드: filename={file.filename}, card_type={card_type}, size={len(raw)}, by={current_user.id}")
     try:
@@ -293,6 +296,7 @@ def upload_receipt(
     payment = db.query(Payment).options(joinedload(Payment.client)).filter(Payment.id == payment_id).first()
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
+    require_card_use(db, current_user, payment.card_type)
     if file.content_type not in ALLOWED_RECEIPT_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")
 
@@ -373,8 +377,10 @@ def update_payment(
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
 
+    require_card_use(db, current_user, payment.card_type)  # 기존 내역의 카드와 바꾸려는 카드 모두 사용 권한이 있어야 한다
     if payload.card_type is not None and payload.card_type != payment.card_type:
         require_account(db, "card", payload.card_type)
+        require_card_use(db, current_user, payload.card_type)
     if payload.bank_type is not None and payload.bank_type != payment.bank_type:
         require_account(db, "bank", payload.bank_type)
 
@@ -423,6 +429,7 @@ def delete_payment(payment_id: int, db: Session = Depends(get_db), current_user:
     if payment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출금 내역을 찾을 수 없습니다.")
 
+    require_card_use(db, current_user, payment.card_type)
     undo_payment_effects(db, payment)
 
     db.delete(payment)

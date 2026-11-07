@@ -17,6 +17,7 @@ import type { Client } from "../clients/types";
 import { ApiError, apiDelete, apiGet, apiUpload, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PaymentDetailModal } from "./PaymentDetailModal";
+import { CardAccessModal } from "./CardAccessModal";
 import { PaymentAccountsModal } from "./PaymentAccountsModal";
 import { RecurringPaymentsModal } from "./RecurringPaymentsModal";
 import { useAuth } from "../../context/useAuth";
@@ -71,6 +72,7 @@ export function PaymentsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [showRecurring, setShowRecurring] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
+  const [showCardAccess, setShowCardAccess] = useState(false);
   const { user } = useAuth();
   const { cards: cardAccounts } = usePaymentAccounts();
   const [csvCardPick, setCsvCardType] = useState<CardType | "">("");
@@ -354,6 +356,15 @@ export function PaymentsPage() {
       actions={
         <div className="flex items-center gap-2">
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvSelected} className="hidden" />
+          {cardAccounts.some((c) => c.can_manage) && (
+            <button
+              onClick={() => setShowCardAccess(true)}
+              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
+            >
+              <CreditCard size={14} />
+              법인카드 사용 권한
+            </button>
+          )}
           {!!user && isAdminRole(user.role) && (
             <button
               onClick={() => setShowAccounts(true)}
@@ -590,6 +601,7 @@ export function PaymentsPage() {
       )}
 
       {showAccounts && <PaymentAccountsModal onClose={() => setShowAccounts(false)} />}
+      {showCardAccess && <CardAccessModal onClose={() => setShowCardAccess(false)} />}
       {showRecurring && (
         <RecurringPaymentsModal
           onClose={() => setShowRecurring(false)}

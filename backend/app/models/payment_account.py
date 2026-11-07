@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -29,4 +29,19 @@ class PaymentAccount(Base):
     pay_day: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 카드 결제일 (매월 N일). 계좌는 비움
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # 법인카드 소유 직원. 지정된 카드는 소유 직원·허용받은 직원(PaymentAccountDelegate)·관리자만 입출금 내역을 등록·수정한다.
+    # 소유 직원을 지정하지 않은 카드(공용 카드, 기존 카드)는 입출금관리 권한이 있는 직원 누구나 쓴다.
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaymentAccountDelegate(Base):
+    """법인카드 소유 직원(또는 관리자)이 사용 내역 등록·수정 권한을 허용한 직원."""
+
+    __tablename__ = "payment_account_delegates"
+    __table_args__ = (UniqueConstraint("account_id", "user_id", name="uq_payment_account_delegates"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("payment_accounts.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

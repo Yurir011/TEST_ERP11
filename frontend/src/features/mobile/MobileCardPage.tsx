@@ -52,7 +52,7 @@ async function shrinkPhoto(file: File): Promise<File> {
 
 export function MobileCardPage() {
   const { user } = useAuth();
-  const { cards, loaded, cardName } = usePaymentAccounts();
+  const { usableCards: cards, loaded, cardName } = usePaymentAccounts(); // 내가 쓸 수 있는 카드만 (내 소유 카드 우선)
   const [cardCode, setCardCode] = useState<string | null>(null);
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState("");
@@ -73,12 +73,13 @@ export function MobileCardPage() {
   // 카드 목록이 오면 내가 쓰던 카드를 먼저 고른다 (없거나 숨겨진 카드면 목록 맨 앞)
   const selected = cardCode ?? (() => {
     const pref = readPreferred(user?.id);
-    return cards.find((c) => c.code === pref)?.code ?? cards[0]?.code ?? null;
+    return cards.find((c) => c.code === pref)?.code ?? cards.find((c) => c.owner_user_id === user?.id)?.code ?? cards[0]?.code ?? null;
   })();
   // 내 카드를 맨 앞에 둔다
   const orderedCards = useMemo(() => {
     const pref = readPreferred(user?.id);
-    return [...cards].sort((a, b) => Number(b.code === pref) - Number(a.code === pref));
+    const rank = (c: (typeof cards)[number]) => (c.code === pref ? 2 : c.owner_user_id === user?.id ? 1 : 0);
+    return [...cards].sort((a, b) => rank(b) - rank(a));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, user?.id, cardCode]);
 

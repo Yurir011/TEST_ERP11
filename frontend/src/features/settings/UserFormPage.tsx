@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { MENU_PERMISSION_OPTIONS, type CurrentUser, type JobGrade, type JobTitle, type MenuPermissionKey } from "../../lib/auth";
-import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
-import { logError } from "../../lib/logger";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
+import { logDebug, logError } from "../../lib/logger";
 import { todayISO } from "../../lib/date";
+import { refreshPaymentAccounts, usePaymentAccounts, type PaymentAccount } from "../payments/paymentAccounts";
 import { NfcCardsSection } from "./NfcCardsSection";
 import { PasskeysSection } from "./PasskeysSection";
 
@@ -23,6 +24,14 @@ const TITLE_OPTIONS: { value: JobTitle | null; label: string }[] = [
   { value: "ceo", label: "대표" },
 ];
 
+/** 직원 등록·수정 화면에서 다루는 법인카드 한 줄 (카드사 + 뒤 4자리). id 가 null 이면 아직 저장 전인 새 카드. */
+interface CardRow {
+  key: string;
+  account: PaymentAccount | null;
+  issuer: string;
+  last4: string;
+}
+
 export function UserFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = Boolean(id);
@@ -39,6 +48,10 @@ export function UserFormPage() {
   const [birthDate, setBirthDate] = useState("");
   const [address, setAddress] = useState("");
   const [menuPermissions, setMenuPermissions] = useState<MenuPermissionKey[]>([]);
+  const [cardRows, setCardRows] = useState<CardRow[]>([]);
+  const [removedCards, setRemovedCards] = useState<PaymentAccount[]>([]);
+  const { all: allAccounts, loaded: accountsLoaded } = usePaymentAccounts();
+  const cardsInit = useRef(false);
 
   const [isLoading, setIsLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,11 +95,58 @@ export function UserFormPage() {
     setMenuPermissions((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   }
 
+  // 수정 화면: 이 직원이 소유한 법인카드를 한 번만 불러온다
+  useEffect(() => {
+    if (!isEdit || !accountsLoaded || cardsInit.current) return;
+    cardsInit.current = true;
+    setCardRows(
+      allAccounts
+        .filter((a) => a.kind === "card" && a.owner_user_id === Number(id) && a.is_active)
+        .map((a) => ({ key: `a${a.id}`, account: a, issuer: a.issuer, last4: a.last4 ?? "" })),
+    );
+  }, [isEdit, id, accountsLoaded, allAccounts]);
+
+  const patchCard = (key: string, p: Partial<CardRow>) => setCardRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...p } : r)));
+  const removeCard = (row: CardRow) => {
+    setCardRows((rows) => rows.filter((r) => r.key !== row.key));
+    if (row.account) setRemovedCards((prev) => [...prev, row.account as PaymentAccount]);
+  };
+
+  /** 사용자 저장이 끝난 뒤 법인카드 목록을 카드·계좌 관리와 맞춘다 (추가·수정·삭제). */
+  async function syncCards(userId: number) {
+    for (const a of removedCards) {
+      logDebug("UserForm", `법인카드 삭제: account_id=${a.id}`);
+      await apiDelete(`/api/payment-accounts/${a.id}`);
+    }
+    for (const r of cardRows) {
+      const issuer = r.issuer.trim();
+      const last4 = r.last4.trim();
+      if (r.account) {
+        if (issuer === r.account.issuer && last4 === (r.account.last4 ?? "")) continue;
+        logDebug("UserForm", `법인카드 수정: account_id=${r.account.id}`);
+        await apiPut(`/api/payment-accounts/${r.account.id}`, {
+          nickname: r.account.nickname, issuer, last4, pay_day: r.account.pay_day, is_active: r.account.is_active, owner_user_id: userId,
+        });
+      } else {
+        logDebug("UserForm", `법인카드 추가: user_id=${userId}, issuer=${issuer}`);
+        await apiPost("/api/payment-accounts", { kind: "card", nickname: `${issuer} ${last4}`, issuer, last4, pay_day: 15, owner_user_id: userId });
+      }
+    }
+    await refreshPaymentAccounts();
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    for (const r of cardRows) {
+      if (!r.issuer.trim() || !/^\d{4}$/.test(r.last4.trim())) {
+        setError("법인카드는 카드사와 카드번호 끝 4자리(숫자)를 모두 입력해주세요.");
+        return;
+      }
+    }
     setIsSubmitting(true);
     try {
+      let savedId = Number(id);
       if (isEdit) {
         await apiPut(`/api/users/${id}`, {
           name,
@@ -98,7 +158,7 @@ export function UserFormPage() {
           menu_permissions: menuPermissions,
         });
       } else {
-        await apiPost("/api/users", {
+        const created = await apiPost<{ id: number }>("/api/users", {
           email,
           name,
           password,
@@ -109,7 +169,9 @@ export function UserFormPage() {
           address: address.trim() || null,
           menu_permissions: menuPermissions,
         });
+        savedId = created.id;
       }
+      await syncCards(savedId);
       navigate("/settings", { replace: true });
     } catch (err) {
       logError("UserForm", "저장 실패", err);
@@ -213,6 +275,38 @@ export function UserFormPage() {
                 </div>
                 <p className="text-xs text-text-muted mt-1.5">대표로 지정하면 관리자 권한이, 그 외에는 일반직원 권한이 자동으로 부여됩니다.</p>
               </div>
+            </section>
+
+            <section className="bg-surface border border-border rounded-2xl p-5">
+              <h2 className="text-sm font-semibold mb-1">법인카드</h2>
+              <p className="text-xs text-text-muted mb-3">이 직원이 소유한 법인카드입니다. 소유한 카드의 사용 내역은 이 직원과 관리자, 이 직원이 허용한 직원만 등록·수정할 수 있습니다.</p>
+              <div className="flex flex-col gap-2">
+                {cardRows.map((r) => (
+                  <div key={r.key} className="grid grid-cols-[1fr_8rem_auto] items-center gap-2">
+                    <input value={r.issuer} onChange={(e) => patchCard(r.key, { issuer: e.target.value })} aria-label="카드사" placeholder="카드사 (예: 신한카드)" maxLength={50} className={inputCls} />
+                    <input
+                      value={r.last4}
+                      onChange={(e) => patchCard(r.key, { last4: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                      aria-label="카드번호 끝 4자리"
+                      placeholder="끝 4자리"
+                      inputMode="numeric"
+                      maxLength={4}
+                      className={inputCls}
+                    />
+                    <button type="button" onClick={() => removeCard(r)} className="rounded-lg border border-border px-3 py-2 text-xs text-text-muted hover:bg-bg hover:text-danger">
+                      삭제
+                    </button>
+                  </div>
+                ))}
+                {cardRows.length === 0 && <p className="text-xs text-text-muted">등록된 법인카드가 없습니다.</p>}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCardRows((rows) => [...rows, { key: `n${Date.now()}${rows.length}`, account: null, issuer: "", last4: "" }])}
+                className="mt-3 rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-bg"
+              >
+                + 법인카드 추가
+              </button>
             </section>
 
             {title !== "ceo" && (

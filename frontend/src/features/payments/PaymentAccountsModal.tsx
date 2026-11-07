@@ -4,6 +4,7 @@ import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiDelete, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { refreshPaymentAccounts, usePaymentAccounts, type AccountKind, type PaymentAccount } from "./paymentAccounts";
+import { useCardStaff } from "./useCardStaff";
 
 interface FormState {
   id: number | null; // null 이면 새로 추가
@@ -13,9 +14,10 @@ interface FormState {
   last4: string;
   payDay: string;
   isActive: boolean;
+  ownerId: string; // 소유 직원 id (카드만, 빈 값 = 공용)
 }
 
-const emptyForm = (kind: AccountKind): FormState => ({ id: null, kind, nickname: "", issuer: "", last4: "", payDay: kind === "card" ? "15" : "", isActive: true });
+const emptyForm = (kind: AccountKind): FormState => ({ id: null, kind, nickname: "", issuer: "", last4: "", payDay: kind === "card" ? "15" : "", isActive: true, ownerId: "" });
 
 const fromAccount = (a: PaymentAccount): FormState => ({
   id: a.id,
@@ -25,6 +27,7 @@ const fromAccount = (a: PaymentAccount): FormState => ({
   last4: a.last4 ?? "",
   payDay: a.pay_day ? String(a.pay_day) : "",
   isActive: a.is_active,
+  ownerId: a.owner_user_id ? String(a.owner_user_id) : "",
 });
 
 const inputClass = "w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary";
@@ -37,6 +40,7 @@ const inputClass = "w-full rounded-lg border border-border bg-bg px-3 py-2 text-
 export function PaymentAccountsModal({ onClose }: { onClose: () => void }) {
   const { confirm, notify } = useDialog();
   const { all } = usePaymentAccounts();
+  const staff = useCardStaff();
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +68,7 @@ export function PaymentAccountsModal({ onClose }: { onClose: () => void }) {
       issuer: form.issuer.trim(),
       last4: form.last4.trim() || null,
       pay_day: form.kind === "card" && form.payDay ? Number(form.payDay) : null,
+      owner_user_id: form.kind === "card" && form.ownerId ? Number(form.ownerId) : null,
     };
     if (!body.nickname || !body.issuer) {
       setError("별명과 카드사(은행)를 입력해주세요.");
@@ -130,6 +135,7 @@ export function PaymentAccountsModal({ onClose }: { onClose: () => void }) {
                   {a.issuer}
                   {a.last4 ? ` · ····${a.last4}` : ""}
                   {a.kind === "card" && a.pay_day ? ` · 매월 ${a.pay_day}일 결제` : ""}
+                  {a.kind === "card" ? ` · ${a.owner_name ? `소유 ${a.owner_name}` : "공용"}` : ""}
                 </p>
               </div>
               <button type="button" onClick={() => setForm(fromAccount(a))} aria-label={`${a.nickname} 수정`} title="수정" className="p-1.5 rounded-md text-text-muted hover:bg-bg hover:text-text">
@@ -182,6 +188,19 @@ export function PaymentAccountsModal({ onClose }: { onClose: () => void }) {
                 {form.kind === "card" ? "카드번호" : "계좌번호"} 뒤 4자리
                 <input value={form.last4} onChange={(e) => patch({ last4: e.target.value.replace(/\D/g, "").slice(0, 4) })} inputMode="numeric" maxLength={4} aria-label="뒤 4자리" placeholder="1234" className={`mt-1 ${inputClass}`} />
               </label>
+              {form.kind === "card" && (
+                <label className="text-xs text-text-muted">
+                  소유 직원
+                  <select value={form.ownerId} onChange={(e) => patch({ ownerId: e.target.value })} aria-label="소유 직원" className={`mt-1 ${inputClass}`}>
+                    <option value="">공용 (지정 안 함)</option>
+                    {staff.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {form.kind === "card" && (
                 <label className="text-xs text-text-muted">
                   결제일 (매월)

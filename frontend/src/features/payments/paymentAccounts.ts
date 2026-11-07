@@ -16,6 +16,11 @@ export interface PaymentAccount {
   pay_day: number | null; // 카드 결제일
   is_active: boolean; // 숨김 처리(false)된 수단은 새로 고를 수 없지만 옛 내역의 이름은 그대로 보인다
   in_use: boolean;
+  owner_user_id: number | null; // 법인카드 소유 직원 (없으면 공용 카드: 입출금관리 권한이 있는 직원 누구나 사용)
+  owner_name: string | null;
+  delegate_ids: number[]; // 사용 내역 등록·수정을 허용받은 직원
+  can_use: boolean; // 지금 로그인한 직원이 이 카드로 내역을 등록·수정할 수 있는가
+  can_manage: boolean; // 지금 로그인한 직원이 사용 권한을 허용·회수할 수 있는가 (소유 직원·관리자)
   created_at: string;
 }
 
@@ -60,6 +65,8 @@ export interface PaymentAccountsView {
   all: PaymentAccount[];
   /** 새로 고를 수 있는 카드 / 계좌 */
   cards: PaymentAccount[];
+  /** 그중 지금 로그인한 직원이 내역을 등록·수정할 수 있는 카드 (소유 직원·허용받은 직원·관리자, 공용 카드) */
+  usableCards: PaymentAccount[];
   banks: PaymentAccount[];
   cardName: (code: string | null | undefined) => string;
   bankName: (code: string | null | undefined) => string;
@@ -81,6 +88,7 @@ export function usePaymentAccounts(): PaymentAccountsView {
   return {
     all,
     cards: all.filter((a) => a.kind === "card" && a.is_active),
+    usableCards: all.filter((a) => a.kind === "card" && a.is_active && a.can_use),
     banks: all.filter((a) => a.kind === "bank" && a.is_active),
     cardName: (code) => nameOf(all, "card", code),
     bankName: (code) => nameOf(all, "bank", code),

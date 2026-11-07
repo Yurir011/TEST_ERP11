@@ -14,7 +14,7 @@ from app.models.messenger import Conversation, ConversationMember, Message, Mess
 from app.models.notice import Notice
 from app.models.notification import Notification
 from app.models.payment import Payment
-from app.models.payment_account import PaymentAccount
+from app.models.payment_account import PaymentAccount, PaymentAccountDelegate
 from app.models.recurring_payment import RecurringPayment, RecurringPaymentRun
 from app.models.presence import MessengerFavorite, UserPresence
 from app.models.project import Project
@@ -62,6 +62,7 @@ __all__ = [
     "Transaction",
     "Payment",
     "PaymentAccount",
+    "PaymentAccountDelegate",
     "RecurringPayment",
     "RecurringPaymentRun",
     "ScheduleEvent",
