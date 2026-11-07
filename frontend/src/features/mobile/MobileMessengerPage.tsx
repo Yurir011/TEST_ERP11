@@ -148,7 +148,7 @@ function ThreadScreen({ id }: { id: number }) {
   return (
     // 화면에 고정(fixed)해서 문서가 따로 스크롤되며 윗부분이 상태 표시줄 아래로 밀려 올라가는 일이 없게 한다.
     // 위쪽 여백은 안전영역(상태 표시줄·노치)만큼 줘서 대화목록의 제목줄과 같은 높이에서 시작한다.
-    <div className="messenger-theme fixed inset-0 rounded-none! border-0! p-0! flex flex-col bg-bg pt-[env(safe-area-inset-top)]">
+    <div className="messenger-theme fixed inset-0 rounded-none! border-0! p-0! pt-[env(safe-area-inset-top)]! flex flex-col bg-bg">
       <div className="relative flex-1 min-h-0 bg-surface pb-[env(safe-area-inset-bottom)]">
         <div className="absolute inset-x-0 top-0 bottom-[env(safe-area-inset-bottom)]">
           {active ? (
