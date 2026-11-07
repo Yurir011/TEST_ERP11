@@ -1,12 +1,14 @@
 import {
+  CalendarCheck,
   ChevronLeft,
   ChevronRight,
-  CreditCard,
   Download,
+  FileUp,
   Plus,
   Repeat,
   Search,
-  Upload,
+  SlidersHorizontal,
+  UserCheck,
   Wallet,
   X,
 } from "lucide-react";
@@ -18,6 +20,7 @@ import { ApiError, apiDelete, apiGet, apiUpload, downloadFile, openFile } from "
 import { logDebug, logError } from "../../lib/logger";
 import { PaymentDetailModal } from "./PaymentDetailModal";
 import { CardAccessModal } from "./CardAccessModal";
+import { IconAction } from "./IconAction";
 import { PaymentAccountsModal } from "./PaymentAccountsModal";
 import { RecurringPaymentsModal } from "./RecurringPaymentsModal";
 import { useAuth } from "../../context/useAuth";
@@ -40,7 +43,6 @@ import {
   type Payment,
   type PaymentType,
 } from "./types";
-import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { toMonthValue } from "../../lib/date";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
@@ -74,9 +76,10 @@ export function PaymentsPage() {
   const [showAccounts, setShowAccounts] = useState(false);
   const [showCardAccess, setShowCardAccess] = useState(false);
   const { user } = useAuth();
-  const { cards: cardAccounts } = usePaymentAccounts();
+  const { cards: cardAccounts, usableCards } = usePaymentAccounts();
   const [csvCardPick, setCsvCardType] = useState<CardType | "">("");
-  const csvCardType: CardType = csvCardPick || cardAccounts[0]?.code || "";
+  const [showCsvMenu, setShowCsvMenu] = useState(false);
+  const csvCardType: CardType = csvCardPick || usableCards[0]?.code || "";
   const [cardPending, setCardPending] = useState<CardPendingSummary[]>([]);
   const [showCardSettle, setShowCardSettle] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -354,74 +357,66 @@ export function PaymentsPage() {
       title="입출금관리"
       description="법인카드·계좌 입출금 내역을 관리합니다."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleCsvSelected} className="hidden" />
           {cardAccounts.some((c) => c.can_manage) && (
-            <button
-              onClick={() => setShowCardAccess(true)}
-              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
-            >
-              <CreditCard size={14} />
-              법인카드 사용 권한
-            </button>
+            <IconAction label="법인카드 사용 권한" onClick={() => setShowCardAccess(true)}>
+              <UserCheck size={17} />
+            </IconAction>
           )}
           {!!user && isAdminRole(user.role) && (
-            <button
-              onClick={() => setShowAccounts(true)}
-              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
-            >
-              <CreditCard size={14} />
-              카드·계좌 관리
-            </button>
+            <IconAction label="카드·계좌 관리" onClick={() => setShowAccounts(true)}>
+              <SlidersHorizontal size={17} />
+            </IconAction>
           )}
-          <button
-            onClick={() => setShowRecurring(true)}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
-          >
-            <Repeat size={14} />
-            정기 자동이체
-          </button>
-          <button
-            onClick={() => setShowCardSettle(true)}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
-          >
-            <CreditCard size={14} />
-            카드 결제일 일괄처리
-            {cardPending.some((s) => s.count > 0) && (
-              <span className={`px-1.5 py-0.5 ${SOFT_BADGE.orange}`}>{cardPending.reduce((n, s) => n + s.count, 0)}</span>
+          <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+          <IconAction label="정기 자동이체" onClick={() => setShowRecurring(true)}>
+            <Repeat size={17} />
+          </IconAction>
+          <IconAction label="카드 결제일 일괄처리" onClick={() => setShowCardSettle(true)} badge={cardPending.reduce((n, s) => n + s.count, 0)}>
+            <CalendarCheck size={17} />
+          </IconAction>
+          <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+          <div className="relative">
+            <IconAction label={isImporting ? "가져오는 중..." : "법인카드 CSV 가져오기"} onClick={() => setShowCsvMenu((v) => !v)} disabled={isImporting}>
+              <FileUp size={17} />
+            </IconAction>
+            {showCsvMenu && (
+              <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-xl border border-border bg-surface p-3 shadow-lg" role="dialog" aria-label="법인카드 CSV 가져오기">
+                <p className="mb-2 text-xs font-medium">가져올 명세서의 카드</p>
+                <select
+                  value={csvCardType}
+                  onChange={(e) => setCsvCardType(e.target.value as CardType)}
+                  aria-label="가져올 CSV 명세서의 카드"
+                  className="mb-2 w-full rounded-lg border border-border bg-bg px-2 py-2 text-sm"
+                >
+                  {usableCards.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.nickname}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={!csvCardType}
+                  onClick={() => {
+                    setShowCsvMenu(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="w-full rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+                >
+                  CSV 파일 선택
+                </button>
+                {usableCards.length === 0 && <p className="mt-2 text-xs text-text-muted">가져올 수 있는 법인카드가 없습니다.</p>}
+              </div>
             )}
-          </button>
-          <select
-            value={csvCardType}
-            onChange={(e) => setCsvCardType(e.target.value as CardType)}
-            className="text-xs border border-border rounded-lg px-2 py-2 bg-surface"
-            title="가져올 CSV 명세서의 카드 종류"
-          >
-            {cardAccounts.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.nickname}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isImporting}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
-          >
-            <Upload size={14} />
-            {isImporting ? "가져오는 중..." : "법인카드 CSV 가져오기"}
-          </button>
-          <button
-            onClick={handleExportExcel}
-            disabled={isExporting}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
-          >
-            <Download size={14} />
-            {isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"}
-          </button>
+          </div>
+          <IconAction label={isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"} onClick={handleExportExcel} disabled={isExporting}>
+            <Download size={17} />
+          </IconAction>
           <Link
             to="/payments/new"
-            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            className="ml-1 flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
           >
             <Plus size={16} />
             새 입출금 등록
