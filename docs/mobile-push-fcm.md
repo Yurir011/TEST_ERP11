@@ -6,12 +6,12 @@
 
 ## 진행 체크리스트
 
-- [ ] 1단계 — 사전 준비: Apple 개발자 계정·APNs 키(.p8)
-- [ ] 2단계 — Firebase 프로젝트·iOS 앱 등록·APNs 키 업로드·서비스 계정 키
-- [ ] 3단계 — iOS 앱: 플러그인 설치·Xcode capability·plist
-- [ ] 4단계 — 백엔드: 설정·DB(device_tokens)·API·발송 서비스
-- [ ] 5단계 — 프론트(`/m` 화면): 권한 요청·토큰 등록·알림 탭 처리
-- [ ] 6단계 — 테스트·배포·운영
+- [x] 1단계 — 사전 준비: Apple 개발자 계정·APNs 키(.p8) (완료: 2026-11-08, Sandbox & Production 겸용 키)
+- [x] 2단계 — Firebase 프로젝트·iOS 앱 등록·APNs 키 업로드·서비스 계정 키 (완료: 2026-11-08)
+- [x] 3단계 — iOS 앱: 플러그인 설치·Xcode capability·plist (완료: 2026-11-08)
+- [x] 4단계 — 백엔드: 설정·DB(device_tokens)·API·발송 서비스 (완료: 2026-11-08, V.0.73.001)
+- [x] 5단계 — 프론트(`/m` 화면): 권한 요청·토큰 등록·알림 탭 처리 (완료: 2026-11-08, V.0.73.001)
+- [x] 6단계 — 테스트·배포·운영 (완료: 2026-11-08, 실기기에서 업무 알림·메신저 푸시·앱 아이콘 숫자 확인, V.0.73.002. TestFlight/App Store 빌드 확인은 앱 담당자)
 - [ ] 7단계(나중) — 안드로이드 추가
 
 ---
@@ -205,11 +205,11 @@ FCM_CREDENTIALS_PATH=secrets/firebase-service-account.json
 마이그레이션 (서버는 시작 시 구조를 바꾸지 않는다):
 ```bash
 cd backend
-./venv/Scripts/python.exe -m alembic revision -m "device_tokens" --rev-id 0029
-# 생성된 파일(0029_device_tokens.py)의 upgrade/downgrade 를 작성
+./venv/Scripts/python.exe -m alembic revision -m "device_tokens" --rev-id 0031
+# 생성된 파일(0031_device_tokens.py)의 upgrade/downgrade 를 작성
 ./venv/Scripts/python.exe -m alembic upgrade head
 ```
-(현재 head 는 `0028_contacts`.)
+(문서 작성 때 head 는 `0028_contacts` 였고, 실제 구현은 `0031_device_tokens` 이다.)
 
 ### 4-4. API — `backend/app/routers/push.py` (`/api/push`)
 
@@ -302,7 +302,7 @@ fm.addListener("notificationActionPerformed", (e: any) => {
 ### 6-2. 운영 서버 배포 순서
 1. `firebase-service-account.json` 을 운영 서버 `backend/secrets/` 에 복사하고 `.env` 에 `FCM_CREDENTIALS_PATH` 설정
 2. `pip install -r requirements.txt`
-3. `python -m alembic upgrade head` (0029 적용)
+3. `python -m alembic upgrade head` (0028~0031 적용, 푸시용은 0031_device_tokens)
 4. 백엔드·프론트 배포 후 서버 재시작 → 로그에서 `[Push] FCM 초기화 완료` 확인
 5. 직원 폰에 업데이트된 앱을 설치 (TestFlight 또는 Xcode 직접 설치 — `docs/mobile-external-release.md` 참고)
 

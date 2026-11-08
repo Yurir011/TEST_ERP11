@@ -26,7 +26,7 @@ ERP 서버에서 Notification 저장 → (4단계) Firebase Admin SDK 로 FCM �
 | 3 | iOS 앱: 플러그인·plist·capability·AppDelegate·실기기 빌드 | 완료 (실기기에서 `/m` 로그인 확인) |
 | 4 | 백엔드: 설정·`device_tokens`·API·발송·알림 연결 | **구현 완료 (2026-11-08)** — `services/push.py`, `routers/push.py`, 마이그레이션 `0031_device_tokens` (현재 head 가 0030 이라 0029 가 아니라 0031) |
 | 5 | 프론트(`/m`): 권한 요청·토큰 등록·알림 탭 이동 | **구현 완료 (2026-11-08)** — `lib/push.ts`, `features/mobile/useMobilePush.ts`, `mobilePaths.ts`, 로그아웃 때 토큰 해제 |
-| 6 | 테스트·배포 | 4·5 이후 |
+| 6 | 테스트·배포 | **완료 (2026-11-08)** — 실기기에서 업무 알림·메신저 푸시·앱 아이콘 숫자 확인(V.0.73.001·002). 메신저 푸시와 읽음 시 아이콘 숫자 갱신도 구현됨(§4-3 참고). 대화방별 알림(종 아이콘)이 꺼져 있으면 그 방 푸시는 가지 않는다 |
 
 현재 저장소에 `firebase`, `fcm`, `device_token` 관련 서버·프론트 코드는 **전혀 없다** (확인 완료).
 
@@ -40,9 +40,9 @@ ERP 서버에서 Notification 저장 → (4단계) Firebase Admin SDK 로 FCM �
 | iOS 번들 ID | `kr.co.bench.erp` (Xcode·Capacitor·Firebase 모두 동일) |
 | 서비스 계정 | `firebase-adminsdk-fbsvc@bench-erp.iam.gserviceaccount.com` |
 | 서비스 계정 키 파일 | 서버 `backend/secrets/firebase-service-account.json` (**이미 서버·도커에 올려 둠**, git 제외) |
-| APNs 키 | Firebase 에 **개발(Development) 키만** 업로드됨. 프로덕션 키 칸은 비어 있음 (§7 참고) |
+| APNs 키 | Firebase 에 **Sandbox & Production 겸용 키**가 올라가 있음 (확인: 2026-11-08). 개발·TestFlight·App Store 빌드 모두 같은 키 사용 |
 | 앱이 여는 주소 | `https://www.epik.bio/m` (HTTPS. `mobile/capacitor.config.ts` 기본값) |
-| 서버 상태 | `/api/health` 정상, 서버 버전 V.0.72.052 |
+| 서버 상태 | 작성 당시 `/api/health` 정상, 서버 버전 V.0.72.052 (푸시는 V.0.73.001, 아이콘 숫자·이미지 미리보기는 V.0.73.002 에 반영) |
 
 `.gitignore` 에 `backend/secrets/`, `*.p8`, `*firebase-adminsdk*.json`, `mobile/certificate/` 가 들어 있다. **서비스 계정 JSON·.p8 은 절대 커밋하지 않는다.**
 
@@ -68,11 +68,11 @@ ERP 서버에서 Notification 저장 → (4단계) Firebase Admin SDK 로 FCM �
 
 ### 4-3. 메신저는 Notification 을 만들지 않는다
 - 메신저(`routers/messenger*.py`, `services/messenger.py`) 메시지는 `Notification` 테이블을 쓰지 않는다. 즉 **4-6 방식으로는 메신저 푸시가 가지 않는다.**
-- 이번 범위(결재·연차 등 `Notification` 기반)에는 포함하지 않는다. 메신저 푸시는 별도 작업으로 분리한다(필요하면 메신저 전송 지점에서 `send_push` 를 직접 호출하는 방식). **범위를 담당자와 먼저 합의할 것.**
+- (처리됨, V.0.73.001) 메신저 전송 지점(`routers/messenger.py` `_notify_message`)에서 `push.notify_new_message` 를 직접 호출해 푸시를 보낸다. 본문 미리보기는 기본 꺼짐(`FCM_MESSENGER_PREVIEW`), 대화방별 알림 끄기를 따른다.
 
 ### 4-4. 마이그레이션 번호
-- (구현 시점 head 는 `0030_card_owner_delegates` 라 실제 번호는 `0031_device_tokens`) 문서 작성 때 head 는 `0028_contacts` 였다(`backend/alembic/versions/` 에서 확인). 새 마이그레이션은 `0029_device_tokens` 로 만든다.
-- **다른 담당자가 먼저 0029 를 쓰고 있지 않은지 확인**하고, 겹치면 번호를 올린다. 서버는 시작 시 구조를 바꾸지 않으므로 배포 때 `alembic upgrade head` 를 반드시 실행한다.
+- (처리됨) 문서 작성 때 head 는 `0028_contacts` 였지만, 구현 시점 head 가 `0030_card_owner_delegates` 라 실제 번호는 `0031_device_tokens` 이다.
+- **다른 담당자가 먼저 같은 번호를 쓰고 있지 않은지 확인**하고, 겹치면 번호를 올린다. 서버는 시작 시 구조를 바꾸지 않으므로 배포 때 `alembic upgrade head` 를 반드시 실행한다.
 
 ### 4-5. Docker 환경
 - `backend/secrets/` 는 git 에 없으므로 **이미지 빌드(`COPY`)로는 들어가지 않는다.** 볼륨 마운트로 연결하거나 컨테이너에 직접 둔다.
@@ -84,7 +84,7 @@ ERP 서버에서 Notification 저장 → (4단계) Firebase Admin SDK 로 FCM �
 ### 5-A. 백엔드 (원본 4-1 ~ 4-7)
 1. `firebase-admin` 설치, `requirements.txt` 에 버전 고정 추가
 2. `config.py` 에 `fcm_credentials_path` (기본 빈 값 = 푸시 꺼짐), `.env` 에 `FCM_CREDENTIALS_PATH`
-3. `models/device_token.py` + 마이그레이션 `0029` (`token` unique, 계정 전환 시 `user_id` 갱신)
+3. `models/device_token.py` + 마이그레이션 `0031` (`token` unique, 계정 전환 시 `user_id` 갱신)
 4. `routers/push.py`: `POST /api/push/devices`(upsert), `DELETE /api/push/devices`(본인 토큰만), `main.py` 에 등록
 5. `services/push.py`: 앱 시작 시 한 번 초기화, `send_push(...)`, 무효 토큰 삭제, **예외 전파 금지**, 백그라운드 발송
 6. `Notification` 커밋 후 자동 발송 연결 (§4-2)
@@ -110,8 +110,8 @@ ERP 서버에서 Notification 저장 → (4단계) Firebase Admin SDK 로 FCM �
 
 | 항목 | 내용 |
 |---|---|
-| 프로덕션 APNs 키 | Firebase 의 **프로덕션 APNs 인증 키 칸이 비어 있다.** Xcode 로 직접 설치한 개발 빌드는 지금 설정으로 되지만, **TestFlight/App Store 빌드는 프로덕션 키가 있어야 푸시를 받는다.** 같은 `.p8`(Key ID·Team ID 동일)을 프로덕션 칸에도 올리면 된다. 키 파일은 이 담당자에게 따로 전달 필요 |
-| 푸시 권한 팝업 | 아직 뜨지 않는다. 5단계의 `registerPush()` 가 호출될 때 처음 뜬다 |
+| APNs 키 | (해결됨) 겸용 키가 올라가 있어 추가 작업 없음. TestFlight/App Store 빌드에서 푸시가 오는지만 앱 담당자가 확인 |
+| 푸시 권한 팝업 | 로그인 후 `registerPush()` 가 호출될 때 처음 뜬다 |
 | Firebase 콘솔 테스트 | 5단계로 토큰을 얻으면, 콘솔 **Messaging → 새 캠페인 → 테스트 메시지**에 토큰을 넣어 **앱 쪽만 먼저 검증**할 수 있다 |
 | 네이티브 변경 | 서버·`/m` 화면 변경은 앱 재설치가 필요 없다. 앱 네이티브 설정(plist·capability)을 바꿀 때만 재설치 |
 | 안드로이드 | 이번 범위 아님(원본 7단계). 서버는 `platform` 컬럼만 두면 이후 변경이 없다 |
@@ -139,4 +139,4 @@ ERP 서버에서 Notification 저장 → (4단계) Firebase Admin SDK 로 FCM �
 
 - Apple/Firebase 계정·키 관련(프로덕션 키 업로드, 키 재발급): 앱 담당자
 - 서버 배포·도커·`.env`: 서버 담당자
-- 메신저 푸시 포함 여부(§4-3), `0029` 번호 충돌(§4-4): 시작 전에 양측이 합의
+- (처리됨) 메신저 푸시 포함 여부(§4-3)와 마이그레이션 번호(§4-4)는 구현 때 정리됨
