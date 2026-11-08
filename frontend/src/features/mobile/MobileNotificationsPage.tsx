@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
+import { toMobilePath } from "./mobilePaths";
 
 interface NotificationItem {
   id: number;
@@ -17,18 +18,6 @@ function shortDateTime(iso: string) {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** PC 화면 경로로 저장된 알림 링크를 모바일 화면 경로로 바꾼다. */
-function toMobilePath(link: string | null): string | null {
-  if (!link) return null;
-  if (link.startsWith("/leaves")) return "/m/leaves";
-  if (link.startsWith("/project-documents") || link.startsWith("/documents") || link.startsWith("/approval") || link.startsWith("/proposals")) {
-    return "/m/approvals";
-  }
-  if (link.startsWith("/notices")) return "/m/notices";
-  if (link.startsWith("/schedule")) return "/m/schedule";
-  return null;
 }
 
 export function MobileNotificationsPage() {

@@ -10,6 +10,7 @@ from app.core.startup_checks import enforce_security_settings
 from app.database import SessionLocal, engine
 from app.logging_config import get_logger, setup_logging
 from app.version import APP_VERSION, format_version
+from app.services import push as push_service
 from app.services.recurring_payment import generate_recurring_payments
 from app.routers import (
     approvals,
@@ -33,6 +34,7 @@ from app.routers import (
     notifications,
     payment_accounts,
     payments,
+    push,
     recurring_payments,
     project_documents,
     project_notes,
@@ -50,6 +52,7 @@ setup_logging()
 logger = get_logger("Main")
 
 app = FastAPI(title=settings.app_name)
+push_service.install_notification_hook()  # 업무 알림이 커밋되면 모바일 푸시(FCM)도 보낸다
 
 # 감사 로그용: 요청마다 접속 주소와 요청 경로를 담는다 (로그인 사용자는 인증 의존성이 채운다).
 @app.middleware("http")
@@ -101,6 +104,7 @@ app.include_router(messenger.router)
 app.include_router(messenger_ws.router)
 app.include_router(nfc_cards.router)
 app.include_router(devices.router)
+app.include_router(push.router)
 app.include_router(schedule.router)
 app.include_router(todos.router)
 
@@ -119,6 +123,8 @@ def on_startup():
 
     # DB 구조는 서버가 바꾸지 않는다 (alembic upgrade head 로 미리 맞춘다). 최신이 아니면 운영에서는 시작을 막는다.
     check_db_revision(engine, settings, logger)
+
+    push_service.init_fcm()  # 서비스 계정이 없으면 푸시만 꺼지고 서버는 정상 기동한다
 
     try:
         # 도래한 정기 자동이체를 입출금 내역으로 기록한다 (서버가 꺼져 있던 기간분도 함께 채운다).

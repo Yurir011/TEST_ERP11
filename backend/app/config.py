@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
     # 팝빌 전자세금계산서 연동. 연동신청으로 발급받은 LinkID/SecretKey, 테스트 팝빌 가입 사업자번호/아이디.
+    # FCM 푸시(모바일 앱 알림). 서비스 계정 JSON 경로(backend 기준 상대 경로 가능). 비어 있으면 푸시는 꺼지고 알림은 앱 안에서만 보인다.
+    fcm_credentials_path: str = ""
+    # 메신저 푸시에 메시지 내용을 미리 보여 줄지. 기본은 끔: 잠금 화면에 내용이 보이므로 "새 메시지가 도착했습니다"만 보낸다.
+    fcm_messenger_preview: bool = False
+
     popbill_link_id: str = ""
     popbill_secret_key: str = ""
     popbill_corp_num: str = ""

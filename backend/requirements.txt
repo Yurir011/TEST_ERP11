@@ -7,6 +7,7 @@ click==8.5.0
 dnspython==2.8.0
 email-validator==2.3.0
 fastapi==0.141.1
+firebase-admin==7.7.0
 greenlet==3.5.5
 h11==0.16.0
 httptools==0.8.0

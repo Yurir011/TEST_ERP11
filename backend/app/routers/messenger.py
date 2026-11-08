@@ -43,7 +43,7 @@ from app.schemas.messenger import (
     UnreadTotalOut,
 )
 from app.services import messenger as svc
-from app.services import presence
+from app.services import presence, push
 from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
 
 router = APIRouter(prefix="/api/messenger", tags=["messenger"])
@@ -61,6 +61,7 @@ INLINE_TYPES = ("image/", "application/pdf")  # 화면에서 바로 보여 줘�
 def _notify_message(db: Session, message_id: int, conversation_id: int) -> None:
     m = svc.load_message(db, message_id)
     hub.publish(svc.active_member_ids(db, conversation_id), {"type": "message.created", "message": svc.message_out(m).model_dump(mode="json")})
+    push.notify_new_message(db, message_id, conversation_id)  # 실시간 연결이 없는 사람(앱을 닫은 폰)에게는 푸시로 알린다
 
 
 def _notify_conversation_changed(user_ids: list[int], conversation_id: int) -> None:

@@ -2,6 +2,15 @@
 
 버전 표기와 올리는 규칙은 [`docs/version-policy.md`](docs/version-policy.md). 새 버전은 맨 위에 추가한다.
 
+## V.0.73.001 — 2026-11-08
+
+### 모바일 푸시 알림(FCM·APNs): 업무 알림과 메신저 (DB 구조 변경 있음 — `alembic upgrade head` 필요, 서버 `.env` 에 `FCM_CREDENTIALS_PATH` 필요, 데스크톱 앱 코드 변경 없음)
+- **iOS 앱(네이티브)**: Firebase Cloud Messaging 연결 — `mobile/ios/` 프로젝트(AppDelegate 푸시 토큰 전달, Push Notifications·Background Modes, `App.entitlements`), `mobile/capacitor.config.ts`(앱이 열려 있어도 배너·소리, SwiftPM 이름 충돌 방지), `mobile/package.json`(`@capacitor-firebase/messaging`, `firebase`, `@capacitor/assets`). 앱 네이티브 변경이라 아이폰 앱은 재설치(재빌드)해야 푸시를 받는다. 전체 계획·인수인계는 `docs/mobile-push-fcm.md`, `docs/mobile-push-handoff-backend.md`.
+- **서버**: `device_tokens` 표(`0031_device_tokens`), 토큰 등록·해제 API(`POST·DELETE /api/push/devices`: 같은 폰에서 계정을 바꿔 로그인하면 주인이 바뀌고, 남의 토큰은 지울 수 없다), 발송 서비스(`services/push.py`: Firebase Admin SDK, 앱 시작 때 한 번 초기화, 무효 토큰 자동 삭제, 실패해도 본 업무를 막지 않고 백그라운드 발송). `FCM_CREDENTIALS_PATH` 가 비어 있거나 파일이 없으면 푸시만 꺼진다. `firebase-admin==7.7.0` 추가.
+- **푸시가 가는 알림**: (1) 결재 요청이 도착했을 때 (2) 결재가 승인·반려되었을 때 (3) 결재 요청이 회수되었을 때 — 문서(`documents`)·연차(`leaves`)·견적서/발주서/세금계산서(`project_documents`)·품의서(`proposals`)가 모두 같은 경로(`Notification`)라 커밋된 뒤 수신자 폰으로 간다(롤백되면 보내지 않는다). (4) 메신저 새 메시지(텍스트·파일): 보낸 사람, 알림을 끈 대화방의 사람, 지금 실시간 연결로 보고 있는 사람은 제외. 푸시 문구에는 거래처·금액·메시지 내용을 넣지 않는다(잠금 화면 노출). 메신저 내용 미리보기는 `FCM_MESSENGER_PREVIEW=true` 로 켤 수 있다(기본 꺼짐). 앱 아이콘 숫자는 안 읽은 업무 알림 + 메신저.
+- **프론트**: 앱 안에서 로그인하면 알림 권한을 묻고 토큰을 서버에 등록, 로그아웃하면 해제, 알림을 탭하면 해당 `/m` 화면(결재·연차·공지·일정·메신저 대화방)으로 이동(종료 상태에서 탭해도 로그인 확인 뒤 이동). 일반 브라우저에서는 아무 일도 하지 않는다. `lib/push.ts`, `features/mobile/useMobilePush.ts`, `features/mobile/mobilePaths.ts`.
+- **보안**: 서비스 계정 JSON·APNs 키(`.p8`)·`GoogleService-Info.plist`·임시 토큰 파일은 `.gitignore` 로 제외(커밋 이력에도 없음을 확인).
+
 ## V.0.72.052 — 2026-11-07
 
 ### 모바일 메신저 대화방 상단이 시계와 겹치던 문제 수정 (화면만 변경, DB·데스크톱 앱 코드 변경 없음)

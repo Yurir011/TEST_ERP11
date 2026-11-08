@@ -32,3 +32,18 @@ Doc/
 
 # HTTPS 문지기(Caddy) 실행 파일 (직접 내려받아 deploy 폴더에 둔다. 설정 파일 Caddyfile 만 올린다)
 /deploy/caddy.exe
+
+# 푸시/Firebase 인증서·비밀키 (절대 커밋 금지)
+mobile/certificate/
+mobile/Certificate/
+*.p8
+*firebase-adminsdk*.json
+firebase-service-account.json
+backend/secrets/
+*.p12
+*.pem
+*.mobileprovision
+GoogleService-Info.plist
+google-services.json
+# 개발 중 임시로 받아 둔 로그인 토큰 (커밋 금지)
+scratch_token.txt
