@@ -153,3 +153,43 @@ def test_messenger_push_preview_setting_and_disabled(client, make_user, auth_hea
     monkeypatch.setattr(settings, "fcm_messenger_preview", True)
     client.post(f"/api/messenger/conversations/{cid}/messages", headers=auth_headers(a), json={"body": "내용 미리보기"})
     assert sent[-1][2] == "내용 미리보기"
+
+
+# ── 앱 아이콘 숫자(배지) ────────────────────────────────────────────
+
+def test_send_badge_updates_every_device_and_deletes_invalid_tokens(db, make_user, monkeypatch):
+    user = make_user(name="직원")
+    db.add_all([DeviceToken(user_id=user.id, token=TOKEN_A, platform="ios"), DeviceToken(user_id=user.id, token=TOKEN_B, platform="ios")])
+    db.commit()
+    monkeypatch.setattr(push, "_build_badge_message", lambda row, badge: (row.token, badge))
+
+    class Gone(Exception):
+        pass
+
+    monkeypatch.setattr(push, "_is_invalid_token", lambda e: isinstance(e, Gone))
+    seen = []
+    monkeypatch.setattr(push, "_send_each", lambda msgs: seen.extend(msgs) or [Gone() if m[0] == TOKEN_A else None for m in msgs])
+    assert push.send_badge(db, user.id, 0) == 0  # FCM 꺼짐
+    monkeypatch.setattr(push, "_ready", True)
+    assert push.send_badge(db, user.id, 0) == 1
+    assert seen == [(TOKEN_A, 0), (TOKEN_B, 0)]
+    db.expire_all()
+    assert [r.token for r in db.query(DeviceToken).all()] == [TOKEN_B]
+
+
+def test_reading_notifications_and_messages_syncs_badge(client, db, make_user, auth_headers, monkeypatch):
+    a, b = make_user(name="보낸이"), make_user(name="받는이")
+    synced = []
+    monkeypatch.setattr(push, "sync_badge_in_background", lambda uid: synced.append(uid))
+    n = Notification(user_id=b.id, title="결재 요청", message="m", link=None)
+    db.add(n)
+    db.commit()
+    assert client.put(f"/api/notifications/{n.id}/read", headers=auth_headers(b)).status_code == 200
+    assert client.put("/api/notifications/read-all", headers=auth_headers(b)).status_code == 204
+    assert synced == [b.id, b.id]
+
+    cid = _chat(client, auth_headers(a), [b.id])
+    mid = client.post(f"/api/messenger/conversations/{cid}/messages", headers=auth_headers(a), json={"body": "안녕"}).json()["id"]
+    synced.clear()
+    assert client.put(f"/api/messenger/conversations/{cid}/read", headers=auth_headers(b), json={"message_id": mid}).status_code == 200
+    assert synced == [b.id]  # 메신저를 읽으면 읽은 사람 폰의 숫자를 맞춘다

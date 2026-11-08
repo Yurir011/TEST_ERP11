@@ -416,6 +416,7 @@ def mark_read(conversation_id: int, payload: ReadIn, db: Session = Depends(get_d
             svc.active_member_ids(db, conv.id),
             {"type": "conversation.read", "conversation_id": conv.id, "user_id": current_user.id, "message_id": me.last_read_message_id},
         )
+        push.sync_badge_in_background(current_user.id)  # 읽은 만큼 폰 앱 아이콘 숫자를 줄인다
     unread = svc.unread_counts(db, current_user.id, [conv.id]).get(conv.id, 0)
     return ReadOut(last_read_message_id=me.last_read_message_id, unread_count=unread)
 

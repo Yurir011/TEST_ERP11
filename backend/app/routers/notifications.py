@@ -11,6 +11,7 @@ from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalT
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.notification import AllNotificationOut, NotificationOut, UnreadCountOut
+from app.services import push
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 logger = get_logger("Notifications")
@@ -145,6 +146,7 @@ def mark_notification_read(
     db.commit()
     db.refresh(n)
     logger.debug(f"[Notifications] 읽음 처리: id={notification_id}, user_id={current_user.id}")
+    push.sync_badge_in_background(current_user.id)  # 읽은 만큼 폰 앱 아이콘 숫자를 줄인다
     return n
 
 
@@ -155,4 +157,5 @@ def mark_all_notifications_read(db: Session = Depends(get_db), current_user: Use
     )
     db.commit()
     logger.debug(f"[Notifications] 전체 읽음 처리: user_id={current_user.id}")
+    push.sync_badge_in_background(current_user.id)
     return None

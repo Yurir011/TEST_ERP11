@@ -1,11 +1,49 @@
 import { Paperclip, Send, X } from "lucide-react";
-import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { MAX_ATTACHMENT_BYTES, MAX_BODY_LENGTH, formatBytes } from "./messengerState";
 
 // 서버가 받는 형식 (backend/app/services/upload_check.py 의 ATTACHMENT_TYPES). 최종 확인은 서버가 파일 내용으로 한다.
 const ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt";
 
 const PASTE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+/** 보낼 파일 한 개. 이미지는 작은 미리보기 그림을 보여 주고, 누르면 크게 볼 수 있다. */
+function StagedFile({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const isImage = PASTE_IMAGE_TYPES.has(file.type);
+  const url = useMemo(() => (isImage ? URL.createObjectURL(file) : null), [file, isImage]);
+  const [enlarged, setEnlarged] = useState(false);
+  useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  useEffect(() => {
+    if (!enlarged) return;
+    const onKey = (e: globalThis.KeyboardEvent) => e.key === "Escape" && setEnlarged(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [enlarged]);
+
+  return (
+    <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-bg py-1.5 pl-1.5 pr-1.5 text-sm">
+      {url ? (
+        <button type="button" onClick={() => setEnlarged(true)} aria-label={`${file.name} 크게 보기`} title="누르면 크게 봅니다" className="shrink-0 overflow-hidden rounded-md">
+          <img src={url} alt={file.name} className="h-14 w-14 object-cover" />
+        </button>
+      ) : (
+        <Paperclip size={14} className="ml-1.5 shrink-0 text-text-muted" />
+      )}
+      <span className="truncate" title={file.name}>
+        {file.name}
+      </span>
+      <span className="shrink-0 text-xs text-text-muted">{formatBytes(file.size)}</span>
+      <button type="button" aria-label="보낼 파일 빼기" title="파일 빼기" onClick={onRemove} className="shrink-0 rounded p-1 text-text-muted hover:bg-border hover:text-text">
+        <X size={13} />
+      </button>
+      {enlarged && url && (
+        <div role="dialog" aria-label="이미지 미리보기" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setEnlarged(false)}>
+          <img src={url} alt={file.name} className="max-h-full max-w-full rounded-lg object-contain" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * 메시지 입력칸. Enter 로 보내고 Shift+Enter 로 줄바꿈한다. 한글 조합(IME) 중의 Enter 는 보내지 않는다 (마지막 글자가 중복되거나 잘리는 것을 막는다).
@@ -86,22 +124,7 @@ export function MessageInput({
           {staged.length > 0 && (
             <div className="flex flex-wrap gap-2" aria-label="보낼 파일">
               {staged.map((f, idx) => (
-                <div key={`${f.name}-${idx}`} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-bg pl-3 pr-1.5 py-1.5 text-sm">
-                  <Paperclip size={14} className="shrink-0 text-text-muted" />
-                  <span className="truncate" title={f.name}>
-                    {f.name}
-                  </span>
-                  <span className="shrink-0 text-xs text-text-muted">{formatBytes(f.size)}</span>
-                  <button
-                    type="button"
-                    aria-label="보낼 파일 빼기"
-                    title="파일 빼기"
-                    onClick={() => setStaged((prev) => prev.filter((_, i) => i !== idx))}
-                    className="shrink-0 rounded p-1 text-text-muted hover:bg-border hover:text-text"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
+                <StagedFile key={`${f.name}-${idx}`} file={f} onRemove={() => setStaged((prev) => prev.filter((_, i) => i !== idx))} />
               ))}
             </div>
           )}

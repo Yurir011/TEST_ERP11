@@ -104,6 +104,58 @@ def _build_message(row: DeviceToken, title: str, body: str, link: str | None, ba
     return messaging.Message(token=row.token, notification=messaging.Notification(title=title, body=body), data=data, apns=apns)
 
 
+def _build_badge_message(row: DeviceToken, badge: int):
+    """알림창 없이 앱 아이콘 숫자만 바꾸는 푸시 (iOS 는 앱이 읽음 처리해도 아이콘 숫자를 스스로 줄이지 않는다)."""
+    from firebase_admin import messaging
+
+    return messaging.Message(token=row.token, apns=messaging.APNSConfig(payload=messaging.APNSPayload(aps=messaging.Aps(badge=badge))))
+
+
+def send_badge(db: Session, user_id: int, badge: int) -> int:
+    """직원의 모든 기기 앱 아이콘 숫자를 badge 로 맞춘다 (0 이면 지운다). 어떤 예외도 밖으로 내보내지 않는다."""
+    try:
+        if not _ready:
+            return 0
+        rows = db.query(DeviceToken).filter(DeviceToken.user_id == user_id).all()
+        if not rows:
+            return 0
+        results = _send_each([_build_badge_message(r, badge) for r in rows])
+        sent = 0
+        for row, err in zip(rows, results):
+            if err is None:
+                sent += 1
+            elif _is_invalid_token(err):
+                logger.debug(f"[Push] 무효 토큰 삭제(배지): user_id={user_id}, token={_short(row.token)}")
+                db.delete(row)
+            else:
+                logger.warning(f"[Push] 배지 갱신 실패: user_id={user_id}, token={_short(row.token)}, error={err}")
+        db.commit()
+        logger.debug(f"[Push] 앱 아이콘 숫자 갱신: user_id={user_id}, badge={badge}, 기기={len(rows)}, 성공={sent}")
+        return sent
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"[Push] 배지 갱신 중 오류(무시): user_id={user_id}, error={exc}")
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+
+
+def _sync_badge(user_id: int) -> None:
+    try:
+        with SessionLocal() as db:
+            send_badge(db, user_id, _badge(db, user_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"[Push] 배지 동기화 스레드 오류(무시): {exc}")
+
+
+def sync_badge_in_background(user_id: int) -> None:
+    """알림·메신저를 읽었을 때 호출한다: 남은 안 읽은 수로 이 직원 폰들의 앱 아이콘 숫자를 맞춘다 (읽어도 숫자가 안 없어지는 문제)."""
+    if not _ready:
+        return
+    threading.Thread(target=_sync_badge, args=(user_id,), daemon=True, name="fcm-badge").start()
+
+
 def send_push(db: Session, user_id: int, title: str, body: str, link: str | None = None, badge: int | None = None) -> int:
     """직원 한 명의 모든 기기로 푸시를 보낸다. 보낸 기기 수를 돌려준다. 어떤 예외도 밖으로 내보내지 않는다."""
     try:
