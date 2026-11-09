@@ -1,3 +1,4 @@
+import { TypeMark } from "../../components/ui/TypeMark";
 import { FileSpreadsheet, Image, Pencil, Printer, X } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +10,6 @@ import { usePaymentAccounts } from "./paymentAccounts";
 import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_TYPE_LABELS,
-  PAYMENT_TYPE_STYLES,
   PROOF_TYPE_LABELS,
   paymentMethodDetailLabel,
   type Payment,
@@ -61,9 +61,7 @@ export function PaymentDetailModal({ payment, onClose, onAttachReceipt }: { paym
       >
         <div className="flex items-start justify-between mb-4">
           <div>
-            <span className={`text-xs px-2 py-1 font-medium ${PAYMENT_TYPE_STYLES[payment.type]}`}>
-              {PAYMENT_TYPE_LABELS[payment.type]}
-            </span>
+            <TypeMark kind={payment.type} />
             <h3 className="text-sm font-semibold mt-2">
               {payment.category} · {payment.description}
             </h3>

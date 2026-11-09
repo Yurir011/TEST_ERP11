@@ -1,3 +1,4 @@
+import { TypeMark } from "../../components/ui/TypeMark";
 import { ChevronLeft, ChevronRight, Download, FileSpreadsheet, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -9,7 +10,7 @@ import { HometaxImportModal } from "./HometaxImportModal";
 import { ReportDetailModal, type ReportCardKind } from "./ReportDetailModal";
 import { TransactionDetailModal } from "./TransactionDetailModal";
 import { TransactionSettleModal } from "./TransactionSettleModal";
-import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction, type TransactionType, type VatReport } from "./types";
+import { type Transaction, type TransactionType, type VatReport } from "./types";
 import { CODE_BADGE } from "../../components/ui/softBadge";
 import { toLocalISODate, toMonthValue } from "../../lib/date";
 import { useDialog } from "../../components/ui/dialog/useDialog";
@@ -372,9 +373,7 @@ export function TransactionsPage() {
                   className="border-b border-border last:border-0 cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
                 >
                   <td className="py-2.5 px-4">
-                    <span className={`text-xs px-2 py-1 font-medium ${TX_TYPE_STYLES[tx.type]}`}>
-                      {TX_TYPE_LABELS[tx.type]}
-                    </span>
+                    <TypeMark kind={tx.type === "sales" ? "sales" : "purchase"} />
                   </td>
                   <td className="py-2.5 px-4">{tx.transaction_date}</td>
                   <td className="py-2.5 px-4 break-words">{tx.client_name ?? tx.counterparty ?? "-"}</td>

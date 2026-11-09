@@ -1,9 +1,10 @@
+import { TypeMark } from "../../components/ui/TypeMark";
 import { Pencil, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatCurrency } from "../../lib/format";
 import { logDebug } from "../../lib/logger";
 import { PaymentHistoryList } from "./PaymentHistoryList";
-import { TX_TYPE_LABELS, TX_TYPE_STYLES, type Transaction } from "./types";
+import { type Transaction } from "./types";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
 interface TransactionDetailModalProps {
@@ -30,7 +31,7 @@ export function TransactionDetailModal({ tx, onClose, onSettle }: TransactionDet
       <div className="bg-surface rounded-2xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-2">
-            <span className={`text-xs px-2 py-1 font-medium ${TX_TYPE_STYLES[tx.type]}`}>{TX_TYPE_LABELS[tx.type]}</span>
+            <TypeMark kind={tx.type === "sales" ? "sales" : "purchase"} />
             <h3 className="text-sm font-semibold">{tx.item_name}</h3>
           </div>
           <button onClick={onClose} className="p-1 text-text-muted hover:text-text" title="닫기">

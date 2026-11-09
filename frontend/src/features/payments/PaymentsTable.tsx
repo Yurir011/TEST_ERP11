@@ -1,10 +1,11 @@
+import { TypeMark } from "../../components/ui/TypeMark";
 import { FileSpreadsheet, Image, ImagePlus, Printer, Trash2 } from "lucide-react";
 import { useRef } from "react";
 import { CODE_BADGE } from "../../components/ui/softBadge";
 import { openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { AccountName } from "./AccountName";
-import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, PAYMENT_TYPE_STYLES, PROOF_TYPE_LABELS, paymentMethodDetailLabel, type Payment } from "./types";
+import { PAYMENT_METHOD_LABELS, PROOF_TYPE_LABELS, paymentMethodDetailLabel, type Payment } from "./types";
 import { usePaymentAccounts } from "./paymentAccounts";
 
 interface PaymentsTableProps {
@@ -60,7 +61,7 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
               className="cursor-pointer hover:bg-primary/10 even:bg-text/[0.025] transition-colors"
             >
               <td className="text-center py-2.5 px-2 whitespace-nowrap">
-                <span className={`text-xs px-2 py-1 font-medium ${PAYMENT_TYPE_STYLES[p.type]}`}>{PAYMENT_TYPE_LABELS[p.type]}</span>
+                <TypeMark kind={p.type} />
               </td>
               <td className="text-center py-2.5 px-2 break-words">
                 {p.payment_date}
