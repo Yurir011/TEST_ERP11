@@ -6,9 +6,10 @@ import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiGet } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
+import { MovementList } from "./MovementList";
 import { MovementModal } from "./MovementModal";
 import { SubLevelView } from "./SubLevelTree";
-import { CATEGORY_BADGE, CATEGORY_LABELS, KIND_LABELS, formatQty, levelPath, type MaterialDetail, type MovementKind } from "./types";
+import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, levelPath, type MaterialDetail, type MovementKind } from "./types";
 
 /** 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 하위 속성 트리, 입출고 이력. [추가 입고]·[출고]로 한 줄씩 기록한다. */
 export function MaterialDetailPage() {
@@ -126,33 +127,7 @@ export function MaterialDetailPage() {
           {m.movements.length === 0 ? (
             <p className="text-sm text-text-muted py-6 text-center">아직 입출고 기록이 없습니다. [입고]로 처음 개수를 기록해 주세요.</p>
           ) : (
-            <ul>
-              {m.movements.map((x) => {
-                const out = x.kind === "out";
-                return (
-                  <li key={x.id} className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 py-2.5 border-b border-border last:border-0 text-sm">
-                    <span className={`px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${out ? "rounded-md bg-tile-red text-danger" : "rounded-md bg-tile-green text-tile-green-fg"}`}>{KIND_LABELS[x.kind]}</span>
-                    <span className="min-w-0">
-                      <span className="tabular-nums">{x.movement_date}</span>
-                      {out && x.reason && <span className="block text-xs text-text-muted truncate">출고 사유: {x.reason}{x.note ? ` · ${x.note}` : ""}</span>}
-                      {!out && x.note && <span className="block text-xs text-text-muted truncate">메모: {x.note}</span>}
-                      {x.created_by_name && <span className="block text-[11px] text-text-muted">{x.created_by_name}</span>}
-                    </span>
-                    <b className={`tabular-nums ${out ? "text-danger" : "text-success"}`}>
-                      {out ? "−" : "+"}
-                      {formatQty(x.quantity)}
-                    </b>
-                    {isAdmin ? (
-                      <button type="button" onClick={() => void removeMovement(x.id)} aria-label="이 기록 지우기" className="text-xs text-text-muted hover:text-danger">
-                        지우기
-                      </button>
-                    ) : (
-                      <span />
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <MovementList movements={m.movements} isAdmin={isAdmin} onRemove={(id) => void removeMovement(id)} />
           )}
         </section>
       </div>

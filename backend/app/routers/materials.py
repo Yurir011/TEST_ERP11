@@ -1,4 +1,4 @@
-"""자재관리: 항목(IC/사출물/부자재)+이름, 하위 속성(트리), 입고·추가 입고·출고 기록. 현재 개수는 입출고 합계로 계산한다.
+"""자재관리: 항목(회로부품/사출물/부자재/소모품)+이름, 하위 속성(트리), 입고·추가 입고·출고 기록. 현재 개수는 입출고 합계로 계산한다.
 
 로그인한 직원(사이트 관리자 제외) 누구나 조회·등록·수정·입출고 기록을 할 수 있고, 자재와 입출고 기록을 지우는 것은 대표만 한다.
 """
@@ -95,7 +95,7 @@ def _get_or_404(db: Session, material_id: int, lock: bool = False) -> Material:
 
 @router.get("", response_model=list[MaterialOut])
 def list_materials(
-    category: str | None = Query(default=None, description="항목: ic / injection / subsidiary (없으면 전체)"),
+    category: str | None = Query(default=None, description="항목: ic(회로부품) / injection / subsidiary / consumable (없으면 전체)"),
     q: str | None = Query(default=None, description="이름·하위 속성 검색어"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_material_access),

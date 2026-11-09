@@ -7,16 +7,16 @@ from sqlalchemy.sql import func
 
 from app.database import Base
 
-# 자재 항목(분류): IC / 사출물 / 부자재 중 하나. 항목별로 모아 볼 수 있다.
-MATERIAL_CATEGORIES = ("ic", "injection", "subsidiary")
-CATEGORY_LABELS = {"ic": "IC", "injection": "사출물", "subsidiary": "부자재"}
+# 자재 항목(분류): 회로부품 / 사출물 / 부자재 / 소모품 중 하나. 항목별로 모아 볼 수 있다. (저장 값 "ic" 는 예전 이름이며 화면에는 "회로부품"으로 보인다)
+MATERIAL_CATEGORIES = ("ic", "injection", "subsidiary", "consumable")
+CATEGORY_LABELS = {"ic": "회로부품", "injection": "사출물", "subsidiary": "부자재", "consumable": "소모품"}
 
 # 입출고 종류: 입고(처음) / 추가 입고 / 출고. 현재 개수 = 입고 + 추가 입고 - 출고
 MOVEMENT_KINDS = ("in", "add", "out")
 
 
 class Material(Base):
-    """자재. 항목(IC/사출물/부자재) + 이름을 붙이고, 그 아래 비워 둘 수 있는 하위 속성(트리, 1단계→2단계→3단계…)을 적는다.
+    """자재. 항목(회로부품/사출물/부자재/소모품) + 이름을 붙이고, 그 아래 비워 둘 수 있는 하위 속성(트리, 1단계→2단계→3단계…)을 적는다.
 
     현재 개수는 저장하지 않고 입출고 기록(MaterialMovement)의 합계로 계산한다 (수량을 직접 고치지 않으므로 틀려도 추적할 수 있다).
     """

@@ -47,7 +47,7 @@ export function MaterialsPage() {
   return (
     <MainLayout
       title="자재관리"
-      description="IC·사출물·부자재의 현재 개수와 입고·출고를 관리합니다."
+      description="회로부품·사출물·부자재·소모품의 현재 개수와 입고·출고를 관리합니다."
       actions={
         <button type="button" onClick={() => navigate("/materials/new")} className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5">
           <Plus size={15} /> 자재 등록

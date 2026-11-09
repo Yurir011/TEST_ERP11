@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 MAX_SUB_LEVELS = 10  # 하위 속성 단계는 필요하면 늘려 쓸 수 있지만 무한정은 아니다
 MAX_QUANTITY = 1_000_000_000
 
-Category = Literal["ic", "injection", "subsidiary"]
+Category = Literal["ic", "injection", "subsidiary", "consumable"]  # ic = 회로부품
 Kind = Literal["in", "add", "out"]
 
 

@@ -1,21 +1,24 @@
 import { SOFT_BADGE } from "../../components/ui/softBadge";
 
-export type MaterialCategory = "ic" | "injection" | "subsidiary";
+// "ic" 는 저장 값이고 화면에는 "회로부품"으로 보인다.
+export type MaterialCategory = "ic" | "injection" | "subsidiary" | "consumable";
 
-/** 자재 항목(분류) 3가지. 순서는 탭·선택 버튼에 보이는 순서다. */
-export const CATEGORY_ORDER: MaterialCategory[] = ["ic", "injection", "subsidiary"];
+/** 자재 항목(분류) 4가지. 순서는 탭·선택 버튼에 보이는 순서다. */
+export const CATEGORY_ORDER: MaterialCategory[] = ["ic", "injection", "subsidiary", "consumable"];
 
 export const CATEGORY_LABELS: Record<MaterialCategory, string> = {
-  ic: "IC",
+  ic: "회로부품",
   injection: "사출물",
   subsidiary: "부자재",
+  consumable: "소모품",
 };
 
-/** 항목 배지 색: IC 파랑, 사출물 주황, 부자재 청록 계열(초록) */
+/** 항목 배지 색: 회로부품 파랑, 사출물 주황, 부자재 초록, 소모품 보라 */
 export const CATEGORY_BADGE: Record<MaterialCategory, string> = {
   ic: SOFT_BADGE.blue,
   injection: SOFT_BADGE.orange,
   subsidiary: SOFT_BADGE.green,
+  consumable: SOFT_BADGE.purple,
 };
 
 /** 출고 사유 선택지. 나중에 회사에서 쓰는 사유로 고칠 수 있다 (여기만 바꾸면 화면에 반영된다). */

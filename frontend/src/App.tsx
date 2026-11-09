@@ -27,6 +27,9 @@ const MobileApprovalsPage = lazyPage(() => import("./features/mobile/MobileAppro
 const MobileAttendancePage = lazyPage(() => import("./features/mobile/MobileAttendancePage"), "MobileAttendancePage");
 const MobileClientsPage = lazyPage(() => import("./features/mobile/MobileClientsPage"), "MobileClientsPage");
 const MobileContactsPage = lazyPage(() => import("./features/mobile/MobileContactsPage"), "MobileContactsPage");
+const MobileMaterialsPage = lazyPage(() => import("./features/mobile/MobileMaterialsPage"), "MobileMaterialsPage");
+const MobileMaterialDetailPage = lazyPage(() => import("./features/mobile/MobileMaterialDetailPage"), "MobileMaterialDetailPage");
+const MobileMaterialFormPage = lazyPage(() => import("./features/mobile/MobileMaterialFormPage"), "MobileMaterialFormPage");
 const MobileCardPage = lazyPage(() => import("./features/mobile/MobileCardPage"), "MobileCardPage");
 const ContactsPage = lazyPage(() => import("./features/contacts/ContactsPage"), "ContactsPage");
 const MobileDocumentsPage =lazyPage(() => import("./features/mobile/MobileDocumentsPage"), "MobileDocumentsPage");
@@ -445,6 +448,10 @@ function App() {
       <Route path="/m/schedule" element={mobileRoute(<MobileSchedulePage />, { siteAdminAllowed: true })} />
       <Route path="/m/clients" element={mobileRoute(<MobileClientsPage />, { menuKey: "clients" })} />
       <Route path="/m/contacts" element={mobileRoute(<MobileContactsPage />)} />
+      <Route path="/m/materials" element={mobileRoute(<MobileMaterialsPage />)} />
+      <Route path="/m/materials/new" element={mobileRoute(<MobileMaterialFormPage />)} />
+      <Route path="/m/materials/:id/edit" element={mobileRoute(<MobileMaterialFormPage />)} />
+      <Route path="/m/materials/:id" element={mobileRoute(<MobileMaterialDetailPage />)} />
       <Route path="/m/card" element={mobileRoute(<MobileCardPage />, { menuKey: "payments" })} />
       <Route path="/m/notifications"element={mobileRoute(<MobileNotificationsPage />, { siteAdminAllowed: true })} />
       <Route path="/m/approvals" element={mobileRoute(<MobileApprovalsPage />)} />

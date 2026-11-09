@@ -18,7 +18,7 @@ def test_create_with_sub_levels_skips_empty_and_records_first_in(client, make_us
     h = auth_headers(make_user(name="직원"))
     m = _new(client, h, sub_levels=["MCU", "", "  ", "LQFP48"])
     assert m["sub_levels"] == ["MCU", "LQFP48"]  # 비어 있는 단계는 건너뛴다
-    assert (m["category"], m["category_label"], m["current_qty"], m["total_in"]) == ("ic", "IC", 500, 500)
+    assert (m["category"], m["category_label"], m["current_qty"], m["total_in"]) == ("ic", "회로부품", 500, 500)
     assert m["last_in"] == {"movement_date": "2026-10-05", "quantity": 500} and m["last_out"] is None
     assert [x["kind"] for x in m["movements"]] == ["in"]
     # 하위 속성 없이, 처음 입고 없이도 등록된다

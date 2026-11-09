@@ -6,7 +6,7 @@ import { todayISO } from "../../lib/date";
 import { logDebug, logError } from "../../lib/logger";
 import { KIND_LABELS, OUT_REASONS, formatQty, type MaterialDetail, type MovementKind } from "./types";
 
-const inputCls = "w-full rounded-lg border border-border px-3 py-2.5 text-sm outline-none focus:border-primary bg-bg";
+const inputCls = "w-full rounded-lg border border-border px-3 py-2.5 text-base sm:text-sm outline-none focus:border-primary bg-bg";
 
 /**
  * 입고 / 추가 입고 / 출고 기록 창. 날짜와 개수를 적고, 출고는 사유가 반드시 있어야 저장된다
@@ -60,13 +60,13 @@ export function MovementModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:px-4" onClick={onClose}>
       <form
         onSubmit={submit}
         role="dialog"
         aria-modal="true"
         aria-label={`${KIND_LABELS[kind]} 기록`}
-        className="bg-surface rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto"
+        className="bg-surface rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom))] w-full sm:max-w-md max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">

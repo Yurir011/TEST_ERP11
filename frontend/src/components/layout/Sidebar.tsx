@@ -55,8 +55,8 @@ const menuItems: {
   { to: "/clients", label: "거래처관리", icon: Building2, adminOnly: false, menuKey: "clients", colorClass: "" },
   { to: "/tax-invoices", label: "세금계산서", icon: ScrollText, adminOnly: false, menuKey: "tax_invoice", colorClass: "" },
   { to: "/transactions", label: "매입매출관리", icon: Receipt, adminOnly: false, menuKey: "transactions", colorClass: "text-primary" },
-  { to: "/materials", label: "자재관리", icon: Boxes, adminOnly: false, colorClass: "" },
   { to: "/payments", label: "입출금관리", icon: Banknote, adminOnly: false, menuKey: "payments", colorClass: "text-primary" },
+  { to: "/materials", label: "자재관리", icon: Boxes, adminOnly: false, colorClass: "" },
   { to: "/notices", label: "업무 알림", icon: Bell, adminOnly: false, menuKey: "notices", colorClass: "text-notify" },
   { to: "/settings", label: "직원등록", icon: Settings, adminOnly: true, colorClass: "text-primary" },
 ];

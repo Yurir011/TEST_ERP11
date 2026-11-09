@@ -1,7 +1,7 @@
 import { Plus, X } from "lucide-react";
 import { MAX_LEVEL_SLOTS, MIN_LEVEL_SLOTS } from "./types";
 
-const inputCls = "w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-surface";
+const inputCls = "w-full rounded-lg border border-border px-3 py-2 text-base sm:text-sm outline-none focus:border-primary bg-surface";
 
 /** 트리 한 단계의 줄 모양 (왼쪽 연결선). 안쪽으로 들어가는 간격은 부르는 쪽에서 준다. */
 function Branch({ children }: { children: React.ReactNode }) {

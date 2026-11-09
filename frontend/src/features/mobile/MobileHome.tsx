@@ -1,4 +1,4 @@
-import { Bell, BookUser, Building2, CreditCard, ChevronRight, CalendarCheck, CalendarDays, Clock, FileCheck, Folder, Megaphone, MessageCircle, Monitor, User, type LucideIcon } from "lucide-react";
+import { Bell, BookUser, Boxes, Building2, CreditCard, ChevronRight, CalendarCheck, CalendarDays, Clock, FileCheck, Folder, Megaphone, MessageCircle, Monitor, User, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Logo } from "../../components/ui/Logo";
@@ -116,6 +116,7 @@ export function MobileHome() {
     { to: "/m/messenger", label: "메신저", icon: MessageCircle, tile: "bg-tile-yellow", fg: "text-tile-yellow-fg", badge: messengerUnread, show: true },
     { to: "/m/card", label: "법인카드", icon: CreditCard, tile: "bg-tile-blue", fg: "text-tile-blue-fg", show: hasMenuPermission(user, "payments") && !isSiteAdmin },
     { to: "/m/contacts", label: "연락처", icon: BookUser, tile: "bg-tile-green", fg: "text-tile-green-fg", show: !isSiteAdmin },
+    { to: "/m/materials", label: "자재", icon: Boxes, tile: "bg-tile-orange", fg: "text-tile-orange-fg", show: !isSiteAdmin },
   ];
 
   return (
