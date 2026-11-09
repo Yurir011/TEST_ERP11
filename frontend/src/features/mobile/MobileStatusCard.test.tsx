@@ -1,60 +1,78 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DialogProvider } from "../../components/ui/dialog/DialogProvider";
 import { MessengerContext, type MessengerContextValue } from "../messenger/useMessenger";
 import { MobileStatusCard } from "./MobileStatusCard";
 
-afterEach(cleanup);
+const api = vi.hoisted(() => ({ apiGet: vi.fn(), apiPost: vi.fn() }));
+vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof import("../../lib/api")>()), ...api }));
 
-function renderCard(props: { isWorking: boolean; isDone: boolean }, myStatus: string | null = "working", changeMyStatus = vi.fn().mockResolvedValue(undefined)) {
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+function renderCard(myStatus: string | null = "working", changeMyStatus = vi.fn().mockResolvedValue(undefined)) {
   const ensureDirectory = vi.fn();
   const value = { myStatus, ensureDirectory, changeMyStatus } as unknown as MessengerContextValue;
   render(
-    <MessengerContext.Provider value={value}>
-      <MobileStatusCard {...props} />
-    </MessengerContext.Provider>,
+    <DialogProvider>
+      <MessengerContext.Provider value={value}>
+        <MobileStatusCard />
+      </MessengerContext.Provider>
+    </DialogProvider>,
   );
   return { ensureDirectory, changeMyStatus };
 }
 
+function openSheet() {
+  fireEvent.click(screen.getByRole("button", { name: /출근|회의중|식사중|외근|출장|휴가|퇴근|불러오는 중/ }));
+}
+
 describe("MobileStatusCard", () => {
   it("열리면 내 상태를 불러오고 현재 상태를 보여 준다", () => {
-    const { ensureDirectory } = renderCard({ isWorking: true, isDone: false }, "meeting");
+    const { ensureDirectory } = renderCard("meeting");
     expect(ensureDirectory).toHaveBeenCalled();
-    expect(screen.getAllByText("회의중").length).toBeGreaterThan(0);
+    expect(screen.getByText("회의중")).toBeTruthy();
   });
 
-  it("출근·퇴근은 고르는 칸에 없고 회의중·식사중·외근·출장·휴가만 있다", () => {
-    renderCard({ isWorking: true, isDone: false });
-    const names = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(names).toEqual(["회의중", "식사중", "외근", "출장", "휴가"]);
+  it("누르면 PC와 같은 7가지가 나오고 현재 상태가 표시된다", () => {
+    renderCard("meeting");
+    openSheet();
+    const names = screen.getAllByRole("button", { name: /^(출근|회의중|식사중|외근|출장|휴가|퇴근)/ }).map((b) => b.textContent?.replace("근태 기록", "").replace("✓", ""));
+    expect(names).toEqual(expect.arrayContaining(["출근", "회의중", "식사중", "외근", "출장", "휴가", "퇴근"]));
+    expect(screen.getAllByRole("button", { current: true }).length).toBe(1);
   });
 
-  it("칩을 누르면 그 상태로 바꾼다", async () => {
-    const { changeMyStatus } = renderCard({ isWorking: true, isDone: false });
+  it("외근을 고르면 상태만 바꾼다", async () => {
+    const { changeMyStatus } = renderCard("working");
+    openSheet();
     fireEvent.click(screen.getByRole("button", { name: "외근" }));
     await waitFor(() => expect(changeMyStatus).toHaveBeenCalledWith("outside"));
+    expect(api.apiPost).not.toHaveBeenCalled();
   });
 
-  it("출근 중에 다른 상태이면 '출근 중으로 돌아가기'로 되돌린다", async () => {
-    const { changeMyStatus } = renderCard({ isWorking: true, isDone: false }, "meal");
-    fireEvent.click(screen.getByRole("button", { name: "출근 중으로 돌아가기" }));
+  it("출근을 고르면 근태 출근을 기록하고 상태를 바꾼다", async () => {
+    api.apiGet.mockResolvedValue(null);
+    api.apiPost.mockResolvedValue({});
+    const { changeMyStatus } = renderCard("absent");
+    openSheet();
+    fireEvent.click(screen.getByRole("button", { name: /^출근/ }));
     await waitFor(() => expect(changeMyStatus).toHaveBeenCalledWith("working"));
+    expect(api.apiPost).toHaveBeenCalledWith("/api/attendance/clock-in");
   });
 
-  it("출근 전에는 '출근 중으로 돌아가기'가 없다", () => {
-    renderCard({ isWorking: false, isDone: false }, "absent");
-    expect(screen.queryByRole("button", { name: "출근 중으로 돌아가기" })).toBeNull();
+  it("지금 상태를 다시 고르면 아무것도 하지 않는다", () => {
+    const { changeMyStatus } = renderCard("meal");
+    openSheet();
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^식사중/ }));
+    expect(changeMyStatus).not.toHaveBeenCalled();
   });
 
-  it("퇴근한 뒤에는 바꿀 수 없다", () => {
-    renderCard({ isWorking: false, isDone: true }, "off");
-    expect((screen.getByRole("button", { name: "외근" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("퇴근한 뒤에는 상태를 바꿀 수 없어요.")).toBeTruthy();
-  });
-
-  it("서버가 거절하면 오류 문구를 보여 준다", async () => {
-    renderCard({ isWorking: true, isDone: false }, "working", vi.fn().mockRejectedValue(new Error("x")));
+  it("서버가 거절하면 오류 안내를 보여 준다", async () => {
+    renderCard("working", vi.fn().mockRejectedValue(new Error("x")));
+    openSheet();
     fireEvent.click(screen.getByRole("button", { name: "휴가" }));
     expect(await screen.findByText("상태를 바꾸지 못했습니다.")).toBeTruthy();
   });

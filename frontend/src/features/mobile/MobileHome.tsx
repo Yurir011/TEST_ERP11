@@ -9,6 +9,7 @@ import { hasMenuPermission } from "../../lib/auth";
 import { formatTime } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "../attendance/types";
+import { CHANGED_EVENT } from "../attendance/useAttendanceToday";
 import { toISODate } from "../schedule/dateUtils";
 import { useMessengerOptional } from "../messenger/useMessenger";
 import { eventColorStyle, type ScheduleEvent } from "../schedule/types";
@@ -65,6 +66,18 @@ export function MobileHome() {
         logError("MobileHome", "오늘 일정 조회 실패", err);
         setEvents([]);
       });
+  }, [isSiteAdmin]);
+
+  // 내 상태 목록에서 출근·퇴근을 고르면 근태 기록이 바뀌므로 출퇴근 카드도 서버 값으로 다시 맞춘다
+  useEffect(() => {
+    if (isSiteAdmin) return;
+    const reload = () => {
+      apiGet<AttendanceRecord | null>("/api/attendance/today")
+        .then(setToday)
+        .catch((err) => logError("MobileHome", "오늘 근태 다시 조회 실패", err));
+    };
+    window.addEventListener(CHANGED_EVENT, reload);
+    return () => window.removeEventListener(CHANGED_EVENT, reload);
   }, [isSiteAdmin]);
 
   const isWorking = !!today?.clock_in && !today.clock_out;
@@ -164,7 +177,7 @@ export function MobileHome() {
           </MobileCard>
         )}
         {error && <p className="text-xs text-danger -mt-2">{error}</p>}
-        {!isSiteAdmin && today !== undefined && <MobileStatusCard isWorking={isWorking} isDone={isDone} />}
+        {!isSiteAdmin && today !== undefined && <MobileStatusCard />}
 
         <MobileCard className="py-5 px-2">
           <div className="grid grid-cols-4 gap-y-5">

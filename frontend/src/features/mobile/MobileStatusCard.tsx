@@ -1,87 +1,85 @@
+import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
-import { ApiError } from "../../lib/api";
-import { logDebug, logError } from "../../lib/logger";
-import { statusDotClass, statusLabel, type PresenceStatus } from "../messenger/presence";
+import { logDebug } from "../../lib/logger";
+import { STATUS_OPTIONS, statusDotClass, statusLabel } from "../messenger/presence";
 import { useMessengerOptional } from "../messenger/useMessenger";
+import { usePresenceChange } from "../messenger/usePresenceChange";
 import { MobileCard } from "./MobileLayout";
 
-// 출근·퇴근은 출퇴근 버튼으로 기록하므로, 여기서는 그 밖의 상태만 고른다 (PC 메신저의 '내 상태'와 같은 값이고 서로 바로 반영된다).
-const CHOICES: Exclude<PresenceStatus, "working" | "off" | "absent">[] = ["meeting", "meal", "outside", "trip", "leave"];
+/** 서버 값이 없을 때 쓰는 자리 표시용 (messenger 가 없으면 카드를 아예 그리지 않으므로 훅 호출 순서만 맞춘다) */
+const NOOP = async () => {};
 
 /**
- * 모바일 홈의 '내 상태' 카드. 지금 상태를 보여 주고, 회의중·식사중·외근·출장·휴가를 눌러 바꾼다.
- * 고른 상태는 그날 하루 유지되고 직원 모두에게 보인다. 이미 고른 칩을 다시 누르거나 '출근 중으로 돌아가기'를 누르면 출근 상태로 돌아온다.
- * @param isWorking 지금 출근해서 일하는 중인가 (출근 중으로 돌아가기를 보여 줄지 정한다)
- * @param isDone 오늘 퇴근했는가 (퇴근 뒤에는 상태를 바꾸지 않는다)
+ * 모바일 홈의 '내 상태' 카드. PC 메신저의 콤보박스와 같은 7가지(출근·회의중·식사중·외근·출장·휴가·퇴근)를
+ * 카드를 눌러 아래에서 올라오는 목록에서 고른다. 출근·퇴근을 고르면 근태 기록도 함께 남고, 고른 상태는 직원 모두에게 보인다.
  */
-export function MobileStatusCard({ isWorking, isDone }: { isWorking: boolean; isDone: boolean }) {
+export function MobileStatusCard() {
   const messenger = useMessengerOptional();
   const ensureDirectory = messenger?.ensureDirectory;
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, change } = usePresenceChange(messenger?.changeMyStatus ?? NOOP);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     ensureDirectory?.(); // 내 현재 상태를 불러오고, 이후 PC·다른 기기에서 바뀐 것도 따라온다
   }, [ensureDirectory]);
 
-  if (!messenger) return null;
-  const { myStatus, changeMyStatus } = messenger;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
-  async function choose(next: string) {
-    if (busy || isDone) return;
-    setError(null);
-    setBusy(true);
-    try {
-      logDebug("MobileStatus", `내 상태 변경 시도: ${myStatus} → ${next}`);
-      await changeMyStatus(next);
-    } catch (err) {
-      logError("MobileStatus", "내 상태 변경 실패", err);
-      setError(err instanceof ApiError ? err.message : "상태를 바꾸지 못했습니다.");
-    } finally {
-      setBusy(false);
-    }
+  if (!messenger) return null;
+  const { myStatus } = messenger;
+
+  async function choose(value: string) {
+    setOpen(false);
+    if (value === myStatus) return;
+    logDebug("MobileStatus", `내 상태 변경 시도: ${myStatus} → ${value}`);
+    await change(value);
   }
 
-  const showBack = isWorking && myStatus !== null && myStatus !== "working";
-
   return (
-    <MobileCard className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">내 상태</h2>
-        <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+    <>
+      <MobileCard>
+        <p className="text-sm font-semibold mb-2">내 상태</p>
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          disabled={busy || myStatus === null}
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center gap-2 rounded-xl border border-border bg-bg px-3 py-2.5 text-[15px] disabled:opacity-60"
+        >
           <span className={`w-2.5 h-2.5 rounded-full ${myStatus ? statusDotClass(myStatus) : "bg-border"}`} aria-hidden />
           {myStatus ? statusLabel(myStatus) : "불러오는 중..."}
-        </span>
-      </div>
-
-      <div className="flex flex-wrap gap-2" role="group" aria-label="상태 고르기">
-        {CHOICES.map((c) => {
-          const on = myStatus === c;
-          return (
-            <button
-              key={c}
-              type="button"
-              aria-pressed={on}
-              disabled={busy || isDone || myStatus === null}
-              onClick={() => void choose(on && isWorking ? "working" : c)}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium disabled:opacity-40 ${
-                on ? "border-primary bg-primary/10 text-primary" : "border-border bg-bg text-text"
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${statusDotClass(c)}`} aria-hidden />
-              {statusLabel(c)}
-            </button>
-          );
-        })}
-      </div>
-
-      {showBack && (
-        <button type="button" disabled={busy || isDone} onClick={() => void choose("working")} className="text-xs text-primary disabled:opacity-40">
-          출근 중으로 돌아가기
+          <ChevronDown size={16} className="ml-auto text-text-muted" aria-hidden />
         </button>
+      </MobileCard>
+
+      {open && (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="내 상태 고르기">
+          <button type="button" aria-label="닫기" className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 max-w-lg mx-auto bg-surface border-t border-border rounded-t-2xl px-3 pt-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+            <div className="w-9 h-1 rounded-full bg-border mx-auto mb-2" aria-hidden />
+            <ul>
+              {STATUS_OPTIONS.map((o) => {
+                const on = myStatus === o.value;
+                return (
+                  <li key={o.value} className="border-b border-border last:border-0">
+                    <button type="button" aria-current={on} onClick={() => void choose(o.value)} className="w-full flex items-center gap-3 px-1.5 py-3 text-[15px] text-left">
+                      <span className={`w-2.5 h-2.5 rounded-full ${statusDotClass(o.value)}`} aria-hidden />
+                      {o.label}
+                      {(o.value === "working" || o.value === "off") && <span className="text-xs text-text-muted">근태 기록</span>}
+                      {on && <span className="ml-auto text-primary font-bold" aria-hidden>✓</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
       )}
-      {isDone && <p className="text-xs text-text-muted">퇴근한 뒤에는 상태를 바꿀 수 없어요.</p>}
-      {error && <p className="text-xs text-danger">{error}</p>}
-    </MobileCard>
+    </>
   );
 }

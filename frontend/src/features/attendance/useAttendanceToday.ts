@@ -4,7 +4,7 @@ import { apiGet } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "./types";
 
-const CHANGED_EVENT = "attendance:changed";
+export const CHANGED_EVENT = "attendance:changed";
 /** 화면이 보이는 동안 서버의 오늘 근태를 다시 확인하는 간격 (다른 화면·다른 PC 에서 바꾼 것을 따라간다) */
 const POLL_MS = 30_000;
 
