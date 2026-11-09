@@ -53,6 +53,9 @@ const ProjectDocumentFormPage = lazyPage(() => import("./features/projectDocumen
 const ProposalFormPage = lazyPage(() => import("./features/proposals/ProposalFormPage"), "ProposalFormPage");
 const TransactionsPage = lazyPage(() => import("./features/transactions/TransactionsPage"), "TransactionsPage");
 const TransactionFormPage = lazyPage(() => import("./features/transactions/TransactionFormPage"), "TransactionFormPage");
+const MaterialsPage = lazyPage(() => import("./features/materials/MaterialsPage"), "MaterialsPage");
+const MaterialFormPage = lazyPage(() => import("./features/materials/MaterialFormPage"), "MaterialFormPage");
+const MaterialDetailPage = lazyPage(() => import("./features/materials/MaterialDetailPage"), "MaterialDetailPage");
 const PaymentsPage = lazyPage(() => import("./features/payments/PaymentsPage"), "PaymentsPage");
 const PaymentFormPage = lazyPage(() => import("./features/payments/PaymentFormPage"), "PaymentFormPage");
 const UsersPage = lazyPage(() => import("./features/settings/UsersPage"), "UsersPage");
@@ -261,6 +264,38 @@ const desktopRoutes = (
         element={
           <ProtectedRoute menuKey="transactions">
             <TransactionFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/materials"
+        element={
+          <ProtectedRoute>
+            <MaterialsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/materials/new"
+        element={
+          <ProtectedRoute>
+            <MaterialFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/materials/:id/edit"
+        element={
+          <ProtectedRoute>
+            <MaterialFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/materials/:id"
+        element={
+          <ProtectedRoute>
+            <MaterialDetailPage />
           </ProtectedRoute>
         }
       />

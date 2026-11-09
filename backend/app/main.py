@@ -26,6 +26,7 @@ from app.routers import (
     documents,
     leaves,
     mail,
+    materials,
     messenger,
     messenger_ws,
     nfc_auth,
@@ -88,6 +89,7 @@ app.include_router(leaves.router)
 app.include_router(documents.router)
 app.include_router(clients.router)
 app.include_router(contacts.router)
+app.include_router(materials.router)
 app.include_router(projects.router)
 app.include_router(project_documents.router)
 app.include_router(proposals.router)
