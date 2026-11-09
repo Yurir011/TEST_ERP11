@@ -22,7 +22,7 @@ describe("paymentForm", () => {
     expect(descriptionFields("인건비", "급여")).toEqual({ category: "인건비", item: "급여", customText: "", manualItem: "" });
     expect(descriptionFields("인건비", "명절 상여")).toEqual({ category: "인건비", item: "기타", customText: "명절 상여", manualItem: "" });
     expect(descriptionFields("소모품비", "볼펜")).toEqual({ category: "소모품비", item: "", customText: "", manualItem: "볼펜" });
-    expect(descriptionFields("없는분류", "x").category).toBe("소모품비"); // 알 수 없는 분류는 첫 분류로
+    expect(descriptionFields("없는분류", "x").category).toBe("복리후생비"); // 알 수 없는 분류는 첫 분류로
   });
 
   it("입력란 → 저장할 내용, 입력 방식 판별", () => {

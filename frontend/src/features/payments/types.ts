@@ -48,9 +48,9 @@ export type BankType = string;
 
 // 입출금 분류 13개. 인건비/차량/제조만 세부 항목 콤보박스를 갖는다 (PAYMENT_CATEGORY_ITEMS 참고).
 export const PAYMENT_CATEGORIES = [
+  "복리후생비",
   "소모품비",
   "공과금",
-  "복리후생비",
   "지급수수료",
   "인건비",
   "차량",

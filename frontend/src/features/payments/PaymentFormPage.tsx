@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { Client } from "../clients/types";
@@ -72,6 +72,11 @@ export function PaymentFormPage() {
   const [isLoading, setIsLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // [등록 + 추가]: 저장하고 화면을 이동하지 않은 채 다음 입출금을 바로 입력한다
+  const addAnotherRef = useRef(false);
+  const [addedCount, setAddedCount] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [formKey, setFormKey] = useState(0); // 영수증 파일 칸처럼 직접 비울 수 없는 칸을 새로 그리기 위한 값
 
   useEffect(() => {
     logDebug("PaymentForm", "거래처 전체 목록 불러오기");
@@ -174,9 +179,27 @@ export function PaymentFormPage() {
     }
   }
 
+  /** 다음 입출금을 입력하도록 내용 칸을 비운다. 연속 입력에서 보통 그대로인 구분·날짜·결제수단·카드/계좌 종류는 남긴다. */
+  function resetForNext() {
+    changeCategory(PAYMENT_CATEGORIES[0]);
+    setAmount("0");
+    setPartyQuery("");
+    setSelectedClient(null);
+    setReceiptFile(null);
+    setMemo("");
+    setProofType(null);
+    setProofTypeDetail("");
+    setLinkedTx(null);
+    setHasReceipt(false);
+    setFormKey((k) => k + 1);
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    const addAnother = addAnotherRef.current && !isEdit;
+    addAnotherRef.current = false;
     setError(null);
+    setNotice(null);
 
     const fields = { category, item, customText, manualItem };
     const invalid = validatePaymentForm({ ...fields, method, proofType, proofTypeDetail, cardType, bankType });
@@ -214,6 +237,15 @@ export function PaymentFormPage() {
         await apiUpload(`/api/payments/${saved.id}/receipt`, receiptFile);
       }
 
+      if (addAnother) {
+        const count = addedCount + 1;
+        logDebug("PaymentForm", `등록 + 추가: ${count}건째 저장 완료, 다음 입력 화면으로`);
+        setAddedCount(count);
+        setNotice(`${count}건 등록했습니다: ${description} · ${formatCurrency(body.amount)}. 이어서 다음 내역을 입력하세요.`);
+        resetForNext();
+        window.scrollTo({ top: 0 });
+        return;
+      }
       navigate("/payments", { replace: true });
     } catch (err) {
       logError("PaymentForm", `${isEdit ? "수정" : "등록"} 실패`, err);
@@ -229,6 +261,11 @@ export function PaymentFormPage() {
         <p className="text-sm text-text-muted">불러오는 중...</p>
       ) : (
       <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-xl">
+        {notice && (
+          <p role="status" className="rounded-xl bg-tile-green text-tile-green-fg px-4 py-2.5 text-sm">
+            {notice}
+          </p>
+        )}
         {!isEdit && (
           <div className="rounded-xl bg-bg border border-border px-4 py-3">
             <button
@@ -408,6 +445,7 @@ export function PaymentFormPage() {
             영수증 이미지 (선택){isEdit && hasReceipt && " · 이미 첨부되어 있습니다. 새 파일을 고르면 교체됩니다."}
           </label>
           <input
+            key={formKey}
             type="file"
             accept="image/jpeg,image/png,image/webp"
             onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
@@ -435,6 +473,18 @@ export function PaymentFormPage() {
           >
             {isSubmitting ? (isEdit ? "저장 중..." : "등록 중...") : isEdit ? "저장" : "등록"}
           </button>
+          {!isEdit && (
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              onClick={() => {
+                addAnotherRef.current = true;
+              }}
+              className="rounded-lg border border-primary text-primary hover:bg-tile-blue text-sm font-medium px-5 py-2.5 transition-colors disabled:opacity-60"
+            >
+              등록 + 추가
+            </button>
+          )}
           <button
             type="button"
             onClick={() => navigate(-1)}
