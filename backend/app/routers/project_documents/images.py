@@ -35,7 +35,8 @@ def _normalize_company_no(value: str | None) -> str:
 def ocr_tax_invoice(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     """홈택스 세금계산서 사진에서 내용을 인식해 입력란을 미리 채울 값을 돌려준다 (저장하지 않음).
     공급자/공급받는자 중 우리 회사(설정의 사업자등록번호)가 어느 쪽인지로 매출/매입 방향을 판별한다."""
-    if not has_menu_permission(current_user, "tax_invoice"):
+    # 세금계산서 작성 권한이 있거나, 매입매출 '새 거래 등록'에서 스크린샷을 붙여 넣는 매입매출 권한이 있으면 쓸 수 있다
+    if not (has_menu_permission(current_user, "tax_invoice") or has_menu_permission(current_user, "transactions")):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="세금계산서 작성 권한이 없습니다.")
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미지 파일(jpg, png, webp)만 업로드할 수 있습니다.")

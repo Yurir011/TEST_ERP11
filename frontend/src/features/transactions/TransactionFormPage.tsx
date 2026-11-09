@@ -1,9 +1,10 @@
-import { FileText, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { ClipboardPaste, FileText, X } from "lucide-react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { Client } from "../clients/types";
-import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
+import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
+import type { TaxInvoiceOcrResult } from "../projectDocuments/types";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import { vatAmount as calcVat } from "../../lib/money";
@@ -112,6 +113,9 @@ export function TransactionFormPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanNotice, setScanNotice] = useState<{ ok: boolean; messages: string[] } | null>(null);
+  const pasteFileRef = useRef<HTMLInputElement>(null);
 
   // 수정 모드: 기존 내용을 불러와 채운다. 부가세는 저장된 값을 그대로 쓰도록 자동계산을 끈다.
   useEffect(() => {
@@ -194,6 +198,48 @@ export function TransactionFormPage() {
     }
   }
 
+  /** 세금계산서 스크린샷(사진)을 인식해 입력란을 채운다. 인식한 값은 사용자가 확인·수정한 뒤 저장한다. */
+  async function scanScreenshot(file: File) {
+    setError(null);
+    setScanNotice(null);
+    setIsScanning(true);
+    try {
+      logDebug("TransactionForm", `세금계산서 스크린샷 인식 요청: ${file.name}, ${file.type}, ${file.size}B`);
+      const r = await apiUpload<TaxInvoiceOcrResult>("/api/project-documents/ocr/tax-invoice", file);
+      logDebug("TransactionForm", `스크린샷 인식 성공: direction=${r.direction}, supply=${r.supply_amount}, warnings=${r.warnings.length}`);
+      setLinkedDoc(null); // 스크린샷은 문서와 연결하지 않는다 (입력란만 채움)
+      if (r.direction) setType(r.direction);
+      if (r.issue_date) setTransactionDate(r.issue_date);
+      const firstItem = r.items[0]?.content;
+      if (firstItem) setItemName(r.items.length > 1 ? `${firstItem} 외 ${r.items.length - 1}건` : firstItem);
+      if (r.supply_amount !== null) setSupplyAmount(String(r.supply_amount));
+      if (r.vat_amount !== null) {
+        setVatAmount(String(r.vat_amount));
+        setVatManuallyEdited(true);
+      }
+      if (r.approval_no) setTaxInvoiceNo(r.approval_no);
+      const name = r.counterparty_name ?? "";
+      if (name) {
+        setPartyQuery(name);
+        setSelectedClient(clients.find((c) => c.name === name) ?? null);
+      }
+      setMemo("세금계산서 스크린샷으로 입력");
+      setScanNotice({ ok: true, messages: r.warnings });
+    } catch (err) {
+      logError("TransactionForm", "스크린샷 인식 실패", err);
+      setScanNotice({ ok: false, messages: [err instanceof ApiError ? err.message : "스크린샷을 인식하지 못했습니다. 직접 입력해주세요."] });
+    } finally {
+      setIsScanning(false);
+    }
+  }
+
+  // Ctrl+V 로 붙여 넣은 스크린샷은 앱 전체의 붙여넣기(fileDrop)가 아래 파일 칸에 넣어 주므로 handleScreenshotFile 이 받는다.
+  function handleScreenshotFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) void scanScreenshot(file);
+  }
+
   const total = (Number(supplyAmount) || 0) + (Number(vatAmount) || 0);
 
   async function handleSubmit(e: FormEvent) {
@@ -248,6 +294,29 @@ export function TransactionFormPage() {
                 ? `불러온 세금계산서: ${linkedDoc.client_name} · ${linkedDoc.issue_date} · ${formatCurrency(linkedDoc.supply_amount + linkedDoc.vat_amount)} (저장하면 연결됩니다)`
                 : "이미 작성한 세금계산서가 있으면 불러와서 다시 입력하지 않아도 됩니다."}
             </p>
+            <div className="mt-3 pt-3 border-t border-border">
+              <input ref={pasteFileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleScreenshotFile} className="hidden" />
+              <button
+                type="button"
+                onClick={() => pasteFileRef.current?.click()}
+                disabled={isScanning}
+                className="flex items-center gap-1.5 text-sm border border-border bg-surface rounded-lg px-4 py-2 hover:bg-bg disabled:opacity-50"
+              >
+                <ClipboardPaste size={15} />
+                {isScanning ? "스크린샷 인식 중..." : "스크린샷으로 입력"}
+              </button>
+              <p className="text-xs text-text-muted mt-1.5">
+                홈택스 세금계산서 화면을 캡처해 복사한 뒤 이 화면에서 <b>Ctrl+V</b> 로 붙여 넣으면 내용이 입력란에 채워집니다. (이미지 파일을 직접 고를 수도 있습니다)
+              </p>
+              {scanNotice && (
+                <div role="status" className={`mt-2 text-xs ${scanNotice.ok ? "text-text-muted" : "text-danger"}`}>
+                  {scanNotice.ok && <p className="text-tile-green-fg font-medium">스크린샷에서 읽은 내용을 입력했습니다. 틀린 곳이 없는지 확인해 주세요.</p>}
+                  {scanNotice.messages.map((m) => (
+                    <p key={m}>{m}</p>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
         <div>

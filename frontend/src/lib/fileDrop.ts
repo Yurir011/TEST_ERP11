@@ -40,6 +40,35 @@ export function fillFileInput(input: HTMLInputElement, files: File[]): void {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+const IMAGE_EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+
+/** 클립보드에 든 이미지(캡처 등)를 파일 이름을 붙여 돌려준다. 이미지가 없으면 빈 배열. */
+export function imagesFromClipboard(data: Pick<DataTransfer, "files"> | null | undefined, now: Date = new Date()): File[] {
+  const stamp = now.toISOString().slice(0, 19).replace(/[-:T]/g, "");
+  return Array.from(data?.files ?? [])
+    .filter((f) => f.type.startsWith("image/"))
+    .map((f, i) => new File([f], `붙여넣은 이미지_${stamp}${i ? `_${i + 1}` : ""}.${IMAGE_EXT[f.type] ?? "png"}`, { type: f.type }));
+}
+
+/**
+ * 붙여 넣은 이미지를 받을 파일 선택 칸을 고른다. 어느 칸인지 분명할 때만 고르고, 애매하면 null (엉뚱한 칸에 올리지 않는다).
+ * 1) 지금 초점이 있는 곳에서 가장 가까운, 파일 칸이 하나뿐인 영역  2) 화면(열린 창이 있으면 그 창) 안에서 이미지를 받는 파일 칸이 하나뿐일 때 그 칸
+ */
+export function findPasteTarget(active: Element | null, root: ParentNode = document): HTMLInputElement | null {
+  const image = { name: "image.png", type: "image/png" };
+  if (active && active !== document.body) {
+    const near = findDropTarget(active);
+    if (near && acceptsFile(image, near.input.accept)) return near.input;
+  }
+  const overlays = Array.from(root.querySelectorAll(".fixed.inset-0, [role='dialog']"));
+  const top = overlays[overlays.length - 1];
+  const inputs = Array.from((top ?? root).querySelectorAll<HTMLInputElement>('input[type="file"]')).filter((i) => !i.disabled && acceptsFile(image, i.accept));
+  return inputs.length === 1 ? inputs[0] : null;
+}
+
+const isTextEditing = (el: Element | null) =>
+  !!el && (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && el.type !== "file") || (el as HTMLElement).isContentEditable);
+
 const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
 const ACTIVE_ATTR = "data-drop-active";
 
@@ -73,6 +102,25 @@ export function useFileDrop(): void {
       if (files.length > 0) fillFileInput(target.input, files);
     }
 
+    // Ctrl+V 로 복사한 스크린샷을 붙여 넣으면 화면의 파일 첨부 칸에 올린다 (영수증·거래명세서·세금계산서 사진·품의서 첨부 등 모든 첨부 칸).
+    // 스스로 붙여넣기를 처리하는 곳(메신저)이나 글자와 함께 복사한 경우(엑셀 셀 등)는 건드리지 않는다.
+    function onPaste(e: ClipboardEvent) {
+      if (e.defaultPrevented) return;
+      const images = imagesFromClipboard(e.clipboardData);
+      if (images.length === 0) return;
+      if (isTextEditing(document.activeElement) && e.clipboardData?.types.includes("text/plain")) return;
+      const input = findPasteTarget(document.activeElement);
+      if (!input) {
+        logDebug("FilePaste", "붙여넣은 이미지를 받을 첨부 칸이 분명하지 않아 무시");
+        return;
+      }
+      const files = pickDroppedFiles(images, input);
+      if (files.length === 0) return;
+      e.preventDefault();
+      logDebug("FilePaste", `이미지 붙여넣기: ${files.length}개 첨부 (${files.map((f) => f.name).join(", ")})`);
+      fillFileInput(input, files);
+    }
+
     const clear = () => setActive(null);
     const onDragLeave = (e: DragEvent) => {
       if (e.relatedTarget === null) clear(); // 창 밖으로 나가면 표시를 지운다
@@ -81,7 +129,9 @@ export function useFileDrop(): void {
     window.addEventListener("drop", onDrop);
     window.addEventListener("dragleave", onDragLeave);
     window.addEventListener("dragend", clear);
+    window.addEventListener("paste", onPaste);
     return () => {
+      window.removeEventListener("paste", onPaste);
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("drop", onDrop);
       window.removeEventListener("dragleave", onDragLeave);

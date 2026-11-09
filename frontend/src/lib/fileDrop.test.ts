@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { acceptsFile, fillFileInput, findDropTarget, pickDroppedFiles } from "./fileDrop";
+import { acceptsFile, fillFileInput, findDropTarget, findPasteTarget, imagesFromClipboard, pickDroppedFiles } from "./fileDrop";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -62,5 +62,25 @@ describe("파일 끌어다 놓기", () => {
     expect(assigned.map((f) => f.name)).toEqual(["a.pdf", "b.pdf"]);
     expect(onChange).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
+  });
+
+  it("클립보드의 이미지만 골라 붙여넣은 이미지_시각.확장자 이름을 붙인다", () => {
+    const data = { files: [file("image.png", "image/png"), file("a.txt", "text/plain"), file("x.jpg", "image/jpeg")] } as unknown as DataTransfer;
+    const names = imagesFromClipboard(data, new Date("2026-11-09T01:02:03Z")).map((f) => f.name);
+    expect(names).toEqual(["붙여넣은 이미지_20261109010203.png", "붙여넣은 이미지_20261109010203_2.jpg"]);
+    expect(imagesFromClipboard({ files: [] } as unknown as DataTransfer)).toEqual([]);
+  });
+
+  it("붙여넣기: 이미지를 받는 파일 칸이 하나뿐이면 그 칸, 여럿이면 초점이 있는 영역의 칸", () => {
+    document.body.innerHTML = `<form><input type="file" id="only" accept="image/png,image/jpeg" /><input type="file" id="csv" accept=".csv" /></form>`;
+    expect(findPasteTarget(null)?.id).toBe("only"); // .csv 칸은 이미지를 받지 않으므로 후보에서 뺀다
+    document.body.innerHTML = `<div id="a"><button id="ba">a</button><input type="file" id="fa" accept="image/*" /></div><div id="b"><input type="file" id="fb" accept="image/*" /></div>`;
+    expect(findPasteTarget(null)).toBeNull(); // 어느 칸인지 애매하면 올리지 않는다
+    expect(findPasteTarget(document.getElementById("ba"))?.id).toBe("fa");
+  });
+
+  it("붙여넣기: 열린 창이 있으면 그 창 안의 칸만 본다", () => {
+    document.body.innerHTML = `<input type="file" id="page" accept="image/*" /><div class="fixed inset-0"><input type="file" id="modal" accept="image/*" /></div>`;
+    expect(findPasteTarget(null)?.id).toBe("modal");
   });
 });
