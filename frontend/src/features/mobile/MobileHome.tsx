@@ -13,6 +13,7 @@ import { toISODate } from "../schedule/dateUtils";
 import { useMessengerOptional } from "../messenger/useMessenger";
 import { eventColorStyle, type ScheduleEvent } from "../schedule/types";
 import { useApprovalQueue } from "./approvalQueue";
+import { MobileStatusCard } from "./MobileStatusCard";
 import { MobileCard } from "./MobileLayout";
 import { MobileTabBar } from "./MobileTabBar";
 import { setForcePc } from "./mobileMode";
@@ -163,6 +164,7 @@ export function MobileHome() {
           </MobileCard>
         )}
         {error && <p className="text-xs text-danger -mt-2">{error}</p>}
+        {!isSiteAdmin && today !== undefined && <MobileStatusCard isWorking={isWorking} isDone={isDone} />}
 
         <MobileCard className="py-5 px-2">
           <div className="grid grid-cols-4 gap-y-5">
