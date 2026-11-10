@@ -9,7 +9,7 @@ import { CodeText } from "../materials/CodeText";
 import { MovementList } from "../materials/MovementList";
 import { MovementModal } from "../materials/MovementModal";
 import { SubLevelView } from "../materials/SubLevelTree";
-import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, formatReelQty, levelPath, type MaterialDetail, type MovementKind } from "../materials/types";
+import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, formatReelQty, levelPath, netOutQty, purchasedQty, type MaterialDetail, type MovementKind } from "../materials/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
 
 /** 모바일 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성, 입출고 이력. 아래 [추가 입고]·[출고]로 기록한다 (출고는 사유 필수). */
@@ -84,8 +84,8 @@ export function MobileMaterialDetailPage() {
           )}
         </p>
         <p className="text-xs text-text-muted mt-1">
-          입고 <b className="text-text">{formatQty(m.total_in)}</b> + 추가 입고 <b className="text-text">{formatQty(m.total_add)}</b> + 재입고 <b className="text-text">{formatQty(m.total_return)}</b> − 출고{" "}
-          <b className="text-text">{formatQty(m.total_out)}</b>
+          입고 <b className="text-text">{formatQty(purchasedQty(m))}</b> − 순 출고 <b className="text-text">{formatQty(netOutQty(m))}</b>
+          {m.total_return > 0 && <span> (출고 {formatQty(m.total_out)} − 재입고 {formatQty(m.total_return)})</span>}
         </p>
         {m.total_return > 0 && <p className="text-xs mt-1.5"><span className="rounded-md bg-tile-orange/60 text-tile-orange-fg px-2 py-0.5 font-semibold">로스 {formatQty(m.total_loss)}개</span></p>}
         <div className="grid grid-cols-3 gap-2 mt-4">

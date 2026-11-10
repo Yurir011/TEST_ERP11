@@ -149,6 +149,24 @@ export function formatReelGroups(groups?: ReelGroup[] | null): string {
   return (groups ?? []).map((g) => `${formatQty(g.per_reel)}개 × ${formatQty(g.reels)}릴`).join(" + ");
 }
 
+/** 입고(구매분): 처음 입고 + 추가 입고. 재입고(반납)는 새로 들어온 물량이 아니므로 넣지 않는다. */
+export const purchasedQty = (m: Pick<MaterialDetail, "total_in" | "total_add">): number => m.total_in + m.total_add;
+
+/** 순 출고(실제 사용): 출고에서 재입고(반납)를 뺀 값. 현재 개수 = 입고(구매분) − 순 출고. */
+export const netOutQty = (m: Pick<MaterialDetail, "total_out" | "total_return">): number => m.total_out - m.total_return;
+
+/** 이력 탭: 전체 / 입고(입고 + 추가 입고) / 재입고 / 출고 */
+export type HistoryTab = "all" | "in" | "return" | "out";
+export const HISTORY_TABS: { key: HistoryTab; label: string }[] = [
+  { key: "all", label: "전체" },
+  { key: "in", label: "입고" },
+  { key: "return", label: "재입고" },
+  { key: "out", label: "출고" },
+];
+export function matchHistoryTab(x: Pick<Movement, "kind">, tab: HistoryTab): boolean {
+  return tab === "all" || (tab === "in" ? x.kind === "in" || x.kind === "add" : x.kind === tab);
+}
+
 /** 개수를 글로: 릴로 기록했으면 "3릴 (7,500개)", 개로만 기록했으면 "500개". */
 export function formatReelQty(quantity: number, reels?: number | null): string {
   return reels != null ? `${formatQty(reels)}릴 (${formatQty(quantity)}개)` : `${formatQty(quantity)}개`;

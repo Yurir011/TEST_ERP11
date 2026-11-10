@@ -47,8 +47,8 @@ function SettleTiles({ x }: { x: Movement }) {
 }
 
 /** 입출고 이력 목록 (최근순). 출고는 사유를, 입고는 메모를 보여 준다. 대표(isAdmin)만 한 줄씩 지울 수 있다. (PC·모바일 공용) */
-export function MovementList({ movements, isAdmin, onRemove }: { movements: Movement[]; isAdmin: boolean; onRemove: (movementId: number) => void }) {
-  const byId = new Map(movements.map((x) => [x.id, x]));
+export function MovementList({ movements, isAdmin, onRemove, lookup }: { movements: Movement[]; isAdmin: boolean; onRemove: (movementId: number) => void; lookup?: Movement[] }) {
+  const byId = new Map((lookup ?? movements).map((x) => [x.id, x])); // 재입고가 가리키는 출고를 찾는다 (탭으로 걸러도 전체에서 찾는다)
   return (
     <ul>
         {movements.map((x) => {

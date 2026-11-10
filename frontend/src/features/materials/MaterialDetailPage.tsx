@@ -10,7 +10,7 @@ import { CodeText } from "./CodeText";
 import { MovementList } from "./MovementList";
 import { MovementModal } from "./MovementModal";
 import { SubLevelView } from "./SubLevelTree";
-import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, formatReelQty, levelPath, type MaterialDetail, type MovementKind } from "./types";
+import { CATEGORY_BADGE, CATEGORY_LABELS, HISTORY_TABS, formatQty, formatReelQty, matchHistoryTab, netOutQty, purchasedQty, type HistoryTab, type MaterialDetail, type MovementKind } from "./types";
 
 /** 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성 트리, 입출고 이력. [추가 입고]·[출고]로 한 줄씩 기록한다. */
 export function MaterialDetailPage() {
@@ -23,6 +23,7 @@ export function MaterialDetailPage() {
   const [m, setM] = useState<MaterialDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modalKind, setModalKind] = useState<MovementKind | null>(null);
+  const [tab, setTab] = useState<HistoryTab>("all");
 
   useEffect(() => {
     logDebug("MaterialDetail", `상세 조회 시작: id=${materialId}`);
@@ -67,11 +68,12 @@ export function MaterialDetailPage() {
   }
 
   const hasFirstIn = m.movements.some((x) => x.kind === "in");
+  const shown = m.movements.filter((x) => matchHistoryTab(x, tab));
+  const countOf = (k: HistoryTab) => m.movements.filter((x) => matchHistoryTab(x, k)).length;
 
   return (
     <MainLayout
-      title={m.name}
-      description={levelPath(m.sub_levels) || CATEGORY_LABELS[m.category]}
+      title="자재 상세"
       showBack
       actions={
         <div className="flex items-center gap-2">
@@ -86,72 +88,104 @@ export function MaterialDetailPage() {
         </div>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4 max-w-5xl">
-        <div className="space-y-4">
-          <section className="bg-surface border border-border rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <CodeText code={m.code} />
-              <span className={`px-2 py-0.5 text-xs font-semibold ${CATEGORY_BADGE[m.category]}`}>{m.kind_label ? `${CATEGORY_LABELS[m.category]} · ${m.kind_label}` : CATEGORY_LABELS[m.category]}</span>
+      <div className="space-y-4 max-w-5xl">
+        <section className="bg-surface border border-border rounded-2xl p-5 sm:p-6" aria-label="자재 정보">
+          <div className="flex flex-wrap justify-between gap-x-8 gap-y-5">
+            <div className="min-w-0 flex-1 basis-72">
+              <div className="flex flex-wrap items-center gap-2">
+                <CodeText code={m.code} />
+                <span className={`px-2 py-0.5 text-xs font-semibold ${CATEGORY_BADGE[m.category]}`}>{m.kind_label ? `${CATEGORY_LABELS[m.category]} · ${m.kind_label}` : CATEGORY_LABELS[m.category]}</span>
+              </div>
+              <h2 className="text-xl font-extrabold mt-2 break-all">{m.name}</h2>
+              <div className="mt-2.5">
+                <SubLevelView levels={m.sub_levels} />
+              </div>
+              {m.memo && <p className="text-xs text-text-muted mt-3 whitespace-pre-wrap">메모: {m.memo}</p>}
             </div>
-            <h2 className="text-sm font-semibold mb-1">현재 개수</h2>
-            <p className="text-4xl font-extrabold tabular-nums" aria-label="현재 개수">
-              {m.current_reels != null ? (
-                <>
-                  {formatQty(m.current_reels)}
-                  <span className="text-lg font-bold ml-0.5">릴</span>
-                  <span className="text-xl font-bold text-text-muted ml-2">({formatReelQty(m.current_qty)})</span>
-                </>
-              ) : (
-                <>
-                  {formatQty(m.current_qty)}
-                  <span className="text-sm font-medium text-text-muted ml-1">개</span>
-                </>
-              )}
-            </p>
-            <p className="text-xs text-text-muted mt-2">
-              입고 <b className="text-text">{formatQty(m.total_in)}</b> + 추가 입고 <b className="text-text">{formatQty(m.total_add)}</b> + 재입고{" "}
-              <b className="text-text">{formatQty(m.total_return)}</b> − 출고 <b className="text-text">{formatQty(m.total_out)}</b>
-            </p>
-            {m.total_return > 0 && (
-              <p className="text-xs mt-1.5">
-                <span className="rounded-md bg-tile-orange/60 text-tile-orange-fg px-2 py-0.5 font-semibold">로스 {formatQty(m.total_loss)}개</span>
-              </p>
-            )}
-            <div className="flex gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setModalKind(hasFirstIn ? "add" : "in")}
-                className="rounded-lg bg-success text-white text-sm font-medium px-4 py-2.5 hover:opacity-90"
-              >
-                + {hasFirstIn ? "추가 입고" : "입고"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setModalKind("return")}
-                disabled={!m.movements.some((x) => x.kind === "out")}
-                className="rounded-lg bg-tile-orange-fg text-white text-sm font-medium px-4 py-2.5 hover:opacity-90 disabled:opacity-40"
-              >
-                ↩ 재입고
-              </button>
-              <button type="button" onClick={() => setModalKind("out")} disabled={m.current_qty <= 0} className="rounded-lg bg-danger text-white text-sm font-medium px-4 py-2.5 hover:opacity-90 disabled:opacity-40">
-                − 출고
-              </button>
-            </div>
-          </section>
 
-          <section className="bg-surface border border-border rounded-2xl p-5">
-            <h2 className="text-sm font-semibold mb-3">속성</h2>
-            <SubLevelView levels={m.sub_levels} />
-            {m.memo && <p className="text-xs text-text-muted mt-4 whitespace-pre-wrap">메모: {m.memo}</p>}
-          </section>
+            <div className="sm:text-right">
+              <p className="text-xs text-text-muted">현재 개수</p>
+              <p className="text-4xl font-extrabold tabular-nums leading-tight" aria-label="현재 개수">
+                {m.current_reels != null ? (
+                  <>
+                    {formatQty(m.current_reels)}
+                    <span className="text-lg font-bold ml-0.5">릴</span>
+                    <span className="text-xl font-bold text-text-muted ml-2">({formatReelQty(m.current_qty)})</span>
+                  </>
+                ) : (
+                  <>
+                    {formatQty(m.current_qty)}
+                    <span className="text-sm font-medium text-text-muted ml-1">개</span>
+                  </>
+                )}
+              </p>
+              <div className="flex flex-wrap gap-2 mt-3 sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalKind(hasFirstIn ? "add" : "in")}
+                  className="rounded-lg bg-success text-white text-sm font-medium px-4 py-2.5 hover:opacity-90"
+                >
+                  + {hasFirstIn ? "추가 입고" : "입고"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalKind("return")}
+                  disabled={!m.movements.some((x) => x.kind === "out")}
+                  className="rounded-lg bg-tile-orange-fg text-white text-sm font-medium px-4 py-2.5 hover:opacity-90 disabled:opacity-40"
+                >
+                  ↩ 재입고
+                </button>
+                <button type="button" onClick={() => setModalKind("out")} disabled={m.current_qty <= 0} className="rounded-lg bg-danger text-white text-sm font-medium px-4 py-2.5 hover:opacity-90 disabled:opacity-40">
+                  − 출고
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5" aria-label="입출고 요약">
+          <div className="rounded-xl bg-surface border border-border px-4 py-3 text-xs text-text-muted">
+            입고 (구매분)
+            <b className="block text-lg text-text tabular-nums">{formatQty(purchasedQty(m))}</b>
+          </div>
+          <div className="rounded-xl bg-surface border border-border px-4 py-3 text-xs text-text-muted">
+            출고
+            <b className="block text-lg text-text tabular-nums">{formatQty(m.total_out)}</b>
+            {m.total_return > 0 && <span className="text-[11px]">재입고 {formatQty(m.total_return)} 반납</span>}
+          </div>
+          <div className="rounded-xl bg-surface border border-border px-4 py-3 text-xs text-text-muted">
+            순 출고 (실제 사용)
+            <b className="block text-lg text-text tabular-nums">{formatQty(netOutQty(m))}</b>
+          </div>
+          <div className="rounded-xl bg-tile-orange/50 border border-border px-4 py-3 text-xs text-tile-orange-fg">
+            로스 (정산된 건)
+            <b className="block text-lg tabular-nums">{formatQty(m.total_loss)}개</b>
+          </div>
         </div>
 
-        <section className="bg-surface border border-border rounded-2xl p-5">
-          <h2 className="text-sm font-semibold mb-2">입출고 이력 (최근순)</h2>
+        <section className="bg-surface border border-border rounded-2xl p-5" aria-label="입출고 이력">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h2 className="text-sm font-semibold">입출고 이력 (최근순)</h2>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="이력 구분">
+              {HISTORY_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  aria-pressed={tab === t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`rounded-full border px-3 py-1 text-xs ${tab === t.key ? "border-primary bg-tile-blue text-tile-blue-fg font-semibold" : "border-border text-text-muted hover:bg-bg"}`}
+                >
+                  {t.label} {countOf(t.key)}
+                </button>
+              ))}
+            </div>
+          </div>
           {m.movements.length === 0 ? (
             <p className="text-sm text-text-muted py-6 text-center">아직 입출고 기록이 없습니다. [입고]로 처음 개수를 기록해 주세요.</p>
+          ) : shown.length === 0 ? (
+            <p className="text-sm text-text-muted py-6 text-center">이 구분의 기록이 없습니다.</p>
           ) : (
-            <MovementList movements={m.movements} isAdmin={isAdmin} onRemove={(id) => void removeMovement(id)} />
+            <MovementList movements={shown} lookup={m.movements} isAdmin={isAdmin} onRemove={(id) => void removeMovement(id)} />
           )}
         </section>
       </div>
