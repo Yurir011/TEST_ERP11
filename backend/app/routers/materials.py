@@ -60,7 +60,12 @@ def _latest(m: Material, kinds: tuple[str, ...]) -> MovementBrief | None:
     rows = [x for x in m.movements if x.kind in kinds]  # movements 는 최근순
     if not rows:
         return None
-    return MovementBrief(movement_date=rows[0].movement_date, quantity=rows[0].quantity, reels=rows[0].reels, per_reel=rows[0].per_reel)
+    return MovementBrief(movement_date=rows[0].movement_date, quantity=rows[0].quantity, reels=rows[0].reels, reel_groups=rows[0].reel_groups)
+
+
+def _groups(q) -> list[dict] | None:
+    """입력의 릴 묶음을 저장 형태(JSON)로: [{"per_reel": 2500, "reels": 2}, ...]. 개로 적었으면 None."""
+    return [{"per_reel": g.per_reel, "reels": g.reels} for g in q.reel_groups] if q.reel_groups else None
 
 
 def _next_code(db: Session, prefix: str) -> str:
@@ -101,7 +106,7 @@ def _movement_out(x: MaterialMovement, names: dict[int, str], m: Material) -> Mo
         movement_date=x.movement_date,
         quantity=x.quantity,
         reels=x.reels,
-        per_reel=x.per_reel,
+        reel_groups=x.reel_groups,
         reason=x.reason,
         note=x.note,
         created_by=x.created_by,
@@ -188,7 +193,7 @@ def create_material(payload: MaterialIn, db: Session = Depends(get_db), current_
     if payload.initial_in is not None:
         i = payload.initial_in
         m.movements.append(
-            MaterialMovement(kind="in", movement_date=i.movement_date, quantity=i.quantity, reels=i.reels, per_reel=i.per_reel, created_by=current_user.id)
+            MaterialMovement(kind="in", movement_date=i.movement_date, quantity=i.quantity, reels=i.reels, reel_groups=_groups(i), created_by=current_user.id)
         )
     db.commit()
     m = _get_or_404(db, m.id)
@@ -254,7 +259,7 @@ def add_movement(material_id: int, payload: MovementIn, db: Session = Depends(ge
             movement_date=payload.movement_date,
             quantity=payload.quantity,
             reels=payload.reels,
-            per_reel=payload.per_reel,
+            reel_groups=_groups(payload),
             return_of=payload.return_of,
             used_qty=payload.used_qty,
             reason=payload.reason,

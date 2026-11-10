@@ -5,7 +5,7 @@ import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiPost } from "../../lib/api";
 import { todayISO } from "../../lib/date";
 import { logDebug, logError } from "../../lib/logger";
-import { QtyInput, emptyQty, qtyPayload, qtyTotal, type QtyState } from "./QtyInput";
+import { QtyInput, emptyQty, qtyIncomplete, qtyPayload, qtyTotal, type QtyState } from "./QtyInput";
 import { KIND_LABELS, OUT_REASONS, formatQty, formatReelQty, type MaterialDetail, type Movement, type MovementKind } from "./types";
 
 /** 재입고로 더 정산할 수 있는 출고 건들: 출고 개수에서 이미 반납·사용으로 정산된 개수를 뺀 것이 남아 있는 건. */
@@ -63,7 +63,7 @@ export function MovementModal({
     if (busy) return;
     setError(null);
     const payload = qtyPayload(qty);
-    if (!payload) return setError(qty.unit === "reel" ? "릴 수와 1릴 당 개수를 입력해주세요." : "개수를 입력해주세요.");
+    if (!payload) return setError(qtyIncomplete(qty) ? "릴 구성의 개수와 릴 수를 모두 입력해주세요." : qty.unit === "reel" ? "릴 구성을 입력해주세요." : "개수를 입력해주세요.");
     if (isOut && !reason.trim()) return setError("출고 사유를 선택하거나 입력해주세요.");
     if (isReturn && !out) return setError("어느 출고 건의 재입고인지 골라주세요.");
     if (isReturn && out && retTotal + usedTotal > out.quantity) {

@@ -68,15 +68,15 @@ describe("자재 등록 폼 (시안 A-3)", () => {
     expect(within(screen.getByRole("listbox")).getAllByRole("option").map((o) => o.textContent)).toEqual(["Cortex-M3", "Cortex-M4"]);
   });
 
-  it("처음 입고는 평소 개 한 칸뿐이고, 릴을 고를 때만 1릴 당 개수 칸이 나온다 (곱한 총 개수 표시)", () => {
+  it("처음 입고는 평소 개 한 칸뿐이고, 릴을 고를 때만 개수 × 릴 수 칸이 나온다 (곱한 총 개수 표시)", () => {
     renderForm();
-    expect(screen.queryByLabelText("입고 1릴 당 개수")).toBeNull();
+    expect(screen.queryByLabelText("입고 릴 1 개수")).toBeNull();
     fireEvent.click(within(screen.getByRole("group", { name: "입고 단위" })).getByRole("button", { name: "릴" }));
-    fireEvent.change(screen.getByLabelText("입고 릴 수"), { target: { value: "3" } });
-    fireEvent.change(screen.getByLabelText("입고 1릴 당 개수"), { target: { value: "2500" } });
+    fireEvent.change(screen.getByLabelText("입고 릴 1 개수"), { target: { value: "2500" } });
+    fireEvent.change(screen.getByLabelText("입고 릴 1 릴 수"), { target: { value: "3" } });
     expect(screen.getByLabelText("입고 총 개수").textContent).toBe("3릴 (7,500개)");
     fireEvent.click(within(screen.getByRole("group", { name: "입고 단위" })).getByRole("button", { name: "개" }));
-    expect(screen.queryByLabelText("입고 1릴 당 개수")).toBeNull(); // 개로 돌아가면 다시 사라진다
+    expect(screen.queryByLabelText("입고 릴 1 개수")).toBeNull(); // 개로 돌아가면 다시 사라진다
   });
 
   it("등록하면 회로부품 종류·속성·개(또는 릴)를 담아 저장하고 상세 화면으로 간다", async () => {
@@ -88,13 +88,13 @@ describe("자재 등록 폼 (시안 A-3)", () => {
     fireEvent.change(screen.getByLabelText("속성 3"), { target: { value: "0603" } });
     fireEvent.change(screen.getByLabelText("품명"), { target: { value: "저항 10kΩ" } });
     fireEvent.click(within(screen.getByRole("group", { name: "입고 단위" })).getByRole("button", { name: "릴" }));
-    fireEvent.change(screen.getByLabelText("입고 릴 수"), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText("입고 1릴 당 개수"), { target: { value: "5000" } });
+    fireEvent.change(screen.getByLabelText("입고 릴 1 개수"), { target: { value: "5000" } });
+    fireEvent.change(screen.getByLabelText("입고 릴 1 릴 수"), { target: { value: "2" } });
     fireEvent.click(registerBtn());
     await waitFor(() => expect(screen.getByText("상세 화면")).toBeTruthy());
     expect(api.apiPost).toHaveBeenCalledWith(
       "/api/materials",
-      expect.objectContaining({ category: "ic", kind: "general", name: "저항 10kΩ", sub_levels: ["저항", "0603"], initial_in: expect.objectContaining({ reels: 2, per_reel: 5000 }) }),
+      expect.objectContaining({ category: "ic", kind: "general", name: "저항 10kΩ", sub_levels: ["저항", "0603"], initial_in: expect.objectContaining({ reel_groups: [{ per_reel: 5000, reels: 2 }] }) }),
     );
   });
 

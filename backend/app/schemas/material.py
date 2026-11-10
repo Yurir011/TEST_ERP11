@@ -16,23 +16,35 @@ def _clean(v: str | None) -> str | None:
     return v or None
 
 
+class ReelGroup(BaseModel):
+    """릴 묶음 하나: "개수 × 릴 수" (예: 2,500개짜리 릴 2개). 릴마다 개수가 다르면 묶음을 여러 개 준다."""
+
+    per_reel: int = Field(gt=0, le=MAX_QUANTITY)  # 릴 하나의 개수
+    reels: int = Field(gt=0, le=MAX_QUANTITY)  # 그런 릴의 수
+
+
+MAX_REEL_GROUPS = 100
+
+
 class _Qty(BaseModel):
-    """수량: 개로 적으면 quantity 만, 릴로 적으면 reels(릴 수) + per_reel(1릴 당 개수)을 주고 총 개수 quantity 는 곱해서 정한다."""
+    """수량: 개로 적으면 quantity 만, 릴로 적으면 reel_groups("개수 × 릴 수" 묶음들)를 주고, 총 개수 quantity 와 릴 수 reels 는 묶음에서 정한다."""
 
     quantity: int | None = Field(default=None, gt=0, le=MAX_QUANTITY)
-    reels: int | None = Field(default=None, gt=0, le=MAX_QUANTITY)
-    per_reel: int | None = Field(default=None, gt=0, le=MAX_QUANTITY)
+    reel_groups: list[ReelGroup] | None = Field(default=None, max_length=MAX_REEL_GROUPS)
+    reels: int | None = None  # 응답 전용: 릴 수 합계 (입력값은 무시하고 reel_groups 에서 정한다)
 
     @model_validator(mode="after")
     def _qty(self):
-        if self.reels is not None or self.per_reel is not None:
-            if self.reels is None or self.per_reel is None:
-                raise ValueError("릴 수와 1릴 당 개수를 모두 입력해주세요.")
-            self.quantity = self.reels * self.per_reel
+        if self.reel_groups:
+            self.quantity = sum(g.per_reel * g.reels for g in self.reel_groups)
+            self.reels = sum(g.reels for g in self.reel_groups)
             if self.quantity > MAX_QUANTITY:
                 raise ValueError("개수가 너무 큽니다.")
         elif self.quantity is None:
             raise ValueError("개수를 입력해주세요.")
+        else:
+            self.reel_groups = None
+            self.reels = None
         return self
 
 
@@ -118,7 +130,7 @@ class MovementOut(BaseModel):
     movement_date: date
     quantity: int
     reels: int | None = None
-    per_reel: int | None = None
+    reel_groups: list[ReelGroup] | None = None  # 릴로 기록한 경우 "개수 × 릴 수" 묶음들
     return_of: int | None = None  # 재입고: 반납 대상 출고 기록 id
     used_qty: int | None = None  # 재입고: 그중 사용한 개수 (적지 않았으면 None)
     returned_qty: int | None = None  # 출고: 이 출고에서 재입고된 개수 합계 (재입고가 하나라도 있을 때만)
@@ -135,7 +147,7 @@ class MovementBrief(BaseModel):
     movement_date: date
     quantity: int
     reels: int | None = None
-    per_reel: int | None = None
+    reel_groups: list[ReelGroup] | None = None
 
 
 class MaterialOut(BaseModel):

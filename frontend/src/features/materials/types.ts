@@ -52,7 +52,13 @@ export interface MovementBrief {
   movement_date: string;
   quantity: number;
   reels?: number | null;
-  per_reel?: number | null;
+  reel_groups?: ReelGroup[] | null;
+}
+
+/** 릴 묶음: per_reel 개짜리 릴이 reels 개. 릴마다 개수가 다르면 묶음이 여러 개다. */
+export interface ReelGroup {
+  per_reel: number;
+  reels: number;
 }
 
 export interface Material {
@@ -77,7 +83,7 @@ export interface Movement {
   movement_date: string;
   quantity: number;
   reels: number | null;
-  per_reel: number | null;
+  reel_groups: ReelGroup[] | null;
   /** 재입고: 반납 대상 출고 기록 id, 그중 사용한 개수(안 적었으면 null) */
   return_of: number | null;
   used_qty: number | null;
@@ -112,7 +118,7 @@ export interface MaterialInput {
 }
 
 /** 서버에 보내는 수량: 개로 적으면 quantity, 릴로 적으면 릴 수와 1릴 당 개수 (총 개수는 서버가 곱해서 정한다). */
-export type QtyPayload = { quantity: number } | { reels: number; per_reel: number };
+export type QtyPayload = { quantity: number } | { reel_groups: ReelGroup[] };
 
 /** 목록 탭: 전체 / 회로부품 전용 / 회로부품 범용 / 사출물 / 부자재 / 포장재 / 소모품 */
 export type ListTab = "all" | "ic:dedicated" | "ic:general" | Exclude<MaterialCategory, "ic">;
@@ -136,6 +142,11 @@ export function matchTab(m: Pick<Material, "category" | "kind">, tab: ListTab): 
 export function matchKeyword(m: Pick<Material, "code" | "name" | "sub_levels" | "category_label" | "kind_label">, keyword: string): boolean {
   const q = keyword.trim().toLowerCase();
   return !q || `${m.code} ${m.name} ${m.sub_levels.join(" ")} ${m.category_label} ${m.kind_label ?? ""}`.toLowerCase().includes(q);
+}
+
+/** 릴별 내역 글: "2,500개 × 2릴 + 2,480개 × 1릴". 릴이 아니면 빈 글. */
+export function formatReelGroups(groups?: ReelGroup[] | null): string {
+  return (groups ?? []).map((g) => `${formatQty(g.per_reel)}개 × ${formatQty(g.reels)}릴`).join(" + ");
 }
 
 /** 개수를 글로: 릴로 기록했으면 "3릴 (7,500개)", 개로만 기록했으면 "500개". */

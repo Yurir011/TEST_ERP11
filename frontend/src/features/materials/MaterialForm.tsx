@@ -4,7 +4,7 @@ import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { todayISO } from "../../lib/date";
 import { logDebug, logError } from "../../lib/logger";
 import { PrefixBadge, prefixFor } from "./CodeText";
-import { QtyInput, emptyQty, qtyPayload, qtyTotal, type QtyState } from "./QtyInput";
+import { QtyInput, emptyQty, qtyIncomplete, qtyPayload, qtyReels, qtyTotal, type QtyState } from "./QtyInput";
 import { SubLevelEditor } from "./SubLevelTree";
 import {
   CATEGORY_LABELS,
@@ -103,7 +103,7 @@ export function MaterialForm({ basePath }: { basePath: string }) {
     setError(null);
     if (needKind) return setError("회로부품은 전용 또는 범용을 골라주세요.");
     const qty = qtyPayload(inQty);
-    if (!isEdit && inQty.unit === "reel" && !qty && (Number(inQty.reels) > 0 || Number(inQty.perReel) > 0)) return setError("릴 수와 1릴 당 개수를 모두 입력해주세요.");
+    if (!isEdit && qtyIncomplete(inQty)) return setError("릴 구성의 개수와 릴 수를 모두 입력해주세요.");
     const body: MaterialInput = {
       category,
       kind: category === "ic" ? kind : null,
@@ -225,7 +225,7 @@ export function MaterialForm({ basePath }: { basePath: string }) {
           </span>
           <span className="text-text-muted">·</span>
           <b className="break-all">{name.trim() || "품명"}</b>
-          {!isEdit && total > 0 && <span className="text-text-muted">· {formatReelQty(total, inQty.unit === "reel" ? Number(inQty.reels) : null)}</span>}
+          {!isEdit && total > 0 && <span className="text-text-muted">· {formatReelQty(total, inQty.unit === "reel" ? qtyReels(inQty) : null)}</span>}
         </p>
       </div>
 

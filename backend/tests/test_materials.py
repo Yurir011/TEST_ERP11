@@ -19,7 +19,7 @@ def test_create_with_sub_levels_skips_empty_and_records_first_in(client, make_us
     m = _new(client, h, sub_levels=["MCU", "", "  ", "LQFP48"])
     assert m["sub_levels"] == ["MCU", "LQFP48"]  # 비어 있는 단계는 건너뛴다
     assert (m["category"], m["category_label"], m["current_qty"], m["total_in"]) == ("ic", "회로부품", 500, 500)
-    assert m["last_in"] == {"movement_date": "2026-10-05", "quantity": 500, "reels": None, "per_reel": None} and m["last_out"] is None
+    assert m["last_in"] == {"movement_date": "2026-10-05", "quantity": 500, "reels": None, "reel_groups": None} and m["last_out"] is None
     assert [x["kind"] for x in m["movements"]] == ["in"]
     # 속성 없이, 처음 입고 없이도 등록된다
     bare = _new(client, h, category="subsidiary", name="완충재", sub_levels=[], initial_in=None)
@@ -123,21 +123,21 @@ def test_changing_kind_gives_a_new_code(client, make_user, auth_headers):
 
 def test_reel_quantity_is_total_and_shown_together(client, make_user, auth_headers):
     h = auth_headers(make_user(name="직원"))
-    m = _new(client, h, initial_in={"movement_date": "2026-10-05", "reels": 3, "per_reel": 2500})
+    m = _new(client, h, initial_in={"movement_date": "2026-10-05", "reel_groups": [{"per_reel": 2500, "reels": 3}]})
     assert (m["current_qty"], m["current_reels"]) == (7500, 3)
-    assert m["movements"][0]["reels"] == 3 and m["movements"][0]["per_reel"] == 2500 and m["movements"][0]["quantity"] == 7500
-    assert (m["last_in"]["reels"], m["last_in"]["per_reel"]) == (3, 2500)
+    assert m["movements"][0]["reels"] == 3 and m["movements"][0]["reel_groups"] == [{"per_reel": 2500, "reels": 3}] and m["movements"][0]["quantity"] == 7500
+    assert (m["last_in"]["reels"], m["last_in"]["reel_groups"]) == (3, [{"per_reel": 2500, "reels": 3}])
     d = _move(client, h, m["id"], kind="add", movement_date="2026-10-12", quantity=200, note="낱개").json()  # 개로 적은 건 릴 수에 들어가지 않는다
     assert (d["current_qty"], d["current_reels"]) == (7700, 3)
-    d = _move(client, h, m["id"], kind="out", movement_date="2026-11-03", reels=1, per_reel=2500, reason="생산 불출").json()
+    d = _move(client, h, m["id"], kind="out", movement_date="2026-11-03", reel_groups=[{"per_reel": 2500, "reels": 1}], reason="생산 불출").json()
     assert (d["current_qty"], d["current_reels"], d["total_out"]) == (5200, 2, 2500)
     assert d["movements"][0]["reels"] == 1 and d["movements"][0]["quantity"] == 2500
-    # 릴 수와 1릴 당 개수는 함께 있어야 한다, 개수도 릴도 없으면 거절
-    assert _move(client, h, m["id"], kind="add", movement_date="2026-11-04", reels=2).status_code == 422
-    assert _move(client, h, m["id"], kind="add", movement_date="2026-11-04", per_reel=2).status_code == 422
+    # 릴 묶음의 개수·릴 수는 둘 다 있어야 한다, 개수도 릴도 없으면 거절
+    assert _move(client, h, m["id"], kind="add", movement_date="2026-11-04", reel_groups=[{"reels": 2}]).status_code == 422
+    assert _move(client, h, m["id"], kind="add", movement_date="2026-11-04", reel_groups=[{"per_reel": 2}]).status_code == 422
     assert _move(client, h, m["id"], kind="add", movement_date="2026-11-04").status_code == 422
     # 출고는 개 기준으로 현재 개수를 넘을 수 없다
-    too_many = _move(client, h, m["id"], kind="out", movement_date="2026-11-05", reels=3, per_reel=2000, reason="생산 불출")
+    too_many = _move(client, h, m["id"], kind="out", movement_date="2026-11-05", reel_groups=[{"per_reel": 2000, "reels": 3}], reason="생산 불출")
     assert too_many.status_code == 400
     plain = _new(client, h, name="개로만", initial_in={"movement_date": "2026-10-05", "quantity": 10})
     assert plain["current_reels"] is None
@@ -199,5 +199,27 @@ def test_return_validation(client, make_user, auth_headers):
     admin = auth_headers(make_user(role=UserRole.admin, name="대표"))
     assert client.delete(f"/api/materials/{m['id']}/movements/{out_id}", headers=admin).status_code == 400
     # 재입고는 개/릴로 입력할 수 있다 (재입고로 늘어난 개수가 있으니 입고를 지우면 음수가 되는지도 함께 따진다)
-    reel = _move(client, h, m["id"], kind="add", movement_date="2026-11-05", reels=2, per_reel=10).json()
+    reel = _move(client, h, m["id"], kind="add", movement_date="2026-11-05", reel_groups=[{"per_reel": 10, "reels": 2}]).json()
     assert reel["current_reels"] == 2
+
+
+def test_reels_with_different_counts_are_recorded_as_groups(client, make_user, auth_headers):
+    """릴마다 개수가 다르면 "개수 × 릴 수" 묶음을 여러 개 준다. 총 개수와 릴 수는 묶음에서 정해지고, 출고에도 같은 방식을 쓴다."""
+    h = auth_headers(make_user(name="직원"))
+    groups = [{"per_reel": 2500, "reels": 2}, {"per_reel": 2480, "reels": 1}]
+    m = _new(client, h, initial_in={"movement_date": "2026-11-10", "reel_groups": groups})
+    mv = m["movements"][0]
+    assert (mv["quantity"], mv["reels"], mv["reel_groups"]) == (7480, 3, groups)
+    assert (m["current_qty"], m["current_reels"]) == (7480, 3)
+    # 출고도 릴별로: 2,500개 1릴 + 2,480개 1릴 = 4,980개, 2릴
+    d = _move(client, h, m["id"], kind="out", movement_date="2026-11-11", reel_groups=[{"per_reel": 2500, "reels": 1}, {"per_reel": 2480, "reels": 1}], reason="생산 불출").json()
+    assert (d["current_qty"], d["current_reels"], d["total_out"]) == (2500, 1, 4980)
+    assert d["movements"][0]["reel_groups"] == [{"per_reel": 2500, "reels": 1}, {"per_reel": 2480, "reels": 1}]
+    # 묶음이 있으면 quantity 를 같이 보내도 묶음 합계가 우선한다, 개로 적으면 묶음은 비어 있다
+    d = _move(client, h, m["id"], kind="add", movement_date="2026-11-12", quantity=999, reel_groups=[{"per_reel": 10, "reels": 3}]).json()
+    assert (d["movements"][0]["quantity"], d["movements"][0]["reels"]) == (30, 3)
+    d = _move(client, h, m["id"], kind="add", movement_date="2026-11-13", quantity=5).json()
+    assert (d["movements"][0]["reel_groups"], d["movements"][0]["reels"]) == (None, None)
+    # 묶음이 너무 많거나 0 이 들어 있으면 거절
+    assert _move(client, h, m["id"], kind="add", movement_date="2026-11-13", reel_groups=[{"per_reel": 0, "reels": 1}]).status_code == 422
+    assert _move(client, h, m["id"], kind="add", movement_date="2026-11-13", reel_groups=[{"per_reel": 1, "reels": 1}] * 101).status_code == 422

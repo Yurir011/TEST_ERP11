@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -69,8 +69,9 @@ class MaterialMovement(Base):
     kind: Mapped[str] = mapped_column(String(10))
     movement_date: Mapped[date] = mapped_column(Date)
     quantity: Mapped[int] = mapped_column(Integer)  # 항상 양수, 낱개(개) 기준 총 개수 (더할지 뺄지는 kind 로 정한다)
-    reels: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 릴로 기록한 경우 릴 수 (quantity = reels × per_reel)
-    per_reel: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 릴로 기록한 경우 1릴 당 개수
+    reels: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 릴로 기록한 경우 릴 수 합계
+    # 릴로 기록한 경우 "개수 × 릴 수" 묶음들: [{"per_reel": 2500, "reels": 2}, {"per_reel": 2480, "reels": 1}] (quantity = 개수×릴 수의 합, reels = 릴 수의 합)
+    reel_groups: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # 재입고(return)일 때만: 어느 출고 건의 반납인지, 그중 실제 사용한 개수 (로스 = 출고 - 반납 합계 - 사용 합계). 사용 개수를 모르면 비워 둔다.
     return_of: Mapped[int | None] = mapped_column(ForeignKey("material_movements.id"), nullable=True, index=True)
     used_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)

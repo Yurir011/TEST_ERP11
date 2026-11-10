@@ -1,4 +1,28 @@
+import { useState } from "react";
 import { KIND_LABELS, formatQty, formatReelQty, type Movement } from "./types";
+
+/** 릴로 기록한 입출고의 "릴별 보기": 눌러서 개수 × 릴 수 내역을 펼친다. */
+function ReelBreakdown({ x }: { x: Movement }) {
+  const [open, setOpen] = useState(false);
+  if (!x.reel_groups?.length) return null;
+  return (
+    <div className="mt-1">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="text-xs text-primary">
+        릴별 보기 {open ? "▴" : "▾"}
+      </button>
+      {open && (
+        <p className="mt-1 rounded-lg bg-bg px-2.5 py-1.5 text-xs leading-relaxed" aria-label="릴별 내역">
+          {x.reel_groups.map((g, i) => (
+            <span key={i} className="block">
+              {formatQty(g.per_reel)}개 × {formatQty(g.reels)}릴
+            </span>
+          ))}
+          <b className="block">합계 {formatReelQty(x.quantity, x.reels)}</b>
+        </p>
+      )}
+    </div>
+  );
+}
 
 const fmtPct = (loss: number, base: number) => (base > 0 ? `${((loss / base) * 100).toFixed(1)}%` : "0%");
 
@@ -40,6 +64,7 @@ export function MovementList({ movements, isAdmin, onRemove }: { movements: Move
                 {isReturn && source && <span className="block text-xs text-text-muted truncate">{source.movement_date} 출고분 반납{x.used_qty != null ? ` · 사용 ${formatQty(x.used_qty)}개` : ""}</span>}
                 {!out && x.note && <span className="block text-xs text-text-muted truncate">메모: {x.note}</span>}
                 {x.created_by_name && <span className="block text-[11px] text-text-muted">{x.created_by_name}</span>}
+                <ReelBreakdown x={x} />
                 {out && x.returned_qty != null && <SettleTiles x={x} />}
               </div>
               <b className={`tabular-nums ${out ? "text-danger" : "text-success"}`}>

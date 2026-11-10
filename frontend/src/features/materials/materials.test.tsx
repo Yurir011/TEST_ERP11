@@ -112,23 +112,23 @@ describe("릴 단위 입출고", () => {
     renderWithDialog(<MovementModal material={{ ...material, current_qty: 7500, current_reels: 3 }} kind="out" onClose={() => {}} onSaved={onSaved} />);
     expect(screen.getByText(/현재 3릴 \(7,500개\)/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "릴" }));
-    fireEvent.change(screen.getByLabelText("출고 릴 수"), { target: { value: "1" } });
-    fireEvent.change(screen.getByLabelText("출고 1릴 당 개수"), { target: { value: "2500" } });
+    fireEvent.change(screen.getByLabelText("출고 릴 1 개수"), { target: { value: "2500" } });
+    fireEvent.change(screen.getByLabelText("출고 릴 1 릴 수"), { target: { value: "1" } });
     expect(screen.getByText("5,000개")).toBeTruthy(); // 출고 후 남는 개수
     fireEvent.click(screen.getByRole("button", { name: "생산 불출" }));
     fireEvent.click(screen.getByRole("button", { name: "출고 저장" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const body = api.apiPost.mock.calls[0][1];
-    expect(body).toMatchObject({ kind: "out", reels: 1, per_reel: 2500, reason: "생산 불출" });
+    expect(body).toMatchObject({ kind: "out", reel_groups: [{ per_reel: 2500, reels: 1 }], reason: "생산 불출" });
     expect(body).not.toHaveProperty("quantity");
   });
 
-  it("릴인데 1릴 당 개수를 안 적으면 저장하지 않는다", () => {
+  it("릴인데 개수나 릴 수 중 하나만 적은 줄이 있으면 저장하지 않는다", () => {
     renderWithDialog(<MovementModal material={material} kind="add" onClose={() => {}} onSaved={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "릴" }));
-    fireEvent.change(screen.getByLabelText("추가 입고 릴 수"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 릴 수"), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: "추가 입고 저장" }));
-    expect(screen.getByText("릴 수와 1릴 당 개수를 입력해주세요.")).toBeTruthy();
+    expect(screen.getByText("릴 구성의 개수와 릴 수를 모두 입력해주세요.")).toBeTruthy();
     expect(api.apiPost).not.toHaveBeenCalled();
   });
 });
@@ -168,7 +168,7 @@ describe("목록 표시 도우미", () => {
 });
 
 const mv = (o: Partial<Movement>): Movement => ({
-  id: 1, kind: "in", movement_date: "2026-11-03", quantity: 0, reels: null, per_reel: null, return_of: null, used_qty: null,
+  id: 1, kind: "in", movement_date: "2026-11-03", quantity: 0, reels: null, reel_groups: null, return_of: null, used_qty: null,
   returned_qty: null, used_total: null, loss_qty: null, reason: null, note: null, created_by: 1, created_by_name: "김대리", created_at: "", ...o,
 });
 
@@ -234,5 +234,47 @@ describe("재입고와 로스", () => {
     expect(tiles[1].textContent).toBe("사용0반납120로스0");
     expect(screen.getByText("2026-11-03 출고분 반납 · 사용 920개")).toBeTruthy();
     expect(screen.getAllByText("재입고").length).toBe(1);
+  });
+});
+
+describe("릴마다 개수가 다를 때", () => {
+  it("개수 × 릴 수 줄을 더해 총합이 자동으로 계산되고, 묶음 여러 개로 저장된다", async () => {
+    api.apiPost.mockResolvedValue({ id: 7 });
+    const onSaved = vi.fn();
+    renderWithDialog(<MovementModal material={material} kind="add" onClose={() => {}} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", { name: "릴" }));
+    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 개수"), { target: { value: "2500" } });
+    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 릴 수"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "+ 다른 개수 릴 추가" }));
+    fireEvent.change(screen.getByLabelText("추가 입고 릴 2 개수"), { target: { value: "2480" } });
+    expect((screen.getByLabelText("추가 입고 릴 2 릴 수") as HTMLInputElement).value).toBe("1"); // 새 줄은 1릴로 시작
+    expect(screen.getByLabelText("추가 입고 총 개수").textContent).toBe("3릴 (7,480개)");
+    fireEvent.click(screen.getByRole("button", { name: "추가 입고 저장" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(api.apiPost.mock.calls[0][1]).toMatchObject({ kind: "add", reel_groups: [{ per_reel: 2500, reels: 2 }, { per_reel: 2480, reels: 1 }] });
+    expect(api.apiPost.mock.calls[0][1]).not.toHaveProperty("quantity");
+  });
+
+  it("줄을 지우면 총합이 다시 계산되고, 줄이 하나뿐이면 지우기 버튼이 없다", () => {
+    renderWithDialog(<MovementModal material={material} kind="add" onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "릴" }));
+    expect(screen.queryByRole("button", { name: /줄 지우기/ })).toBeNull();
+    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 개수"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 릴 수"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "+ 다른 개수 릴 추가" }));
+    fireEvent.change(screen.getByLabelText("추가 입고 릴 2 개수"), { target: { value: "90" } });
+    expect(screen.getByLabelText("추가 입고 총 개수").textContent).toBe("4릴 (390개)");
+    fireEvent.click(screen.getByRole("button", { name: "릴 2 줄 지우기" }));
+    expect(screen.getByLabelText("추가 입고 총 개수").textContent).toBe("3릴 (300개)");
+  });
+
+  it("이력에서 [릴별 보기]를 누르면 개수 × 릴 수 내역과 합계가 펼쳐진다", () => {
+    const x = mv({ id: 21, kind: "in", quantity: 7480, reels: 3, reel_groups: [{ per_reel: 2500, reels: 2 }, { per_reel: 2480, reels: 1 }] });
+    render(<MovementList movements={[x, mv({ id: 22, quantity: 50 })]} isAdmin={false} onRemove={() => {}} />);
+    expect(screen.getAllByRole("button", { name: /릴별 보기/ })).toHaveLength(1); // 개로 기록한 건에는 없다
+    expect(screen.queryByLabelText("릴별 내역")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /릴별 보기/ }));
+    const box = screen.getByLabelText("릴별 내역");
+    expect(box.textContent).toBe("2,500개 × 2릴2,480개 × 1릴합계 3릴 (7,480개)");
   });
 });
