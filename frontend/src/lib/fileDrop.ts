@@ -93,8 +93,14 @@ export function useFileDrop(): void {
 
     function onDrop(e: DragEvent) {
       if (!hasFiles(e)) return;
+      // 이미 스스로 파일 놓기를 처리한 곳(메신저 채팅창 등)이 preventDefault 를 했으면 여기서 또 올리지 않는다 (같은 파일이 두 번 첨부되는 것을 막는다)
+      const handled = e.defaultPrevented;
       e.preventDefault();
       setActive(null);
+      if (handled) {
+        logDebug("FileDrop", "화면이 직접 처리한 파일 놓기라 건너뜀");
+        return;
+      }
       const target = findDropTarget(e.target as Element | null);
       if (!target) return;
       const files = pickDroppedFiles(Array.from(e.dataTransfer?.files ?? []), target.input);

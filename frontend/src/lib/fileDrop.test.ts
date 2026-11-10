@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { acceptsFile, fillFileInput, findDropTarget, findPasteTarget, imagesFromClipboard, pickDroppedFiles } from "./fileDrop";
+import { acceptsFile, fillFileInput, findDropTarget, findPasteTarget, imagesFromClipboard, pickDroppedFiles, useFileDrop } from "./fileDrop";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -82,5 +83,37 @@ describe("파일 끌어다 놓기", () => {
   it("붙여넣기: 열린 창이 있으면 그 창 안의 칸만 본다", () => {
     document.body.innerHTML = `<input type="file" id="page" accept="image/*" /><div class="fixed inset-0"><input type="file" id="modal" accept="image/*" /></div>`;
     expect(findPasteTarget(null)?.id).toBe("modal");
+  });
+});
+
+describe("앱 전체 끌어다 놓기 (useFileDrop)", () => {
+  function setup(handlerPrevents: boolean) {
+    class FakeTransfer {
+      files: File[] = [];
+      items = { add: (f: File) => this.files.push(f) };
+    }
+    vi.stubGlobal("DataTransfer", FakeTransfer);
+    document.body.innerHTML = `<div id="zone"><span id="inner">놓는 곳</span><input type="file" id="f" multiple /></div>`;
+    const input = document.getElementById("f") as HTMLInputElement;
+    Object.defineProperty(input, "files", { get: () => [], set: () => {}, configurable: true });
+    const onChange = vi.fn();
+    input.addEventListener("change", onChange);
+    // 메신저 채팅창처럼 스스로 파일 놓기를 처리하는 곳은 preventDefault 를 한다
+    if (handlerPrevents) document.getElementById("zone")!.addEventListener("drop", (e) => e.preventDefault());
+    const hook = renderHook(() => useFileDrop());
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files: [file("a.pdf")] } });
+    document.getElementById("inner")!.dispatchEvent(drop);
+    hook.unmount();
+    vi.unstubAllGlobals();
+    return onChange;
+  }
+
+  it("화면이 직접 처리한 파일 놓기는 다시 올리지 않는다 (메신저에서 두 번 첨부되던 문제)", () => {
+    expect(setup(true)).not.toHaveBeenCalled();
+  });
+
+  it("처리하는 곳이 없으면 가까운 파일 칸에 올린다", () => {
+    expect(setup(false)).toHaveBeenCalledTimes(1);
   });
 });
