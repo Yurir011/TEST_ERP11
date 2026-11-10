@@ -5,10 +5,11 @@ import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiGet } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
+import { CodeText } from "../materials/CodeText";
 import { MovementList } from "../materials/MovementList";
 import { MovementModal } from "../materials/MovementModal";
 import { SubLevelView } from "../materials/SubLevelTree";
-import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, levelPath, type MaterialDetail, type MovementKind } from "../materials/types";
+import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, formatReelQty, levelPath, type MaterialDetail, type MovementKind } from "../materials/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
 
 /** 모바일 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성, 입출고 이력. 아래 [추가 입고]·[출고]로 기록한다 (출고는 사유 필수). */
@@ -62,21 +63,37 @@ export function MobileMaterialDetailPage() {
       }
     >
       <MobileCard>
+        <CodeText code={m.code} small className="block truncate mb-1" />
         <div className="flex items-center gap-2 mb-1">
-          <span className={`px-1.5 py-0.5 text-[11px] font-semibold ${CATEGORY_BADGE[m.category]}`}>{CATEGORY_LABELS[m.category]}</span>
+          <span className={`px-1.5 py-0.5 text-[11px] font-semibold ${CATEGORY_BADGE[m.category]}`}>{m.kind_label ? `${CATEGORY_LABELS[m.category]} · ${m.kind_label}` : CATEGORY_LABELS[m.category]}</span>
           <span className="text-xs text-text-muted truncate">{levelPath(m.sub_levels)}</span>
         </div>
         <p className="text-xs text-text-muted">현재 개수</p>
-        <p className="text-4xl font-extrabold tabular-nums leading-tight">
-          {formatQty(m.current_qty)}
-          <span className="text-sm font-medium text-text-muted ml-1">개</span>
+        <p className="text-4xl font-extrabold tabular-nums leading-tight" aria-label="현재 개수">
+          {m.current_reels != null ? (
+            <>
+              {formatQty(m.current_reels)}
+              <span className="text-lg font-bold ml-0.5">릴</span>
+              <span className="block text-xl font-bold text-text-muted">({formatReelQty(m.current_qty)})</span>
+            </>
+          ) : (
+            <>
+              {formatQty(m.current_qty)}
+              <span className="text-sm font-medium text-text-muted ml-1">개</span>
+            </>
+          )}
         </p>
         <p className="text-xs text-text-muted mt-1">
-          입고 <b className="text-text">{formatQty(m.total_in)}</b> + 추가 입고 <b className="text-text">{formatQty(m.total_add)}</b> − 출고 <b className="text-text">{formatQty(m.total_out)}</b>
+          입고 <b className="text-text">{formatQty(m.total_in)}</b> + 추가 입고 <b className="text-text">{formatQty(m.total_add)}</b> + 재입고 <b className="text-text">{formatQty(m.total_return)}</b> − 출고{" "}
+          <b className="text-text">{formatQty(m.total_out)}</b>
         </p>
-        <div className="grid grid-cols-2 gap-2 mt-4">
+        {m.total_return > 0 && <p className="text-xs mt-1.5"><span className="rounded-md bg-tile-orange/60 text-tile-orange-fg px-2 py-0.5 font-semibold">로스 {formatQty(m.total_loss)}개</span></p>}
+        <div className="grid grid-cols-3 gap-2 mt-4">
           <button type="button" onClick={() => setModalKind(hasFirstIn ? "add" : "in")} className="rounded-xl bg-success text-white text-sm font-semibold py-3 active:opacity-70">
             + {hasFirstIn ? "추가 입고" : "입고"}
+          </button>
+          <button type="button" onClick={() => setModalKind("return")} disabled={!m.movements.some((x) => x.kind === "out")} className="rounded-xl bg-tile-orange-fg text-white text-sm font-semibold py-3 active:opacity-70 disabled:opacity-40">
+            ↩ 재입고
           </button>
           <button type="button" onClick={() => setModalKind("out")} disabled={m.current_qty <= 0} className="rounded-xl bg-danger text-white text-sm font-semibold py-3 active:opacity-70 disabled:opacity-40">
             − 출고

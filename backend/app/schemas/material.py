@@ -6,8 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 MAX_SUB_LEVELS = 10  # 속성 단계는 필요하면 늘려 쓸 수 있지만 무한정은 아니다
 MAX_QUANTITY = 1_000_000_000
 
-Category = Literal["ic", "injection", "subsidiary", "consumable"]  # ic = 회로부품
-Kind = Literal["in", "add", "out"]
+Category = Literal["ic", "injection", "subsidiary", "packaging", "consumable"]  # ic = 회로부품
+MaterialKind = Literal["dedicated", "general"]  # 회로부품의 전용 / 범용
+Kind = Literal["in", "add", "return", "out"]
 
 
 def _clean(v: str | None) -> str | None:
@@ -15,12 +16,33 @@ def _clean(v: str | None) -> str | None:
     return v or None
 
 
-class MovementIn(BaseModel):
+class _Qty(BaseModel):
+    """수량: 개로 적으면 quantity 만, 릴로 적으면 reels(릴 수) + per_reel(1릴 당 개수)을 주고 총 개수 quantity 는 곱해서 정한다."""
+
+    quantity: int | None = Field(default=None, gt=0, le=MAX_QUANTITY)
+    reels: int | None = Field(default=None, gt=0, le=MAX_QUANTITY)
+    per_reel: int | None = Field(default=None, gt=0, le=MAX_QUANTITY)
+
+    @model_validator(mode="after")
+    def _qty(self):
+        if self.reels is not None or self.per_reel is not None:
+            if self.reels is None or self.per_reel is None:
+                raise ValueError("릴 수와 1릴 당 개수를 모두 입력해주세요.")
+            self.quantity = self.reels * self.per_reel
+            if self.quantity > MAX_QUANTITY:
+                raise ValueError("개수가 너무 큽니다.")
+        elif self.quantity is None:
+            raise ValueError("개수를 입력해주세요.")
+        return self
+
+
+class MovementIn(_Qty):
     """입고(in) / 추가 입고(add) / 출고(out) 한 줄. 출고에는 사유가 반드시 필요하다."""
 
     kind: Kind
     movement_date: date
-    quantity: int = Field(gt=0, le=MAX_QUANTITY)
+    return_of: int | None = None  # 재입고(return)일 때 필수: 어느 출고 건의 반납인지 (그 출고 기록의 id)
+    used_qty: int | None = Field(default=None, ge=0, le=MAX_QUANTITY)  # 재입고일 때 그중 실제 사용한 개수 (모르면 비움)
     reason: str | None = None  # 출고 사유
     note: str | None = None  # 메모(입고) / 사유 자세히(출고)
 
@@ -35,16 +57,22 @@ class MovementIn(BaseModel):
             raise ValueError("출고 사유를 입력해주세요.")
         if self.kind != "out":
             self.reason = None  # 사유는 출고에서만 쓴다
+        if self.kind == "return":
+            if self.return_of is None:
+                raise ValueError("어느 출고 건의 재입고인지 골라주세요.")
+        else:
+            self.return_of = None  # 재입고에서만 쓴다
+            self.used_qty = None
         return self
 
 
-class InitialInIn(BaseModel):
+class InitialInIn(_Qty):
     movement_date: date
-    quantity: int = Field(gt=0, le=MAX_QUANTITY)
 
 
 class MaterialIn(BaseModel):
     category: Category
+    kind: MaterialKind | None = None  # 회로부품이면 필수(전용/범용), 다른 항목은 쓰지 않는다
     name: str
     sub_levels: list[str] = []  # 비어 있는 단계는 건너뛰고 채운 것만 위에서부터 차례로 저장한다
     memo: str | None = None
@@ -73,6 +101,14 @@ class MaterialIn(BaseModel):
     def _memo(cls, v: str | None) -> str | None:
         return _clean(v)
 
+    @model_validator(mode="after")
+    def _kind(self):
+        if self.category == "ic" and self.kind is None:
+            raise ValueError("회로부품은 전용 또는 범용을 골라주세요.")
+        if self.category != "ic":
+            self.kind = None
+        return self
+
 
 class MovementOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -81,6 +117,13 @@ class MovementOut(BaseModel):
     kind: str
     movement_date: date
     quantity: int
+    reels: int | None = None
+    per_reel: int | None = None
+    return_of: int | None = None  # 재입고: 반납 대상 출고 기록 id
+    used_qty: int | None = None  # 재입고: 그중 사용한 개수 (적지 않았으면 None)
+    returned_qty: int | None = None  # 출고: 이 출고에서 재입고된 개수 합계 (재입고가 하나라도 있을 때만)
+    used_total: int | None = None  # 출고: 사용한 개수 합계 (사용 개수를 적은 재입고가 하나라도 있을 때만)
+    loss_qty: int | None = None  # 출고: 로스 = 출고 − 반납 합계 − 사용 합계 (사용 개수를 적은 재입고가 있을 때만)
     reason: str | None
     note: str | None
     created_by: int
@@ -91,17 +134,23 @@ class MovementOut(BaseModel):
 class MovementBrief(BaseModel):
     movement_date: date
     quantity: int
+    reels: int | None = None
+    per_reel: int | None = None
 
 
 class MaterialOut(BaseModel):
     """목록 한 줄: 항목·이름·속성, 현재 개수, 가장 최근 입고(추가 입고 포함)·출고."""
 
     id: int
+    code: str
     category: str
     category_label: str
+    kind: str | None = None
+    kind_label: str | None = None
     name: str
     sub_levels: list[str]
     current_qty: int
+    current_reels: int | None = None  # 릴로 기록한 입출고가 있을 때만: 릴 수 합계 (입고 + 추가 입고 − 출고)
     last_in: MovementBrief | None
     last_out: MovementBrief | None
     updated_at: datetime
@@ -112,4 +161,6 @@ class MaterialDetailOut(MaterialOut):
     total_in: int  # 입고 합계
     total_add: int  # 추가 입고 합계
     total_out: int  # 출고 합계
+    total_return: int = 0  # 재입고 합계
+    total_loss: int = 0  # 로스 합계 (사용 개수를 적어 정산된 출고 건만)
     movements: list[MovementOut]  # 최근순

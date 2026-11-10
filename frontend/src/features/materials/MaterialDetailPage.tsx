@@ -6,10 +6,11 @@ import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiGet } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
+import { CodeText } from "./CodeText";
 import { MovementList } from "./MovementList";
 import { MovementModal } from "./MovementModal";
 import { SubLevelView } from "./SubLevelTree";
-import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, levelPath, type MaterialDetail, type MovementKind } from "./types";
+import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, formatReelQty, levelPath, type MaterialDetail, type MovementKind } from "./types";
 
 /** 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성 트리, 입출고 이력. [추가 입고]·[출고]로 한 줄씩 기록한다. */
 export function MaterialDetailPage() {
@@ -89,17 +90,33 @@ export function MaterialDetailPage() {
         <div className="space-y-4">
           <section className="bg-surface border border-border rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-2">
-              <span className={`px-2 py-0.5 text-xs font-semibold ${CATEGORY_BADGE[m.category]}`}>{CATEGORY_LABELS[m.category]}</span>
-              <h2 className="text-sm font-semibold">현재 개수</h2>
+              <CodeText code={m.code} />
+              <span className={`px-2 py-0.5 text-xs font-semibold ${CATEGORY_BADGE[m.category]}`}>{m.kind_label ? `${CATEGORY_LABELS[m.category]} · ${m.kind_label}` : CATEGORY_LABELS[m.category]}</span>
             </div>
-            <p className="text-4xl font-extrabold tabular-nums">
-              {formatQty(m.current_qty)}
-              <span className="text-sm font-medium text-text-muted ml-1">개</span>
+            <h2 className="text-sm font-semibold mb-1">현재 개수</h2>
+            <p className="text-4xl font-extrabold tabular-nums" aria-label="현재 개수">
+              {m.current_reels != null ? (
+                <>
+                  {formatQty(m.current_reels)}
+                  <span className="text-lg font-bold ml-0.5">릴</span>
+                  <span className="text-xl font-bold text-text-muted ml-2">({formatReelQty(m.current_qty)})</span>
+                </>
+              ) : (
+                <>
+                  {formatQty(m.current_qty)}
+                  <span className="text-sm font-medium text-text-muted ml-1">개</span>
+                </>
+              )}
             </p>
             <p className="text-xs text-text-muted mt-2">
-              입고 <b className="text-text">{formatQty(m.total_in)}</b> + 추가 입고 <b className="text-text">{formatQty(m.total_add)}</b> − 출고{" "}
-              <b className="text-text">{formatQty(m.total_out)}</b>
+              입고 <b className="text-text">{formatQty(m.total_in)}</b> + 추가 입고 <b className="text-text">{formatQty(m.total_add)}</b> + 재입고{" "}
+              <b className="text-text">{formatQty(m.total_return)}</b> − 출고 <b className="text-text">{formatQty(m.total_out)}</b>
             </p>
+            {m.total_return > 0 && (
+              <p className="text-xs mt-1.5">
+                <span className="rounded-md bg-tile-orange/60 text-tile-orange-fg px-2 py-0.5 font-semibold">로스 {formatQty(m.total_loss)}개</span>
+              </p>
+            )}
             <div className="flex gap-2 mt-4">
               <button
                 type="button"
@@ -107,6 +124,14 @@ export function MaterialDetailPage() {
                 className="rounded-lg bg-success text-white text-sm font-medium px-4 py-2.5 hover:opacity-90"
               >
                 + {hasFirstIn ? "추가 입고" : "입고"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalKind("return")}
+                disabled={!m.movements.some((x) => x.kind === "out")}
+                className="rounded-lg bg-tile-orange-fg text-white text-sm font-medium px-4 py-2.5 hover:opacity-90 disabled:opacity-40"
+              >
+                ↩ 재입고
               </button>
               <button type="button" onClick={() => setModalKind("out")} disabled={m.current_qty <= 0} className="rounded-lg bg-danger text-white text-sm font-medium px-4 py-2.5 hover:opacity-90 disabled:opacity-40">
                 − 출고

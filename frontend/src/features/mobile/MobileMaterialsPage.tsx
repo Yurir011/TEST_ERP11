@@ -3,15 +3,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, apiGet } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
-import { CATEGORY_BADGE, CATEGORY_LABELS, CATEGORY_ORDER, formatQty, levelPath, type Material, type MaterialCategory } from "../materials/types";
+import { CodeText } from "../materials/CodeText";
+import { LIST_TABS, classLabel, formatReelQty, matchKeyword, matchTab, type ListTab, type Material } from "../materials/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
 
-/** 모바일 자재 목록: 항목 칩(전체·회로부품·사출물·부자재·소모품)으로 걸러 보고, 이름·속성으로 찾는다. 누르면 상세(입출고)로 간다. */
+/** 모바일 자재 목록 (시안 B-3): 한 행을 3줄로 — 윗줄 코드(대분류 색 블록), 가운데 품명, 아랫줄 분류(속성), 오른쪽에 개수. 긴 코드는 윗줄에서 …로 줄어든다. */
 export function MobileMaterialsPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<Material[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"all" | MaterialCategory>("all");
+  const [tab, setTab] = useState<ListTab>("all");
   const [keyword, setKeyword] = useState("");
 
   useEffect(() => {
@@ -27,13 +28,8 @@ export function MobileMaterialsPage() {
       });
   }, []);
 
-  const shown = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    return (rows ?? []).filter((m) => (tab === "all" || m.category === tab) && (!q || `${m.name} ${m.sub_levels.join(" ")}`.toLowerCase().includes(q)));
-  }, [rows, tab, keyword]);
-
-  const chips: { key: "all" | MaterialCategory; label: string }[] = [{ key: "all", label: "전체" }, ...CATEGORY_ORDER.map((k) => ({ key: k, label: CATEGORY_LABELS[k] }))];
-  const count = (k: "all" | MaterialCategory) => (k === "all" ? rows?.length : rows?.filter((m) => m.category === k).length) ?? 0;
+  const shown = useMemo(() => (rows ?? []).filter((m) => matchTab(m, tab) && matchKeyword(m, keyword)), [rows, tab, keyword]);
+  const count = (k: ListTab) => (rows ?? []).filter((m) => matchTab(m, k)).length;
 
   return (
     <MobileLayout
@@ -44,8 +40,8 @@ export function MobileMaterialsPage() {
         </Link>
       }
     >
-      <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-1" role="group" aria-label="항목">
-        {chips.map((c) => (
+      <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-1" role="group" aria-label="품목">
+        {LIST_TABS.map((c) => (
           <button
             key={c.key}
             type="button"
@@ -53,14 +49,14 @@ export function MobileMaterialsPage() {
             onClick={() => setTab(c.key)}
             className={`shrink-0 rounded-full border px-3.5 py-1.5 text-sm ${tab === c.key ? "border-primary bg-tile-blue text-tile-blue-fg font-semibold" : "border-border bg-surface text-text-muted"}`}
           >
-            {c.label} <span className="text-xs opacity-70">{count(c.key)}</span>
+            {c.short} <span className="text-xs opacity-70">{count(c.key)}</span>
           </button>
         ))}
       </div>
       <input
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
-        placeholder="이름·속성 검색"
+        placeholder="코드·품명·속성 검색"
         aria-label="자재 검색"
         className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-primary"
       />
@@ -73,15 +69,12 @@ export function MobileMaterialsPage() {
           <button key={m.id} type="button" onClick={() => navigate(`/m/materials/${m.id}`)} className="w-full text-left active:opacity-60">
             <MobileCard className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate">
-                  <span className={`px-1.5 py-0.5 text-[11px] font-semibold mr-1.5 ${CATEGORY_BADGE[m.category]}`}>{CATEGORY_LABELS[m.category]}</span>
-                  <b className="text-sm">{m.name}</b>
-                </p>
-                <p className="text-xs text-text-muted truncate mt-1">{levelPath(m.sub_levels) || "속성 없음"}</p>
+                <CodeText code={m.code} small className="block truncate mb-0.5" />
+                <b className="block text-sm truncate">{m.name}</b>
+                <p className="text-xs text-text-muted truncate mt-0.5">{classLabel(m)}</p>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-lg font-bold tabular-nums leading-none">{formatQty(m.current_qty)}</p>
-                <p className="text-[11px] text-text-muted mt-1">개</p>
+              <div className="text-right shrink-0 max-w-[40%]">
+                <p className="text-lg font-bold tabular-nums leading-tight break-keep">{formatReelQty(m.current_qty, m.current_reels)}</p>
               </div>
             </MobileCard>
           </button>

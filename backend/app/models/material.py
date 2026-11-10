@@ -7,12 +7,31 @@ from sqlalchemy.sql import func
 
 from app.database import Base
 
-# 자재 항목(분류): 회로부품 / 사출물 / 부자재 / 소모품 중 하나. 항목별로 모아 볼 수 있다. (저장 값 "ic" 는 예전 이름이며 화면에는 "회로부품"으로 보인다)
-MATERIAL_CATEGORIES = ("ic", "injection", "subsidiary", "consumable")
-CATEGORY_LABELS = {"ic": "회로부품", "injection": "사출물", "subsidiary": "부자재", "consumable": "소모품"}
+# 자재 항목(분류): 회로부품 / 사출물 / 부자재 / 포장재 / 소모품 중 하나. 항목별로 모아 볼 수 있다. (저장 값 "ic" 는 예전 이름이며 화면에는 "회로부품"으로 보인다)
+MATERIAL_CATEGORIES = ("ic", "injection", "subsidiary", "packaging", "consumable")
+CATEGORY_LABELS = {"ic": "회로부품", "injection": "사출물", "subsidiary": "부자재", "packaging": "포장재", "consumable": "소모품"}
 
-# 입출고 종류: 입고(처음) / 추가 입고 / 출고. 현재 개수 = 입고 + 추가 입고 - 출고
-MOVEMENT_KINDS = ("in", "add", "out")
+# 회로부품만 전용 / 범용 으로 나눈다 (다른 항목은 종류가 없다)
+KINDS = ("dedicated", "general")
+KIND_LABELS = {"dedicated": "전용", "general": "범용"}
+
+# 품목 코드 접두어. 세부 항목별 코드는 나중에 이 표(또는 code_prefix)에 추가한다. 코드 = 접두어 + "-" + 4자리 순번 (예: EC-0001), 순번은 접두어마다 따로 센다.
+CODE_PREFIXES = {
+    ("ic", "dedicated"): "EC",
+    ("ic", "general"): "EG",
+    ("injection", None): "ME",
+    ("subsidiary", None): "SU",
+    ("packaging", None): "PK",
+    ("consumable", None): "CS",
+}
+
+
+def code_prefix(category: str, kind: str | None) -> str:
+    return CODE_PREFIXES[(category, kind if category == "ic" else None)]
+
+# 입출고 종류: 입고(처음) / 추가 입고 / 재입고(출고했다가 남아서 돌아온 것) / 출고. 현재 개수 = 입고 + 추가 입고 + 재입고 - 출고
+MOVEMENT_KINDS = ("in", "add", "return", "out")
+IN_KINDS = ("in", "add", "return")  # 개수를 더하는 종류
 
 
 class Material(Base):
@@ -25,6 +44,8 @@ class Material(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     category: Mapped[str] = mapped_column(String(20), index=True)
+    kind: Mapped[str | None] = mapped_column(String(10), nullable=True)  # 회로부품의 전용(dedicated) / 범용(general). 다른 항목은 비어 있다.
+    code: Mapped[str] = mapped_column(String(40), unique=True, index=True)  # 품목 코드 (예: EC-0001). 저장할 때 자동으로 붙는다.
     name: Mapped[str] = mapped_column(String(200), index=True)
     # 속성: 위 단계부터 순서대로. 비어 있는 단계는 저장하지 않는다 (예: ["MCU", "ARM Cortex-M3", "LQFP48"])
     sub_levels: Mapped[list[str]] = mapped_column(ARRAY(String(100)), default=list, server_default="{}")
@@ -47,7 +68,12 @@ class MaterialMovement(Base):
     material_id: Mapped[int] = mapped_column(ForeignKey("materials.id", ondelete="CASCADE"), index=True)
     kind: Mapped[str] = mapped_column(String(10))
     movement_date: Mapped[date] = mapped_column(Date)
-    quantity: Mapped[int] = mapped_column(Integer)  # 항상 양수 (더할지 뺄지는 kind 로 정한다)
+    quantity: Mapped[int] = mapped_column(Integer)  # 항상 양수, 낱개(개) 기준 총 개수 (더할지 뺄지는 kind 로 정한다)
+    reels: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 릴로 기록한 경우 릴 수 (quantity = reels × per_reel)
+    per_reel: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 릴로 기록한 경우 1릴 당 개수
+    # 재입고(return)일 때만: 어느 출고 건의 반납인지, 그중 실제 사용한 개수 (로스 = 출고 - 반납 합계 - 사용 합계). 사용 개수를 모르면 비워 둔다.
+    return_of: Mapped[int | None] = mapped_column(ForeignKey("material_movements.id"), nullable=True, index=True)
+    used_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reason: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 출고 사유 (출고에서 필수)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)  # 메모(입고) / 사유 자세히(출고)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
