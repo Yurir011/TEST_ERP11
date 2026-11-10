@@ -46,8 +46,8 @@ function SettleTiles({ x }: { x: Movement }) {
   );
 }
 
-/** 입출고 이력 목록 (최근순). 출고는 사유를, 입고는 메모를 보여 준다. 대표(isAdmin)만 한 줄씩 지울 수 있다. (PC·모바일 공용) */
-export function MovementList({ movements, isAdmin, onRemove, lookup }: { movements: Movement[]; isAdmin: boolean; onRemove: (movementId: number) => void; lookup?: Movement[] }) {
+/** 입출고 이력 목록 (최근순). 출고는 사유를, 입고는 메모를 보여 준다. 한 줄씩 [수정]으로 고친다 (지우기는 수정 창 안에서 대표만). (PC·모바일 공용) */
+export function MovementList({ movements, onEdit, lookup }: { movements: Movement[]; onEdit: (movement: Movement) => void; lookup?: Movement[] }) {
   const byId = new Map((lookup ?? movements).map((x) => [x.id, x])); // 재입고가 가리키는 출고를 찾는다 (탭으로 걸러도 전체에서 찾는다)
   return (
     <ul>
@@ -71,13 +71,9 @@ export function MovementList({ movements, isAdmin, onRemove, lookup }: { movemen
                 {out ? "−" : "+"}
                 {formatReelQty(x.quantity, x.reels)}
               </b>
-              {isAdmin ? (
-                <button type="button" onClick={() => onRemove(x.id)} aria-label="이 기록 지우기" className="text-xs text-text-muted hover:text-danger">
-                  지우기
-                </button>
-              ) : (
-                <span />
-              )}
+              <button type="button" onClick={() => onEdit(x)} aria-label={`${x.movement_date} ${KIND_LABELS[x.kind]} 기록 수정`} className="text-xs text-text-muted hover:text-primary">
+                수정
+              </button>
             </li>
           );
         })}

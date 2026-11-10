@@ -9,7 +9,7 @@ import { LIST_TABS, classLabel, formatReelQty, levelPath, matchKeyword, matchTab
 import { MovementList } from "./MovementList";
 import { CodeText, splitCode } from "./CodeText";
 
-const api = vi.hoisted(() => ({ apiPost: vi.fn() }));
+const api = vi.hoisted(() => ({ apiPost: vi.fn(), apiPut: vi.fn() }));
 vi.mock("../../lib/api", async (orig) => ({ ...(await orig<typeof import("../../lib/api")>()), ...api }));
 
 const dialogApi: DialogApi = { confirm: vi.fn(async () => true), prompt: vi.fn(), notify: vi.fn(), notifyError: vi.fn() };
@@ -227,7 +227,7 @@ describe("재입고와 로스", () => {
       mv({ id: 13, kind: "out", quantity: 50, reason: "샘플 제공" }), // 재입고 없음: 타일 없음
       mv({ id: 14, kind: "return", quantity: 70, return_of: 11, used_qty: 920, movement_date: "2026-11-06" }),
     ];
-    render(<MovementList movements={list} isAdmin={false} onRemove={() => {}} />);
+    render(<MovementList movements={list} onEdit={() => {}} />);
     const tiles = screen.getAllByLabelText("출고 정산");
     expect(tiles).toHaveLength(2);
     expect(tiles[0].textContent).toBe("사용920반납70로스 1.0%10");
@@ -270,11 +270,83 @@ describe("릴마다 개수가 다를 때", () => {
 
   it("이력에서 [릴별 보기]를 누르면 개수 × 릴 수 내역과 합계가 펼쳐진다", () => {
     const x = mv({ id: 21, kind: "in", quantity: 7480, reels: 3, reel_groups: [{ per_reel: 2500, reels: 2 }, { per_reel: 2480, reels: 1 }] });
-    render(<MovementList movements={[x, mv({ id: 22, quantity: 50 })]} isAdmin={false} onRemove={() => {}} />);
+    render(<MovementList movements={[x, mv({ id: 22, quantity: 50 })]} onEdit={() => {}} />);
     expect(screen.getAllByRole("button", { name: /릴별 보기/ })).toHaveLength(1); // 개로 기록한 건에는 없다
     expect(screen.queryByLabelText("릴별 내역")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /릴별 보기/ }));
     const box = screen.getByLabelText("릴별 내역");
     expect(box.textContent).toBe("2,500개 × 2릴2,480개 × 1릴합계 3릴 (7,480개)");
+  });
+});
+
+describe("입출고 기록 수정", () => {
+  const rec = [
+    mv({ id: 11, kind: "out", quantity: 1000, reason: "시제품 제작", returned_qty: 70, used_total: 920, loss_qty: 10, movement_date: "2026-11-03" }),
+    mv({ id: 14, kind: "return", quantity: 70, return_of: 11, used_qty: 920, movement_date: "2026-11-06" }),
+    mv({ id: 10, kind: "in", quantity: 5000, movement_date: "2026-10-05", note: "첫 입고" }),
+  ];
+  const mat = { id: 7, name: "STM32", current_qty: 4070, current_reels: null, movements: rec };
+
+  it("이력 줄마다 [수정] 버튼이 있고 누르면 그 기록이 넘어온다 (지우기 버튼은 없다)", () => {
+    const onEdit = vi.fn();
+    render(<MovementList movements={rec} onEdit={onEdit} />);
+    expect(screen.queryByText("지우기")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "2026-10-05 입고 기록 수정" }));
+    expect(onEdit).toHaveBeenCalledWith(rec[2]);
+    expect(screen.getAllByRole("button", { name: /기록 수정$/ })).toHaveLength(3);
+  });
+
+  it("입고 수정 창은 기존 값으로 채워지고, 저장하면 그 기록을 PUT 으로 덮어쓴다", async () => {
+    api.apiPut.mockResolvedValue({ id: 7 });
+    const onSaved = vi.fn();
+    renderWithDialog(<MovementModal material={mat} kind="in" editing={rec[2]} onClose={() => {}} onSaved={onSaved} />);
+    expect(screen.getByRole("heading", { name: "입고 수정" })).toBeTruthy();
+    expect((screen.getByLabelText(/입고 개수/) as HTMLInputElement).value).toBe("5,000");
+    expect((screen.getByLabelText(/메모/) as HTMLTextAreaElement).value).toBe("첫 입고");
+    fireEvent.change(screen.getByLabelText(/입고 개수/), { target: { value: "4500" } });
+    expect(screen.getByText("3,570개")).toBeTruthy(); // 현재 4,070 − 기존 5,000 + 고친 4,500
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(api.apiPut).toHaveBeenCalledWith("/api/materials/7/movements/10", expect.objectContaining({ kind: "in", quantity: 4500, movement_date: "2026-10-05" }));
+    expect(api.apiPost).not.toHaveBeenCalled();
+  });
+
+  it("릴로 기록한 건은 릴 구성이 채워진 채로 열린다", () => {
+    const reel = mv({ id: 20, kind: "add", quantity: 7480, reels: 3, reel_groups: [{ per_reel: 2500, reels: 2 }, { per_reel: 2480, reels: 1 }] });
+    renderWithDialog(<MovementModal material={{ ...mat, movements: [reel] }} kind="add" editing={reel} onClose={() => {}} onSaved={() => {}} />);
+    expect((screen.getByLabelText("입고 릴 1 개수") as HTMLInputElement).value).toBe("2,500");
+    expect((screen.getByLabelText("입고 릴 2 개수") as HTMLInputElement).value).toBe("2,480");
+    expect(screen.getByLabelText("입고 총 개수").textContent).toBe("3릴 (7,480개)");
+  });
+
+  it("출고 수정은 이 기록을 뺀 개수를 기준으로 한도를 따진다", async () => {
+    // 현재 4,070, 이 출고 1,000 을 빼면 5,070 → 5,100개는 안 되고 5,000개는 된다
+    renderWithDialog(<MovementModal material={mat} kind="out" editing={rec[0]} onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/출고 개수/), { target: { value: "5100" } });
+    fireEvent.click(screen.getByRole("button", { name: "수정 저장" }));
+    await waitFor(() => expect(dialogApi.confirm).toHaveBeenCalled());
+    expect(vi.mocked(dialogApi.confirm).mock.calls[0][0]).toContain("현재 개수(5,070개)보다 많아");
+    expect(api.apiPut).not.toHaveBeenCalled();
+  });
+
+  it("재입고 수정은 대상 출고를 바꿀 수 없고, 자기 몫을 뺀 정산으로 로스를 보여 준다", () => {
+    renderWithDialog(<MovementModal material={mat} kind="return" editing={rec[1]} onClose={() => {}} onSaved={() => {}} />);
+    const select = screen.getByLabelText(/어느 출고 건의 반납/) as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe("11");
+    expect((screen.getByLabelText(/실제 사용한 개수/) as HTMLInputElement).value).toBe("920");
+    expect(screen.getByLabelText("로스 계산").textContent).toContain("10개 (1.0%)"); // 1,000 − 70 − 920
+    fireEvent.change(screen.getByLabelText(/실제 사용한 개수/), { target: { value: "900" } });
+    expect(screen.getByLabelText("로스 계산").textContent).toContain("30개 (3.0%)");
+  });
+
+  it("[이 기록 지우기]는 수정 창에서 지우기 함수가 넘어온 경우(대표)에만 보인다", () => {
+    const { unmount } = renderWithDialog(<MovementModal material={mat} kind="in" editing={rec[2]} onClose={() => {}} onSaved={() => {}} />);
+    expect(screen.queryByText("이 기록 지우기")).toBeNull();
+    unmount();
+    const onRemove = vi.fn();
+    renderWithDialog(<MovementModal material={mat} kind="in" editing={rec[2]} onRemove={onRemove} onClose={() => {}} onSaved={() => {}} />);
+    fireEvent.click(screen.getByText("이 기록 지우기"));
+    expect(onRemove).toHaveBeenCalled();
   });
 });

@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { NumberInput } from "../../components/ui/NumberInput";
 import { useDialog } from "../../components/ui/dialog/useDialog";
-import { ApiError, apiPost } from "../../lib/api";
+import { ApiError, apiPost, apiPut } from "../../lib/api";
 import { todayISO } from "../../lib/date";
 import { logDebug, logError } from "../../lib/logger";
 import { QtyInput, emptyQty, qtyIncomplete, qtyPayload, qtyTotal, type QtyState } from "./QtyInput";
@@ -29,27 +29,47 @@ export function MovementModal({
   kind,
   onClose,
   onSaved,
+  editing = null,
+  onRemove,
 }: {
   material: Pick<MaterialDetail, "id" | "name" | "current_qty"> & Partial<Pick<MaterialDetail, "current_reels" | "movements">>;
   kind: MovementKind;
   onClose: () => void;
   onSaved: (m: MaterialDetail) => void;
+  /** 고칠 기록 (있으면 수정 창: 구분·재입고 대상 출고는 바꿀 수 없고, 저장하면 그 기록을 덮어쓴다) */
+  editing?: Movement | null;
+  /** 수정 창에서 [이 기록 지우기] (대표만 넘긴다) */
+  onRemove?: () => void;
 }) {
   const dialog = useDialog();
   const isOut = kind === "out";
   const isReturn = kind === "return";
-  const outs = returnableOuts(material.movements);
-  const [target, setTarget] = useState<number | null>(outs[0]?.id ?? null); // 재입고: 어느 출고 건의 반납인지
-  const [used, setUsed] = useState(""); // 재입고: 그중 실제 사용한 개수 (비워 두면 로스를 계산하지 않는다)
-  const [date, setDate] = useState(todayISO());
-  const [qty, setQty] = useState<QtyState>(emptyQty());
-  const [reason, setReason] = useState("");
-  const [note, setNote] = useState("");
+  // 수정 중인 재입고는 자기 몫을 뺀 상태로 정산을 계산한다 (자기 반납·사용 개수를 두 번 세지 않게)
+  const movements = (material.movements ?? []).map((x) => {
+    if (!(editing?.kind === "return" && x.id === editing.return_of)) return x;
+    const used = (x.used_total ?? 0) - (editing.used_qty ?? 0);
+    return { ...x, returned_qty: (x.returned_qty ?? 0) - editing.quantity, used_total: used > 0 ? used : null };
+  });
+  const outs = returnableOuts(movements);
+  const [target, setTarget] = useState<number | null>(editing?.return_of ?? outs[0]?.id ?? null); // 재입고: 어느 출고 건의 반납인지
+  const [used, setUsed] = useState(editing?.used_qty != null ? String(editing.used_qty) : ""); // 재입고: 그중 실제 사용한 개수 (비워 두면 로스를 계산하지 않는다)
+  const [date, setDate] = useState(editing?.movement_date ?? todayISO());
+  const [qty, setQty] = useState<QtyState>(() =>
+    editing?.reel_groups?.length
+      ? { unit: "reel", qty: "", rows: editing.reel_groups.map((g) => ({ per: String(g.per_reel), cnt: String(g.reels) })) }
+      : editing
+        ? { ...emptyQty(), qty: String(editing.quantity) }
+        : emptyQty(),
+  );
+  const [reason, setReason] = useState(editing?.reason ?? "");
+  const [note, setNote] = useState(editing?.note ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const n = qtyTotal(qty); // 총 개수 (릴이면 릴 수 × 1릴 당 개수)
-  const after = material.current_qty + (isOut ? -n : n);
+  // 수정 중이면 이 기록을 뺀 개수를 기준으로 한다 (고친 개수가 다시 더해지거나 빠진다)
+  const baseQty = material.current_qty - (editing ? (editing.kind === "out" ? -editing.quantity : editing.quantity) : 0);
+  const after = baseQty + (isOut ? -n : n);
   const out = outs.find((x) => x.id === target);
   // 재입고 정산 미리보기: 이미 정산된 개수와 이번 입력을 합쳐 로스(출고 − 반납 − 사용)를 계산한다. 사용 개수를 하나도 안 적었으면 사용·로스는 0 으로 보인다.
   const usedNow = Number(used) || 0;
@@ -71,17 +91,18 @@ export function MovementModal({
       await dialog.confirm(`반납(${formatQty(retTotal)}개)과 사용(${formatQty(usedTotal)}개)의 합이 출고한 개수(${formatQty(out.quantity)}개)보다 많습니다.\n개수를 다시 확인해 주세요.`, { okLabel: "확인", danger: true });
       return;
     }
-    if (isOut && n > material.current_qty) {
+    if (isOut && n > baseQty) {
       // 입고(현재 개수)보다 많이 출고하려 하면 경고 창을 띄우고 저장하지 않는다
-      logDebug("MaterialMovement", `출고 경고: 요청=${n}, 현재=${material.current_qty}`);
-      await dialog.confirm(`출고 개수(${formatQty(n)}개)가 현재 개수(${formatReelQty(material.current_qty, material.current_reels)})보다 많아 출고할 수 없습니다.
+      logDebug("MaterialMovement", `출고 경고: 요청=${n}, 현재=${baseQty}`);
+      await dialog.confirm(`출고 개수(${formatQty(n)}개)가 현재 개수(${formatReelQty(baseQty, editing ? null : material.current_reels)})보다 많아 출고할 수 없습니다.
 개수를 다시 확인해 주세요.`, { okLabel: "확인", danger: true });
       return;
     }
     setBusy(true);
     try {
       logDebug("MaterialMovement", `${KIND_LABELS[kind]} 기록 시도: material_id=${material.id}, date=${date}, qty=${n}, unit=${qty.unit}, reason=${reason}`);
-      const saved = await apiPost<MaterialDetail>(`/api/materials/${material.id}/movements`, {
+      const send = editing ? apiPut : apiPost;
+      const saved = await send<MaterialDetail>(`/api/materials/${material.id}/movements${editing ? `/${editing.id}` : ""}`, {
         kind,
         movement_date: date,
         ...payload,
@@ -103,12 +124,14 @@ export function MovementModal({
         onSubmit={submit}
         role="dialog"
         aria-modal="true"
-        aria-label={`${KIND_LABELS[kind]} 기록`}
+        aria-label={`${KIND_LABELS[kind]} ${editing ? "수정" : "기록"}`}
         className="bg-surface rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom))] w-full sm:max-w-md max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
-          <h3 className="text-base font-semibold">{KIND_LABELS[kind]} 기록</h3>
+          <h3 className="text-base font-semibold">
+            {KIND_LABELS[kind]} {editing ? "수정" : "기록"}
+          </h3>
           <button type="button" onClick={onClose} aria-label="닫기" className="text-text-muted hover:text-text">
             <X size={18} />
           </button>
@@ -125,7 +148,7 @@ export function MovementModal({
             {outs.length === 0 ? (
               <p className="text-xs text-danger">재입고할 출고 기록이 없습니다. (출고한 뒤 남은 자재를 돌려받을 때 기록합니다)</p>
             ) : (
-              <select id="mv-target" value={target ?? ""} onChange={(e) => setTarget(Number(e.target.value))} className={inputCls}>
+              <select id="mv-target" value={target ?? ""} onChange={(e) => setTarget(Number(e.target.value))} disabled={!!editing} className={inputCls}>
                 {outs.map((x) => (
                   <option key={x.id} value={x.id}>
                     {outLabel(x)}
@@ -232,17 +255,22 @@ export function MovementModal({
 
         {error && <p className="text-xs text-danger mb-3">{error}</p>}
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="submit"
             disabled={busy}
             className={`rounded-lg text-white text-sm font-medium px-6 py-2.5 disabled:opacity-60 ${isOut ? "bg-danger hover:opacity-90" : "bg-primary hover:bg-primary-hover"}`}
           >
-            {busy ? "저장 중..." : `${KIND_LABELS[kind]} 저장`}
+            {busy ? "저장 중..." : editing ? "수정 저장" : `${KIND_LABELS[kind]} 저장`}
           </button>
           <button type="button" onClick={onClose} className="rounded-lg border border-border text-sm px-6 py-2.5 hover:bg-bg">
             취소
           </button>
+          {editing && onRemove && (
+            <button type="button" onClick={onRemove} className="ml-auto text-xs text-text-muted hover:text-danger">
+              이 기록 지우기
+            </button>
+          )}
         </div>
       </form>
     </div>

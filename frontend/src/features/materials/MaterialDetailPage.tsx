@@ -10,7 +10,7 @@ import { CodeText } from "./CodeText";
 import { MovementList } from "./MovementList";
 import { MovementModal } from "./MovementModal";
 import { SubLevelView } from "./SubLevelTree";
-import { CATEGORY_BADGE, CATEGORY_LABELS, HISTORY_TABS, formatQty, formatReelQty, matchHistoryTab, netOutQty, purchasedQty, type HistoryTab, type MaterialDetail, type MovementKind } from "./types";
+import { CATEGORY_BADGE, CATEGORY_LABELS, HISTORY_TABS, formatQty, formatReelQty, matchHistoryTab, netOutQty, purchasedQty, type HistoryTab, type MaterialDetail, type Movement, type MovementKind } from "./types";
 
 /** 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성 트리, 입출고 이력. [입고]·[출고]로 한 줄씩 기록한다. */
 export function MaterialDetailPage() {
@@ -24,6 +24,7 @@ export function MaterialDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalKind, setModalKind] = useState<MovementKind | null>(null);
   const [tab, setTab] = useState<HistoryTab>("all");
+  const [editing, setEditing] = useState<Movement | null>(null); // 수정 중인 입출고 기록
 
   useEffect(() => {
     logDebug("MaterialDetail", `상세 조회 시작: id=${materialId}`);
@@ -185,19 +186,33 @@ export function MaterialDetailPage() {
           ) : shown.length === 0 ? (
             <p className="text-sm text-text-muted py-6 text-center">이 구분의 기록이 없습니다.</p>
           ) : (
-            <MovementList movements={shown} lookup={m.movements} isAdmin={isAdmin} onRemove={(id) => void removeMovement(id)} />
+            <MovementList movements={shown} lookup={m.movements} onEdit={setEditing} />
           )}
         </section>
       </div>
 
-      {modalKind && (
+      {(modalKind || editing) && (
         <MovementModal
           material={m}
-          kind={modalKind}
-          onClose={() => setModalKind(null)}
+          kind={editing?.kind ?? modalKind!}
+          editing={editing}
+          onRemove={
+            editing && isAdmin
+              ? () => {
+                  const id = editing.id;
+                  setEditing(null);
+                  void removeMovement(id);
+                }
+              : undefined
+          }
+          onClose={() => {
+            setModalKind(null);
+            setEditing(null);
+          }}
           onSaved={(saved) => {
             setM(saved);
             setModalKind(null);
+            setEditing(null);
           }}
         />
       )}
