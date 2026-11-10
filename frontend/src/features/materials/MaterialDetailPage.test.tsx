@@ -63,7 +63,7 @@ describe("자재 상세 화면 (시안 1: 위 카드 + 요약 + 아래 이력)",
     expect(within(info).getByText("MCU")).toBeTruthy();
     expect(within(info).getByText("메모: 2차 구매분 로트 확인")).toBeTruthy();
     expect(within(info).getByLabelText("현재 개수").textContent).toBe("3,790개");
-    for (const name of ["+ 추가 입고", "↩ 재입고", "− 출고"]) expect(within(info).getByRole("button", { name })).toBeTruthy();
+    for (const name of ["+ 입고", "↩ 재입고", "− 출고"]) expect(within(info).getByRole("button", { name })).toBeTruthy();
     const summary = screen.getByLabelText("입출고 요약");
     expect(summary.textContent).toContain("입고 (구매분)5,000");
     expect(summary.textContent).toContain("출고1,400재입고 190 반납");

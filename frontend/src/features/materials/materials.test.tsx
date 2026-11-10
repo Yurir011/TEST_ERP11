@@ -97,9 +97,9 @@ describe("입출고 기록 창", () => {
     const onSaved = vi.fn();
     renderWithDialog(<MovementModal material={material} kind="add" onClose={() => {}} onSaved={onSaved} />);
     expect(screen.queryByLabelText("출고 사유")).toBeNull();
-    fireEvent.change(screen.getByLabelText(/추가 입고 개수/), { target: { value: "200" } });
+    fireEvent.change(screen.getByLabelText(/입고 개수/), { target: { value: "200" } });
     expect(screen.getByText("620개")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "추가 입고 저장" }));
+    fireEvent.click(screen.getByRole("button", { name: "입고 저장" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(api.apiPost).toHaveBeenCalledWith("/api/materials/7/movements", expect.objectContaining({ kind: "add", quantity: 200, reason: null }));
   });
@@ -126,8 +126,8 @@ describe("릴 단위 입출고", () => {
   it("릴인데 개수나 릴 수 중 하나만 적은 줄이 있으면 저장하지 않는다", () => {
     renderWithDialog(<MovementModal material={material} kind="add" onClose={() => {}} onSaved={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "릴" }));
-    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 릴 수"), { target: { value: "2" } });
-    fireEvent.click(screen.getByRole("button", { name: "추가 입고 저장" }));
+    fireEvent.change(screen.getByLabelText("입고 릴 1 릴 수"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "입고 저장" }));
     expect(screen.getByText("릴 구성의 개수와 릴 수를 모두 입력해주세요.")).toBeTruthy();
     expect(api.apiPost).not.toHaveBeenCalled();
   });
@@ -243,13 +243,13 @@ describe("릴마다 개수가 다를 때", () => {
     const onSaved = vi.fn();
     renderWithDialog(<MovementModal material={material} kind="add" onClose={() => {}} onSaved={onSaved} />);
     fireEvent.click(screen.getByRole("button", { name: "릴" }));
-    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 개수"), { target: { value: "2500" } });
-    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 릴 수"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("입고 릴 1 개수"), { target: { value: "2500" } });
+    fireEvent.change(screen.getByLabelText("입고 릴 1 릴 수"), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: "+ 다른 개수 릴 추가" }));
-    fireEvent.change(screen.getByLabelText("추가 입고 릴 2 개수"), { target: { value: "2480" } });
-    expect((screen.getByLabelText("추가 입고 릴 2 릴 수") as HTMLInputElement).value).toBe("1"); // 새 줄은 1릴로 시작
-    expect(screen.getByLabelText("추가 입고 총 개수").textContent).toBe("3릴 (7,480개)");
-    fireEvent.click(screen.getByRole("button", { name: "추가 입고 저장" }));
+    fireEvent.change(screen.getByLabelText("입고 릴 2 개수"), { target: { value: "2480" } });
+    expect((screen.getByLabelText("입고 릴 2 릴 수") as HTMLInputElement).value).toBe("1"); // 새 줄은 1릴로 시작
+    expect(screen.getByLabelText("입고 총 개수").textContent).toBe("3릴 (7,480개)");
+    fireEvent.click(screen.getByRole("button", { name: "입고 저장" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(api.apiPost.mock.calls[0][1]).toMatchObject({ kind: "add", reel_groups: [{ per_reel: 2500, reels: 2 }, { per_reel: 2480, reels: 1 }] });
     expect(api.apiPost.mock.calls[0][1]).not.toHaveProperty("quantity");
@@ -259,13 +259,13 @@ describe("릴마다 개수가 다를 때", () => {
     renderWithDialog(<MovementModal material={material} kind="add" onClose={() => {}} onSaved={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "릴" }));
     expect(screen.queryByRole("button", { name: /줄 지우기/ })).toBeNull();
-    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 개수"), { target: { value: "100" } });
-    fireEvent.change(screen.getByLabelText("추가 입고 릴 1 릴 수"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("입고 릴 1 개수"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("입고 릴 1 릴 수"), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "+ 다른 개수 릴 추가" }));
-    fireEvent.change(screen.getByLabelText("추가 입고 릴 2 개수"), { target: { value: "90" } });
-    expect(screen.getByLabelText("추가 입고 총 개수").textContent).toBe("4릴 (390개)");
+    fireEvent.change(screen.getByLabelText("입고 릴 2 개수"), { target: { value: "90" } });
+    expect(screen.getByLabelText("입고 총 개수").textContent).toBe("4릴 (390개)");
     fireEvent.click(screen.getByRole("button", { name: "릴 2 줄 지우기" }));
-    expect(screen.getByLabelText("추가 입고 총 개수").textContent).toBe("3릴 (300개)");
+    expect(screen.getByLabelText("입고 총 개수").textContent).toBe("3릴 (300개)");
   });
 
   it("이력에서 [릴별 보기]를 누르면 개수 × 릴 수 내역과 합계가 펼쳐진다", () => {

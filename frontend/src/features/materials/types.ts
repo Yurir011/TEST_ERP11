@@ -46,7 +46,7 @@ export const MAX_LEVEL_SLOTS = 10;
 
 export type MovementKind = "in" | "add" | "return" | "out";
 
-export const KIND_LABELS: Record<MovementKind, string> = { in: "입고", add: "추가 입고", return: "재입고", out: "출고" };
+export const KIND_LABELS: Record<MovementKind, string> = { in: "입고", add: "입고", return: "재입고", out: "출고" };
 
 export interface MovementBrief {
   movement_date: string;

@@ -90,7 +90,7 @@ export function MobileMaterialDetailPage() {
         {m.total_return > 0 && <p className="text-xs mt-1.5"><span className="rounded-md bg-tile-orange/60 text-tile-orange-fg px-2 py-0.5 font-semibold">로스 {formatQty(m.total_loss)}개</span></p>}
         <div className="grid grid-cols-3 gap-2 mt-4">
           <button type="button" onClick={() => setModalKind(hasFirstIn ? "add" : "in")} className="rounded-xl bg-success text-white text-sm font-semibold py-3 active:opacity-70">
-            + {hasFirstIn ? "추가 입고" : "입고"}
+            + 입고
           </button>
           <button type="button" onClick={() => setModalKind("return")} disabled={!m.movements.some((x) => x.kind === "out")} className="rounded-xl bg-tile-orange-fg text-white text-sm font-semibold py-3 active:opacity-70 disabled:opacity-40">
             ↩ 재입고

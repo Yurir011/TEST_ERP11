@@ -12,7 +12,7 @@ import { MovementModal } from "./MovementModal";
 import { SubLevelView } from "./SubLevelTree";
 import { CATEGORY_BADGE, CATEGORY_LABELS, HISTORY_TABS, formatQty, formatReelQty, matchHistoryTab, netOutQty, purchasedQty, type HistoryTab, type MaterialDetail, type MovementKind } from "./types";
 
-/** 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성 트리, 입출고 이력. [추가 입고]·[출고]로 한 줄씩 기록한다. */
+/** 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성 트리, 입출고 이력. [입고]·[출고]로 한 줄씩 기록한다. */
 export function MaterialDetailPage() {
   const { id } = useParams();
   const materialId = Number(id);
@@ -125,7 +125,7 @@ export function MaterialDetailPage() {
                   onClick={() => setModalKind(hasFirstIn ? "add" : "in")}
                   className="rounded-lg bg-success text-white text-sm font-medium px-4 py-2.5 hover:opacity-90"
                 >
-                  + {hasFirstIn ? "추가 입고" : "입고"}
+                  + 입고
                 </button>
                 <button
                   type="button"
