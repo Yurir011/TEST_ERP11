@@ -230,6 +230,9 @@ def update_material(material_id: int, payload: MaterialIn, db: Session = Depends
 def delete_material(material_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     m = _get_or_404(db, material_id)
     name = m.name
+    # 재입고 기록이 출고 기록을 가리키고 있으면 한꺼번에 지울 때 순서 때문에 막히므로, 서로 가리키는 연결을 먼저 끊는다
+    db.query(MaterialMovement).filter(MaterialMovement.material_id == m.id).update({MaterialMovement.return_of: None}, synchronize_session=False)
+    db.expire(m, ["movements"])
     db.delete(m)  # 입출고 기록도 함께 지워진다
     db.commit()
     logger.debug(f"[Materials] 삭제: id={material_id}, name={name}, by={current_user.id}")
@@ -273,6 +276,64 @@ def add_movement(material_id: int, payload: MovementIn, db: Session = Depends(ge
         f"[Materials] 입출고 기록: id={material_id}, kind={payload.kind}, date={payload.movement_date}, qty={payload.quantity}, "
         f"reason={payload.reason!r}, 현재={_stock(m)}, by={current_user.id}"
     )
+    return _detail(db, m)
+
+
+@router.put("/{material_id}/movements/{movement_id}", response_model=MaterialDetailOut)
+def update_movement(
+    material_id: int,
+    movement_id: int,
+    payload: MovementIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_material_access),
+):
+    """잘못 적은 입출고 한 줄을 고친다 (날짜·개수(개/릴)·출고 사유·메모·재입고의 사용 개수). 구분(입고/재입고/출고)과 재입고가 가리키는 출고는 바꿀 수 없다.
+    고친 뒤에도 현재 개수가 0보다 작아지면 안 되고, 출고·재입고 사이의 정산(반납 + 사용 ≤ 출고)이 맞아야 한다."""
+    m = _get_or_404(db, material_id, lock=True)
+    target = next((x for x in m.movements if x.id == movement_id), None)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="입출고 기록을 찾을 수 없습니다.")
+    same_kind = payload.kind == target.kind or (payload.kind in ("in", "add") and target.kind in ("in", "add"))  # 입고·추가 입고는 같은 입고로 본다
+    if not same_kind:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="구분은 바꿀 수 없습니다. 기록을 지우고 새로 입력해주세요.")
+    if target.kind == "return" and payload.return_of != target.return_of:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="재입고가 가리키는 출고는 바꿀 수 없습니다. 기록을 지우고 새로 입력해주세요.")
+
+    sign = 1 if target.kind in IN_KINDS else -1
+    stock_without = _stock(m) - sign * target.quantity  # 이 기록을 뺀 현재 개수
+    if stock_without + sign * payload.quantity < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"이렇게 고치면 현재 개수가 0보다 작아집니다. (이 기록을 뺀 개수 {stock_without:,}개)",
+        )
+    if target.kind == "out":  # 이미 정산된 반납·사용 개수보다 적게 줄일 수 없다
+        returns = [x for x in m.movements if x.kind == "return" and x.return_of == target.id]
+        settled = sum(x.quantity for x in returns) + sum(x.used_qty or 0 for x in returns)
+        if payload.quantity < settled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"이 출고에는 재입고·사용 {settled:,}개가 이미 정산되어 있어 그보다 적게 고칠 수 없습니다.",
+            )
+    if target.kind == "return":  # 같은 출고의 다른 재입고와 합쳐 출고 개수를 넘으면 안 된다
+        out = next(x for x in m.movements if x.id == target.return_of)
+        others = [x for x in m.movements if x.kind == "return" and x.return_of == out.id and x.id != target.id]
+        total = sum(x.quantity for x in others) + sum(x.used_qty or 0 for x in others) + payload.quantity + (payload.used_qty or 0)
+        if total > out.quantity:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"재입고와 사용 개수의 합({total:,}개)이 출고한 개수({out.quantity:,}개)보다 많습니다.",
+            )
+
+    target.movement_date = payload.movement_date
+    target.quantity = payload.quantity
+    target.reels = payload.reels
+    target.reel_groups = _groups(payload)
+    target.reason = payload.reason if target.kind == "out" else None
+    target.note = payload.note
+    target.used_qty = payload.used_qty if target.kind == "return" else None
+    db.commit()
+    m = _get_or_404(db, material_id)
+    logger.debug(f"[Materials] 입출고 기록 수정: material_id={material_id}, movement_id={movement_id}, kind={target.kind}, qty={payload.quantity}, 현재={_stock(m)}, by={current_user.id}")
     return _detail(db, m)
 
 

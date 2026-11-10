@@ -223,3 +223,64 @@ def test_reels_with_different_counts_are_recorded_as_groups(client, make_user, a
     # 묶음이 너무 많거나 0 이 들어 있으면 거절
     assert _move(client, h, m["id"], kind="add", movement_date="2026-11-13", reel_groups=[{"per_reel": 0, "reels": 1}]).status_code == 422
     assert _move(client, h, m["id"], kind="add", movement_date="2026-11-13", reel_groups=[{"per_reel": 1, "reels": 1}] * 101).status_code == 422
+
+
+def test_delete_material_with_returns_removes_everything(client, make_user, auth_headers):
+    """재입고(출고를 가리키는 기록)가 있는 자재도 삭제된다 (기록끼리 서로 가리켜도 한꺼번에 지워진다)."""
+    h = auth_headers(make_user(name="직원"))
+    admin = auth_headers(make_user(role=UserRole.admin, name="대표"))
+    m = _new(client, h, initial_in={"movement_date": "2026-11-09", "quantity": 1000})
+    out_id = _move(client, h, m["id"], kind="out", movement_date="2026-11-09", quantity=600, reason="출고").json()["movements"][0]["id"]
+    assert _move(client, h, m["id"], kind="return", movement_date="2026-11-10", quantity=100, return_of=out_id, used_qty=495).status_code == 201
+    assert client.delete(f"/api/materials/{m['id']}", headers=admin).status_code == 204
+    assert client.get(f"/api/materials/{m['id']}", headers=h).status_code == 404
+
+
+def _edit(client, h, mid, movement_id, **body):
+    return client.put(f"/api/materials/{mid}/movements/{movement_id}", headers=h, json=body)
+
+
+def test_edit_movement_fixes_date_quantity_reason_and_keeps_kind(client, make_user, auth_headers):
+    h = auth_headers(make_user(name="직원"))
+    m = _new(client, h, initial_in={"movement_date": "2026-10-05", "quantity": 500})
+    in_id = m["movements"][0]["id"]
+    d = _move(client, h, m["id"], kind="out", movement_date="2026-11-01", quantity=100, reason="시제품 제작").json()
+    out_id = d["movements"][0]["id"]
+    # 입고 개수·날짜 고치기 (직원도 가능), 현재 개수가 다시 계산된다
+    r = _edit(client, h, m["id"], in_id, kind="in", movement_date="2026-10-06", quantity=450, note="수량 정정")
+    assert r.status_code == 200
+    d = r.json()
+    x = next(x for x in d["movements"] if x["id"] == in_id)
+    assert (x["movement_date"], x["quantity"], x["note"], x["kind"]) == ("2026-10-06", 450, "수량 정정", "in")
+    assert d["current_qty"] == 350
+    # 출고 사유·개수 고치기, 릴로 바꾸기
+    r = _edit(client, h, m["id"], out_id, kind="out", movement_date="2026-11-02", reel_groups=[{"per_reel": 30, "reels": 2}], reason="생산 불출")
+    x = next(x for x in r.json()["movements"] if x["id"] == out_id)
+    assert (x["quantity"], x["reels"], x["reason"]) == (60, 2, "생산 불출") and r.json()["current_qty"] == 390
+    # 출고에는 사유가 꼭 필요하다, 구분은 바꿀 수 없다
+    assert _edit(client, h, m["id"], out_id, kind="out", movement_date="2026-11-02", quantity=10).status_code == 422
+    assert _edit(client, h, m["id"], out_id, kind="in", movement_date="2026-11-02", quantity=10).status_code == 400
+    assert _edit(client, h, m["id"], 99999, kind="in", movement_date="2026-11-02", quantity=10).status_code == 404
+
+
+def test_edit_movement_keeps_stock_and_settlement_consistent(client, make_user, auth_headers):
+    h = auth_headers(make_user(name="직원"))
+    m = _new(client, h, initial_in={"movement_date": "2026-10-05", "quantity": 1000})
+    in_id = m["movements"][0]["id"]
+    d = _move(client, h, m["id"], kind="out", movement_date="2026-11-03", quantity=600, reason="시제품 제작").json()
+    out_id = d["movements"][0]["id"]
+    d = _move(client, h, m["id"], kind="return", movement_date="2026-11-04", quantity=100, return_of=out_id, used_qty=490).json()
+    ret_id = d["movements"][0]["id"]
+    # 입고를 줄여 현재 개수가 음수가 되면 거절 (이 입고를 뺀 개수 = −600+100 = −500 → 입고는 500 이상이어야 한다)
+    assert _edit(client, h, m["id"], in_id, kind="in", movement_date="2026-10-05", quantity=500).status_code == 200
+    assert _edit(client, h, m["id"], in_id, kind="in", movement_date="2026-10-05", quantity=499).status_code == 400
+    # 이미 정산된 반납·사용(590)보다 출고를 적게 줄일 수 없다
+    assert _edit(client, h, m["id"], out_id, kind="out", movement_date="2026-11-03", quantity=500, reason="x").status_code == 400
+    assert _edit(client, h, m["id"], out_id, kind="out", movement_date="2026-11-03", quantity=590, reason="x").status_code == 200
+    # 재입고: 사용 개수를 고치면 로스가 다시 계산된다 (출고 590 − 반납 100 − 사용 480 = 10)
+    r = _edit(client, h, m["id"], ret_id, kind="return", movement_date="2026-11-04", quantity=100, return_of=out_id, used_qty=480)
+    s = next(x for x in r.json()["movements"] if x["id"] == out_id)
+    assert (s["returned_qty"], s["used_total"], s["loss_qty"]) == (100, 480, 10)
+    # 반납 + 사용이 출고(590)를 넘으면 거절, 가리키는 출고는 바꿀 수 없다
+    assert _edit(client, h, m["id"], ret_id, kind="return", movement_date="2026-11-04", quantity=100, return_of=out_id, used_qty=500).status_code == 400
+    assert _edit(client, h, m["id"], ret_id, kind="return", movement_date="2026-11-04", quantity=100, return_of=in_id).status_code == 400
