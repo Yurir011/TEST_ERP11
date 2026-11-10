@@ -11,7 +11,7 @@ import { SubLevelView } from "../materials/SubLevelTree";
 import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, levelPath, type MaterialDetail, type MovementKind } from "../materials/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
 
-/** 모바일 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 하위 분류, 입출고 이력. 아래 [추가 입고]·[출고]로 기록한다 (출고는 사유 필수). */
+/** 모바일 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성, 입출고 이력. 아래 [추가 입고]·[출고]로 기록한다 (출고는 사유 필수). */
 export function MobileMaterialDetailPage() {
   const { id } = useParams();
   const materialId = Number(id);
@@ -85,8 +85,8 @@ export function MobileMaterialDetailPage() {
       </MobileCard>
 
       <MobileCard>
-        <h2 className="text-sm font-semibold mb-2">하위 분류</h2>
-        <SubLevelView levels={m.sub_levels} rootLabel={`${CATEGORY_LABELS[m.category]} · ${m.name}`} />
+        <h2 className="text-sm font-semibold mb-2">속성</h2>
+        <SubLevelView levels={m.sub_levels} />
         {m.memo && <p className="text-xs text-text-muted mt-3 whitespace-pre-wrap">메모: {m.memo}</p>}
       </MobileCard>
 

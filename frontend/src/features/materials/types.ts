@@ -21,10 +21,18 @@ export const CATEGORY_BADGE: Record<MaterialCategory, string> = {
   consumable: SOFT_BADGE.purple,
 };
 
+/** 항목 선택 탭의 밑줄 색 (테마 색 변수) */
+export const CATEGORY_COLOR: Record<MaterialCategory, string> = {
+  ic: "var(--color-tile-blue-fg)",
+  injection: "var(--color-tile-orange-fg)",
+  subsidiary: "var(--color-tile-green-fg)",
+  consumable: "var(--color-tile-purple-fg)",
+};
+
 /** 출고 사유 선택지. 나중에 회사에서 쓰는 사유로 고칠 수 있다 (여기만 바꾸면 화면에 반영된다). */
 export const OUT_REASONS = ["시제품 제작", "생산 불출", "불량·폐기", "샘플 제공", "반품", "기타"];
 
-/** 하위 속성은 기본으로 3칸을 보여 주고, 필요하면 이 단계까지 늘려 쓴다 (서버 MAX_SUB_LEVELS 와 같다). */
+/** 속성은 기본으로 3칸을 보여 주고, 필요하면 이 단계까지 늘려 쓴다 (서버 MAX_SUB_LEVELS 와 같다). */
 export const MIN_LEVEL_SLOTS = 3;
 export const MAX_LEVEL_SLOTS = 10;
 
@@ -82,7 +90,7 @@ export function formatQty(n: number): string {
   return n.toLocaleString("ko-KR");
 }
 
-/** 항목 이름 뒤에 하위 속성을 '›' 로 이은 글 (목록·상세 머리글용). 비어 있으면 빈 글. */
+/** 항목 이름 뒤에 속성을 '›' 로 이은 글 (목록·상세 머리글용). 비어 있으면 빈 글. */
 export function levelPath(levels: string[]): string {
   return levels.join(" › ");
 }

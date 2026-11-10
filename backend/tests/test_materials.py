@@ -1,4 +1,4 @@
-"""자재관리: 항목·이름·하위 속성, 입고/추가 입고/출고와 현재 개수, 출고 사유 필수."""
+"""자재관리: 항목·이름·속성, 입고/추가 입고/출고와 현재 개수, 출고 사유 필수."""
 from app.models.user import UserRole
 
 
@@ -21,7 +21,7 @@ def test_create_with_sub_levels_skips_empty_and_records_first_in(client, make_us
     assert (m["category"], m["category_label"], m["current_qty"], m["total_in"]) == ("ic", "회로부품", 500, 500)
     assert m["last_in"] == {"movement_date": "2026-10-05", "quantity": 500} and m["last_out"] is None
     assert [x["kind"] for x in m["movements"]] == ["in"]
-    # 하위 속성 없이, 처음 입고 없이도 등록된다
+    # 속성 없이, 처음 입고 없이도 등록된다
     bare = _new(client, h, category="subsidiary", name="포장 박스", sub_levels=[], initial_in=None)
     assert bare["sub_levels"] == [] and bare["current_qty"] == 0 and bare["movements"] == []
 
@@ -58,7 +58,7 @@ def test_filter_by_category_and_search(client, make_user, auth_headers):
     _new(client, h, category="subsidiary", name="M3 볼트", sub_levels=["체결", "볼트"], initial_in=None)
     assert [r["name"] for r in client.get("/api/materials?category=injection", headers=h).json()] == ["상부 케이스"]
     assert len(client.get("/api/materials", headers=h).json()) == 3
-    assert [r["name"] for r in client.get("/api/materials?q=LQFP", headers=h).json()] == ["STM32F103C8T6"]  # 하위 속성으로도 찾는다
+    assert [r["name"] for r in client.get("/api/materials?q=LQFP", headers=h).json()] == ["STM32F103C8T6"]  # 속성으로도 찾는다
     assert [r["name"] for r in client.get("/api/materials?q=볼트", headers=h).json()] == ["M3 볼트"]
     assert client.get("/api/materials?category=wrong", headers=h).status_code == 400
 

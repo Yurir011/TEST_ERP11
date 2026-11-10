@@ -221,7 +221,8 @@ def _deliver_ready(items: list[tuple[int, str, str, str | None]]) -> None:
 
 
 def notify_new_message(db: Session, message_id: int, conversation_id: int) -> None:
-    """메신저 새 메시지를 받는 사람들의 폰으로 푸시한다. 보낸 사람, 알림을 끈(muted) 사람, 지금 실시간 연결로 보고 있는 사람은 뺀다.
+    """메신저 새 메시지를 받는 사람들의 폰으로 푸시한다. 보낸 사람, 알림을 끈(muted) 사람, 지금 폰 화면으로 직접 보고 있는 사람은 뺀다.
+    PC 앱을 쓰는 중이라도 폰에는 푸시가 간다 (PC 앱의 실시간 연결은 폰을 보고 있다는 뜻이 아니다).
     메신저는 Notification 을 만들지 않으므로 메시지를 저장한 쪽에서 직접 부른다. 어떤 오류도 밖으로 내보내지 않는다."""
     try:
         if not _ready:
@@ -237,7 +238,7 @@ def notify_new_message(db: Session, message_id: int, conversation_id: int) -> No
         sender = m.sender
         sender_name = sender.name if sender else "알 수 없음"
         members = db.query(ConversationMember).filter(ConversationMember.conversation_id == conversation_id, ConversationMember.left_at.is_(None)).all()
-        targets = [x.user_id for x in members if x.user_id != m.sender_id and not x.muted and not hub.is_online(x.user_id)]
+        targets = [x.user_id for x in members if x.user_id != m.sender_id and not x.muted and not hub.is_online_on_phone(x.user_id)]
         if not targets:
             logger.debug(f"[Push] 메시지 푸시 대상 없음: conversation_id={conversation_id}, message_id={message_id}")
             return

@@ -6,7 +6,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { CATEGORY_BADGE, CATEGORY_LABELS, CATEGORY_ORDER, formatQty, levelPath, type Material, type MaterialCategory } from "../materials/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
 
-/** 모바일 자재 목록: 항목 칩(전체·회로부품·사출물·부자재·소모품)으로 걸러 보고, 이름·하위 속성으로 찾는다. 누르면 상세(입출고)로 간다. */
+/** 모바일 자재 목록: 항목 칩(전체·회로부품·사출물·부자재·소모품)으로 걸러 보고, 이름·속성으로 찾는다. 누르면 상세(입출고)로 간다. */
 export function MobileMaterialsPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<Material[] | null>(null);
@@ -60,7 +60,7 @@ export function MobileMaterialsPage() {
       <input
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
-        placeholder="이름·하위 속성 검색"
+        placeholder="이름·속성 검색"
         aria-label="자재 검색"
         className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-primary"
       />
@@ -77,7 +77,7 @@ export function MobileMaterialsPage() {
                   <span className={`px-1.5 py-0.5 text-[11px] font-semibold mr-1.5 ${CATEGORY_BADGE[m.category]}`}>{CATEGORY_LABELS[m.category]}</span>
                   <b className="text-sm">{m.name}</b>
                 </p>
-                <p className="text-xs text-text-muted truncate mt-1">{levelPath(m.sub_levels) || "하위 속성 없음"}</p>
+                <p className="text-xs text-text-muted truncate mt-1">{levelPath(m.sub_levels) || "속성 없음"}</p>
               </div>
               <div className="text-right shrink-0">
                 <p className="text-lg font-bold tabular-nums leading-none">{formatQty(m.current_qty)}</p>

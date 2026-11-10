@@ -18,36 +18,36 @@ function Harness({ initial = [] as string[] }) {
   const [levels, setLevels] = useState(initial);
   return (
     <>
-      <SubLevelEditor levels={levels} onChange={setLevels} rootLabel="IC · STM32" />
+      <SubLevelEditor levels={levels} onChange={setLevels} />
       <output data-testid="saved">{JSON.stringify(levels.map((v) => v.trim()).filter(Boolean))}</output>
     </>
   );
 }
 
-describe("하위 속성 트리 입력", () => {
+describe("속성 트리 입력", () => {
   it("기본으로 3단계 칸을 보여 주고, 비워 둔 칸은 저장 값에서 빠진다", () => {
     render(<Harness />);
     expect(screen.getAllByRole("textbox")).toHaveLength(3);
-    fireEvent.change(screen.getByLabelText("하위 속성 1단계"), { target: { value: "MCU" } });
-    fireEvent.change(screen.getByLabelText("하위 속성 3단계"), { target: { value: "LQFP48" } });
+    fireEvent.change(screen.getByLabelText("속성 1단계"), { target: { value: "MCU" } });
+    fireEvent.change(screen.getByLabelText("속성 3단계"), { target: { value: "LQFP48" } });
     expect(screen.getByTestId("saved").textContent).toBe('["MCU","LQFP48"]'); // 2단계를 비웠으므로 건너뛴다
   });
 
-  it("[+ 하위 단계 더 추가]로 4단계 이상을 늘리고 지울 수 있다", () => {
+  it("[+ 추가]로 4단계 이상을 늘리고 지울 수 있다", () => {
     render(<Harness initial={["a", "b", "c"]} />);
-    fireEvent.click(screen.getByRole("button", { name: /하위 단계 더 추가/ }));
+    fireEvent.click(screen.getByRole("button", { name: "추가" }));
     expect(screen.getAllByRole("textbox")).toHaveLength(4);
     fireEvent.click(screen.getByRole("button", { name: "4단계 지우기" }));
     expect(screen.getAllByRole("textbox")).toHaveLength(3);
   });
 
   it("읽기 전용 표시는 채운 단계만 보여 주고, 비어 있으면 안내한다", () => {
-    const { unmount } = render(<SubLevelView levels={["MCU", "LQFP48"]} rootLabel="IC · STM32" />);
+    const { unmount } = render(<SubLevelView levels={["MCU", "LQFP48"]} />);
     expect(screen.getByText("MCU")).toBeTruthy();
     expect(screen.queryByText("1단계")).toBeNull(); // 단계 이름은 보여 주지 않는다
     unmount();
-    render(<SubLevelView levels={[]} rootLabel="IC · STM32" />);
-    expect(screen.getByText("적어 둔 하위 속성이 없습니다.")).toBeTruthy();
+    render(<SubLevelView levels={[]} />);
+    expect(screen.getByText("적어 둔 속성이 없습니다.")).toBeTruthy();
     expect(levelPath(["MCU", "LQFP48"])).toBe("MCU › LQFP48");
   });
 });

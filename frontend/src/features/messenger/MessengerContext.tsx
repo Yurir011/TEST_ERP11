@@ -5,6 +5,7 @@ import { getToken } from "../../lib/auth";
 import { getBenchClient } from "../../lib/desktop";
 import { logDebug, logError } from "../../lib/logger";
 import { RealtimeClient, realtimeUrl, type ConnectionStatus } from "../../lib/realtime";
+import { shouldUseMobile } from "../mobile/mobileMode";
 import { applyIncomingMessage, applyReadEvent, totalUnread } from "./messengerState";
 import { withFavorite, withStatus } from "./presence";
 import type { ConversationSummary, DirectoryUser, RealtimeEvent } from "./types";
@@ -70,7 +71,7 @@ export function MessengerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (meId === null) return;
-    const client = new RealtimeClient<RealtimeEvent>({ url: realtimeUrl(), getToken });
+    const client = new RealtimeClient<RealtimeEvent>({ url: realtimeUrl(), getToken, getClientKind: () => (shouldUseMobile() ? "mobile" : "pc") });
     const offStatus = client.onStatus((s) => {
       setConnection(s);
       if (s.state === "connected") {

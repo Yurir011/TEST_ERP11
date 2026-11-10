@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-MAX_SUB_LEVELS = 10  # 하위 속성 단계는 필요하면 늘려 쓸 수 있지만 무한정은 아니다
+MAX_SUB_LEVELS = 10  # 속성 단계는 필요하면 늘려 쓸 수 있지만 무한정은 아니다
 MAX_QUANTITY = 1_000_000_000
 
 Category = Literal["ic", "injection", "subsidiary", "consumable"]  # ic = 회로부품
@@ -63,9 +63,9 @@ class MaterialIn(BaseModel):
     def _levels(cls, v: list[str]) -> list[str]:
         levels = [s.strip() for s in v if s and s.strip()]
         if len(levels) > MAX_SUB_LEVELS:
-            raise ValueError(f"하위 속성은 {MAX_SUB_LEVELS}단계까지 적을 수 있습니다.")
+            raise ValueError(f"속성은 {MAX_SUB_LEVELS}단계까지 적을 수 있습니다.")
         if any(len(s) > 100 for s in levels):
-            raise ValueError("하위 속성은 한 칸에 100자까지 적을 수 있습니다.")
+            raise ValueError("속성은 한 칸에 100자까지 적을 수 있습니다.")
         return levels
 
     @field_validator("memo")
@@ -94,7 +94,7 @@ class MovementBrief(BaseModel):
 
 
 class MaterialOut(BaseModel):
-    """목록 한 줄: 항목·이름·하위 속성, 현재 개수, 가장 최근 입고(추가 입고 포함)·출고."""
+    """목록 한 줄: 항목·이름·속성, 현재 개수, 가장 최근 입고(추가 입고 포함)·출고."""
 
     id: int
     category: str

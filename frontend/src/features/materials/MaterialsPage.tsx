@@ -10,7 +10,7 @@ function formatBrief(b: { movement_date: string; quantity: number } | null, sign
   return b ? `${b.movement_date} (${sign}${formatQty(b.quantity)})` : "-";
 }
 
-/** 자재관리 목록: 항목(IC·사출물·부자재) 탭으로 걸러 보고, 이름·하위 속성으로 찾는다. 행을 누르면 상세(입출고 기록)로 간다. */
+/** 자재관리 목록: 항목(IC·사출물·부자재) 탭으로 걸러 보고, 이름·속성으로 찾는다. 행을 누르면 상세(입출고 기록)로 간다. */
 export function MaterialsPage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<Material[] | null>(null);
@@ -69,7 +69,7 @@ export function MaterialsPage() {
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          placeholder="이름·하위 속성 검색"
+          placeholder="이름·속성 검색"
           aria-label="자재 검색"
           className="ml-auto w-64 rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-surface"
         />
@@ -82,7 +82,7 @@ export function MaterialsPage() {
           <thead className="text-text-muted text-xs">
             <tr className="text-left border-b border-border">
               <th className="py-3 px-4 font-medium">항목 · 이름</th>
-              <th className="py-3 px-4 font-medium">하위 속성</th>
+              <th className="py-3 px-4 font-medium">속성</th>
               <th className="py-3 px-4 font-medium text-right">현재 개수</th>
               <th className="py-3 px-4 font-medium">최근 입고</th>
               <th className="py-3 px-4 font-medium">최근 출고</th>

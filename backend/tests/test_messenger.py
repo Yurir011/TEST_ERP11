@@ -398,17 +398,29 @@ def test_non_image_files_are_downloads_not_inline(api, users):
     "name, content, ctype",
     [
         ("x.png", HTML, "image/png"),  # 이미지인 척하는 HTML
-        ("x.html", HTML, "text/html"),  # 허용하지 않는 형식
+        ("x.html", HTML, "text/html"),
         ("x.svg", b"<svg onload='alert(1)'/>", "image/svg+xml"),
-        ("x.exe", b"MZ\x90\x00" + b"\x00" * 32, "application/octet-stream"),
-        ("empty.png", b"", "image/png"),
+        ("x.exe", b"MZ" + bytes([0x90, 0, 0]) * 11, "application/octet-stream"),
+        ("도면.dwg", b"AC1027" + bytes([1]) * 32, "application/acad"),
     ],
 )
-def test_dangerous_or_fake_files_are_rejected(api, users, name, content, ctype):
+def test_any_file_is_accepted_but_only_as_download(api, users, name, content, ctype):
+    """어떤 확장자든 보낼 수 있다. 확인되지 않은 파일은 형식 없는 파일로 저장되어 내려받기만 된다 (화면에서 열리지 않는다)."""
     conv = api.direct(users["a"], users["b"])
     r = api.post(users["a"], f"/conversations/{conv['id']}/attachments", files={"file": (name, content, ctype)})
+    assert r.status_code == 201
+    att = r.json()["attachments"][0]
+    assert att["file_name"] == name
+    d = api.get(users["b"], f"/attachments/{att['id']}")
+    assert d.content == content and d.headers["content-disposition"].startswith("attachment")
+    assert d.headers["content-type"].startswith("application/octet-stream")
+
+
+def test_empty_file_is_rejected(api, users):
+    conv = api.direct(users["a"], users["b"])
+    r = api.post(users["a"], f"/conversations/{conv['id']}/attachments", files={"file": ("empty.png", b"", "image/png")})
     assert r.status_code == 400
-    assert api.get(users["a"], f"/conversations/{conv['id']}/messages").json()["messages"] == []  # 저장되지 않았다
+    assert api.get(users["a"], f"/conversations/{conv['id']}/messages").json()["messages"] == []
 
 
 def test_attachment_size_limit(api, users, monkeypatch):

@@ -76,7 +76,8 @@ async def realtime(ws: WebSocket):
         await _close(ws, CLOSE_UNAUTHORIZED)
         return
 
-    conn = hub.add(user_id, ws)
+    client = first.get("client") if first else None  # 연결한 화면 종류 ("mobile" / "pc"), 없으면 pc
+    conn = hub.add(user_id, ws, client if isinstance(client, str) else "pc")
     try:
         await ws.send_json({"type": "ready"})
         while True:

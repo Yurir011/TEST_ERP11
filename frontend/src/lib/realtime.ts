@@ -25,6 +25,8 @@ export interface SocketLike {
 export interface RealtimeOptions<E> {
   url: string;
   getToken: () => string | null;
+  /** 이 연결이 폰 화면인지 알린다 ("mobile" / "pc"). 서버가 폰으로 보고 있는 사람에게는 푸시를 보내지 않는 데 쓴다. 없으면 보내지 않는다. */
+  getClientKind?: () => "mobile" | "pc";
   createSocket?: (url: string) => SocketLike;
   backoffMs?: number[];
   pingMs?: number;
@@ -123,7 +125,7 @@ export class RealtimeClient<E extends { type: string } = { type: string }> {
     this.setState("connecting");
     const socket = (this.opts.createSocket ?? ((u) => new WebSocket(u) as unknown as SocketLike))(this.opts.url);
     this.socket = socket;
-    socket.onopen = () => socket.send(JSON.stringify({ type: "auth", token }));
+    socket.onopen = () => socket.send(JSON.stringify({ type: "auth", token, ...(this.opts.getClientKind ? { client: this.opts.getClientKind() } : {}) }));
     socket.onmessage = (ev) => this.handleMessage(socket, ev.data);
     socket.onerror = () => undefined; // 닫힘 이벤트에서 처리한다
     socket.onclose = (ev) => this.handleClose(socket, ev.code);

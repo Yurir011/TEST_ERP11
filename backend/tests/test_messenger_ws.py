@@ -54,6 +54,20 @@ def test_auth_then_ready(client, people):
     assert not hub.is_online(people["a"].id)  # 연결이 끊기면 목록에서 빠진다
 
 
+def test_pc_connection_is_not_phone_but_mobile_connection_is(client, people):
+    """PC 앱이 연결돼 있어도 폰 푸시는 막지 않는다: 폰 화면(client=mobile)으로 연결했을 때만 '폰에서 보는 중'이다."""
+    a = people["a"]
+    with client.websocket_connect("/api/ws") as ws:  # 화면 종류를 알리지 않으면 pc
+        ws.send_json({"type": "auth", "token": token_of(a)})
+        assert ws.receive_json() == {"type": "ready"}
+        assert hub.is_online(a.id) and not hub.is_online_on_phone(a.id)
+    with client.websocket_connect("/api/ws") as ws:
+        ws.send_json({"type": "auth", "token": token_of(a), "client": "mobile"})
+        assert ws.receive_json() == {"type": "ready"}
+        assert hub.is_online_on_phone(a.id)
+    assert not hub.is_online_on_phone(a.id)  # 끊기면 빠진다
+
+
 @pytest.mark.parametrize("first", [{"type": "auth", "token": "garbage"}, {"type": "auth"}, {"type": "hello"}, {"token": "x"}])
 def test_bad_auth_is_closed_with_4401(client, first):
     with client.websocket_connect("/api/ws") as ws:

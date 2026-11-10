@@ -127,14 +127,14 @@ def test_messenger_message_pushes_to_other_members_without_content(client, make_
     assert sent == [(b.id, "보낸이", "새 메시지가 도착했습니다", f"/m/messenger/{cid}")]  # 보낸 사람은 제외, 내용은 노출하지 않는다
 
 
-def test_messenger_push_skips_muted_and_online_members_and_shows_group_title(client, make_user, auth_headers, monkeypatch):
+def test_messenger_push_skips_muted_and_phone_viewers_and_shows_group_title(client, make_user, auth_headers, monkeypatch):
     from app.core.realtime import hub
 
     a, b, c, d = (make_user(name=n) for n in ("보낸이", "끈사람", "접속중", "받는이"))
     sent = _capture(monkeypatch)
     cid = _chat(client, auth_headers(a), [b.id, c.id, d.id], kind="group", title="개발팀")
     assert client.put(f"/api/messenger/conversations/{cid}/mute", headers=auth_headers(b), json={"muted": True}).status_code == 200
-    monkeypatch.setattr(hub, "is_online", lambda uid: uid == c.id)  # 실시간 연결로 보고 있는 사람에게는 푸시하지 않는다
+    monkeypatch.setattr(hub, "is_online_on_phone", lambda uid: uid == c.id)  # 폰 화면으로 보고 있는 사람에게는 푸시하지 않는다
     assert client.post(f"/api/messenger/conversations/{cid}/messages", headers=auth_headers(a), json={"body": "안녕"}).status_code == 201
     assert sent == [(d.id, "개발팀", "보낸이: 새 메시지가 도착했습니다", f"/m/messenger/{cid}")]
 

@@ -52,6 +52,14 @@ describe("RealtimeClient", () => {
     expect(statuses.at(-1)).toEqual({ state: "connected", epoch: 1 });
   });
 
+  it("화면 종류(폰/PC)를 알려 주는 옵션이 있으면 인증 메시지에 함께 보낸다", () => {
+    const sockets: FakeSocket[] = [];
+    const client = new RealtimeClient({ url: "ws://x/api/ws", getToken: () => "tok", getClientKind: () => "mobile", createSocket: () => { const s = new FakeSocket(); sockets.push(s); return s; } });
+    client.start();
+    sockets[0].open();
+    expect(sockets[0].sent).toEqual([{ type: "auth", token: "tok", client: "mobile" }]);
+  });
+
   it("서버 이벤트를 구독자에게 전달하고, 형식이 이상한 것은 무시한다", () => {
     const { client, sockets } = setup();
     const got: unknown[] = [];

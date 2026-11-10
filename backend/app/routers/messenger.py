@@ -44,7 +44,7 @@ from app.schemas.messenger import (
 )
 from app.services import messenger as svc
 from app.services import presence, push
-from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, read_upload
+from app.services.upload_check import ATTACHMENT_TYPES, EXTENSIONS, check_content
 
 router = APIRouter(prefix="/api/messenger", tags=["messenger"])
 logger = get_logger("Messenger")
@@ -61,7 +61,7 @@ INLINE_TYPES = ("image/", "application/pdf")  # 화면에서 바로 보여 줘�
 def _notify_message(db: Session, message_id: int, conversation_id: int) -> None:
     m = svc.load_message(db, message_id)
     hub.publish(svc.active_member_ids(db, conversation_id), {"type": "message.created", "message": svc.message_out(m).model_dump(mode="json")})
-    push.notify_new_message(db, message_id, conversation_id)  # 실시간 연결이 없는 사람(앱을 닫은 폰)에게는 푸시로 알린다
+    push.notify_new_message(db, message_id, conversation_id)  # 폰 화면으로 보고 있지 않은 사람에게는 (PC 앱을 쓰는 중이어도) 폰 푸시로 알린다
 
 
 def _notify_conversation_changed(user_ids: list[int], conversation_id: int) -> None:
@@ -339,6 +339,28 @@ def _clean_filename(raw: str | None) -> str:
     return (name or "file")[:255]
 
 
+def _read_any_upload(file: UploadFile) -> tuple[bytes, str, str]:
+    """어떤 확장자의 파일이든 받는다. (내용, 저장할 형식, 저장 확장자)를 돌려준다.
+
+    이미지·PDF·오피스 문서·압축·텍스트는 내용(서명)까지 확인되면 그 형식으로 저장한다.
+    그 밖의 파일(또는 헤더와 내용이 안 맞는 파일)은 형식 없는 파일(octet-stream, .bin)로 저장해 내려받기만 되게 한다
+    (화면에서 바로 열거나 실행되지 않으므로 안전하다). 빈 파일과 크기 초과만 거절한다.
+    """
+    content = file.file.read(MAX_ATTACHMENT_BYTES + 1)
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="빈 파일입니다.")
+    if len(content) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"파일 크기는 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB를 초과할 수 없습니다.")
+    ctype = file.content_type
+    if ctype in ATTACHMENT_TYPES:
+        try:
+            check_content(content, ctype, ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES)
+            return content, ctype, EXTENSIONS[ctype]
+        except HTTPException:
+            logger.debug(f"[Messenger] 형식 확인 실패, 일반 파일로 저장: content_type={ctype}")
+    return content, "application/octet-stream", "bin"
+
+
 @router.post("/conversations/{conversation_id}/attachments", response_model=MessageOut, status_code=status.HTTP_201_CREATED)
 def send_attachment(
     conversation_id: int,
@@ -356,16 +378,16 @@ def send_attachment(
         response.status_code = status.HTTP_200_OK
         return svc.message_out(svc.load_message(db, existing.id))
 
-    content = read_upload(file, ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES)  # 파일 앞부분으로 실제 형식·크기를 확인한다
+    content, content_type, extension = _read_any_upload(file)
     directory = settings.messenger_attachments_dir
     os.makedirs(directory, exist_ok=True)
-    stored_path = os.path.join(directory, f"{conv.id}_{uuid.uuid4().hex}.{EXTENSIONS[file.content_type]}")  # 확장자는 확인된 형식에서 정한다
+    stored_path = os.path.join(directory, f"{conv.id}_{uuid.uuid4().hex}.{extension}")  # 확장자는 확인된 형식에서 정한다 (그 밖의 파일은 .bin)
     with open(stored_path, "wb") as f:
         f.write(content)
     try:
         m, created = _save_message(db, conv, me, current_user, body.strip(), client_msg_id)
         if created:
-            db.add(MessageAttachment(message_id=m.id, file_name=_clean_filename(file.filename), stored_path=stored_path, size=len(content), content_type=file.content_type))
+            db.add(MessageAttachment(message_id=m.id, file_name=_clean_filename(file.filename), stored_path=stored_path, size=len(content), content_type=content_type))
         db.commit()
     except Exception:
         db.rollback()

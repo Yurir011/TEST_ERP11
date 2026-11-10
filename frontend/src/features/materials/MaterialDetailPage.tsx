@@ -11,7 +11,7 @@ import { MovementModal } from "./MovementModal";
 import { SubLevelView } from "./SubLevelTree";
 import { CATEGORY_BADGE, CATEGORY_LABELS, formatQty, levelPath, type MaterialDetail, type MovementKind } from "./types";
 
-/** 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 하위 속성 트리, 입출고 이력. [추가 입고]·[출고]로 한 줄씩 기록한다. */
+/** 자재 상세: 현재 개수(= 입고 + 추가 입고 − 출고), 속성 트리, 입출고 이력. [추가 입고]·[출고]로 한 줄씩 기록한다. */
 export function MaterialDetailPage() {
   const { id } = useParams();
   const materialId = Number(id);
@@ -66,7 +66,6 @@ export function MaterialDetailPage() {
   }
 
   const hasFirstIn = m.movements.some((x) => x.kind === "in");
-  const rootLabel = `${CATEGORY_LABELS[m.category]} · ${m.name}`;
 
   return (
     <MainLayout
@@ -116,8 +115,8 @@ export function MaterialDetailPage() {
           </section>
 
           <section className="bg-surface border border-border rounded-2xl p-5">
-            <h2 className="text-sm font-semibold mb-3">하위 분류</h2>
-            <SubLevelView levels={m.sub_levels} rootLabel={rootLabel} />
+            <h2 className="text-sm font-semibold mb-3">속성</h2>
+            <SubLevelView levels={m.sub_levels} />
             {m.memo && <p className="text-xs text-text-muted mt-4 whitespace-pre-wrap">메모: {m.memo}</p>}
           </section>
         </div>

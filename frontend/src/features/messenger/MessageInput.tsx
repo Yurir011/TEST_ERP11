@@ -2,8 +2,7 @@ import { Paperclip, Send, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { MAX_ATTACHMENT_BYTES, MAX_BODY_LENGTH, formatBytes } from "./messengerState";
 
-// 서버가 받는 형식 (backend/app/services/upload_check.py 의 ATTACHMENT_TYPES). 최종 확인은 서버가 파일 내용으로 한다.
-const ACCEPT = ".png,.jpg,.jpeg,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt";
+// 확장자 제한 없이 모든 파일을 보낼 수 있다 (서버가 확인되지 않은 파일은 내려받기 전용으로만 저장한다).
 
 const PASTE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
@@ -149,7 +148,6 @@ export function MessageInput({
         <input
           ref={fileRef}
           type="file"
-          accept={ACCEPT}
           multiple
           hidden
           aria-label="첨부할 파일"

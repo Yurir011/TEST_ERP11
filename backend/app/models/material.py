@@ -16,7 +16,7 @@ MOVEMENT_KINDS = ("in", "add", "out")
 
 
 class Material(Base):
-    """자재. 항목(회로부품/사출물/부자재/소모품) + 이름을 붙이고, 그 아래 비워 둘 수 있는 하위 속성(트리, 1단계→2단계→3단계…)을 적는다.
+    """자재. 항목(회로부품/사출물/부자재/소모품) + 이름을 붙이고, 그 아래 비워 둘 수 있는 속성(트리, 1단계→2단계→3단계…)을 적는다.
 
     현재 개수는 저장하지 않고 입출고 기록(MaterialMovement)의 합계로 계산한다 (수량을 직접 고치지 않으므로 틀려도 추적할 수 있다).
     """
@@ -26,7 +26,7 @@ class Material(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     category: Mapped[str] = mapped_column(String(20), index=True)
     name: Mapped[str] = mapped_column(String(200), index=True)
-    # 하위 속성: 위 단계부터 순서대로. 비어 있는 단계는 저장하지 않는다 (예: ["MCU", "ARM Cortex-M3", "LQFP48"])
+    # 속성: 위 단계부터 순서대로. 비어 있는 단계는 저장하지 않는다 (예: ["MCU", "ARM Cortex-M3", "LQFP48"])
     sub_levels: Mapped[list[str]] = mapped_column(ARRAY(String(100)), default=list, server_default="{}")
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))

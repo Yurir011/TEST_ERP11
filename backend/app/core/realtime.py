@@ -24,6 +24,7 @@ class Connection:
     user_id: int
     ws: WebSocket
     loop: asyncio.AbstractEventLoop
+    client: str = "pc"  # 연결한 화면 종류: "mobile"(폰 화면) 또는 "pc" (알 수 없으면 pc 로 본다)
 
 
 class ConnectionHub:
@@ -31,11 +32,11 @@ class ConnectionHub:
         self._conns: dict[int, set[Connection]] = {}
         self._lock = threading.Lock()
 
-    def add(self, user_id: int, ws: WebSocket) -> Connection:
-        conn = Connection(user_id, ws, asyncio.get_running_loop())
+    def add(self, user_id: int, ws: WebSocket, client: str = "pc") -> Connection:
+        conn = Connection(user_id, ws, asyncio.get_running_loop(), client if client == "mobile" else "pc")
         with self._lock:
             self._conns.setdefault(user_id, set()).add(conn)
-        logger.debug(f"[WS] 연결 등록: user_id={user_id}, 연결 {self.count()}개")
+        logger.debug(f"[WS] 연결 등록: user_id={user_id}, client={conn.client}, 연결 {self.count()}개")
         return conn
 
     def remove(self, conn: Connection) -> None:
@@ -54,6 +55,11 @@ class ConnectionHub:
     def is_online(self, user_id: int) -> bool:
         with self._lock:
             return bool(self._conns.get(user_id))
+
+    def is_online_on_phone(self, user_id: int) -> bool:
+        """그 사람이 지금 폰 화면으로 연결해 보고 있는가. PC 앱이 열려 있는 것은 해당하지 않는다 (폰에는 푸시로 알려야 하므로)."""
+        with self._lock:
+            return any(c.client == "mobile" for c in self._conns.get(user_id, ()))
 
     def publish(self, user_ids: Iterable[int], payload: dict[str, Any]) -> None:
         """user_ids 의 모든 연결에 payload 를 보낸다. 어느 스레드에서 불러도 되고, 기다리지 않는다(보내기에 실패한 연결은 정리)."""
