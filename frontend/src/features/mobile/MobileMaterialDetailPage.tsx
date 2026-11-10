@@ -6,6 +6,7 @@ import { ApiError, apiDelete, apiGet } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { CodeText } from "../materials/CodeText";
+import { NewMaterialButton } from "../materials/NewMaterialButton";
 import { MovementList } from "../materials/MovementList";
 import { MovementModal } from "../materials/MovementModal";
 import { SubLevelView } from "../materials/SubLevelTree";
@@ -58,9 +59,12 @@ export function MobileMaterialDetailPage() {
       title={m.name}
       backTo="/m/materials"
       right={
-        <button type="button" onClick={() => navigate(`/m/materials/${m.id}/edit`)} className="px-3 h-10 text-sm text-primary">
-          수정
-        </button>
+        <div className="flex items-center">
+          <NewMaterialButton mobile />
+          <button type="button" onClick={() => navigate(`/m/materials/${m.id}/edit`)} className="px-3 h-10 text-sm text-primary">
+            수정
+          </button>
+        </div>
       }
     >
       <MobileCard>

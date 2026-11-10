@@ -1,11 +1,12 @@
 import { useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { MaterialForm } from "./MaterialForm";
+import { NewMaterialButton } from "./NewMaterialButton";
 
 export function MaterialFormPage() {
   const { id } = useParams();
   return (
-    <MainLayout title={id ? "자재 수정" : "자재 등록"} showBack>
+    <MainLayout title={id ? "자재 수정" : "자재 등록"} showBack actions={id ? <NewMaterialButton /> : undefined}>
       <MaterialForm basePath="/materials" />
     </MainLayout>
   );

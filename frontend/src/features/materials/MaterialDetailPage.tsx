@@ -7,6 +7,7 @@ import { ApiError, apiDelete, apiGet } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { CodeText } from "./CodeText";
+import { NewMaterialButton } from "./NewMaterialButton";
 import { MovementList } from "./MovementList";
 import { MovementModal } from "./MovementModal";
 import { SubLevelView } from "./SubLevelTree";
@@ -78,6 +79,7 @@ export function MaterialDetailPage() {
       showBack
       actions={
         <div className="flex items-center gap-2">
+          <NewMaterialButton />
           <button type="button" onClick={() => navigate(`/materials/${m.id}/edit`)} className="rounded-lg border border-border text-sm px-4 py-2.5 hover:bg-bg">
             수정
           </button>

@@ -1,10 +1,10 @@
-import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { ApiError, apiGet } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { CodeText } from "./CodeText";
+import { NewMaterialButton } from "./NewMaterialButton";
 import { LIST_TABS, formatReelQty, levelPath, matchKeyword, matchTab, type ListTab, type Material } from "./types";
 
 /** 자재관리 목록 (시안 B-2): 품목 코드 · 품명 · 분류(속성) · 개수 네 칸만 보여 준다. 위 탭으로 걸러 보고, 코드·품명·속성으로 찾는다. 행을 누르면 상세(입출고 기록)로 간다. */
@@ -35,11 +35,7 @@ export function MaterialsPage() {
     <MainLayout
       title="자재관리"
       description="회로부품·사출물·부자재·포장재·소모품의 현재 개수와 입고·출고를 관리합니다."
-      actions={
-        <button type="button" onClick={() => navigate("/materials/new")} className="flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5">
-          <Plus size={15} /> 자재 등록
-        </button>
-      }
+      actions={<NewMaterialButton />}
     >
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {LIST_TABS.map((t) => (

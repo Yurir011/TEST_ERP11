@@ -1,9 +1,9 @@
-import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ApiError, apiGet } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { CodeText } from "../materials/CodeText";
+import { NewMaterialButton } from "../materials/NewMaterialButton";
 import { LIST_TABS, classLabel, formatReelQty, matchKeyword, matchTab, type ListTab, type Material } from "../materials/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
 
@@ -34,11 +34,7 @@ export function MobileMaterialsPage() {
   return (
     <MobileLayout
       title="자재"
-      right={
-        <Link to="/m/materials/new" aria-label="자재 등록" className="w-10 h-10 flex items-center justify-center text-primary">
-          <Plus size={22} />
-        </Link>
-      }
+      right={<NewMaterialButton mobile />}
     >
       <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-1" role="group" aria-label="품목">
         {LIST_TABS.map((c) => (
