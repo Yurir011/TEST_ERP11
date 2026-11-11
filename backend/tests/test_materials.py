@@ -135,9 +135,14 @@ def test_bulk_levels_changes_classification_for_all_selected_or_none(client, mak
     assert client.get(f"/api/materials/{c['id']}", headers=hs).json()["sub_levels"] == ["MCU", "ARM Cortex-M3", "LQFP48"]
 
 
-def test_site_admin_cannot_use_materials(client, make_user, auth_headers):
+def test_site_admin_has_full_access_to_materials(client, make_user, auth_headers):
     h = auth_headers(make_user(role=UserRole.site_admin, name="사이트관리자"))
-    assert client.get("/api/materials", headers=h).status_code == 403
+    assert client.get("/api/materials", headers=h).status_code == 200
+    m = _new(client, h)
+    assert _move(client, h, m["id"], kind="out", movement_date="2026-11-01", quantity=10, reason="생산 불출").status_code == 201
+    other = _new(client, h, name="다른 자재")
+    assert client.post("/api/materials/bulk-delete", headers=h, json={"ids": [other["id"]]}).status_code == 200
+    assert client.delete(f"/api/materials/{m['id']}", headers=h).status_code == 204
 
 
 def test_codes_are_assigned_per_prefix_and_kind_is_required_for_ic(client, make_user, auth_headers):

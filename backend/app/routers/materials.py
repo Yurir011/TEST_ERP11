@@ -1,16 +1,16 @@
 """자재관리: 항목(회로부품 전용·범용/사출물/부자재/포장재/소모품)+이름, 품목 코드, 속성(트리), 입고·추가 입고·출고 기록(개 또는 릴). 현재 개수는 입출고 합계로 계산한다.
 
-로그인한 직원(사이트 관리자 제외) 누구나 조회·등록·수정·입출고 기록을 할 수 있고, 자재와 입출고 기록을 지우는 것은 대표만 한다.
+로그인한 직원은 누구나(사이트 관리자 포함) 조회·등록·수정·입출고 기록을 할 수 있고, 자재와 입출고 기록을 지우는 것은 대표와 사이트 관리자만 한다.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import Integer, func, or_, text
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.deps import get_current_user, require_admin
+from app.core.deps import get_current_user, require_admin_or_site_admin
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.material import CATEGORY_LABELS, IN_KINDS, KIND_LABELS, MATERIAL_CATEGORIES, Material, MaterialMovement, code_prefix
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.material import (
     MaterialBulkDeleteIn,
     MaterialBulkDeleteOut,
@@ -28,8 +28,7 @@ logger = get_logger("Materials")
 
 
 def require_material_access(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role == UserRole.site_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="자재관리 권한이 없습니다.")
+    """자재관리는 로그인한 모든 계정(대표·직원·사이트 관리자)이 쓸 수 있다."""
     return current_user
 
 
@@ -256,7 +255,7 @@ def update_material(material_id: int, payload: MaterialIn, db: Session = Depends
 
 
 @router.delete("/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_material(material_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def delete_material(material_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     m = _get_or_404(db, material_id)
     name = m.name
     # 재입고 기록이 출고 기록을 가리키고 있으면 한꺼번에 지울 때 순서 때문에 막히므로, 서로 가리키는 연결을 먼저 끊는다
@@ -268,7 +267,7 @@ def delete_material(material_id: int, db: Session = Depends(get_db), current_use
 
 
 @router.post("/bulk-delete", response_model=MaterialBulkDeleteOut)
-def bulk_delete_materials(payload: MaterialBulkDeleteIn, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def bulk_delete_materials(payload: MaterialBulkDeleteIn, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     """체크한 자재를 한 번에 지운다(대표 전용). 하나라도 없는 번호가 있으면 아무것도 지우지 않는다."""
     ids = set(payload.ids)
     logger.debug(f"[Materials] 일괄 삭제 시도: ids={sorted(ids)}, by={current_user.id}")
@@ -402,7 +401,7 @@ def update_movement(
 
 
 @router.delete("/{material_id}/movements/{movement_id}", response_model=MaterialDetailOut)
-def delete_movement(material_id: int, movement_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+def delete_movement(material_id: int, movement_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_site_admin)):
     """잘못 기록한 입출고 한 줄을 지운다 (대표만). 지운 뒤 현재 개수가 음수가 되면 거절한다."""
     m = _get_or_404(db, material_id, lock=True)
     target = next((x for x in m.movements if x.id == movement_id), None)
