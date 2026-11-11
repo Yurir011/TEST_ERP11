@@ -30,16 +30,13 @@ function renderForm() {
 const registerBtn = () => screen.getByRole("button", { name: "등록" }) as HTMLButtonElement;
 
 describe("자재 등록 폼 (시안 A-3)", () => {
-  it("품목 칩은 5개, 회로부품 칩에는 '회로부품' 글자만 보이고 눌러야 전용/범용 메뉴가 열린다", () => {
+  it("품목 칩은 6개: 회로부품은 전용·범용 칩으로 나뉘어 있고 바로 눌러 고른다", () => {
     renderForm();
-    expect(screen.getAllByRole("radio").map((b) => b.textContent)).toEqual(["회로부품", "사출물", "부자재", "포장재", "소모품"]);
-    expect(screen.queryByRole("menu")).toBeNull(); // 평소에는 메뉴가 없다
-    fireEvent.click(screen.getByRole("radio", { name: "회로부품" }));
-    const menu = screen.getByRole("menu");
-    expect(within(menu).getAllByRole("menuitemradio").map((b) => b.textContent)).toEqual(["전용EC", "범용EG"]);
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /전용/ }));
-    expect(screen.queryByRole("menu")).toBeNull(); // 고르면 닫힌다
-    expect(screen.getByRole("radio", { name: "회로부품" }).textContent).toBe("회로부품"); // 칩 글자는 그대로
+    expect(screen.getAllByRole("radio").map((b) => b.textContent)).toEqual(["회로부품 전용", "회로부품 범용", "사출물", "부자재", "포장재", "소모품"]);
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "회로부품 전용" }));
+    expect(screen.getByRole("radio", { name: "회로부품 전용" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("radio", { name: "회로부품 범용" }).getAttribute("aria-checked")).toBe("false");
     expect(screen.getByTestId("preview-path").textContent).toBe("회로부품 › 전용");
     expect(within(screen.getByLabelText("미리보기")).getByText("EC")).toBeTruthy();
   });
@@ -47,7 +44,7 @@ describe("자재 등록 폼 (시안 A-3)", () => {
   it("회로부품은 전용/범용을 고르기 전에는 등록할 수 없고, 다른 품목은 종류 없이 등록된다", () => {
     renderForm();
     expect(registerBtn().disabled).toBe(true);
-    expect(screen.getByText("회로부품을 눌러 전용 / 범용을 골라 주세요.")).toBeTruthy();
+    expect(screen.getByText("회로부품은 전용 / 범용 중 하나를 골라 주세요.")).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: "포장재" }));
     expect(registerBtn().disabled).toBe(false);
     expect(within(screen.getByLabelText("미리보기")).getByText("PK")).toBeTruthy();
@@ -82,8 +79,7 @@ describe("자재 등록 폼 (시안 A-3)", () => {
   it("등록하면 회로부품 종류·속성·개(또는 릴)를 담아 저장하고 상세 화면으로 간다", async () => {
     api.apiPost.mockResolvedValue({ id: 9 });
     renderForm();
-    fireEvent.click(screen.getByRole("radio", { name: "회로부품" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /범용/ }));
+    fireEvent.click(screen.getByRole("radio", { name: "회로부품 범용" }));
     fireEvent.change(screen.getByLabelText("속성 1"), { target: { value: "저항" } });
     fireEvent.change(screen.getByLabelText("속성 3"), { target: { value: "0603" } });
     fireEvent.change(screen.getByLabelText("품명"), { target: { value: "저항 10kΩ" } });

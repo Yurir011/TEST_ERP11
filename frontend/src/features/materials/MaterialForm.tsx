@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState, type FormEvent } from "react";
+import { useContext, useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { DialogContext } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
@@ -28,6 +28,11 @@ const inputCls = "rounded-lg border border-border px-3 py-2.5 text-base sm:text-
  * 품목 칩은 평소 "회로부품" 네 글자만 보이고, 회로부품을 누르면 작은 메뉴가 열려 전용 / 범용을 고른다. 고르기 전에는 등록할 수 없다.
  * @param basePath 저장하면 이동할 상세 화면의 앞 경로 ("/materials" 또는 "/m/materials")
  */
+/** 품목 선택 칩: 회로부품은 전용·범용을 칩 둘로 나눠 한눈에 보고 바로 누르게 한다. */
+const CHIPS: { key: string; category: MaterialCategory; kind: MaterialKind | null; label: string }[] = CATEGORY_ORDER.flatMap((c) =>
+  c === "ic" ? MATERIAL_KIND_ORDER.map((k) => ({ key: `ic-${k}`, category: c, kind: k, label: `${CATEGORY_LABELS[c]} ${MATERIAL_KIND_LABELS[k]}` })) : [{ key: c, category: c, kind: null, label: CATEGORY_LABELS[c] }],
+);
+
 export function MaterialForm({ basePath }: { basePath: string }) {
   const navigate = useNavigate();
   const dialog = useContext(DialogContext); // 안내 창이 없는 곳(테스트 등)에서도 그려지도록 필수로 쓰지 않는다
@@ -37,7 +42,6 @@ export function MaterialForm({ basePath }: { basePath: string }) {
 
   const [category, setCategory] = useState<MaterialCategory>("ic");
   const [kind, setKind] = useState<MaterialKind | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [name, setName] = useState("");
   const [levels, setLevels] = useState<string[]>(["", "", ""]);
   const [history, setHistory] = useState<string[][]>([]);
@@ -47,7 +51,6 @@ export function MaterialForm({ basePath }: { basePath: string }) {
   const [inQty, setInQty] = useState<QtyState>(emptyQty());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const menuRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     logDebug("MaterialForm", "이전 속성 불러오기");
@@ -74,29 +77,15 @@ export function MaterialForm({ basePath }: { basePath: string }) {
       });
   }, [editingId]);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [menuOpen]);
-
   const prefix = prefixFor(category, kind);
   const cleanLevels = levels.map((v) => v.trim()).filter(Boolean);
   const total = qtyTotal(inQty);
   const needKind = category === "ic" && kind === null;
 
-  function pickCategory(c: MaterialCategory) {
-    if (c === "ic") {
-      setCategory("ic");
-      setMenuOpen((o) => !o);
-      return;
-    }
+  /** 품목 칩 한 개를 누른다. 회로부품은 전용/범용이 칩 하나씩이라 누르면 종류까지 함께 정해진다. */
+  function pickChip(c: MaterialCategory, k: MaterialKind | null) {
     setCategory(c);
-    setKind(null);
-    setMenuOpen(false);
+    setKind(k);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -136,46 +125,19 @@ export function MaterialForm({ basePath }: { basePath: string }) {
     <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-5 sm:p-8 max-w-2xl">
       <p className="text-xs text-text-muted mb-2">품목</p>
       <div className="flex flex-wrap gap-1.5 mb-6" role="radiogroup" aria-label="품목">
-        {CATEGORY_ORDER.map((c) => {
-          const on = category === c;
-          const chip = (
+        {CHIPS.map((chip) => {
+          const on = category === chip.category && kind === chip.kind;
+          return (
             <button
+              key={chip.key}
               type="button"
               role="radio"
               aria-checked={on}
-              aria-haspopup={c === "ic" ? "menu" : undefined}
-              aria-expanded={c === "ic" ? menuOpen : undefined}
-              onClick={() => pickCategory(c)}
+              onClick={() => pickChip(chip.category, chip.kind)}
               className={`rounded-full border px-4 py-1.5 text-sm ${on ? "bg-primary border-primary text-white font-semibold" : "border-border bg-bg text-text hover:bg-surface"}`}
             >
-              {CATEGORY_LABELS[c]}
+              {chip.label}
             </button>
-          );
-          if (c !== "ic") return <span key={c}>{chip}</span>;
-          return (
-            <span key={c} ref={menuRef} className="relative">
-              {chip}
-              {menuOpen && (
-                <div role="menu" aria-label="회로부품 종류" className="absolute left-0 top-full mt-1.5 z-20 min-w-40 rounded-xl border border-border bg-surface shadow-lg p-1">
-                  {MATERIAL_KIND_ORDER.map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={kind === k}
-                      onClick={() => {
-                        setKind(k);
-                        setMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between gap-6 rounded-lg px-3 py-2 text-sm text-left hover:bg-bg ${kind === k ? "text-primary font-bold" : ""}`}
-                    >
-                      {MATERIAL_KIND_LABELS[k]}
-                      <small className="font-mono text-[11px] text-text-muted">{k === "dedicated" ? "EC" : "EG"}</small>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </span>
           );
         })}
       </div>
@@ -236,7 +198,7 @@ export function MaterialForm({ basePath }: { basePath: string }) {
       </div>
 
       {error && <p className="text-xs text-danger mb-3">{error}</p>}
-      {needKind && !error && <p className="text-xs text-text-muted mb-3">회로부품을 눌러 전용 / 범용을 골라 주세요.</p>}
+      {needKind && !error && <p className="text-xs text-text-muted mb-3">회로부품은 전용 / 범용 중 하나를 골라 주세요.</p>}
 
       <div className="flex gap-2">
         <button
