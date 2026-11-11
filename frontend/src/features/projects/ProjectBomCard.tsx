@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { AlertCircle, ChevronDown, List, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
@@ -10,7 +10,10 @@ import { BOM_FILTERS, bomCounts, bomState, bomStateLabel, groupBom, type BomFilt
 import { BomRegisterModal } from "./BomRegisterModal";
 
 const STATE_BADGE: Record<BomState, string> = { bad: SOFT_BADGE.red, warn: SOFT_BADGE.orange, good: SOFT_BADGE.green };
-const TILE_TEXT: Record<BomFilter, string> = { all: "", bad: "text-danger", warn: "text-tile-orange-fg", good: "text-success" };
+/** 상태 막대와 필터 점의 색 */
+const DOT: Record<BomFilter, string> = { all: "bg-text-muted/50", bad: "bg-danger", warn: "bg-tile-orange-fg", good: "bg-success" };
+const fieldCls =
+  "w-full h-[42px] rounded-lg border-[1.5px] border-[color-mix(in_srgb,var(--color-text)_26%,var(--color-surface))] bg-surface px-3 text-sm outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20";
 const ROW_GRID = "grid grid-cols-[minmax(0,1.7fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 px-5";
 const inputCls = "w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg";
 const fmt = (n: number) => n.toLocaleString("ko-KR");
@@ -18,12 +21,14 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 /**
  * 프로젝트(=제품 생산)의 "BOM 등록" 카드: 이 프로젝트에 필요한 자재와 수량.
  * 평소에는 왼쪽의 [BOM 등록] 버튼만 보이고, BOM 이 하나라도 있으면 오른쪽에 요약(총 N종 · 재고 부족 · 미등록)이 붙는다. 버튼을 누르면 같은 자리에서 펼쳐진다.
- * 위 칩(전체·재고 부족·미등록·충분)으로 걸러 보고, 부족·미등록은 "조치 필요" 묶음으로 맨 위에 모인다.
+ * 펼치면 "조치가 필요한 자재 N종"과 상태 막대·필터가 먼저 보이고, 부족·미등록은 "조치 필요" 묶음으로 맨 위에 모인다.
+ * BOM 이 비어 있으면 안내와 [+ 자재 추가] 버튼만 보이고, 그 버튼을 눌러야 자재 추가 칸이 나타난다.
  * 줄을 누르면 오른쪽 패널에서 수량·비고를 고치거나 지운다. 자재관리(재고 목록)에 없는 자재는 경고와 함께 등록할 수 있다.
  * 자동 출고는 아직 없다.
  */
 export function ProjectBomCard({ projectId }: { projectId: number }) {
   const dialog = useDialog();
+  const [addOpen, setAddOpen] = useState(false); // BOM 이 비어 있을 때만 쓴다: [+ 자재 추가]를 눌러야 추가 칸이 보인다
   const [open, setOpen] = useState(false); // 평소에는 접어 두고 버튼만 보인다 (열어 둔 상태는 기억하지 않는다)
   const [lines, setLines] = useState<BomLine[] | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -73,6 +78,9 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
 
   const counts = useMemo(() => bomCounts(lines ?? []), [lines]);
   const groups = useMemo(() => groupBom(lines ?? [], filter), [lines, filter]);
+  const issues = counts.bad + counts.warn;
+  const hasLines = lines !== null && lines.length > 0;
+  const showAdd = hasLines || addOpen;
   const selected = lines?.find((l) => l.id === selectedId) ?? null;
   const usedMaterialIds = useMemo(() => new Set((lines ?? []).flatMap((l) => (l.material_id === null ? [] : [l.material_id]))), [lines]);
 
@@ -242,8 +250,9 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
           aria-expanded={open}
           aria-controls="bom-content"
           onClick={() => setOpen((v) => !v)}
-          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${open ? "bg-primary hover:bg-primary-hover text-white" : "border border-border bg-surface hover:bg-bg text-text"}`}
+          className={`inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-text transition-colors ${open ? "bg-border/50" : "bg-bg hover:bg-border/40"}`}
         >
+          <List size={16} className="text-primary" aria-hidden />
           BOM 등록
           <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
@@ -261,32 +270,62 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
 
       {open && (
         <div id="bom-content" className="border-t border-border">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-5 pb-4">
-        {BOM_FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            aria-pressed={filter === f.key}
-            onClick={() => setFilter(f.key)}
-            className={`rounded-xl border px-4 py-2.5 text-center ${filter === f.key ? "border-primary bg-tile-blue" : "border-border hover:bg-bg"}`}
-          >
-            <span className="block text-xs text-text-muted">{f.label}</span>
-            <strong className={`block text-xl tabular-nums ${TILE_TEXT[f.key]}`}>{counts[f.key]}</strong>
-          </button>
-        ))}
-      </div>
+      {hasLines && (
+        <div className="px-5 pt-4 pb-3 space-y-2.5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <strong className="text-[15px]">{issues > 0 ? `조치가 필요한 자재 ${issues}종` : "모든 자재의 재고가 충분합니다"}</strong>
+            <span className="text-xs text-text-muted">{issues > 0 ? `전체 ${counts.all}종 중` : `전체 ${counts.all}종`}</span>
+          </div>
+          <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-bg" aria-hidden>
+            {(["bad", "warn", "good"] as const)
+              .filter((k) => counts[k] > 0)
+              .map((k) => (
+                <i key={k} className={`block h-full min-w-1.5 ${DOT[k]}`} style={{ flex: counts[k] }} />
+              ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {BOM_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                aria-pressed={filter === f.key}
+                onClick={() => setFilter(f.key)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs ${filter === f.key ? "border-border bg-bg font-bold text-text" : "border-transparent text-text-muted hover:bg-bg"}`}
+              >
+                <i className={`h-2 w-2 rounded-full ${DOT[f.key]}`} />
+                {f.label} <b className="tabular-nums text-text">{counts[f.key]}</b>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className={selected ? "grid lg:grid-cols-[minmax(0,1fr)_300px]" : ""}>
         <div className="min-w-0">
-          <div className={`${ROW_GRID} py-2.5 border-t border-border text-xs text-text-muted text-center`}>
-            <span>자재</span>
-            <span>필요 수량</span>
-            <span>현재 재고</span>
-            <span>상태</span>
-          </div>
+          {hasLines && (
+            <div className={`${ROW_GRID} py-2.5 border-t border-border text-xs text-text-muted text-center`}>
+              <span>자재</span>
+              <span>필요 수량</span>
+              <span>현재 재고</span>
+              <span>상태</span>
+            </div>
+          )}
           {lines === null && !error && <p className="py-8 text-center text-sm text-text-muted border-t border-border">불러오는 중...</p>}
           {lines !== null && lines.length === 0 && (
-            <p className="py-8 text-center text-sm text-text-muted border-t border-border">아직 등록된 BOM이 없습니다. 아래에서 자재를 검색해 추가해 주세요.</p>
+            <div className="px-5 py-8 text-center border-t border-border">
+              <p className="font-semibold">아직 등록된 BOM이 없습니다</p>
+              {addOpen ? (
+                <p className="mt-1 text-sm text-text-muted">아래에서 자재를 검색해 이 프로젝트에 필요한 자재를 추가해 주세요.</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-tile-blue px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10"
+                >
+                  <Plus size={15} /> 자재 추가
+                </button>
+              )}
+            </div>
           )}
           {lines !== null && lines.length > 0 && groups.need.length + groups.ok.length === 0 && (
             <p className="py-8 text-center text-sm text-text-muted border-t border-border">해당하는 자재가 없습니다.</p>
@@ -352,8 +391,16 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
         )}
       </div>
 
-      <div className="border-t border-border bg-bg rounded-b-2xl px-5 py-4 space-y-3">
-        <div className="flex flex-wrap gap-2 items-start">
+      {showAdd && (
+      <div className="px-4 pb-4 pt-1">
+      <div className="rounded-2xl border border-primary/30 bg-tile-blue p-4 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-bold text-primary">
+          <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-primary text-white">
+            <Plus size={14} />
+          </span>
+          자재 추가
+        </div>
+        <div className="flex flex-wrap gap-2.5 items-start">
           <div className="relative flex-1 basis-64 min-w-0">
             <input
               aria-label="자재 검색"
@@ -368,7 +415,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
               }}
               onFocus={() => !picked && setListOpen(true)}
               onBlur={() => window.setTimeout(() => setListOpen(false), 150)}
-              className={inputCls}
+              className={fieldCls}
             />
             {listOpen && !picked && (
               <div role="listbox" className="absolute left-0 right-0 top-full mt-1 z-20 max-h-64 overflow-auto rounded-xl border border-border bg-surface shadow-lg">
@@ -407,9 +454,9 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
               </div>
             )}
           </div>
-          <input aria-label="필요 수량" type="number" min={1} placeholder="필요 수량" value={addQty} onChange={(e) => setAddQty(e.target.value)} className={`${inputCls} !w-28 text-right`} />
-          <input aria-label="비고" placeholder="비고 (선택)" maxLength={500} value={addNote} onChange={(e) => setAddNote(e.target.value)} className={`${inputCls} !w-auto flex-1 basis-40`} />
-          <button type="button" onClick={handleAdd} disabled={adding} className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-white disabled:opacity-60">
+          <input aria-label="필요 수량" type="number" min={1} placeholder="필요 수량" value={addQty} onChange={(e) => setAddQty(e.target.value)} className={`${fieldCls} !w-28 text-right`} />
+          <input aria-label="비고" placeholder="비고 (선택)" maxLength={500} value={addNote} onChange={(e) => setAddNote(e.target.value)} className={`${fieldCls} !w-auto flex-1 basis-40`} />
+          <button type="button" onClick={handleAdd} disabled={adding} className="h-[42px] rounded-lg bg-primary px-6 text-sm font-bold text-white hover:bg-primary-hover disabled:opacity-60">
             추가
           </button>
         </div>
@@ -422,7 +469,12 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
             </button>
           </p>
         )}
-        {addError && <p className="text-sm text-danger">{addError}</p>}
+        {addError && (
+          <p role="alert" className="flex items-start gap-2 rounded-lg border border-danger/40 bg-tile-red px-3 py-2 text-sm font-medium text-danger">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
+            {addError}
+          </p>
+        )}
 
         {warnFor && (
           <div role="alert" className="rounded-xl border border-tile-orange-fg bg-tile-orange px-4 py-3 text-sm space-y-2">
@@ -443,6 +495,8 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
           </div>
         )}
       </div>
+      </div>
+      )}
 
         </div>
       )}
