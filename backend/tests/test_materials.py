@@ -86,6 +86,37 @@ def test_update_keeps_movements_and_delete_is_admin_only(client, make_user, auth
     assert client.get(f"/api/materials/{m['id']}", headers=hs).status_code == 404
 
 
+def test_bulk_delete_is_admin_only_and_all_or_nothing(client, make_user, auth_headers):
+    staff, admin = make_user(name="직원"), make_user(role=UserRole.admin, name="대표")
+    hs, ha = auth_headers(staff), auth_headers(admin)
+    a, b, c = _new(client, hs, name="A"), _new(client, hs, name="B"), _new(client, hs, name="C")
+    _move(client, hs, a["id"], kind="out", movement_date="2026-11-01", quantity=100, reason="생산 불출")
+    assert client.post("/api/materials/bulk-delete", headers=hs, json={"ids": [a["id"], b["id"]]}).status_code == 403
+    assert client.post("/api/materials/bulk-delete", headers=ha, json={"ids": []}).status_code == 422
+    # 없는 번호가 섞이면 아무것도 지우지 않는다
+    assert client.post("/api/materials/bulk-delete", headers=ha, json={"ids": [a["id"], 99999]}).status_code == 404
+    assert client.get(f"/api/materials/{a['id']}", headers=hs).status_code == 200
+    res = client.post("/api/materials/bulk-delete", headers=ha, json={"ids": [a["id"], b["id"]]})
+    assert res.status_code == 200 and res.json() == {"deleted": 2}
+    assert client.get(f"/api/materials/{a['id']}", headers=hs).status_code == 404
+    assert client.get(f"/api/materials/{c['id']}", headers=hs).status_code == 200
+
+
+def test_bulk_levels_changes_classification_for_all_selected_or_none(client, make_user, auth_headers):
+    staff = make_user(name="직원")
+    hs = auth_headers(staff)
+    a, b, c = _new(client, hs, name="A"), _new(client, hs, name="B"), _new(client, hs, name="C")
+    url = "/api/materials/bulk-levels"
+    assert client.post(url, headers=hs, json={"ids": [a["id"]], "sub_levels": ["  ", ""]}).status_code == 422  # 빈 분류는 거절
+    assert client.post(url, headers=hs, json={"ids": [a["id"], 99999], "sub_levels": ["MCU"]}).status_code == 404
+    assert client.get(f"/api/materials/{a['id']}", headers=hs).json()["sub_levels"] == ["MCU", "ARM Cortex-M3", "LQFP48"]
+    res = client.post(url, headers=hs, json={"ids": [a["id"], b["id"]], "sub_levels": [" 센서 ", "", "온도"]})
+    assert res.status_code == 200 and res.json() == {"updated": 2}
+    assert client.get(f"/api/materials/{a['id']}", headers=hs).json()["sub_levels"] == ["센서", "온도"]
+    assert client.get(f"/api/materials/{b['id']}", headers=hs).json()["current_qty"] == 500  # 개수·입출고는 그대로
+    assert client.get(f"/api/materials/{c['id']}", headers=hs).json()["sub_levels"] == ["MCU", "ARM Cortex-M3", "LQFP48"]
+
+
 def test_site_admin_cannot_use_materials(client, make_user, auth_headers):
     h = auth_headers(make_user(role=UserRole.site_admin, name="사이트관리자"))
     assert client.get("/api/materials", headers=h).status_code == 403

@@ -150,6 +150,39 @@ class MovementBrief(BaseModel):
     reel_groups: list[ReelGroup] | None = None
 
 
+class MaterialBulkDeleteIn(BaseModel):
+    """목록에서 체크한 자재를 한꺼번에 지운다."""
+
+    ids: list[int] = Field(min_length=1, max_length=500)
+
+
+class MaterialBulkDeleteOut(BaseModel):
+    deleted: int
+
+
+class MaterialBulkLevelsIn(BaseModel):
+    """목록에서 체크한 자재의 분류(속성 경로)를 한꺼번에 같은 값으로 바꾼다. 비워 두면 안 된다."""
+
+    ids: list[int] = Field(min_length=1, max_length=500)
+    sub_levels: list[str]
+
+    @field_validator("sub_levels")
+    @classmethod
+    def _levels(cls, v: list[str]) -> list[str]:
+        levels = [s.strip() for s in v if s and s.strip()]
+        if not levels:
+            raise ValueError("바꿀 분류를 한 칸 이상 입력해주세요.")
+        if len(levels) > MAX_SUB_LEVELS:
+            raise ValueError(f"속성은 {MAX_SUB_LEVELS}단계까지 적을 수 있습니다.")
+        if any(len(s) > 100 for s in levels):
+            raise ValueError("속성은 한 칸에 100자까지 적을 수 있습니다.")
+        return levels
+
+
+class MaterialBulkLevelsOut(BaseModel):
+    updated: int
+
+
 class MaterialOut(BaseModel):
     """목록 한 줄: 항목·이름·속성, 현재 개수, 가장 최근 입고(추가 입고 포함)·출고."""
 

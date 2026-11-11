@@ -12,6 +12,10 @@ from app.logging_config import get_logger
 from app.models.material import CATEGORY_LABELS, IN_KINDS, KIND_LABELS, MATERIAL_CATEGORIES, Material, MaterialMovement, code_prefix
 from app.models.user import User, UserRole
 from app.schemas.material import (
+    MaterialBulkDeleteIn,
+    MaterialBulkDeleteOut,
+    MaterialBulkLevelsIn,
+    MaterialBulkLevelsOut,
     MaterialDetailOut,
     MaterialIn,
     MaterialOut,
@@ -236,6 +240,41 @@ def delete_material(material_id: int, db: Session = Depends(get_db), current_use
     db.delete(m)  # 입출고 기록도 함께 지워진다
     db.commit()
     logger.debug(f"[Materials] 삭제: id={material_id}, name={name}, by={current_user.id}")
+
+
+@router.post("/bulk-delete", response_model=MaterialBulkDeleteOut)
+def bulk_delete_materials(payload: MaterialBulkDeleteIn, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+    """체크한 자재를 한 번에 지운다(대표 전용). 하나라도 없는 번호가 있으면 아무것도 지우지 않는다."""
+    ids = set(payload.ids)
+    logger.debug(f"[Materials] 일괄 삭제 시도: ids={sorted(ids)}, by={current_user.id}")
+    found = db.query(Material).filter(Material.id.in_(ids)).all()
+    if len(found) != len(ids):
+        logger.debug(f"[Materials] 일괄 삭제 실패: 없는 자재 포함, 요청={len(ids)}건, 확인={len(found)}건")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="이미 삭제되었거나 없는 자재가 포함되어 있습니다. 목록을 새로고침해 주세요.")
+    # 단건 삭제와 같이, 재입고→출고 연결을 먼저 끊어야 한꺼번에 지울 때 순서 때문에 막히지 않는다
+    db.query(MaterialMovement).filter(MaterialMovement.material_id.in_(ids)).update({MaterialMovement.return_of: None}, synchronize_session=False)
+    for m in found:
+        db.expire(m, ["movements"])
+        db.delete(m)
+    db.commit()
+    logger.debug(f"[Materials] 일괄 삭제 완료: {len(found)}건, by={current_user.id}")
+    return MaterialBulkDeleteOut(deleted=len(found))
+
+
+@router.post("/bulk-levels", response_model=MaterialBulkLevelsOut)
+def bulk_update_levels(payload: MaterialBulkLevelsIn, db: Session = Depends(get_db), current_user: User = Depends(require_material_access)):
+    """체크한 자재의 분류(속성 경로)를 같은 값으로 바꾼다. 하나라도 없는 번호가 있으면 아무것도 바꾸지 않는다."""
+    ids = set(payload.ids)
+    logger.debug(f"[Materials] 분류 일괄 변경 시도: ids={sorted(ids)}, levels={payload.sub_levels}, by={current_user.id}")
+    found = db.query(Material).filter(Material.id.in_(ids)).all()
+    if len(found) != len(ids):
+        logger.debug(f"[Materials] 분류 일괄 변경 실패: 없는 자재 포함, 요청={len(ids)}건, 확인={len(found)}건")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="이미 삭제되었거나 없는 자재가 포함되어 있습니다. 목록을 새로고침해 주세요.")
+    for m in found:
+        m.sub_levels = payload.sub_levels
+    db.commit()
+    logger.debug(f"[Materials] 분류 일괄 변경 완료: {len(found)}건, by={current_user.id}")
+    return MaterialBulkLevelsOut(updated=len(found))
 
 
 @router.post("/{material_id}/movements", response_model=MaterialDetailOut, status_code=status.HTTP_201_CREATED)
