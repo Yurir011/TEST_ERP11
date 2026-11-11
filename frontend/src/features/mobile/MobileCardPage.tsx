@@ -6,7 +6,7 @@ import { ApiError, apiGet, apiPost, apiUpload } from "../../lib/api";
 import { todayISO } from "../../lib/date";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
-import { descriptionFields, needsCustomText, needsManualItem, resolveDescription, validatePaymentForm } from "../payments/paymentForm";
+import { needsCustomText, needsManualItem, resolveDescription, validatePaymentForm } from "../payments/paymentForm";
 import { usePaymentAccounts } from "../payments/paymentAccounts";
 import { PAYMENT_CATEGORIES, PAYMENT_CATEGORY_ITEMS, type Payment, type PaymentCategory } from "../payments/types";
 import { MobileCard, MobileLayout } from "./MobileLayout";

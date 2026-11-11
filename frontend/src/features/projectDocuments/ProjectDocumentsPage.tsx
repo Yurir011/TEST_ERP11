@@ -156,7 +156,7 @@ export function ProjectDocumentsPage({
   }, [openTargetId, docs, pendingForMe]);
   const [purposeFilter, setPurposeFilter] = useState<"all" | TaxInvoicePurpose>("all");
   const [paperFilter, setPaperFilter] = useState<"all" | "electronic" | "paper">("all");
-  const [directionFilter, setDirectionFilter] = useState<"all" | "sales" | "purchase">("all");
+  const [directionFilter] = useState<"all" | "sales" | "purchase">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | ProjectDocumentStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [monthFilter, setMonthFilter] = useState<"all" | "this" | "last">("all");
