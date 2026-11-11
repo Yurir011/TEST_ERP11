@@ -159,17 +159,10 @@ export function MaterialsPage() {
       )}
 
       <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm min-w-[760px] table-fixed">
-          <colgroup>
-            <col className="w-11" />
-            <col className="w-36" />
-            <col className="w-[28%]" />
-            <col />
-            <col className="w-32" />
-          </colgroup>
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="text-text-muted text-xs">
-            <tr className="text-left border-b border-border">
-              <th className="py-3 pl-4 pr-0 w-px">
+            <tr className="border-b border-border">
+              <th className="py-3 pl-4 pr-0 w-px text-left">
                 <input
                   type="checkbox"
                   aria-label="현재 목록 전체 선택"
@@ -180,9 +173,9 @@ export function MaterialsPage() {
                   onChange={(e) => toggleAll(e.target.checked)}
                 />
               </th>
-              <th className="py-3 px-5 font-medium whitespace-nowrap">품목 코드</th>
-              <th className="py-3 px-5 font-medium">품명</th>
-              <th className="py-3 px-5 font-medium">분류</th>
+              <th className="py-3 px-5 font-medium whitespace-nowrap text-center">품목 코드</th>
+              <th className="py-3 px-5 font-medium text-center">품명</th>
+              <th className="py-3 px-5 font-medium text-center">분류</th>
               <th className="py-3 px-5 font-medium text-right whitespace-nowrap">개수</th>
             </tr>
           </thead>
@@ -216,13 +209,13 @@ export function MaterialsPage() {
                     onClick={(e) => toggleRow(m.id, e.currentTarget.checked, e.shiftKey)}
                   />
                 </td>
-                <td className="py-3 px-5 whitespace-nowrap">
+                <td className="py-3 px-5 whitespace-nowrap text-center">
                   <CodeText code={m.code} />
                 </td>
-                <td className="py-3 px-5 truncate font-semibold" title={m.name}>
+                <td className="py-3 px-5 text-center font-semibold [overflow-wrap:anywhere]">
                   {m.name}
                 </td>
-                <td className="py-3 px-5 truncate text-text-muted" title={levelPath(m.sub_levels)}>
+                <td className="py-3 px-5 text-center text-text-muted [overflow-wrap:anywhere]">
                   {levelPath(m.sub_levels) || "-"}
                 </td>
                 <td className="py-3 px-5 text-right font-bold tabular-nums whitespace-nowrap">{formatReelQty(m.current_qty, m.current_reels)}</td>
