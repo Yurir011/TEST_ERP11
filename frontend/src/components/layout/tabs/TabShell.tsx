@@ -240,6 +240,12 @@ export function TabShell({ routes }: { routes: ReactNode }) {
 
   if (shouldUseMobile() && outer.pathname === "/") return <Navigate to="/m" replace />;
 
+  // 메일 창(데스크톱 앱이 따로 여는 /mail 창)에는 ERP 사이드바·탭 막대가 필요 없다. 메일 화면만 꽉 채워 그린다.
+  if (outer.pathname === "/mail") {
+    console.debug("[Tabs] 메일 창: 사이드바·탭 막대 없이 메일 화면만 표시");
+    return <>{routes}</>;
+  }
+
   return (
     <TabMenuContext.Provider value={menuValue}>
       <div className="flex min-h-screen">

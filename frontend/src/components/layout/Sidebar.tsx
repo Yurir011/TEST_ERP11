@@ -11,6 +11,8 @@ import {
   LogOut,
   Mail,
   MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Receipt,
   ScrollText,
   Settings,
@@ -33,6 +35,7 @@ import { useTabMenu } from "./tabs/TabShellContext";
 import { VersionLabel } from "./VersionLabel";
 
 const UNREAD_POLL_MS = 20000;
+const COLLAPSED_KEY = "bench.sidebar.collapsed";
 
 const menuItems: {
   to: string;
@@ -66,6 +69,25 @@ export function Sidebar() {
   const location = useLocation();
   const tabMenu = useTabMenu();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      console.debug(`[Sidebar] 사이드바 ${next ? "숨김(아이콘만)" : "펼침"}`);
+      try {
+        localStorage.setItem(COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        /* 저장 실패는 무시 */
+      }
+      return next;
+    });
+  }
   const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
   const mailBridge = getBenchClient()?.mail;
   const hasDesktopMail = typeof mailBridge?.openWindow === "function";
@@ -94,13 +116,28 @@ export function Sidebar() {
   }, [user, location.pathname]);
 
   return (
-    <aside className="w-64 shrink-0 bg-sidebar border-r border-border h-screen sticky top-0 flex flex-col">
-      <div className="px-5 py-5 flex flex-col items-center text-center">
-        <Logo />
-        <p className="text-xs text-text-muted leading-tight mt-1">사내 ERP 시스템</p>
+    <aside
+      className={`${collapsed ? "w-16" : "w-64"} shrink-0 bg-sidebar border-r border-border h-screen sticky top-0 flex flex-col transition-[width] duration-150 overflow-x-hidden`}
+    >
+      <div className={`flex items-center ${collapsed ? "justify-center py-3" : "justify-end px-3 pt-3"}`}>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title={collapsed ? "사이드바 펼치기" : "사이드바 숨기기"}
+          aria-label={collapsed ? "사이드바 펼치기" : "사이드바 숨기기"}
+          className="p-2 rounded-lg text-text-muted hover:bg-surface hover:text-text transition-colors"
+        >
+          {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+        </button>
       </div>
+      {!collapsed && (
+        <div className="px-5 pb-5 flex flex-col items-center text-center">
+          <Logo />
+          <p className="text-xs text-text-muted leading-tight mt-1">사내 ERP 시스템</p>
+        </div>
+      )}
 
-      <nav className="px-3 space-y-1 shrink-0">
+      <nav className={`${collapsed ? "px-2" : "px-3"} space-y-1 shrink-0`}>
         {visibleItems.map(({ to, label, icon: Icon, end, colorClass, desktopMailOnly }) =>
           desktopMailOnly ? (
             // 메일은 메뉴 이동이 아니라 별도 창을 여는 버튼이다 (이미 열려 있으면 그 창을 앞으로)
@@ -111,25 +148,28 @@ export function Sidebar() {
                 console.debug("[Sidebar] 메일 버튼 클릭 → 메일 창 열기");
                 void mailBridge?.openWindow();
               }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-text-muted hover:bg-surface/60 transition-colors text-left"
+              title={collapsed ? label : undefined}
+              className={`relative w-full flex items-center gap-2.5 py-2 rounded-lg text-sm text-text-muted hover:bg-surface/60 transition-colors text-left ${collapsed ? "justify-center px-0" : "px-3"}`}
             >
               <Icon size={17} />
-              {label}
+              {!collapsed && label}
               {mailUnread > 0 && (
-                <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center" aria-label={`안 읽은 메일 ${mailUnread}통`}>
+                <span className={`${collapsed ? "absolute top-0.5 right-1" : "ml-auto"} min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center`} aria-label={`안 읽은 메일 ${mailUnread}통`}>
                   {mailUnread > 99 ? "99+" : mailUnread}
                 </span>
               )}
             </button>
-            <NewMailNotices
-              items={newMail.items}
-              onOpen={(item) => {
-                newMail.dismiss(item);
-                void mailBridge?.openMessage(item.id, item.accountId);
-              }}
-              onDismiss={newMail.dismiss}
-              onClear={newMail.clear}
-            />
+            {!collapsed && (
+              <NewMailNotices
+                items={newMail.items}
+                onOpen={(item) => {
+                  newMail.dismiss(item);
+                  void mailBridge?.openMessage(item.id, item.accountId);
+                }}
+                onDismiss={newMail.dismiss}
+                onClear={newMail.clear}
+              />
+            )}
             </div>
           ) : (
           <NavLink
@@ -144,21 +184,24 @@ export function Sidebar() {
               console.debug(`[Sidebar] 메뉴 클릭 → 탭 열기: ${to}`);
               tabMenu.openMenu(to);
             }}
+            title={collapsed ? label : undefined}
             className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+              `relative flex items-center gap-2.5 py-2 rounded-lg text-sm transition-colors ${
+                collapsed ? "justify-center px-0" : "px-3"
+              } ${
                 colorClass || (isActive ? "text-text" : "text-text-muted")
               } ${isActive ? "bg-surface font-medium shadow-sm" : "hover:bg-surface/60"}`
             }
           >
             <Icon size={17} />
-            {label}
+            {!collapsed && label}
             {to === "/messenger" && messengerUnread > 0 && (
-              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center" aria-label={`안 읽은 메시지 ${messengerUnread}개`}>
+              <span className={`${collapsed ? "absolute top-0.5 right-1" : "ml-auto"} min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center`} aria-label={`안 읽은 메시지 ${messengerUnread}개`}>
                 {messengerUnread > 99 ? "99+" : messengerUnread}
               </span>
             )}
             {to === "/notices" && unreadCount > 0 && (
-              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center">
+              <span className={`${collapsed ? "absolute top-0.5 right-1" : "ml-auto"} min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center`}>
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}
@@ -167,21 +210,30 @@ export function Sidebar() {
         )}
         {/* 브라우저에서는 메일을 볼 수 없으므로 앱이 알려 준 안 읽은 수만 보여 준다 */}
         {!hasDesktopMail && mailUnread > 0 && (
-          <p className="flex items-center gap-2.5 px-3 py-2 text-sm text-text-muted" title="메일은 데스크톱 앱에서 확인할 수 있습니다">
+          <p className={`relative flex items-center gap-2.5 py-2 text-sm text-text-muted ${collapsed ? "justify-center px-0" : "px-3"}`} title="메일은 데스크톱 앱에서 확인할 수 있습니다">
             <Mail size={17} />
-            안 읽은 메일
-            <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center" aria-label={`안 읽은 메일 ${mailUnread}통`}>
+            {!collapsed && "안 읽은 메일"}
+            <span className={`${collapsed ? "absolute top-0.5 right-1" : "ml-auto"} min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center`} aria-label={`안 읽은 메일 ${mailUnread}통`}>
               {mailUnread > 99 ? "99+" : mailUnread}
             </span>
           </p>
         )}
       </nav>
 
-      <div className="mt-14 flex-1 min-h-0 flex flex-col">
-        <TodoPanel />
-      </div>
+      <div className="mt-14 flex-1 min-h-0 flex flex-col">{!collapsed && <TodoPanel />}</div>
 
-      {user && (
+      {user && collapsed && (
+        <div className="px-2 py-3 border-t border-border flex justify-center">
+          <button
+            onClick={logout}
+            title="로그아웃"
+            className="p-2 rounded-lg text-text-muted hover:bg-surface hover:text-text transition-colors"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
+      )}
+      {user && !collapsed && (
         <div className="px-3 py-4 border-t border-border">
           <div className="flex items-center justify-between px-2">
             <div className="min-w-0">
