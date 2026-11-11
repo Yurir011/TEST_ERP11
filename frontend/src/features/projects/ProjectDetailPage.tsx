@@ -6,6 +6,7 @@ import { ApiError, apiGet, apiPut, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
+import { ProjectBomCard } from "./ProjectBomCard";
 import { ProjectPurchaseList } from "./ProjectPurchaseList";
 import { ScheduleProgressCard } from "./ScheduleProgressCard";
 import { DocColumn } from "./DocColumn";
@@ -224,6 +225,8 @@ export function ProjectDetailPage() {
               </div>
             )}
           </div>
+
+          <ProjectBomCard projectId={project.id} />
 
           <ScheduleProgressCard project={project} stages={stages} onUpdated={setProject} />
 

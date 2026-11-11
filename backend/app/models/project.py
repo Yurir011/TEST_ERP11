@@ -10,6 +10,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.client import Client
+    from app.models.project_bom import ProjectBomLine
     from app.models.project_note import ProjectDateNote
     from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
     from app.models.user import User
@@ -48,6 +49,9 @@ class Project(Base):
     )
     date_notes: Mapped[list["ProjectDateNote"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ProjectDateNote.note_date"
+    )
+    bom_lines: Mapped[list["ProjectBomLine"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", order_by="ProjectBomLine.id"
     )
     purchase_steps: Mapped[list["ProjectPurchaseStep"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ProjectPurchaseStep.order_index"

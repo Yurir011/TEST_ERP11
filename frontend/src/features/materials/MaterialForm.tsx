@@ -8,10 +8,9 @@ import { PrefixBadge, prefixFor } from "./CodeText";
 import { QtyInput, emptyQty, qtyIncomplete, qtyPayload, qtyReels, qtyTotal, type QtyState } from "./QtyInput";
 import { SubLevelEditor } from "./SubLevelTree";
 import {
+  CATEGORY_CHIPS,
   CATEGORY_LABELS,
-  CATEGORY_ORDER,
   MATERIAL_KIND_LABELS,
-  MATERIAL_KIND_ORDER,
   formatReelQty,
   levelPath,
   type MaterialCategory,
@@ -28,11 +27,6 @@ const inputCls = "rounded-lg border border-border px-3 py-2.5 text-base sm:text-
  * 품목 칩은 평소 "회로부품" 네 글자만 보이고, 회로부품을 누르면 작은 메뉴가 열려 전용 / 범용을 고른다. 고르기 전에는 등록할 수 없다.
  * @param basePath 저장하면 이동할 상세 화면의 앞 경로 ("/materials" 또는 "/m/materials")
  */
-/** 품목 선택 칩: 회로부품은 전용·범용을 칩 둘로 나눠 한눈에 보고 바로 누르게 한다. */
-const CHIPS: { key: string; category: MaterialCategory; kind: MaterialKind | null; label: string }[] = CATEGORY_ORDER.flatMap((c) =>
-  c === "ic" ? MATERIAL_KIND_ORDER.map((k) => ({ key: `ic-${k}`, category: c, kind: k, label: `${CATEGORY_LABELS[c]} ${MATERIAL_KIND_LABELS[k]}` })) : [{ key: c, category: c, kind: null, label: CATEGORY_LABELS[c] }],
-);
-
 export function MaterialForm({ basePath }: { basePath: string }) {
   const navigate = useNavigate();
   const dialog = useContext(DialogContext); // 안내 창이 없는 곳(테스트 등)에서도 그려지도록 필수로 쓰지 않는다
@@ -125,7 +119,7 @@ export function MaterialForm({ basePath }: { basePath: string }) {
     <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-5 sm:p-8 max-w-2xl">
       <p className="text-xs text-text-muted mb-2">품목</p>
       <div className="flex flex-wrap gap-1.5 mb-6" role="radiogroup" aria-label="품목">
-        {CHIPS.map((chip) => {
+        {CATEGORY_CHIPS.map((chip) => {
           const on = category === chip.category && kind === chip.kind;
           return (
             <button
