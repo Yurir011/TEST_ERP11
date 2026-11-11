@@ -20,7 +20,7 @@ export const CATEGORY_LABELS: Record<MaterialCategory, string> = {
 };
 
 /** 품목 선택 칩: 회로부품은 전용·범용을 칩 둘로 나눠 한눈에 보고 바로 누르게 한다. 자재 등록 화면과 BOM 의 자재 등록 창이 같이 쓴다. */
-export const CATEGORY_CHIPS: { key: string; category: MaterialCategory; kind: MaterialKind | null; label: string }[] = CATEGORY_ORDER.flatMap((c) =>
+export const CATEGORY_CHIPS: { key: string; category: MaterialCategory; kind: MaterialKind | null; label: string }[] = CATEGORY_ORDER.flatMap<{ key: string; category: MaterialCategory; kind: MaterialKind | null; label: string }>((c) =>
   c === "ic" ? MATERIAL_KIND_ORDER.map((k) => ({ key: `ic-${k}`, category: c, kind: k, label: `${CATEGORY_LABELS[c]} ${MATERIAL_KIND_LABELS[k]}` })) : [{ key: c, category: c, kind: null, label: CATEGORY_LABELS[c] }],
 );
 

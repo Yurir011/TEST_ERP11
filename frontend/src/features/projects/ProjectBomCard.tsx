@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { SOFT_BADGE } from "../../components/ui/softBadge";
@@ -16,12 +17,14 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 /**
  * 프로젝트(=제품 생산)의 "BOM 등록" 카드: 이 프로젝트에 필요한 자재와 수량.
+ * 평소에는 왼쪽의 [BOM 등록] 버튼만 보이고, BOM 이 하나라도 있으면 오른쪽에 요약(총 N종 · 재고 부족 · 미등록)이 붙는다. 버튼을 누르면 같은 자리에서 펼쳐진다.
  * 위 칩(전체·재고 부족·미등록·충분)으로 걸러 보고, 부족·미등록은 "조치 필요" 묶음으로 맨 위에 모인다.
  * 줄을 누르면 오른쪽 패널에서 수량·비고를 고치거나 지운다. 자재관리(재고 목록)에 없는 자재는 경고와 함께 등록할 수 있다.
  * 자동 출고는 아직 없다.
  */
 export function ProjectBomCard({ projectId }: { projectId: number }) {
   const dialog = useDialog();
+  const [open, setOpen] = useState(false); // 평소에는 접어 두고 버튼만 보인다 (열어 둔 상태는 기억하지 않는다)
   const [lines, setLines] = useState<BomLine[] | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -233,10 +236,31 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
 
   return (
     <div className="bg-surface border border-border rounded-2xl mb-6" aria-label="BOM 등록">
-      <div className="px-5 pt-5 pb-3">
-        <h2 className="text-base font-semibold">BOM 등록</h2>
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls="bom-content"
+          onClick={() => setOpen((v) => !v)}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium ${open ? "bg-primary hover:bg-primary-hover text-white" : "border border-border bg-surface hover:bg-bg text-text"}`}
+        >
+          BOM 등록
+          <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {lines !== null && lines.length > 0 && (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5 text-xs" aria-label="BOM 요약">
+            <span className="rounded-full bg-bg px-2.5 py-1 font-medium text-text-muted">총 {lines.length}종</span>
+            {counts.bad > 0 && <span className={`px-2.5 py-1 font-semibold ${SOFT_BADGE.red}`}>재고 부족 {counts.bad}</span>}
+            {counts.warn > 0 && <span className={`px-2.5 py-1 font-semibold ${SOFT_BADGE.orange}`}>미등록 {counts.warn}</span>}
+            {counts.bad === 0 && counts.warn === 0 && <span className={`px-2.5 py-1 font-semibold ${SOFT_BADGE.green}`}>모두 충분</span>}
+          </div>
+        )}
       </div>
 
+      {error && <p className="px-5 pb-3 text-sm text-danger">{error}</p>}
+
+      {open && (
+        <div id="bom-content" className="border-t border-border">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-5 pb-4">
         {BOM_FILTERS.map((f) => (
           <button
@@ -251,8 +275,6 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
           </button>
         ))}
       </div>
-
-      {error && <p className="px-5 pb-3 text-sm text-danger">{error}</p>}
 
       <div className={selected ? "grid lg:grid-cols-[minmax(0,1fr)_300px]" : ""}>
         <div className="min-w-0">
@@ -421,6 +443,9 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
           </div>
         )}
       </div>
+
+        </div>
+      )}
 
       {registerFor && <BomRegisterModal initialName={registerFor.name} onClose={() => setRegisterFor(null)} onRegistered={(m) => void handleRegistered(m)} />}
     </div>
