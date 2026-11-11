@@ -6,6 +6,7 @@ import { MainLayout } from "../../components/layout/MainLayout";
 import { ApiError, apiDelete, apiGet, downloadFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
+import { IconAction } from "../payments/IconAction";
 import { HometaxImportModal } from "./HometaxImportModal";
 import { ReportDetailModal, type ReportCardKind } from "./ReportDetailModal";
 import { TransactionDetailModal } from "./TransactionDetailModal";
@@ -169,21 +170,12 @@ export function TransactionsPage() {
       description="매입·매출을 기록하고 부가세를 자동으로 집계합니다."
       actions={
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowHometax(true)}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
-          >
-            <FileSpreadsheet size={14} />
-            홈택스 엑셀 가져오기
-          </button>
-          <button
-            onClick={handleExportExcel}
-            disabled={isExporting}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
-          >
-            <Download size={14} />
-            {isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"}
-          </button>
+          <IconAction label="홈택스 엑셀 가져오기" onClick={() => setShowHometax(true)}>
+            <FileSpreadsheet size={17} />
+          </IconAction>
+          <IconAction label={isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"} onClick={handleExportExcel} disabled={isExporting}>
+            <Download size={17} />
+          </IconAction>
           <Link
             to="/transactions/new"
             className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"

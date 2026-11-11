@@ -32,6 +32,7 @@ import { ProposalAttachmentsModal } from "../proposals/ProposalAttachmentsModal"
 import { PurchaseProposalCard } from "../proposals/PurchaseProposalCard";
 import { computePurchaseFlow, isPurchaseProposal } from "../proposals/purchaseFlow";
 import type { Proposal } from "../proposals/types";
+import { IconAction } from "../payments/IconAction";
 import { HometaxImportModal } from "../transactions/HometaxImportModal";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import { useOpenTarget, type OpenOverlayProps } from "../../lib/useOpenTarget";
@@ -1196,21 +1197,12 @@ export function ProjectDocumentsPage({
       actions={
         lockedDocType === "tax_invoice" ? (
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowHometax(true)}
-              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface"
-            >
-              <FileSpreadsheet size={14} />
-              홈택스 엑셀 가져오기
-            </button>
-            <button
-              onClick={handleExportTaxInvoicesExcel}
-              disabled={isExportingExcel}
-              className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
-            >
-              <Download size={14} />
-              {isExportingExcel ? "다운로드 중..." : "엑셀 다운로드 (청구/영수/개요)"}
-            </button>
+            <IconAction label="홈택스 엑셀 가져오기" onClick={() => setShowHometax(true)}>
+              <FileSpreadsheet size={17} />
+            </IconAction>
+            <IconAction label={isExportingExcel ? "다운로드 중..." : "엑셀 다운로드 (청구/영수/개요)"} onClick={handleExportTaxInvoicesExcel} disabled={isExportingExcel}>
+              <Download size={17} />
+            </IconAction>
             <Link
               to="/project-documents/new?type=tax_invoice"
               className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"

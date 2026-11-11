@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { apiGet, downloadFile, openFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
+import { IconAction } from "../payments/IconAction";
 import { NewClientButton } from "./NewClientButton";
 import type { Client } from "./types";
 import { todayISO } from "../../lib/date";
@@ -169,14 +170,9 @@ export function ClientsPage() {
       description="거래처 정보를 등록하고 관리합니다."
       actions={
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportExcel}
-            disabled={isExporting}
-            className="flex items-center gap-1.5 text-xs border border-border rounded-lg px-3 py-2 hover:bg-surface disabled:opacity-50"
-          >
-            <Download size={14} />
-            {isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"}
-          </button>
+          <IconAction label={isExporting ? "다운로드 중..." : "목록 엑셀 다운로드"} onClick={handleExportExcel} disabled={isExporting}>
+            <Download size={17} />
+          </IconAction>
           <NewClientButton />
         </div>
       }
