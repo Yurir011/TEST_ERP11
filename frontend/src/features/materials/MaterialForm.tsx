@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useContext, useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { DialogContext } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiGet, apiPost, apiPut } from "../../lib/api";
 import { todayISO } from "../../lib/date";
 import { logDebug, logError } from "../../lib/logger";
@@ -29,6 +30,7 @@ const inputCls = "rounded-lg border border-border px-3 py-2.5 text-base sm:text-
  */
 export function MaterialForm({ basePath }: { basePath: string }) {
   const navigate = useNavigate();
+  const dialog = useContext(DialogContext); // 안내 창이 없는 곳(테스트 등)에서도 그려지도록 필수로 쓰지 않는다
   const { id } = useParams();
   const editingId = id ? Number(id) : null;
   const isEdit = editingId !== null;
@@ -116,6 +118,10 @@ export function MaterialForm({ basePath }: { basePath: string }) {
     try {
       logDebug("MaterialForm", `${isEdit ? "수정" : "등록"} 저장 시도: category=${category}, kind=${kind}, name=${body.name}, levels=${body.sub_levels.length}, unit=${inQty.unit}`);
       const saved = isEdit ? await apiPut<MaterialDetail>(`/api/materials/${editingId}`, body) : await apiPost<MaterialDetail>("/api/materials", body);
+      if (saved.merged) {
+        logDebug("MaterialForm", `같은 자재가 있어 추가 입고로 기록: id=${saved.id}, code=${saved.code}`);
+        dialog?.notify(`이미 있는 자재(${saved.code})라서 새로 만들지 않고 입고로 기록했습니다.`);
+      }
       navigate(`${basePath}/${saved.id}`, { replace: true });
     } catch (err) {
       logError("MaterialForm", "저장 실패", err);

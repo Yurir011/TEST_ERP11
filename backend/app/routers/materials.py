@@ -2,7 +2,7 @@
 
 로그인한 직원(사이트 관리자 제외) 누구나 조회·등록·수정·입출고 기록을 할 수 있고, 자재와 입출고 기록을 지우는 것은 대표만 한다.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import Integer, func, or_, text
 from sqlalchemy.orm import Session, selectinload
 
@@ -182,8 +182,33 @@ def level_history(db: Session = Depends(get_db), current_user: User = Depends(re
     return {"levels": result}
 
 
+def _find_same(db: Session, payload: MaterialIn) -> Material | None:
+    """같은 항목·종류·이름(앞뒤 공백·대소문자 무시)·속성 경로를 가진 기존 자재."""
+    q = db.query(Material).filter(Material.category == payload.category, func.lower(Material.name) == payload.name.lower(), Material.sub_levels == payload.sub_levels)
+    q = q.filter(Material.kind == payload.kind) if payload.kind else q.filter(Material.kind.is_(None))
+    return q.order_by(Material.id).first()
+
+
 @router.post("", response_model=MaterialDetailOut, status_code=status.HTTP_201_CREATED)
-def create_material(payload: MaterialIn, db: Session = Depends(get_db), current_user: User = Depends(require_material_access)):
+def create_material(payload: MaterialIn, response: Response, db: Session = Depends(get_db), current_user: User = Depends(require_material_access)):
+    same = _find_same(db, payload)
+    if same is not None:
+        # 이름과 속성이 같은 자재를 또 만들지 않고, 적은 개수를 기존 자재의 추가 입고로 기록한다
+        if payload.initial_in is None:
+            logger.debug(f"[Materials] 등록 거절: 같은 자재 있음 id={same.id}, code={same.code}, name={payload.name}")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"같은 이름·속성의 자재가 이미 있습니다 ({same.code}). 입고 개수를 적으면 기존 자재에 입고로 기록됩니다.")
+        existing = _get_or_404(db, same.id, lock=True)
+        i = payload.initial_in
+        existing.movements.append(
+            MaterialMovement(kind="add", movement_date=i.movement_date, quantity=i.quantity, reels=i.reels, reel_groups=_groups(i), created_by=current_user.id)
+        )
+        db.commit()
+        existing = _get_or_404(db, existing.id)
+        logger.debug(f"[Materials] 등록 → 기존 자재에 추가 입고: id={existing.id}, code={existing.code}, name={existing.name}, quantity={i.quantity}, by={current_user.id}")
+        response.status_code = status.HTTP_200_OK
+        out = _detail(db, existing)
+        out.merged = True
+        return out
     m = Material(
         category=payload.category,
         kind=payload.kind,

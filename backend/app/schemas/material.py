@@ -209,3 +209,4 @@ class MaterialDetailOut(MaterialOut):
     total_return: int = 0  # 재입고 합계
     total_loss: int = 0  # 로스 합계 (사용 개수를 적어 정산된 출고 건만)
     movements: list[MovementOut]  # 최근순
+    merged: bool = False  # 등록하려던 자재가 이미 있어서(같은 항목·이름·속성) 기존 자재에 추가 입고로 기록했을 때 True

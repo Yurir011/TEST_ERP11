@@ -106,6 +106,8 @@ export interface MaterialDetail extends Material {
   total_return: number;
   total_loss: number;
   movements: Movement[];
+  /** 등록하려던 자재가 이미 있어서 기존 자재에 추가 입고로 기록했다 */
+  merged?: boolean;
 }
 
 export interface MaterialInput {

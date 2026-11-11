@@ -86,6 +86,24 @@ def test_update_keeps_movements_and_delete_is_admin_only(client, make_user, auth
     assert client.get(f"/api/materials/{m['id']}", headers=hs).status_code == 404
 
 
+def test_registering_same_name_and_levels_adds_stock_to_existing(client, make_user, auth_headers):
+    h = auth_headers(make_user(name="직원"))
+    first = _new(client, h)
+    body = {"category": "ic", "kind": "dedicated", "name": "  stm32f103c8t6 ", "sub_levels": ["MCU", "", "ARM Cortex-M3", "LQFP48"], "initial_in": {"movement_date": "2026-11-02", "quantity": 100}}
+    res = client.post("/api/materials", headers=h, json=body)
+    assert res.status_code == 200, res.text
+    d = res.json()
+    assert d["merged"] is True and d["id"] == first["id"] and d["current_qty"] == 600 and d["total_add"] == 100 and d["total_in"] == 500
+    assert len(client.get("/api/materials", headers=h).json()) == 1
+    # 개수를 안 적으면 새로 만들지 않고 알려 준다
+    body.pop("initial_in")
+    assert client.post("/api/materials", headers=h, json=body).status_code == 409
+    # 속성이 다르거나 종류가 다르면 다른 자재다
+    assert _new(client, h, sub_levels=["MCU"]).get("merged") is False
+    assert _new(client, h, kind="general").get("merged") is False
+    assert len(client.get("/api/materials", headers=h).json()) == 3
+
+
 def test_bulk_delete_is_admin_only_and_all_or_nothing(client, make_user, auth_headers):
     staff, admin = make_user(name="직원"), make_user(role=UserRole.admin, name="대표")
     hs, ha = auth_headers(staff), auth_headers(admin)

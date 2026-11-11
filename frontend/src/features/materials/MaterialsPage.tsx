@@ -45,7 +45,14 @@ export function MaterialsPage() {
   }, [load]);
 
   const counts = useMemo(() => Object.fromEntries(LIST_TABS.map((t) => [t.key, (rows ?? []).filter((m) => matchTab(m, t.key)).length])), [rows]);
-  const shown = useMemo(() => (rows ?? []).filter((m) => matchTab(m, tab) && matchKeyword(m, keyword)), [rows, tab, keyword]);
+  // 이름 사전식(가나다·ABC, 숫자는 크기순: "저항 2" 다음에 "저항 10") 자동 정렬. 이름이 같으면 코드순
+  const shown = useMemo(
+    () =>
+      (rows ?? [])
+        .filter((m) => matchTab(m, tab) && matchKeyword(m, keyword))
+        .sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true, sensitivity: "base" }) || a.code.localeCompare(b.code)),
+    [rows, tab, keyword],
+  );
 
   const shownIds = shown.map((m) => m.id);
   const selectedInView = shownIds.filter((id) => selected.has(id)).length;
