@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, Field, field_validator
 
 MAX_QUANTITY = 100_000_000
@@ -43,3 +45,16 @@ class BomLineOut(BaseModel):
     note: str | None
     current_qty: int | None  # 연결된 자재의 현재 재고 (미등록이면 None)
     shortage: int | None  # 재고가 모자라는 개수 (넉넉하거나 미등록이면 None)
+    released: int  # 이 줄로 지금까지 출고한 개수 (자재관리의 출고 기록 중 이 BOM 줄과 연결된 것의 합)
+
+
+class BomReleaseItem(BaseModel):
+    line_id: int
+    quantity: int = Field(gt=0, le=MAX_QUANTITY)
+
+
+class BomReleaseIn(BaseModel):
+    """BOM 에서 고른 줄을 한꺼번에 출고한다 (줄마다 출고 수량). 하나라도 안 되면 전체를 취소한다."""
+
+    items: list[BomReleaseItem] = Field(min_length=1, max_length=500)
+    release_date: date | None = None  # 비우면 오늘

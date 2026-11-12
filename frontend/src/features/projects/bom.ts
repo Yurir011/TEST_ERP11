@@ -12,8 +12,10 @@ export interface BomLine {
   note: string | null;
   /** 연결된 자재의 현재 재고 (미등록이면 null) */
   current_qty: number | null;
-  /** 재고가 모자라는 개수 (넉넉하거나 미등록이면 null) */
+  /** 아직 출고하지 않은 필요 수량 대비 재고가 모자라는 개수 (넉넉하거나 미등록이면 null) */
   shortage: number | null;
+  /** 이 줄로 지금까지 출고한 개수 */
+  released: number;
 }
 
 /** bad: 재고 부족 / warn: 미등록(재고 목록에 없음) / good: 재고 충분 */
@@ -33,11 +35,22 @@ export function bomState(line: BomLine): BomState {
   return line.shortage !== null && line.shortage > 0 ? "bad" : "good";
 }
 
+/** 아직 출고하지 않은 필요 수량 */
+export function bomRemaining(line: BomLine): number {
+  return Math.max(line.quantity - line.released, 0);
+}
+
+/** 지금 출고할 수 있는 줄인가: 자재관리에 등록되어 있고, 남은 필요 수량이 있고, 재고가 그만큼 있다 */
+export function bomReleasable(line: BomLine): boolean {
+  return line.registered && bomRemaining(line) > 0 && (line.current_qty ?? 0) >= bomRemaining(line);
+}
+
 export function bomStateLabel(line: BomLine): string {
+  if (line.registered && bomRemaining(line) === 0) return "출고 완료";
   const s = bomState(line);
   if (s === "warn") return "미등록";
   if (s === "bad") return `${(line.shortage ?? 0).toLocaleString("ko-KR")}개 부족`;
-  return "충분";
+  return line.released > 0 ? "일부 출고" : "충분";
 }
 
 export function bomCounts(lines: BomLine[]): Record<BomFilter, number> {

@@ -75,6 +75,8 @@ class MaterialMovement(Base):
     # 재입고(return)일 때만: 어느 출고 건의 반납인지, 그중 실제 사용한 개수 (로스 = 출고 - 반납 합계 - 사용 합계). 사용 개수를 모르면 비워 둔다.
     return_of: Mapped[int | None] = mapped_column(ForeignKey("material_movements.id"), nullable=True, index=True)
     used_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 프로젝트 BOM 에서 출고한 기록이면 그 BOM 줄 (BOM 줄이 지워져도 출고 기록은 남는다)
+    bom_line_id: Mapped[int | None] = mapped_column(ForeignKey("project_bom_lines.id", ondelete="SET NULL"), nullable=True, index=True)
     reason: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 출고 사유 (출고에서 필수)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)  # 메모(입고) / 사유 자세히(출고)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))

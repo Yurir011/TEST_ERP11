@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bomCounts, bomState, bomStateLabel, groupBom, type BomLine } from "./bom";
+import { bomCounts, bomReleasable, bomRemaining, bomState, bomStateLabel, groupBom, type BomLine } from "./bom";
 
 const line = (id: number, over: Partial<BomLine> = {}): BomLine => ({
   id,
@@ -13,6 +13,7 @@ const line = (id: number, over: Partial<BomLine> = {}): BomLine => ({
   note: null,
   current_qty: 100,
   shortage: null,
+  released: 0,
   ...over,
 });
 
@@ -37,5 +38,20 @@ describe("BOM 상태", () => {
     expect(g.ok.map((l) => l.id)).toEqual([1, 4]);
     expect(groupBom(all, "bad")).toEqual({ need: [short], ok: [] });
     expect(groupBom(all, "good").need).toEqual([]);
+  });
+});
+
+describe("BOM 출고", () => {
+  it("출고할 수 있는 줄: 등록됨 + 남은 필요 수량이 있음 + 재고가 그만큼 있음", () => {
+    expect(bomReleasable(ok)).toBe(true);
+    expect(bomReleasable(short)).toBe(false); // 재고 부족
+    expect(bomReleasable(unreg)).toBe(false); // 자재관리에 없음
+    expect(bomReleasable(line(4, { released: 10 }))).toBe(false); // 이미 모두 출고
+    expect(bomReleasable(line(5, { released: 4, current_qty: 6 }))).toBe(true); // 남은 6개만 있으면 된다
+  });
+  it("일부 출고·출고 완료를 글자로 보여 주고 남은 수량을 센다", () => {
+    expect(bomRemaining(line(6, { released: 4 }))).toBe(6);
+    expect(bomStateLabel(line(6, { released: 4 }))).toBe("일부 출고");
+    expect(bomStateLabel(line(7, { released: 10 }))).toBe("출고 완료");
   });
 });

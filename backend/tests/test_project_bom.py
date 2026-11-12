@@ -76,3 +76,52 @@ def test_bom_survives_material_delete_as_unregistered(client, db, make_user, mak
     assert client.delete(f"/api/materials/{m['id']}", headers=h).status_code == 204
     rows = client.get(f"/api/projects/{p.id}/bom", headers=h).json()
     assert len(rows) == 1 and rows[0]["registered"] is False and rows[0]["item_name"] == "10uF"
+
+
+def test_release_selected_lines_records_out_movements_and_updates_stock(client, db, make_user, make_client, auth_headers):
+    me = make_user(role=UserRole.employee)
+    h = auth_headers(me)
+    p = _project(db, make_client, me)
+    a = _material(client, h, qty=100, name="MCU A")
+    b = _material(client, h, qty=50, name="저항 B", sub_levels=["저항"])
+    url = f"/api/projects/{p.id}/bom"
+    la = client.post(url, headers=h, json={"material_id": a["id"], "quantity": 60}).json()
+    lb = client.post(url, headers=h, json={"material_id": b["id"], "quantity": 40}).json()
+    assert la["released"] == 0
+
+    res = client.post(f"{url}/release", headers=h, json={"items": [{"line_id": la["id"], "quantity": 60}, {"line_id": lb["id"], "quantity": 10}]})
+    assert res.status_code == 200, res.text
+    rows = {r["id"]: r for r in res.json()}
+    assert rows[la["id"]]["released"] == 60 and rows[la["id"]]["current_qty"] == 40
+    assert rows[lb["id"]]["released"] == 10 and rows[lb["id"]]["current_qty"] == 40
+
+    detail = client.get(f"/api/materials/{a['id']}", headers=h).json()
+    outs = [x for x in detail["movements"] if x["kind"] == "out"]
+    assert len(outs) == 1 and outs[0]["quantity"] == 60 and outs[0]["reason"] == "생산 불출" and "BOM 출고" in outs[0]["note"]
+
+    # 남은 필요 수량(40-10=30)보다 많이는 안 된다
+    over = client.post(f"{url}/release", headers=h, json={"items": [{"line_id": lb["id"], "quantity": 31}]})
+    assert over.status_code == 400 and "남은 필요 수량" in over.json()["detail"]
+
+
+def test_release_is_all_or_nothing_and_rejects_shortage_and_unregistered(client, db, make_user, make_client, auth_headers):
+    me = make_user(role=UserRole.employee)
+    h = auth_headers(me)
+    p = _project(db, make_client, me)
+    ok = _material(client, h, qty=100, name="충분한 자재")
+    low = _material(client, h, qty=5, name="모자란 자재", sub_levels=["x"])
+    url = f"/api/projects/{p.id}/bom"
+    l_ok = client.post(url, headers=h, json={"material_id": ok["id"], "quantity": 10}).json()
+    l_low = client.post(url, headers=h, json={"material_id": low["id"], "quantity": 10}).json()
+    l_none = client.post(url, headers=h, json={"item_name": "미등록 자재", "quantity": 3}).json()
+
+    short = client.post(f"{url}/release", headers=h, json={"items": [{"line_id": l_ok["id"], "quantity": 10}, {"line_id": l_low["id"], "quantity": 10}]})
+    assert short.status_code == 400 and "재고" in short.json()["detail"]
+    assert [r["released"] for r in client.get(url, headers=h).json()] == [0, 0, 0]  # 앞의 줄도 출고되지 않았다
+    assert client.get(f"/api/materials/{ok['id']}", headers=h).json()["current_qty"] == 100
+
+    assert client.post(f"{url}/release", headers=h, json={"items": [{"line_id": l_none["id"], "quantity": 1}]}).status_code == 400
+    assert client.post(f"{url}/release", headers=h, json={"items": [{"line_id": 999999, "quantity": 1}]}).status_code == 404
+    assert client.post(f"{url}/release", headers=h, json={"items": []}).status_code == 422
+    dup = client.post(f"{url}/release", headers=h, json={"items": [{"line_id": l_ok["id"], "quantity": 1}, {"line_id": l_ok["id"], "quantity": 1}]})
+    assert dup.status_code == 422

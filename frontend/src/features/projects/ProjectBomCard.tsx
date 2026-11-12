@@ -5,8 +5,8 @@ import { SOFT_BADGE } from "../../components/ui/softBadge";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { CodeText } from "../materials/CodeText";
-import { levelPath, type Material, type MaterialDetail } from "../materials/types";
-import { BOM_FILTERS, bomCounts, bomState, bomStateLabel, groupBom, type BomFilter, type BomLine, type BomState } from "./bom";
+import { classLabel, levelPath, matchKeyword, type Material, type MaterialDetail } from "../materials/types";
+import { BOM_FILTERS, bomCounts, bomReleasable, bomRemaining, bomState, bomStateLabel, groupBom, type BomFilter, type BomLine, type BomState } from "./bom";
 import { BomRegisterModal } from "./BomRegisterModal";
 
 const STATE_BADGE: Record<BomState, string> = { bad: SOFT_BADGE.red, warn: SOFT_BADGE.orange, good: SOFT_BADGE.green };
@@ -14,7 +14,7 @@ const STATE_BADGE: Record<BomState, string> = { bad: SOFT_BADGE.red, warn: SOFT_
 const DOT: Record<BomFilter, string> = { all: "bg-text-muted/50", bad: "bg-danger", warn: "bg-tile-orange-fg", good: "bg-success" };
 const fieldCls =
   "w-full h-[42px] rounded-lg border-[1.5px] border-[color-mix(in_srgb,var(--color-text)_26%,var(--color-surface))] bg-surface px-3 text-sm outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20";
-const ROW_GRID = "grid grid-cols-[minmax(0,1.7fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 px-5";
+const ROW_GRID = "grid grid-cols-[20px_minmax(0,1.7fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1fr)] items-center gap-3 px-5";
 const inputCls = "w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg";
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -24,7 +24,8 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
  * 펼치면 "조치가 필요한 자재 N종"과 상태 막대·필터가 먼저 보이고, 부족·미등록은 "조치 필요" 묶음으로 맨 위에 모인다.
  * BOM 이 비어 있으면 안내와 [+ 자재 추가] 버튼만 보이고, 그 버튼을 눌러야 자재 추가 칸이 나타난다.
  * 줄을 누르면 오른쪽 패널에서 수량·비고를 고치거나 지운다. 자재관리(재고 목록)에 없는 자재는 경고와 함께 등록할 수 있다.
- * 자동 출고는 아직 없다.
+ * 줄 앞 체크박스로 고른 뒤 [선택 항목 출고]를 누르면 줄마다 출고 수량을 확인하고 한꺼번에 출고한다 (자재관리에 "생산 불출" 출고 기록이 남고 재고가 줄어든다).
+ * 자재관리에 없는 줄·남은 필요 수량이 없는 줄·재고가 모자란 줄은 고를 수 없다.
  */
 export function ProjectBomCard({ projectId }: { projectId: number }) {
   const dialog = useDialog();
@@ -48,6 +49,12 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
   const [warnFor, setWarnFor] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // 출고: 체크한 줄, 확인 창, 줄마다 출고 수량(글), 처리 중·오류
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [releaseOpen, setReleaseOpen] = useState(false);
+  const [releaseQty, setReleaseQty] = useState<Record<number, string>>({});
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
   // 자재관리에 등록하는 창: "new" = 추가 입력줄의 이름, 숫자 = 그 BOM 줄을 연결
   const [registerFor, setRegisterFor] = useState<{ target: "new" | number; name: string } | null>(null);
 
@@ -90,10 +97,54 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
     setPanelError(null);
   }, [selected]);
 
+  const releasableIds = useMemo(() => (lines ?? []).filter(bomReleasable).map((l) => l.id), [lines]);
+  const checkedLines = (lines ?? []).filter((l) => checked.has(l.id) && bomReleasable(l));
+
+  function toggleChecked(id: number, on: boolean) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    setReleaseOpen(false);
+  }
+
+  function openRelease() {
+    setReleaseQty(Object.fromEntries(checkedLines.map((l) => [l.id, String(bomRemaining(l))])));
+    setReleaseError(null);
+    setReleaseOpen(true);
+  }
+
+  async function handleRelease() {
+    const items = checkedLines.map((l) => ({ line_id: l.id, quantity: Number(releaseQty[l.id]) })).filter((x) => x.quantity > 0);
+    if (items.length === 0) return setReleaseError("출고할 수량을 1 이상으로 입력해 주세요.");
+    for (const it of items) {
+      const l = checkedLines.find((x) => x.id === it.line_id)!;
+      if (!Number.isInteger(it.quantity) || it.quantity > bomRemaining(l)) return setReleaseError(`'${l.item_name}' 은(는) 남은 필요 수량(${fmt(bomRemaining(l))}개) 이하의 정수로 입력해 주세요.`);
+    }
+    setReleasing(true);
+    setReleaseError(null);
+    try {
+      logDebug("ProjectBom", `BOM 출고 시도: project_id=${projectId}, lines=${items.length}`);
+      const updated = await apiPost<BomLine[]>(`/api/projects/${projectId}/bom/release`, { items });
+      logDebug("ProjectBom", `BOM 출고 성공: ${items.length}건`);
+      setLines(updated);
+      setChecked(new Set());
+      setReleaseOpen(false);
+      void loadMaterials(); // 재고가 바뀌었으니 자재 추가 칸의 재고도 맞춘다
+      dialog.notify(`${items.length}종을 출고했습니다. 자재관리에 출고 기록이 남았습니다.`);
+    } catch (err) {
+      logError("ProjectBom", "BOM 출고 실패", err);
+      setReleaseError(err instanceof ApiError ? err.message : "출고하지 못했습니다.");
+      void loadLines();
+    } finally {
+      setReleasing(false);
+    }
+  }
+
   const matches = useMemo(() => {
-    const s = query.trim().toLowerCase();
-    const found = s ? materials.filter((m) => `${m.code} ${m.name} ${m.sub_levels.join(" ")}`.toLowerCase().includes(s)) : materials;
-    return found.slice(0, 8);
+    return query.trim() ? materials.filter((m) => matchKeyword(m, query)) : materials;
   }, [materials, query]);
   const picked = pickedId === null ? null : (materials.find((m) => m.id === pickedId) ?? null);
 
@@ -222,11 +273,22 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
         }}
         className={`${ROW_GRID} py-3 border-t border-border cursor-pointer text-center ${on ? "bg-tile-blue" : "hover:bg-bg"}`}
       >
+        <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} className="flex">
+          <input
+            type="checkbox"
+            aria-label={`${l.item_name} 출고 선택`}
+            disabled={!bomReleasable(l)}
+            title={bomReleasable(l) ? undefined : l.registered ? (bomRemaining(l) === 0 ? "이미 모두 출고했습니다" : "재고가 모자라 출고할 수 없습니다") : "자재관리에 등록한 뒤 출고할 수 있습니다"}
+            checked={checked.has(l.id)}
+            onChange={(e) => toggleChecked(l.id, e.target.checked)}
+          />
+        </span>
         <div className="min-w-0">
           <p className="text-[11px] font-mono text-text-muted">{l.code ? <CodeText code={l.code} small /> : "코드 없음"}</p>
           <p className="font-semibold break-words">{l.item_name}</p>
         </div>
         <p className="font-bold tabular-nums">{fmt(l.quantity)}개</p>
+        <p className="tabular-nums text-text-muted">{l.released > 0 ? `${fmt(l.released)}개` : "-"}</p>
         <p className="tabular-nums text-text-muted">{l.current_qty === null ? "-" : `${fmt(l.current_qty)}개`}</p>
         <p>
           <span className={`inline-block px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${STATE_BADGE[st]}`}>{bomStateLabel(l)}</span>
@@ -300,12 +362,82 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
         </div>
       )}
 
+      {hasLines && (
+        <div className={`flex flex-wrap items-center gap-2 px-5 py-2.5 border-t border-border text-sm ${checkedLines.length > 0 ? "bg-tile-blue" : "bg-bg text-text-muted"}`}>
+          {checkedLines.length > 0 ? (
+            <>
+              <b className="text-tile-blue-fg">{checkedLines.length}개 선택됨</b>
+              <span className="flex-1" />
+              <button type="button" onClick={() => { setChecked(new Set()); setReleaseOpen(false); }} className="rounded-lg border border-border bg-surface px-3 py-1.5 hover:bg-bg">
+                선택 해제
+              </button>
+              <button type="button" onClick={openRelease} className="rounded-lg bg-primary px-4 py-1.5 font-bold text-white hover:bg-primary-hover">
+                선택 항목 출고
+              </button>
+            </>
+          ) : (
+            <span>출고할 줄을 체크하세요. (재고가 충분하고 아직 출고하지 않은 자재만 고를 수 있습니다)</span>
+          )}
+        </div>
+      )}
+
+      {releaseOpen && checkedLines.length > 0 && (
+        <div className="px-5 py-4 border-t border-border bg-bg space-y-2.5" aria-label="출고 확인">
+          <h3 className="text-sm font-bold">선택한 {checkedLines.length}종 출고 확인</h3>
+          {checkedLines.map((l) => (
+            <div key={l.id} className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="min-w-40 flex-1 font-semibold break-words">{l.item_name}</span>
+              <span className="text-xs text-text-muted">남은 필요 {fmt(bomRemaining(l))} · 재고 {fmt(l.current_qty ?? 0)}</span>
+              <input
+                aria-label={`${l.item_name} 출고 수량`}
+                type="number"
+                min={1}
+                max={bomRemaining(l)}
+                value={releaseQty[l.id] ?? ""}
+                onChange={(e) => setReleaseQty((prev) => ({ ...prev, [l.id]: e.target.value }))}
+                className={`${inputCls} !w-28 text-right`}
+              />
+              개
+            </div>
+          ))}
+          <p className="text-xs text-text-muted">출고 사유는 "생산 불출"로 기록되고, 자재관리의 입출고 기록에도 남습니다.</p>
+          {releaseError && (
+            <p role="alert" className="flex items-start gap-2 rounded-lg border border-danger/40 bg-tile-red px-3 py-2 text-sm font-medium text-danger">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
+              {releaseError}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void handleRelease()} disabled={releasing} className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary-hover disabled:opacity-60">
+              {releasing ? "출고 중..." : "출고하기"}
+            </button>
+            <button type="button" onClick={() => setReleaseOpen(false)} className="rounded-lg border border-border bg-surface px-4 py-2 text-sm hover:bg-bg">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className={selected ? "grid lg:grid-cols-[minmax(0,1fr)_300px]" : ""}>
         <div className="min-w-0">
           {hasLines && (
             <div className={`${ROW_GRID} py-2.5 border-t border-border text-xs text-text-muted text-center`}>
+              <input
+                type="checkbox"
+                aria-label="출고할 수 있는 줄 전체 선택"
+                disabled={releasableIds.length === 0}
+                checked={releasableIds.length > 0 && releasableIds.every((id) => checked.has(id))}
+                ref={(el) => {
+                  if (el) el.indeterminate = checked.size > 0 && !releasableIds.every((id) => checked.has(id));
+                }}
+                onChange={(e) => {
+                  setChecked(e.target.checked ? new Set(releasableIds) : new Set());
+                  setReleaseOpen(false);
+                }}
+              />
               <span>자재</span>
               <span>필요 수량</span>
+              <span>출고됨</span>
               <span>현재 재고</span>
               <span>상태</span>
             </div>
@@ -405,7 +537,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
             <input
               aria-label="자재 검색"
               autoComplete="off"
-              placeholder="재고 목록에서 자재 검색 (코드·품명·분류)"
+              placeholder="재고 목록에서 자재 검색 (코드·품명·분류·속성, 100nF = 0.1uF 환산)"
               value={picked ? picked.name : query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -418,7 +550,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
               className={fieldCls}
             />
             {listOpen && !picked && (
-              <div role="listbox" className="absolute left-0 right-0 top-full mt-1 z-20 max-h-64 overflow-auto rounded-xl border border-border bg-surface shadow-lg">
+              <div role="listbox" className="absolute left-0 right-0 top-full mt-1 z-20 max-h-[26rem] overflow-auto rounded-xl border border-border bg-surface shadow-lg">
                 {matches.length === 0 ? (
                   <p className="px-3 py-2.5 text-xs text-text-muted">일치하는 자재가 없습니다. 이름을 그대로 두고 [추가]를 누르면 등록 여부를 물어봅니다.</p>
                 ) : (
@@ -442,8 +574,8 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
                       >
                         <span className="min-w-0 flex-1">
                           <b className="block break-words">{m.name}</b>
-                          <small className="block text-xs text-text-muted">
-                            {m.code} · {levelPath(m.sub_levels) || "-"}
+                          <small className="block text-xs text-text-muted break-words">
+                            {m.code} · {classLabel(m) || "-"}
                           </small>
                         </span>
                         <span className="text-xs text-text-muted whitespace-nowrap">{used ? "BOM에 있음" : `재고 ${fmt(m.current_qty)}`}</span>
@@ -463,7 +595,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
 
         {picked && (
           <p className="text-xs text-text-muted">
-            <CodeText code={picked.code} small /> · {levelPath(picked.sub_levels) || "-"} · 현재 재고 {fmt(picked.current_qty)}개{" "}
+            <CodeText code={picked.code} small /> · {classLabel(picked) || "-"} · 현재 재고 {fmt(picked.current_qty)}개{" "}
             <button type="button" onClick={() => { setPickedId(null); setQuery(""); setListOpen(true); }} className="ml-1 rounded border border-border px-2 py-0.5 hover:bg-surface">
               다시 고르기
             </button>
