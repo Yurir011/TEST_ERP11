@@ -1,6 +1,7 @@
 import { MessageCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { isMessengerWindow } from "../../lib/windowKind";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
@@ -24,6 +25,8 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export function MessengerPage() {
+  const loc = useLocation();
+  const inWindow = isMessengerWindow(loc.pathname, loc.search); // 앱의 메신저 창이면 화면을 꽉 채운다
   const { user } = useAuth();
   const dialog = useDialog();
   const { conversationId } = useParams<{ conversationId: string }>();
@@ -90,7 +93,7 @@ export function MessengerPage() {
       }
     >
       <div className="messenger-theme">
-      <div className="flex gap-4 h-[calc(100vh-15rem-28px)] min-h-[420px]">
+      <div className={`flex gap-4 min-h-[420px] ${inWindow ? "h-[calc(100vh-4.5rem)]" : "h-[calc(100vh-15rem-28px)]"}`}>
         <aside className="w-80 shrink-0 bg-surface border border-border rounded-2xl flex flex-col overflow-hidden">
           <div role="tablist" aria-label="메신저 목록" className="flex border-b border-border">
             {TABS.map(({ key, label }) => {

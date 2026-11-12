@@ -1,5 +1,7 @@
 import { LogOut } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
+import { useLocation } from "react-router-dom";
+import { isMessengerWindow } from "../../lib/windowKind";
 import { useTabShell } from "./tabs/TabShellContext";
 import { useAuth } from "../../context/useAuth";
 import { AttendanceToggle } from "../../features/attendance/AttendanceToggle";
@@ -21,6 +23,7 @@ interface MainLayoutProps {
 export function MainLayout({ title, description, actions, showBack = false, children }: MainLayoutProps) {
   const { user, logout } = useAuth();
   const tabShell = useTabShell();
+  const loc = useLocation();
   const setTabTitle = tabShell?.setTitle;
 
   // 탭 막대에 이 화면의 제목을 보여 준다
@@ -38,6 +41,20 @@ export function MainLayout({ title, description, actions, showBack = false, chil
             <h1 className="text-2xl font-semibold text-text">{title}</h1>
             {description && <p className="text-sm text-text-muted mt-1">{description}</p>}
           </div>
+          {actions && <div className="flex items-center gap-3">{actions}</div>}
+        </div>
+        {children}
+      </main>
+    );
+  }
+
+  // 데스크톱 앱의 메신저 창: 사이드바와 사용자 줄 없이 제목 한 줄 + 내용만 그린다
+  if (isMessengerWindow(loc.pathname, loc.search)) {
+    console.debug("[Layout] 메신저 창: 사이드바 없이 표시");
+    return (
+      <main className="px-4 py-3">
+        <div className="flex items-center justify-between mb-3">
+          <h1 className="text-base font-semibold text-text">{title}</h1>
           {actions && <div className="flex items-center gap-3">{actions}</div>}
         </div>
         {children}
