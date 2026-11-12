@@ -40,9 +40,14 @@ export function bomRemaining(line: BomLine): number {
   return Math.max(line.quantity - line.released, 0);
 }
 
-/** 지금 출고할 수 있는 줄인가: 자재관리에 등록되어 있고, 남은 필요 수량이 있고, 재고가 그만큼 있다 */
+/** 지금 출고할 수 있는 줄인가: 자재관리에 등록되어 있고, 남은 필요 수량이 있고, 재고가 조금이라도 있다 (모자라면 있는 만큼만 부분 출고) */
 export function bomReleasable(line: BomLine): boolean {
-  return line.registered && bomRemaining(line) > 0 && (line.current_qty ?? 0) >= bomRemaining(line);
+  return line.registered && bomRemaining(line) > 0 && (line.current_qty ?? 0) > 0;
+}
+
+/** 이번에 출고할 수 있는 최대 개수: 남은 필요 수량과 재고 중 작은 쪽 */
+export function bomReleaseMax(line: BomLine): number {
+  return Math.min(bomRemaining(line), Math.max(line.current_qty ?? 0, 0));
 }
 
 export function bomStateLabel(line: BomLine): string {

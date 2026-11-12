@@ -6,7 +6,7 @@ import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { CodeText } from "../materials/CodeText";
 import { classLabel, levelPath, matchKeyword, type Material, type MaterialDetail } from "../materials/types";
-import { BOM_FILTERS, bomCounts, bomReleasable, bomRemaining, bomState, bomStateLabel, groupBom, type BomFilter, type BomLine, type BomState } from "./bom";
+import { BOM_FILTERS, bomCounts, bomReleasable, bomReleaseMax, bomRemaining, bomState, bomStateLabel, groupBom, type BomFilter, type BomLine, type BomState } from "./bom";
 import { BomRegisterModal } from "./BomRegisterModal";
 
 const STATE_BADGE: Record<BomState, string> = { bad: SOFT_BADGE.red, warn: SOFT_BADGE.orange, good: SOFT_BADGE.green };
@@ -111,7 +111,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
   }
 
   function openRelease() {
-    setReleaseQty(Object.fromEntries(checkedLines.map((l) => [l.id, String(bomRemaining(l))])));
+    setReleaseQty(Object.fromEntries(checkedLines.map((l) => [l.id, String(bomReleaseMax(l))])));
     setReleaseError(null);
     setReleaseOpen(true);
   }
@@ -121,7 +121,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
     if (items.length === 0) return setReleaseError("출고할 수량을 1 이상으로 입력해 주세요.");
     for (const it of items) {
       const l = checkedLines.find((x) => x.id === it.line_id)!;
-      if (!Number.isInteger(it.quantity) || it.quantity > bomRemaining(l)) return setReleaseError(`'${l.item_name}' 은(는) 남은 필요 수량(${fmt(bomRemaining(l))}개) 이하의 정수로 입력해 주세요.`);
+      if (!Number.isInteger(it.quantity) || it.quantity > bomReleaseMax(l)) return setReleaseError(`'${l.item_name}' 은(는) ${fmt(bomReleaseMax(l))}개(남은 필요 수량과 재고 중 적은 쪽) 이하의 정수로 입력해 주세요.`);
     }
     setReleasing(true);
     setReleaseError(null);
@@ -278,7 +278,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
             type="checkbox"
             aria-label={`${l.item_name} 출고 선택`}
             disabled={!bomReleasable(l)}
-            title={bomReleasable(l) ? undefined : l.registered ? (bomRemaining(l) === 0 ? "이미 모두 출고했습니다" : "재고가 모자라 출고할 수 없습니다") : "자재관리에 등록한 뒤 출고할 수 있습니다"}
+            title={bomReleasable(l) ? undefined : l.registered ? (bomRemaining(l) === 0 ? "이미 모두 출고했습니다" : "재고가 없어 출고할 수 없습니다") : "자재관리에 등록한 뒤 출고할 수 있습니다"}
             checked={checked.has(l.id)}
             onChange={(e) => toggleChecked(l.id, e.target.checked)}
           />
@@ -376,7 +376,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
               </button>
             </>
           ) : (
-            <span>출고할 줄을 체크하세요. (재고가 충분하고 아직 출고하지 않은 자재만 고를 수 있습니다)</span>
+            <span>출고할 줄을 체크하세요. (재고가 있고 아직 다 출고하지 않은 자재만 고를 수 있으며, 재고가 모자라면 있는 만큼만 출고됩니다)</span>
           )}
         </div>
       )}
@@ -387,12 +387,15 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
           {checkedLines.map((l) => (
             <div key={l.id} className="flex flex-wrap items-center gap-3 text-sm">
               <span className="min-w-40 flex-1 font-semibold break-words">{l.item_name}</span>
-              <span className="text-xs text-text-muted">남은 필요 {fmt(bomRemaining(l))} · 재고 {fmt(l.current_qty ?? 0)}</span>
+              <span className="text-xs text-text-muted">
+                남은 필요 {fmt(bomRemaining(l))} · 재고 {fmt(l.current_qty ?? 0)}
+                {bomReleaseMax(l) < bomRemaining(l) && <b className="ml-1 text-tile-orange-fg">재고가 모자라 {fmt(bomReleaseMax(l))}개만 출고 가능</b>}
+              </span>
               <input
                 aria-label={`${l.item_name} 출고 수량`}
                 type="number"
                 min={1}
-                max={bomRemaining(l)}
+                max={bomReleaseMax(l)}
                 value={releaseQty[l.id] ?? ""}
                 onChange={(e) => setReleaseQty((prev) => ({ ...prev, [l.id]: e.target.value }))}
                 className={`${inputCls} !w-28 text-right`}

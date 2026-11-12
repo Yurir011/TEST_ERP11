@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bomCounts, bomReleasable, bomRemaining, bomState, bomStateLabel, groupBom, type BomLine } from "./bom";
+import { bomCounts, bomReleasable, bomReleaseMax, bomRemaining, bomState, bomStateLabel, groupBom, type BomLine } from "./bom";
 
 const line = (id: number, over: Partial<BomLine> = {}): BomLine => ({
   id,
@@ -42,9 +42,13 @@ describe("BOM 상태", () => {
 });
 
 describe("BOM 출고", () => {
-  it("출고할 수 있는 줄: 등록됨 + 남은 필요 수량이 있음 + 재고가 그만큼 있음", () => {
+  it("출고할 수 있는 줄: 등록됨 + 남은 필요 수량이 있음 + 재고가 있음", () => {
     expect(bomReleasable(ok)).toBe(true);
-    expect(bomReleasable(short)).toBe(false); // 재고 부족
+    expect(bomReleasable(short)).toBe(true); // 재고가 모자라도 있는 만큼은 출고할 수 있다
+    expect(bomReleasable(line(8, { current_qty: 0, shortage: 10 }))).toBe(false); // 재고가 하나도 없음
+    expect(bomReleaseMax(short)).toBe(4);
+    expect(bomReleaseMax(ok)).toBe(10);
+    expect(bomReleaseMax(line(9, { released: 4, current_qty: 100 }))).toBe(6);
     expect(bomReleasable(unreg)).toBe(false); // 자재관리에 없음
     expect(bomReleasable(line(4, { released: 10 }))).toBe(false); // 이미 모두 출고
     expect(bomReleasable(line(5, { released: 4, current_qty: 6 }))).toBe(true); // 남은 6개만 있으면 된다

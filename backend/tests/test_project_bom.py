@@ -125,3 +125,22 @@ def test_release_is_all_or_nothing_and_rejects_shortage_and_unregistered(client,
     assert client.post(f"{url}/release", headers=h, json={"items": []}).status_code == 422
     dup = client.post(f"{url}/release", headers=h, json={"items": [{"line_id": l_ok["id"], "quantity": 1}, {"line_id": l_ok["id"], "quantity": 1}]})
     assert dup.status_code == 422
+
+
+def test_release_partial_when_stock_is_short_then_rest_after_restock(client, db, make_user, make_client, auth_headers):
+    me = make_user(role=UserRole.employee)
+    h = auth_headers(me)
+    p = _project(db, make_client, me)
+    m = _material(client, h, qty=120, name="부분 출고 자재")
+    url = f"/api/projects/{p.id}/bom"
+    line = client.post(url, headers=h, json={"material_id": m["id"], "quantity": 300}).json()
+
+    part = client.post(f"{url}/release", headers=h, json={"items": [{"line_id": line["id"], "quantity": 120}]})
+    assert part.status_code == 200, part.text
+    row = part.json()[0]
+    assert row["released"] == 120 and row["current_qty"] == 0 and row["shortage"] == 180  # 남은 180개가 부족
+
+    assert client.post(f"{url}/release", headers=h, json={"items": [{"line_id": line["id"], "quantity": 1}]}).status_code == 400  # 재고 0
+    client.post(f"/api/materials/{m['id']}/movements", headers=h, json={"kind": "add", "movement_date": "2026-11-12", "quantity": 500})
+    rest = client.post(f"{url}/release", headers=h, json={"items": [{"line_id": line["id"], "quantity": 180}]}).json()[0]
+    assert rest["released"] == 300 and rest["shortage"] is None
