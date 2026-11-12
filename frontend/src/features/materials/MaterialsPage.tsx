@@ -15,6 +15,8 @@ import { LIST_TABS, formatQtyPerReel, matchKeyword, matchTab, type ListTab, type
  *  앞의 체크박스로 여러 자재를 골라 분류를 한꺼번에 바꾸거나(직원 누구나), 한꺼번에 삭제할 수 있다(대표만). Shift+클릭으로 범위 선택. */
 const collator = new Intl.Collator("ko", { numeric: true, sensitivity: "base" });
 
+const LEVEL_HEADS = ["중분류", "소분류"];
+
 /** 분류 경로를 단계별로 비교 (대분류 → 중분류 → ...). 단계가 없는 쪽이 앞에 온다. */
 function compareLevels(a: string[], b: string[]): number {
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -66,29 +68,16 @@ export function MaterialsPage() {
         .sort((a, b) => compareLevels(a.sub_levels, b.sub_levels) || collator.compare(a.name, b.name) || a.code.localeCompare(b.code)),
     [rows, tab, keyword],
   );
-  // 대분류마다 카드 하나. 카드 안 분류 칸은 중분류부터 단계별로 나누고, 위 줄과 같은 분류는 한 칸으로 합친다 (span 0 이면 위 칸에 합쳐진 것)
+  // 대분류마다 카드 하나. 카드 안에는 중분류·소분류(더 깊으면 그 아래 단계도)를 칸마다 그대로 적는다 (합치지 않는다)
   const groups = useMemo(() => {
-    const out: { key: string; label: string; items: Material[]; depth: number; spans: number[][] }[] = [];
+    const out: { key: string; label: string; items: Material[]; depth: number }[] = [];
     for (const m of shown) {
       const key = m.sub_levels[0] ?? "";
       const last = out[out.length - 1];
       if (last && last.key === key) last.items.push(m);
-      else out.push({ key, label: key || "분류 없음", items: [m], depth: 0, spans: [] });
+      else out.push({ key, label: key || "분류 없음", items: [m], depth: 2 });
     }
-    for (const g of out) {
-      const inner = g.items.map((m) => m.sub_levels.slice(1));
-      g.depth = Math.max(0, ...inner.map((l) => l.length));
-      const keyOf = (l: string[], d: number) => l.slice(0, d + 1).join("\u0001");
-      g.spans = inner.map((l, i) =>
-        Array.from({ length: g.depth }, (_, d) => {
-          if (l[d] === undefined) return 1;
-          if (i > 0 && inner[i - 1][d] !== undefined && keyOf(inner[i - 1], d) === keyOf(l, d)) return 0;
-          let n = 1;
-          while (i + n < inner.length && inner[i + n][d] !== undefined && keyOf(inner[i + n], d) === keyOf(l, d)) n++;
-          return n;
-        }),
-      );
-    }
+    for (const g of out) g.depth = Math.max(2, ...g.items.map((m) => m.sub_levels.length - 1));
     return out;
   }, [shown]);
 
@@ -252,17 +241,17 @@ export function MaterialsPage() {
                     <tr className="border-b border-border">
                       <th className="py-2.5 pl-4 pr-0 w-px" />
                       <th className="py-2.5 px-5 font-medium whitespace-nowrap text-center">품목 코드</th>
-                      {g.depth > 0 && (
-                        <th colSpan={g.depth} className="py-2.5 px-5 font-medium text-center">
-                          분류
+                      {Array.from({ length: g.depth }, (_, d) => (
+                        <th key={d} className="py-2.5 px-5 font-medium whitespace-nowrap text-center">
+                          {LEVEL_HEADS[d] ?? `${d + 2}단계 분류`}
                         </th>
-                      )}
-                      <th className="py-2.5 px-5 font-medium text-center">품명</th>
+                      ))}
+                      <th className="py-2.5 px-5 font-medium text-left">품명</th>
                       <th className="py-2.5 px-5 font-medium text-right whitespace-nowrap">개수</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {g.items.map((m, i) => (
+                    {g.items.map((m) => (
                       <tr
                         key={m.id}
                         onClick={() => navigate(`/materials/${m.id}`)}
@@ -280,19 +269,12 @@ export function MaterialsPage() {
                         <td className="py-3 px-5 whitespace-nowrap text-center">
                           <CodeText code={m.code} />
                         </td>
-                        {g.spans[i].map((span, d) =>
-                          span === 0 ? null : (
-                            <td
-                              key={d}
-                              rowSpan={span}
-                              onClick={span > 1 ? (e) => e.stopPropagation() : undefined}
-                              className={`py-3 px-5 text-center text-text-muted [overflow-wrap:anywhere] border-l border-border ${span > 1 ? "bg-bg align-middle cursor-default" : ""}`}
-                            >
-                              {m.sub_levels[d + 1] || "-"}
-                            </td>
-                          ),
-                        )}
-                        <td className="py-3 px-5 text-center font-semibold [overflow-wrap:anywhere]">{m.name}</td>
+                        {Array.from({ length: g.depth }, (_, d) => (
+                          <td key={d} className="py-3 px-5 text-center text-text-muted [overflow-wrap:anywhere]">
+                            {m.sub_levels[d + 1] || <span className="opacity-60">-</span>}
+                          </td>
+                        ))}
+                        <td className="py-3 px-5 text-left font-semibold [overflow-wrap:anywhere]">{m.name}</td>
                         <td className="py-3 px-5 text-right font-bold tabular-nums whitespace-nowrap">{formatQtyPerReel(m.current_qty, m.current_reels)}</td>
                       </tr>
                     ))}
