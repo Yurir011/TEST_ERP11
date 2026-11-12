@@ -1,4 +1,5 @@
 import { SOFT_BADGE } from "../../components/ui/softBadge";
+import { matchesWithUnits } from "./unitSearch";
 
 // "ic" 는 저장 값이고 화면에는 "회로부품"으로 보인다.
 export type MaterialCategory = "ic" | "injection" | "subsidiary" | "packaging" | "consumable";
@@ -147,8 +148,8 @@ export function matchTab(m: Pick<Material, "category" | "kind">, tab: ListTab): 
 
 /** 목록 검색: 코드·이름·속성·분류 어디에 들어 있어도 찾는다. */
 export function matchKeyword(m: Pick<Material, "code" | "name" | "sub_levels" | "category_label" | "kind_label">, keyword: string): boolean {
-  const q = keyword.trim().toLowerCase();
-  return !q || `${m.code} ${m.name} ${m.sub_levels.join(" ")} ${m.category_label} ${m.kind_label ?? ""}`.toLowerCase().includes(q);
+  // 글자 그대로 찾고, 단위값(100nF = 0.1uF = 100000pF)이 같은 자재도 함께 찾는다
+  return matchesWithUnits(`${m.code} ${m.name} ${m.sub_levels.join(" ")} ${m.category_label} ${m.kind_label ?? ""}`, keyword);
 }
 
 /** 릴별 내역 글: "2,500개 × 2릴 + 2,480개 × 1릴". 릴이 아니면 빈 글. */
