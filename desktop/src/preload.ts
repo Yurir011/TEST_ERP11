@@ -34,6 +34,10 @@ const api = {
   /** 시스템 알림. conversationId 를 주면 알림을 눌렀을 때 그 대화방으로 이동하라는 신호(onOpenConversation)가 온다 */
   notify: (title: string, body: string, conversationId?: number): Promise<void> => ipcRenderer.invoke("app:notify", title, body, conversationId),
   onOpenConversation: (cb: (payload: { conversationId: number }) => void): Unsubscribe => subscribe("app:open-conversation", cb),
+  /** 메신저를 별도 창으로 연다 (이미 열려 있으면 앞으로). conversationId 를 주면 그 대화방을 연다 */
+  messenger: {
+    openWindow: (conversationId?: number): Promise<void> => ipcRenderer.invoke("messenger:open-window", conversationId),
+  },
   setBadge: (count: number): Promise<void> => ipcRenderer.invoke("app:badge", count),
   /** ERP 메인 창을 앞으로 가져온다 (메일 창에서 돌아가기) */
   focusMain: (): Promise<void> => ipcRenderer.invoke("app:focus-main"),

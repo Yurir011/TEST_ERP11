@@ -323,6 +323,8 @@ export interface BenchClient {
   setBadge(count: number): Promise<void>;
   /** 메일 기능. 이 기능이 없는 예전 앱 버전에서는 undefined */
   mail?: MailBridge;
+  /** 메신저를 별도 창으로 연다 (이미 열려 있으면 그 창을 앞으로). 예전 앱에는 없다 */
+  messenger?: { openWindow(conversationId?: number): Promise<void> };
   /** ERP 메인 창을 앞으로 가져온다 (메일 창에서 돌아가기). 예전 앱에는 없다 */
   focusMain?(): Promise<void>;
   /** 앱 업데이트 (예전 앱에는 없다) */

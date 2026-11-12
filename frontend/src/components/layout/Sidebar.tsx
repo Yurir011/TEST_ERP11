@@ -91,6 +91,8 @@ export function Sidebar() {
   const messengerUnread = useMessengerOptional()?.unreadTotal ?? 0;
   const mailBridge = getBenchClient()?.mail;
   const hasDesktopMail = typeof mailBridge?.openWindow === "function";
+  const messengerBridge = getBenchClient()?.messenger;
+  const hasDesktopMessenger = typeof messengerBridge?.openWindow === "function";
   const mailUnreadRaw = useMailUnread(!!user);
   const mailUnread = mailUnreadRaw ?? 0;
   const newMail = useNewMailNotices(mailUnreadRaw);
@@ -119,17 +121,7 @@ export function Sidebar() {
     <aside
       className={`${collapsed ? "w-16" : "w-64"} shrink-0 bg-sidebar border-r border-border h-screen sticky top-0 flex flex-col transition-[width] duration-150 overflow-x-hidden`}
     >
-      <div className={`flex items-center ${collapsed ? "justify-center py-3" : "justify-end px-3 pt-3"}`}>
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          title={collapsed ? "사이드바 펼치기" : "사이드바 숨기기"}
-          aria-label={collapsed ? "사이드바 펼치기" : "사이드바 숨기기"}
-          className="p-2 rounded-lg text-text-muted hover:bg-surface hover:text-text transition-colors"
-        >
-          {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-        </button>
-      </div>
+      <div className="pt-3" />
       {!collapsed && (
         <div className="px-5 pb-5 flex flex-col items-center text-center">
           <Logo />
@@ -138,8 +130,38 @@ export function Sidebar() {
       )}
 
       <nav className={`${collapsed ? "px-2" : "px-3"} space-y-1 shrink-0`}>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title={collapsed ? "사이드바 펼치기" : "사이드바 숨기기"}
+          aria-label={collapsed ? "사이드바 펼치기" : "사이드바 숨기기"}
+          className={`w-full flex items-center gap-2.5 py-2 rounded-lg text-sm text-text-muted hover:bg-surface/60 transition-colors text-left ${collapsed ? "justify-center px-0" : "px-3"}`}
+        >
+          {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          {!collapsed && "사이드바"}
+        </button>
         {visibleItems.map(({ to, label, icon: Icon, end, colorClass, desktopMailOnly }) =>
-          desktopMailOnly ? (
+          to === "/messenger" && hasDesktopMessenger ? (
+            // 데스크톱 앱에서는 메신저도 메일처럼 별도 창을 연다 (이미 열려 있으면 그 창을 앞으로)
+            <button
+              key={to}
+              type="button"
+              onClick={() => {
+                console.debug("[Sidebar] 메신저 버튼 클릭 → 메신저 창 열기");
+                void messengerBridge?.openWindow();
+              }}
+              title={collapsed ? label : undefined}
+              className={`relative w-full flex items-center gap-2.5 py-2 rounded-lg text-sm text-text-muted hover:bg-surface/60 transition-colors text-left ${collapsed ? "justify-center px-0" : "px-3"}`}
+            >
+              <Icon size={17} />
+              {!collapsed && label}
+              {messengerUnread > 0 && (
+                <span className={`${collapsed ? "absolute top-0.5 right-1" : "ml-auto"} min-w-[18px] h-[18px] px-1 rounded-full bg-badge-bg border border-badge-border text-badge-fg text-[10px] font-semibold flex items-center justify-center`} aria-label={`안 읽은 메시지 ${messengerUnread}개`}>
+                  {messengerUnread > 99 ? "99+" : messengerUnread}
+                </span>
+              )}
+            </button>
+          ) : desktopMailOnly ? (
             // 메일은 메뉴 이동이 아니라 별도 창을 여는 버튼이다 (이미 열려 있으면 그 창을 앞으로)
             <div key={to}>
             <button

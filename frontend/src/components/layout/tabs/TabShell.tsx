@@ -42,6 +42,7 @@ import { PresenceSelect } from "../../../features/messenger/PresenceSelect";
 import { useMessengerOptional } from "../../../features/messenger/useMessenger";
 import { shouldUseMobile } from "../../../features/mobile/mobileMode";
 import { TITLE_LABELS } from "../../../lib/auth";
+import { isMessengerWindow } from "../../../lib/windowKind";
 import { resolveMailAccent } from "../../../features/mail/mailAccent";
 import { useMailAccent } from "../../../features/mail/useMailAccent";
 import { Sidebar } from "../Sidebar";
@@ -243,6 +244,12 @@ export function TabShell({ routes }: { routes: ReactNode }) {
   // 메일 창(데스크톱 앱이 따로 여는 /mail 창)에는 ERP 사이드바·탭 막대가 필요 없다. 메일 화면만 꽉 채워 그린다.
   if (outer.pathname === "/mail") {
     console.debug("[Tabs] 메일 창: 사이드바·탭 막대 없이 메일 화면만 표시");
+    return <>{routes}</>;
+  }
+
+  // 메신저 창(데스크톱 앱이 따로 여는 /messenger 창)도 메일 창처럼 메신저 화면만 꽉 채워 그린다.
+  if (isMessengerWindow(outer.pathname, outer.search)) {
+    console.debug("[Tabs] 메신저 창: 사이드바·탭 막대 없이 메신저 화면만 표시");
     return <>{routes}</>;
   }
 

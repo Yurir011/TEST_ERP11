@@ -179,6 +179,11 @@ export function formatReelQty(quantity: number, reels?: number | null): string {
   return reels != null ? `${formatQty(reels)}릴 (${formatQty(quantity)}개)` : `${formatQty(quantity)}개`;
 }
 
+/** 목록용 개수 글: 릴로 기록했으면 "7,500개/3릴", 개로만 기록했으면 "500개". */
+export function formatQtyPerReel(quantity: number, reels?: number | null): string {
+  return reels != null ? `${formatQty(quantity)}개/${formatQty(reels)}릴` : `${formatQty(quantity)}개`;
+}
+
 /** 항목 이름 뒤에 종류(전용/범용)와 속성을 이은 글 (분류 칸용): "회로부품 · 전용 · MCU › Cortex-M3". */
 export function classLabel(m: Pick<Material, "category_label" | "kind_label" | "sub_levels">): string {
   return [m.category_label, m.kind_label, levelPath(m.sub_levels)].filter(Boolean).join(" · ");

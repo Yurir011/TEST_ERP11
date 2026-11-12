@@ -9,10 +9,12 @@ import { logDebug, logError } from "../../lib/logger";
 import { BulkLevelsModal } from "./BulkLevelsModal";
 import { CodeText } from "./CodeText";
 import { NewMaterialButton } from "./NewMaterialButton";
-import { LIST_TABS, formatReelQty, levelPath, matchKeyword, matchTab, type ListTab, type Material } from "./types";
+import { LIST_TABS, formatQtyPerReel, levelPath, matchKeyword, matchTab, type ListTab, type Material } from "./types";
 
 /** 자재관리 목록 (시안 B-2): 품목 코드 · 품명 · 분류(속성) · 개수 네 칸만 보여 준다. 위 탭으로 걸러 보고, 코드·품명·속성으로 찾는다. 행을 누르면 상세(입출고 기록)로 간다.
  *  앞의 체크박스로 여러 자재를 골라 분류를 한꺼번에 바꾸거나(직원 누구나), 한꺼번에 삭제할 수 있다(대표만). Shift+클릭으로 범위 선택. */
+const collator = new Intl.Collator("ko", { numeric: true, sensitivity: "base" });
+
 export function MaterialsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -45,14 +47,34 @@ export function MaterialsPage() {
   }, [load]);
 
   const counts = useMemo(() => Object.fromEntries(LIST_TABS.map((t) => [t.key, (rows ?? []).filter((m) => matchTab(m, t.key)).length])), [rows]);
-  // 이름 사전식(가나다·ABC, 숫자는 크기순: "저항 2" 다음에 "저항 10") 자동 정렬. 이름이 같으면 코드순
+  // 분류(대분류 → 중분류 → ...) 순으로 묶고, 같은 분류 안에서는 이름 사전식(가나다·ABC, 숫자는 크기순: "저항 2" 다음에 "저항 10") 정렬. 이름이 같으면 코드순
   const shown = useMemo(
     () =>
       (rows ?? [])
         .filter((m) => matchTab(m, tab) && matchKeyword(m, keyword))
-        .sort((a, b) => a.name.localeCompare(b.name, "ko", { numeric: true, sensitivity: "base" }) || a.code.localeCompare(b.code)),
+        .sort(
+          (a, b) =>
+            collator.compare(levelPath(a.sub_levels), levelPath(b.sub_levels)) ||
+            collator.compare(a.name, b.name) ||
+            a.code.localeCompare(b.code),
+        ),
     [rows, tab, keyword],
   );
+  // 분류 칸: 단계마다 한 칸. 위 줄과 같은 분류(앞 단계까지 모두 같은 값)는 한 칸으로 합친다 (0 이면 위 칸에 합쳐진 것)
+  const depth = Math.max(1, ...shown.map((m) => m.sub_levels.length));
+  const spans = useMemo(() => {
+    const keyOf = (m: Material, d: number) => m.sub_levels.slice(0, d + 1).join("");
+    return shown.map((m, i) =>
+      Array.from({ length: depth }, (_, d) => {
+        if (m.sub_levels[d] === undefined) return 1;
+        if (i > 0 && shown[i - 1].sub_levels[d] !== undefined && keyOf(shown[i - 1], d) === keyOf(m, d)) return 0;
+        let n = 1;
+        while (i + n < shown.length && shown[i + n].sub_levels[d] !== undefined && keyOf(shown[i + n], d) === keyOf(m, d)) n++;
+        return n;
+      }),
+    );
+  }, [shown, depth]);
+  const colCount = 4 + depth;
 
   const shownIds = shown.map((m) => m.id);
   const selectedInView = shownIds.filter((id) => selected.has(id)).length;
@@ -174,27 +196,27 @@ export function MaterialsPage() {
                 />
               </th>
               <th className="py-3 px-5 font-medium whitespace-nowrap text-center">품목 코드</th>
+              <th colSpan={depth} className="py-3 px-5 font-medium text-center">분류</th>
               <th className="py-3 px-5 font-medium text-center">품명</th>
-              <th className="py-3 px-5 font-medium text-center">분류</th>
               <th className="py-3 px-5 font-medium text-right whitespace-nowrap">개수</th>
             </tr>
           </thead>
           <tbody>
             {rows === null && !error && (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-text-muted">
+                <td colSpan={colCount} className="py-10 text-center text-text-muted">
                   불러오는 중...
                 </td>
               </tr>
             )}
             {rows !== null && shown.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-text-muted">
+                <td colSpan={colCount} className="py-10 text-center text-text-muted">
                   {rows.length === 0 ? "등록된 자재가 없습니다. [자재 등록]으로 추가해 주세요." : "조건에 맞는 자재가 없습니다."}
                 </td>
               </tr>
             )}
-            {shown.map((m) => (
+            {shown.map((m, i) => (
               <tr
                 key={m.id}
                 onClick={() => navigate(`/materials/${m.id}`)}
@@ -212,13 +234,22 @@ export function MaterialsPage() {
                 <td className="py-3 px-5 whitespace-nowrap text-center">
                   <CodeText code={m.code} />
                 </td>
+                {spans[i].map((span, d) =>
+                  span === 0 ? null : (
+                    <td
+                      key={d}
+                      rowSpan={span}
+                      onClick={span > 1 ? (e) => e.stopPropagation() : undefined}
+                      className={`py-3 px-5 text-center text-text-muted [overflow-wrap:anywhere] border-l border-border ${span > 1 ? "bg-bg align-middle cursor-default" : ""}`}
+                    >
+                      {m.sub_levels[d] || "-"}
+                    </td>
+                  ),
+                )}
                 <td className="py-3 px-5 text-center font-semibold [overflow-wrap:anywhere]">
                   {m.name}
                 </td>
-                <td className="py-3 px-5 text-center text-text-muted [overflow-wrap:anywhere]">
-                  {levelPath(m.sub_levels) || "-"}
-                </td>
-                <td className="py-3 px-5 text-right font-bold tabular-nums whitespace-nowrap">{formatReelQty(m.current_qty, m.current_reels)}</td>
+                <td className="py-3 px-5 text-right font-bold tabular-nums whitespace-nowrap">{formatQtyPerReel(m.current_qty, m.current_reels)}</td>
               </tr>
             ))}
           </tbody>

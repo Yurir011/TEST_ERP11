@@ -77,6 +77,8 @@ let deviceState: { status: DeviceStatusName | "unknown"; error?: string } = { st
 let deviceTimer: ReturnType<typeof setInterval> | null = null;
 let shellState: { mode: "setup" | "offline"; error?: string } = { mode: "setup" };
 let mailWin: BrowserWindow | null = null;
+let messengerWin: BrowserWindow | null = null;
+let lastNotice = { key: "", at: 0 }; // 메인 창과 메신저 창이 같은 메시지를 각각 알리는 것을 한 번으로 줄이기 위해
 let mail: MailService | null = null;
 let composer: MailComposer | null = null;
 let identities: IdentityStore | null = null;
@@ -274,6 +276,42 @@ function openMailWindow(): void {
   mailWin = w;
   void w.loadURL(`${config.serverUrl}/mail`);
   log.info("[Mail] 메일 창 열기");
+}
+
+/**
+ * 메신저 전용 창. 메일 창과 같은 방식으로 서버 화면(/messenger)만 불러온다 (?window=1 은 화면이 사이드바 없이 그리라는 표시).
+ * 이미 열려 있으면 앞으로 가져오고, 대화방 번호가 있으면 그 대화방으로 이동하라고 알린다.
+ */
+function openMessengerWindow(conversationId: number | null = null): void {
+  if (!config.serverUrl) {
+    log.warn("[Messenger] 메신저 창을 열 수 없습니다 (서버 주소 없음)");
+    return;
+  }
+  if (messengerWin && !messengerWin.isDestroyed()) {
+    if (messengerWin.isMinimized()) messengerWin.restore();
+    messengerWin.show();
+    messengerWin.focus();
+    if (conversationId !== null && !messengerWin.webContents.isLoading()) messengerWin.webContents.send("app:open-conversation", { conversationId });
+    return;
+  }
+  const w = new BrowserWindow({
+    width: 1100,
+    height: 780,
+    minWidth: 720,
+    minHeight: 480,
+    title: "BENCH 메신저",
+    icon: ICON,
+    autoHideMenuBar: true,
+    webPreferences: { preload: PRELOAD, contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
+  });
+  hardenWindow(w);
+  w.on("focus", () => w.flashFrame(false));
+  w.on("closed", () => {
+    if (messengerWin === w) messengerWin = null;
+  });
+  messengerWin = w;
+  void w.loadURL(`${config.serverUrl}/messenger${conversationId !== null ? `/${conversationId}` : ""}?window=1`);
+  log.info(`[Messenger] 메신저 창 열기${conversationId !== null ? ` (대화방 ${conversationId})` : ""}`);
 }
 
 function safeOrigin(url: string): string {
@@ -491,10 +529,20 @@ function registerIpc(): void {
     if (!guard(e, "app:notify", ["server"])) return;
     if (typeof title !== "string" || typeof body !== "string") return;
     const id = parseConversationId(conversationId);
+    // 메신저 창과 메인 창이 둘 다 같은 메시지를 받으므로, 같은 알림이 짧은 시간 안에 또 오면 무시한다
+    const key = `${id}|${title}|${body}`;
+    const now = Date.now();
+    if (lastNotice.key === key && now - lastNotice.at < 3000) {
+      log.debug("[Messenger] 같은 알림이 중복되어 무시");
+      return;
+    }
+    lastNotice = { key, at: now };
+    // 메신저 창을 보고 있는 중이면 따로 알리지 않는다
+    if (messengerWin && !messengerWin.isDestroyed() && messengerWin.isFocused()) return;
     const n = new Notification({ title: title.slice(0, 100), body: body.slice(0, 300), icon: ICON });
     n.on("click", () => {
-      showWindow();
-      if (id !== null) sendOpenConversation(id); // 알림을 누르면 그 대화방으로 바로 간다
+      if (id !== null) openMessengerWindow(id); // 알림을 누르면 메신저 창의 그 대화방으로 바로 간다
+      else showWindow();
     });
     n.show();
     if (win && !win.isDestroyed() && !win.isFocused()) win.flashFrame(true); // 작업 표시줄 아이콘 깜박임
@@ -634,6 +682,11 @@ function registerIpc(): void {
   ipcMain.handle("app:focus-main", (e) => {
     if (!guard(e, "app:focus-main", ["server"])) return;
     showWindow();
+  });
+
+  ipcMain.handle("messenger:open-window", (e, conversationId?: unknown) => {
+    if (!guard(e, "messenger:open-window", ["server"])) return;
+    openMessengerWindow(parseConversationId(conversationId));
   });
 
   ipcMain.handle("mail:open-window", (e) => {
