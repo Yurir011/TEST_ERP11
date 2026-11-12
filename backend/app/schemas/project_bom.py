@@ -46,15 +46,25 @@ class BomLineOut(BaseModel):
     current_qty: int | None  # 연결된 자재의 현재 재고 (미등록이면 None)
     shortage: int | None  # 재고가 모자라는 개수 (넉넉하거나 미등록이면 None)
     released: int  # 이 줄로 지금까지 출고한 개수 (자재관리의 출고 기록 중 이 BOM 줄과 연결된 것의 합)
-
-
-class BomReleaseItem(BaseModel):
-    line_id: int
-    quantity: int = Field(gt=0, le=MAX_QUANTITY)
+    pending_units: int  # 재고 부족으로 출고에서 빠져 나중에 따로 출고해야 하는 제품 개수 (0 이면 없음)
 
 
 class BomReleaseIn(BaseModel):
-    """BOM 에서 고른 줄을 한꺼번에 출고한다 (줄마다 출고 수량). 하나라도 안 되면 전체를 취소한다."""
+    """BOM(제품 1개당 필요 수량)으로 제품 units 개분의 자재를 출고한다.
 
-    items: list[BomReleaseItem] = Field(min_length=1, max_length=500)
+    line_ids: 이번에 출고하는 BOM 줄 (줄마다 1개당 수량 × units 를 출고, 부분 출고는 없다).
+    skipped_line_ids: 재고가 모자라 이번에서 뺀 줄 - 나중에 따로 출고할 수 있게 보류분(units 개분)으로 적어 둔다.
+    하나라도 안 되면 전체를 취소한다.
+    """
+
+    units: int = Field(gt=0, le=100_000)
+    line_ids: list[int] = Field(min_length=1, max_length=500)
+    skipped_line_ids: list[int] = Field(default_factory=list, max_length=500)
     release_date: date | None = None  # 비우면 오늘
+
+
+class BomPendingReleaseIn(BaseModel):
+    """보류해 둔 줄(재고가 모자라 빠졌던 자재)을 보류된 제품 개수만큼 출고한다."""
+
+    line_ids: list[int] = Field(min_length=1, max_length=500)
+    release_date: date | None = None

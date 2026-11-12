@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bomCounts, bomReleasable, bomReleaseMax, bomRemaining, bomState, bomStateLabel, groupBom, type BomLine } from "./bom";
+import { bomCounts, bomPendingRows, bomReleaseRows, bomReleaseTotals, bomState, bomStateLabel, groupBom, type BomLine } from "./bom";
 
 const line = (id: number, over: Partial<BomLine> = {}): BomLine => ({
   id,
@@ -14,6 +14,7 @@ const line = (id: number, over: Partial<BomLine> = {}): BomLine => ({
   current_qty: 100,
   shortage: null,
   released: 0,
+  pending_units: 0,
   ...over,
 });
 
@@ -41,21 +42,25 @@ describe("BOM 상태", () => {
   });
 });
 
-describe("BOM 출고", () => {
-  it("출고할 수 있는 줄: 등록됨 + 남은 필요 수량이 있음 + 재고가 있음", () => {
-    expect(bomReleasable(ok)).toBe(true);
-    expect(bomReleasable(short)).toBe(true); // 재고가 모자라도 있는 만큼은 출고할 수 있다
-    expect(bomReleasable(line(8, { current_qty: 0, shortage: 10 }))).toBe(false); // 재고가 하나도 없음
-    expect(bomReleaseMax(short)).toBe(4);
-    expect(bomReleaseMax(ok)).toBe(10);
-    expect(bomReleaseMax(line(9, { released: 4, current_qty: 100 }))).toBe(6);
-    expect(bomReleasable(unreg)).toBe(false); // 자재관리에 없음
-    expect(bomReleasable(line(4, { released: 10 }))).toBe(false); // 이미 모두 출고
-    expect(bomReleasable(line(5, { released: 4, current_qty: 6 }))).toBe(true); // 남은 6개만 있으면 된다
+describe("BOM 출고(제품 개수 기준)", () => {
+  it("제품 개수를 곱해 필요 개수를 구하고, 재고가 모자라거나 미등록이면 이번 출고에서 뺀다", () => {
+    const rows = bomReleaseRows([ok, short, unreg], 10); // ok: 재고 100, short: 재고 4, 모두 1개당 10
+    expect(rows.map((r) => r.need)).toEqual([100, 100, 100]);
+    expect(rows.map((r) => r.ok)).toEqual([true, false, false]);
+    expect(rows.map((r) => r.held)).toEqual([false, true, false]); // 미등록은 보류하지 않는다
+    expect(rows.map((r) => r.short)).toEqual([0, 96, 0]);
   });
-  it("일부 출고·출고 완료를 글자로 보여 주고 남은 수량을 센다", () => {
-    expect(bomRemaining(line(6, { released: 4 }))).toBe(6);
-    expect(bomStateLabel(line(6, { released: 4 }))).toBe("일부 출고");
-    expect(bomStateLabel(line(7, { released: 10 }))).toBe("출고 완료");
+  it("재고가 정확히 필요한 개수면 출고하고, 한 개라도 모자라면 뺀다", () => {
+    expect(bomReleaseRows([ok], 10)[0].ok).toBe(true); // 100 / 100
+    expect(bomReleaseRows([ok], 11)[0].ok).toBe(false); // 100 / 110
+  });
+  it("합계는 이번에 출고하는 줄만 센다", () => {
+    expect(bomReleaseTotals(bomReleaseRows([ok, short, unreg], 5))).toEqual({ kinds: 1, qty: 50, held: 1 }); // short: 재고 4 < 50
+  });
+  it("보류분은 보류된 제품 개수 × 1개당으로 필요한 개수를 구하고 재고가 되면 출고 가능", () => {
+    const held = line(5, { pending_units: 3, current_qty: 29 }); // 1개당 10 → 30 필요
+    const ready = line(6, { pending_units: 3, current_qty: 30 });
+    const rows = bomPendingRows([ok, held, ready, unreg]);
+    expect(rows.map((r) => [r.line.id, r.need, r.ready, r.short])).toEqual([[5, 30, false, 1], [6, 30, true, 0]]);
   });
 });

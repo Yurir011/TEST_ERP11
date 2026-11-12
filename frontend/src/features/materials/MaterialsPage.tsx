@@ -257,13 +257,19 @@ export function MaterialsPage() {
                         onClick={() => navigate(`/materials/${m.id}`)}
                         className={`border-b border-border last:border-0 cursor-pointer hover:bg-bg ${selected.has(m.id) ? "bg-tile-blue" : ""}`}
                       >
-                        <td className="py-3 pl-4 pr-0 w-px" onClick={(e) => e.stopPropagation()}>
+                        {/* 칸 전체(체크박스 둘레 포함)를 눌러도 체크된다 */}
+                        <td
+                          className="py-3 px-5 w-px cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleRow(m.id, !selected.has(m.id), e.shiftKey);
+                          }}
+                        >
                           <input
                             type="checkbox"
                             aria-label={`${m.name} 선택`}
                             checked={selected.has(m.id)}
                             onChange={() => undefined}
-                            onClick={(e) => toggleRow(m.id, e.currentTarget.checked, e.shiftKey)}
                           />
                         </td>
                         <td className="py-3 px-5 whitespace-nowrap text-center">
