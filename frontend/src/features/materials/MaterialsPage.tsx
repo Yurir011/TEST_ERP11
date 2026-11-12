@@ -9,11 +9,22 @@ import { logDebug, logError } from "../../lib/logger";
 import { BulkLevelsModal } from "./BulkLevelsModal";
 import { CodeText } from "./CodeText";
 import { NewMaterialButton } from "./NewMaterialButton";
-import { LIST_TABS, formatQtyPerReel, levelPath, matchKeyword, matchTab, type ListTab, type Material } from "./types";
+import { LIST_TABS, formatQtyPerReel, matchKeyword, matchTab, type ListTab, type Material } from "./types";
 
 /** 자재관리 목록 (시안 B-2): 품목 코드 · 품명 · 분류(속성) · 개수 네 칸만 보여 준다. 위 탭으로 걸러 보고, 코드·품명·속성으로 찾는다. 행을 누르면 상세(입출고 기록)로 간다.
  *  앞의 체크박스로 여러 자재를 골라 분류를 한꺼번에 바꾸거나(직원 누구나), 한꺼번에 삭제할 수 있다(대표만). Shift+클릭으로 범위 선택. */
 const collator = new Intl.Collator("ko", { numeric: true, sensitivity: "base" });
+
+/** 분류 경로를 단계별로 비교 (대분류 → 중분류 → ...). 단계가 없는 쪽이 앞에 온다. */
+function compareLevels(a: string[], b: string[]): number {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i] === undefined) return -1;
+    if (b[i] === undefined) return 1;
+    const c = collator.compare(a[i], b[i]);
+    if (c) return c;
+  }
+  return 0;
+}
 
 export function MaterialsPage() {
   const navigate = useNavigate();
@@ -52,29 +63,34 @@ export function MaterialsPage() {
     () =>
       (rows ?? [])
         .filter((m) => matchTab(m, tab) && matchKeyword(m, keyword))
-        .sort(
-          (a, b) =>
-            collator.compare(levelPath(a.sub_levels), levelPath(b.sub_levels)) ||
-            collator.compare(a.name, b.name) ||
-            a.code.localeCompare(b.code),
-        ),
+        .sort((a, b) => compareLevels(a.sub_levels, b.sub_levels) || collator.compare(a.name, b.name) || a.code.localeCompare(b.code)),
     [rows, tab, keyword],
   );
-  // 분류 칸: 단계마다 한 칸. 위 줄과 같은 분류(앞 단계까지 모두 같은 값)는 한 칸으로 합친다 (0 이면 위 칸에 합쳐진 것)
-  const depth = Math.max(1, ...shown.map((m) => m.sub_levels.length));
-  const spans = useMemo(() => {
-    const keyOf = (m: Material, d: number) => m.sub_levels.slice(0, d + 1).join("");
-    return shown.map((m, i) =>
-      Array.from({ length: depth }, (_, d) => {
-        if (m.sub_levels[d] === undefined) return 1;
-        if (i > 0 && shown[i - 1].sub_levels[d] !== undefined && keyOf(shown[i - 1], d) === keyOf(m, d)) return 0;
-        let n = 1;
-        while (i + n < shown.length && shown[i + n].sub_levels[d] !== undefined && keyOf(shown[i + n], d) === keyOf(m, d)) n++;
-        return n;
-      }),
-    );
-  }, [shown, depth]);
-  const colCount = 4 + depth;
+  // 대분류마다 카드 하나. 카드 안 분류 칸은 중분류부터 단계별로 나누고, 위 줄과 같은 분류는 한 칸으로 합친다 (span 0 이면 위 칸에 합쳐진 것)
+  const groups = useMemo(() => {
+    const out: { key: string; label: string; items: Material[]; depth: number; spans: number[][] }[] = [];
+    for (const m of shown) {
+      const key = m.sub_levels[0] ?? "";
+      const last = out[out.length - 1];
+      if (last && last.key === key) last.items.push(m);
+      else out.push({ key, label: key || "분류 없음", items: [m], depth: 0, spans: [] });
+    }
+    for (const g of out) {
+      const inner = g.items.map((m) => m.sub_levels.slice(1));
+      g.depth = Math.max(0, ...inner.map((l) => l.length));
+      const keyOf = (l: string[], d: number) => l.slice(0, d + 1).join("\u0001");
+      g.spans = inner.map((l, i) =>
+        Array.from({ length: g.depth }, (_, d) => {
+          if (l[d] === undefined) return 1;
+          if (i > 0 && inner[i - 1][d] !== undefined && keyOf(inner[i - 1], d) === keyOf(l, d)) return 0;
+          let n = 1;
+          while (i + n < inner.length && inner[i + n][d] !== undefined && keyOf(inner[i + n], d) === keyOf(l, d)) n++;
+          return n;
+        }),
+      );
+    }
+    return out;
+  }, [shown]);
 
   const shownIds = shown.map((m) => m.id);
   const selectedInView = shownIds.filter((id) => selected.has(id)).length;
@@ -180,80 +196,112 @@ export function MaterialsPage() {
         </div>
       )}
 
-      <div className="bg-surface border border-border rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm min-w-[640px]">
-          <thead className="text-text-muted text-xs">
-            <tr className="border-b border-border">
-              <th className="py-3 pl-4 pr-0 w-px text-left">
+      {rows === null && !error && <p className="py-10 text-center text-sm text-text-muted">불러오는 중...</p>}
+      {rows !== null && shown.length === 0 && (
+        <p className="py-10 text-center text-sm text-text-muted">
+          {rows.length === 0 ? "등록된 자재가 없습니다. [자재 등록]으로 추가해 주세요." : "조건에 맞는 자재가 없습니다."}
+        </p>
+      )}
+
+      {shown.length > 0 && (
+        <label className="flex items-center gap-2 mb-2 px-1 text-sm text-text-muted w-fit cursor-pointer">
+          <input
+            type="checkbox"
+            aria-label="현재 목록 전체 선택"
+            checked={allInView}
+            ref={(el) => {
+              if (el) el.indeterminate = selectedInView > 0 && !allInView;
+            }}
+            onChange={(e) => toggleAll(e.target.checked)}
+          />
+          전체 선택 <span className="text-xs">({shown.length}개)</span>
+        </label>
+      )}
+
+      <div className="flex flex-col gap-3">
+        {groups.map((g) => {
+          const ids = g.items.map((m) => m.id);
+          const picked = ids.filter((id) => selected.has(id)).length;
+          const total = g.items.reduce((sum, m) => sum + m.current_qty, 0);
+          return (
+            <section key={g.key || "(none)"} className="bg-surface border border-border rounded-2xl overflow-hidden">
+              <header className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-bg border-b border-border">
                 <input
                   type="checkbox"
-                  aria-label="현재 목록 전체 선택"
-                  checked={allInView}
+                  aria-label={`${g.label} 분류 전체 선택`}
+                  checked={picked === ids.length}
                   ref={(el) => {
-                    if (el) el.indeterminate = selectedInView > 0 && !allInView;
+                    if (el) el.indeterminate = picked > 0 && picked < ids.length;
                   }}
-                  onChange={(e) => toggleAll(e.target.checked)}
+                  onChange={(e) => {
+                    setSelected((prev) => {
+                      const next = new Set(prev);
+                      ids.forEach((id) => (e.target.checked ? next.add(id) : next.delete(id)));
+                      return next;
+                    });
+                  }}
                 />
-              </th>
-              <th className="py-3 px-5 font-medium whitespace-nowrap text-center">품목 코드</th>
-              <th colSpan={depth} className="py-3 px-5 font-medium text-center">분류</th>
-              <th className="py-3 px-5 font-medium text-center">품명</th>
-              <th className="py-3 px-5 font-medium text-right whitespace-nowrap">개수</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows === null && !error && (
-              <tr>
-                <td colSpan={colCount} className="py-10 text-center text-text-muted">
-                  불러오는 중...
-                </td>
-              </tr>
-            )}
-            {rows !== null && shown.length === 0 && (
-              <tr>
-                <td colSpan={colCount} className="py-10 text-center text-text-muted">
-                  {rows.length === 0 ? "등록된 자재가 없습니다. [자재 등록]으로 추가해 주세요." : "조건에 맞는 자재가 없습니다."}
-                </td>
-              </tr>
-            )}
-            {shown.map((m, i) => (
-              <tr
-                key={m.id}
-                onClick={() => navigate(`/materials/${m.id}`)}
-                className={`border-b border-border last:border-0 cursor-pointer hover:bg-bg ${selected.has(m.id) ? "bg-tile-blue" : ""}`}
-              >
-                <td className="py-3 pl-4 pr-0 w-px" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    aria-label={`${m.name} 선택`}
-                    checked={selected.has(m.id)}
-                    onChange={() => undefined}
-                    onClick={(e) => toggleRow(m.id, e.currentTarget.checked, e.shiftKey)}
-                  />
-                </td>
-                <td className="py-3 px-5 whitespace-nowrap text-center">
-                  <CodeText code={m.code} />
-                </td>
-                {spans[i].map((span, d) =>
-                  span === 0 ? null : (
-                    <td
-                      key={d}
-                      rowSpan={span}
-                      onClick={span > 1 ? (e) => e.stopPropagation() : undefined}
-                      className={`py-3 px-5 text-center text-text-muted [overflow-wrap:anywhere] border-l border-border ${span > 1 ? "bg-bg align-middle cursor-default" : ""}`}
-                    >
-                      {m.sub_levels[d] || "-"}
-                    </td>
-                  ),
-                )}
-                <td className="py-3 px-5 text-center font-semibold [overflow-wrap:anywhere]">
-                  {m.name}
-                </td>
-                <td className="py-3 px-5 text-right font-bold tabular-nums whitespace-nowrap">{formatQtyPerReel(m.current_qty, m.current_reels)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                <h2 className="font-bold text-sm">{g.label}</h2>
+                <span className="ml-auto text-xs text-text-muted tabular-nums">
+                  {g.items.length}개 자재 · 합계 {total.toLocaleString("ko-KR")}개
+                </span>
+              </header>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[560px]">
+                  <thead className="text-text-muted text-xs">
+                    <tr className="border-b border-border">
+                      <th className="py-2.5 pl-4 pr-0 w-px" />
+                      <th className="py-2.5 px-5 font-medium whitespace-nowrap text-center">품목 코드</th>
+                      {g.depth > 0 && (
+                        <th colSpan={g.depth} className="py-2.5 px-5 font-medium text-center">
+                          분류
+                        </th>
+                      )}
+                      <th className="py-2.5 px-5 font-medium text-center">품명</th>
+                      <th className="py-2.5 px-5 font-medium text-right whitespace-nowrap">개수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.items.map((m, i) => (
+                      <tr
+                        key={m.id}
+                        onClick={() => navigate(`/materials/${m.id}`)}
+                        className={`border-b border-border last:border-0 cursor-pointer hover:bg-bg ${selected.has(m.id) ? "bg-tile-blue" : ""}`}
+                      >
+                        <td className="py-3 pl-4 pr-0 w-px" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            aria-label={`${m.name} 선택`}
+                            checked={selected.has(m.id)}
+                            onChange={() => undefined}
+                            onClick={(e) => toggleRow(m.id, e.currentTarget.checked, e.shiftKey)}
+                          />
+                        </td>
+                        <td className="py-3 px-5 whitespace-nowrap text-center">
+                          <CodeText code={m.code} />
+                        </td>
+                        {g.spans[i].map((span, d) =>
+                          span === 0 ? null : (
+                            <td
+                              key={d}
+                              rowSpan={span}
+                              onClick={span > 1 ? (e) => e.stopPropagation() : undefined}
+                              className={`py-3 px-5 text-center text-text-muted [overflow-wrap:anywhere] border-l border-border ${span > 1 ? "bg-bg align-middle cursor-default" : ""}`}
+                            >
+                              {m.sub_levels[d + 1] || "-"}
+                            </td>
+                          ),
+                        )}
+                        <td className="py-3 px-5 text-center font-semibold [overflow-wrap:anywhere]">{m.name}</td>
+                        <td className="py-3 px-5 text-right font-bold tabular-nums whitespace-nowrap">{formatQtyPerReel(m.current_qty, m.current_reels)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          );
+        })}
       </div>
 
       {levelsOpen && (
