@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     project_documents_dir: str = "storage/project_documents"
     tax_invoice_images_dir: str = "storage/tax_invoice_images"
     proposals_dir: str = "storage/proposals"
+    project_gerbers_dir: str = "storage/project_gerbers"
     proposal_attachments_dir: str = "storage/proposal_attachments"
     business_reg_images_dir: str = "storage/business_reg_images"
     bankbook_images_dir: str = "storage/bankbook_images"
