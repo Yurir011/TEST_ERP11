@@ -90,6 +90,7 @@ class ProposalPaymentIn(BaseModel):
     payment_method: Literal["deposit", "card"]
     account: str  # 카드·계좌 관리의 계좌/카드 code
     amount: int = Field(gt=0)
+    payment_date: date | None = None  # 결제한 날 (없으면 오늘)
 
 
 class ProposalPaymentOut(BaseModel):
@@ -112,6 +113,7 @@ class OrderFlowToggle(BaseModel):
     payment_bank: str | None = None
     payment_asked: bool = False  # 입고 확인에서만 사용: true 면 위 결제 상태로 바꾼다 (입고 때 대금 결제 여부를 물어 본 경우)
     received_date: date | None = None  # 입고 확인에서만 사용: 실제로 물품을 받은 날 (없으면 오늘)
+    payment_date: date | None = None  # 입고 확인에서만 사용: 대금을 결제한 날 (없으면 오늘)
 
 
 class ReceivedDateIn(BaseModel):

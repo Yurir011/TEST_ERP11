@@ -22,7 +22,7 @@ describe("입고 완료 · 대금 결제 확인", () => {
     const h = renderModal();
     expect(screen.getByText(/아직 결제하지 않았다면/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /입고 완료 \(외상\)/ }));
-    expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: null, payment_card: null, payment_bank: null }, expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/));
+    expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: null, payment_card: null, payment_bank: null }, expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/), undefined);
   });
 
   it("송금을 고르면 계좌를 함께 보낸다", () => {
@@ -30,14 +30,14 @@ describe("입고 완료 · 대금 결제 확인", () => {
     fireEvent.click(screen.getByLabelText("송금"));
     fireEvent.change(screen.getByLabelText("송금 계좌"), { target: { value: "woori" } });
     fireEvent.click(screen.getByRole("button", { name: /입고 완료 \(송금 \(우리은행\)\)/ }));
-    expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: "deposit", payment_card: null, payment_bank: "woori" }, expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/));
+    expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: "deposit", payment_card: null, payment_bank: "woori" }, expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/), expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/));
   });
 
   it("발주 때 이미 결제한 건은 그 결제 상태가 미리 골라져 있다", () => {
     const h = renderModal({ payment_method: "card", payment_card: "bc" } as Partial<Proposal>);
     expect((screen.getByLabelText("법인카드 종류") as HTMLSelectElement).value).toBe("bc");
     fireEvent.click(screen.getByRole("button", { name: /입고 완료 \(법인카드 \(BC카드\)\)/ }));
-    expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: "card", payment_card: "bc", payment_bank: null }, expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/));
+    expect(h.onConfirm).toHaveBeenCalledWith({ payment_method: "card", payment_card: "bc", payment_bank: null }, expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/), expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/));
   });
 
   it("취소와 Esc 로 닫는다", () => {

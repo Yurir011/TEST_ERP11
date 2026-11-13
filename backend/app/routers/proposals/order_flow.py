@@ -12,7 +12,13 @@ from app.models.user import User, is_admin_role
 from app.routers.proposals._common import PREFIX, _get_or_404, _to_out, logger
 from app.schemas.proposal import OrderFlowToggle, OrderPaymentIn, ProposalOut, ProposalPaymentIn, ReceivedDateIn
 from app.services.payment_accounts import require_account
-from app.services.purchase_ledger import add_purchase_payment, has_extra_payments, remove_purchase_payment, sync_purchase_transaction
+from app.services.purchase_ledger import (
+    add_purchase_payment,
+    has_extra_payments,
+    remove_purchase_payment,
+    sync_purchase_transaction,
+    update_purchase_payment,
+)
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
 
@@ -120,7 +126,20 @@ def add_payment(
     if p.order_sent_at is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주 완료 후에 결제할 수 있습니다.")
     logger.debug(f"[Proposals] 결제 추가 시도: id={proposal_id}, method={payload.payment_method}, amount={payload.amount}, by={current_user.id}")
-    add_purchase_payment(db, p, payload.payment_method, payload.account, payload.amount, current_user)
+    add_purchase_payment(db, p, payload.payment_method, payload.account, payload.amount, current_user, payload.payment_date)
+    db.commit()
+    return _to_out(_get_or_404(db, proposal_id))
+
+
+@router.put("/{proposal_id}/payments/{payment_id}", response_model=ProposalOut)
+def update_payment(
+    proposal_id: int, payment_id: int, payload: ProposalPaymentIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """결제 내역 한 줄을 고친다 (결제일·금액·방법·계좌). 입출금관리의 출금과 매입도 함께 바뀐다."""
+    p = _get_or_404(db, proposal_id)
+    _check_actor_and_kind(p, current_user)
+    logger.debug(f"[Proposals] 결제 수정 시도: id={proposal_id}, payment_id={payment_id}, amount={payload.amount}, by={current_user.id}")
+    update_purchase_payment(db, p, payment_id, payload.payment_method, payload.account, payload.amount, payload.payment_date, current_user)
     db.commit()
     return _to_out(_get_or_404(db, proposal_id))
 
@@ -151,7 +170,9 @@ def set_received(
         p.received_by = p.received_by or current_user.id
         if payload.payment_asked:  # 입고 때 대금 결제 여부(외상 / 입금 / 법인카드)를 확인한 경우
             _set_payment(db, p, payload.payment_method, payload.payment_card, payload.payment_bank)
-            sync_purchase_transaction(db, p, current_user)
+            if payload.payment_date is not None and payload.payment_date > datetime.now(KST).date():
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결제일은 오늘보다 뒤일 수 없습니다.")
+            sync_purchase_transaction(db, p, current_user, payload.payment_date)
     else:
         if p.received_by != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="입고 처리한 본인만 취소할 수 있습니다.")

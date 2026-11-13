@@ -535,7 +535,7 @@ export function ProjectDocumentsPage({
   }
 
   // 입고 완료는 대금 결제 여부(외상 / 입금 / 법인카드)를 확인하는 창을 거치고, 입고 취소는 확인만 한다.
-  async function handleToggleReceived(p: Proposal, received: boolean, payment?: OrderPayment, receivedDate?: string) {
+  async function handleToggleReceived(p: Proposal, received: boolean, payment?: OrderPayment, receivedDate?: string, paymentDate?: string) {
     if (received && !payment) {
       setReceiveId(p.id);
       return;
@@ -544,7 +544,7 @@ export function ProjectDocumentsPage({
     logDebug("ProjectDocuments", `입고 확인 변경: proposal_id=${p.id}, received=${received}, 결제=${payment ? (payment.payment_method ?? "외상") : "-"}`);
     setBusyId(p.id);
     try {
-      await apiPut(`/api/proposals/${p.id}/received`, received && payment ? { value: true, payment_asked: true, received_date: receivedDate, ...payment } : { value: received });
+      await apiPut(`/api/proposals/${p.id}/received`, received && payment ? { value: true, payment_asked: true, received_date: receivedDate, payment_date: paymentDate, ...payment } : { value: received });
       setReceiveId(null);
       loadPurchaseCards();
     } catch (err) {
@@ -1093,7 +1093,7 @@ export function ProjectDocumentsPage({
         <ReceiveModal
           proposal={receiveProposal}
           busy={busyId === receiveProposal.id}
-          onConfirm={(payment, date) => void handleToggleReceived(receiveProposal, true, payment, date)}
+          onConfirm={(payment, date, payDate) => void handleToggleReceived(receiveProposal, true, payment, date, payDate)}
           onClose={() => setReceiveId(null)}
         />
       )}

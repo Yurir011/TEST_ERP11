@@ -33,6 +33,7 @@ EXPECTED_OPERATIONS = [
     ('POST', '/api/proposals/{proposal_id}/request-delete', 'request_delete_proposal_api_proposals__proposal_id__request_delete_post', ['200', '422']),
     ('POST', '/api/proposals/{proposal_id}/withdraw', 'withdraw_proposal_api_proposals__proposal_id__withdraw_post', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}', 'update_proposal_api_proposals__proposal_id__put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/payments/{payment_id}', 'update_payment_api_proposals__proposal_id__payments__payment_id__put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/order-payment', 'set_order_payment_api_proposals__proposal_id__order_payment_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/order-sent', 'set_order_sent_api_proposals__proposal_id__order_sent_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/received', 'set_received_api_proposals__proposal_id__received_put', ['200', '422']),
@@ -590,3 +591,44 @@ def test_receive_date_can_be_chosen_and_changed(client, staff, auth_headers):
     assert client.put(f"/api/proposals/{p['id']}/received-date", headers=h, json={"received_date": "2999-01-01"}).status_code == 400
     q = _purchase(client, h)
     assert client.put(f"/api/proposals/{q['id']}/received-date", headers=h, json={"received_date": "2026-11-07"}).status_code == 400  # 입고 전
+
+
+def test_payment_date_choose_edit_and_receive(client, db, staff, auth_headers):
+    """결제 추가 때 결제일을 고르고, 결제 줄을 고치고(날짜·금액·방법), 입고 때 결제일을 지정한다."""
+    h = auth_headers(staff["writer"])
+    p = _purchase(client, h)  # 합계 1,100,000
+    pid = p["id"]
+    client.put(f"/api/proposals/{pid}/order-sent", headers=h, json={"value": True, "online": True})
+    url = f"/api/proposals/{pid}/payments"
+
+    assert client.post(url, headers=h, json={"payment_method": "deposit", "account": "ibk", "amount": 400000, "payment_date": "2999-01-01"}).status_code == 400
+    res = client.post(url, headers=h, json={"payment_method": "deposit", "account": "ibk", "amount": 400000, "payment_date": "2026-11-10"})
+    assert res.status_code == 201, res.text
+    first_id = res.json()["payments"][0]["id"]
+    assert res.json()["payments"][0]["payment_date"] == "2026-11-10"
+
+    # 날짜만 고치기
+    res = client.put(f"{url}/{first_id}", headers=h, json={"payment_method": "deposit", "account": "ibk", "amount": 400000, "payment_date": "2026-11-12"})
+    assert res.status_code == 200, res.text
+    assert res.json()["payments"][0]["payment_date"] == "2026-11-12"
+    # 금액·방법 고치기 (잔액도 함께 바뀐다)
+    res = client.put(f"{url}/{first_id}", headers=h, json={"payment_method": "card", "account": "bc", "amount": 300000, "payment_date": "2026-11-12"})
+    assert res.status_code == 200, res.text
+    row = res.json()["payments"][0]
+    assert (row["method"], row["account"], row["amount"]) == ("card", "bc", 300000)
+    (tx,) = _ledger(db, pid)
+    assert tx.paid_amount == 300000 and tx.settled is False
+    # 잔액보다 큰 금액, 남이 고치기
+    assert client.put(f"{url}/{first_id}", headers=h, json={"payment_method": "card", "account": "bc", "amount": 1100001}).status_code == 400
+    assert client.put(f"{url}/{first_id}", headers=auth_headers(staff["other"]), json={"payment_method": "card", "account": "bc", "amount": 1000}).status_code == 403
+
+    # 입고하면서 입금 완료 + 결제일 지정
+    q = _purchase(client, h)
+    client.put(f"/api/proposals/{q['id']}/order-sent", headers=h, json={"value": True, "online": True})
+    res = client.put(
+        f"/api/proposals/{q['id']}/received", headers=h,
+        json={"value": True, "payment_asked": True, "payment_method": "deposit", "payment_bank": "woori", "payment_date": "2026-11-05"},
+    )
+    assert res.status_code == 200, res.text
+    (pay,) = _payments(db, q["id"])
+    assert str(pay.payment_date) == "2026-11-05" and str(_ledger(db, q["id"])[0].settled_date) == "2026-11-05"

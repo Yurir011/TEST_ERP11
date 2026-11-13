@@ -50,7 +50,7 @@ describe("결제 내역 박스", () => {
     render(<PaymentBox proposal={proposal([])} canManage onChanged={onChanged} />);
     fireEvent.click(screen.getByRole("button", { name: "결제 추가" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith(updated));
-    expect(apiPost).toHaveBeenCalledWith("/api/proposals/7/payments", { payment_method: "deposit", account: "ibk", amount: 1100000 });
+    expect(apiPost).toHaveBeenCalledWith("/api/proposals/7/payments", { payment_method: "deposit", account: "ibk", amount: 1100000, payment_date: expect.stringMatching(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) });
   });
 
   it("잔액보다 큰 금액은 서버에 보내지 않고 안내한다", () => {

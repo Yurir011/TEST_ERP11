@@ -89,8 +89,9 @@ def _payment_matches(payment: Payment, p: Proposal, amount: int, client_id: int 
     return False
 
 
-def sync_purchase_transaction(db: Session, p: Proposal, actor: User) -> Transaction | None:
-    """발주 진행 상태에 맞춰 품의서의 매입·출금을 만들거나 고치거나 지운다 (commit 은 호출한 쪽에서)."""
+def sync_purchase_transaction(db: Session, p: Proposal, actor: User, pay_date: date | None = None) -> Transaction | None:
+    """발주 진행 상태에 맞춰 품의서의 매입·출금을 만들거나 고치거나 지운다 (commit 은 호출한 쪽에서).
+    pay_date 가 있으면 자동 출금의 결제일로 쓴다 (없으면 오늘, 이미 있는 출금은 그 날짜로 고친다)."""
     if not LEDGER_SYNC_ENABLED:
         return None
     tx = db.query(Transaction).filter(Transaction.proposal_id == p.id).first()
@@ -168,10 +169,15 @@ def sync_purchase_transaction(db: Session, p: Proposal, actor: User) -> Transact
         credit_add(db, tx)
     db.flush()
 
+    if existing is not None and pay_date is not None and existing.payment_date != pay_date:
+        existing.payment_date = pay_date  # 같은 결제 상태에서 결제일만 바뀐 경우
+        if tx.settled_payment_id == existing.id:
+            tx.settled_date = pay_date
+
     if wanted and existing is None and not tx.settled:
         payment = Payment(
             type=PaymentType.withdrawal,
-            payment_date=date.today(),
+            payment_date=pay_date or date.today(),
             category=LEDGER_CATEGORY,
             description=f"{p.title} (구매 품의서 {p.doc_no})"[:300],
             amount=total,
@@ -225,7 +231,16 @@ def has_extra_payments(db: Session, p: Proposal) -> bool:
     return tx is not None and _manual_payments(db, tx, p.payment_id) > 0
 
 
-def add_purchase_payment(db: Session, p: Proposal, method: str, account: str | None, amount: int, actor: User) -> Payment:
+def _check_pay_date(pay_date: date | None) -> date:
+    today = date.today()
+    if pay_date is not None and pay_date > today:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결제일은 오늘보다 뒤일 수 없습니다.")
+    return pay_date or today
+
+
+def add_purchase_payment(
+    db: Session, p: Proposal, method: str, account: str | None, amount: int, actor: User, pay_date: date | None = None
+) -> Payment:
     """결제 내역을 한 줄 추가한다: amount 만큼 출금을 만들고 매입에 연결한다. 잔액을 다 채우면 매입이 결제완료가 된다."""
     tx = purchase_transaction(db, p)
     if tx is None:
@@ -238,11 +253,12 @@ def add_purchase_payment(db: Session, p: Proposal, method: str, account: str | N
     if amount > remaining:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"잔액(₩{remaining:,})보다 큰 금액은 결제할 수 없습니다.")
     require_account(db, "bank" if method == "deposit" else "card", account)
+    when = _check_pay_date(pay_date)
     is_partial = amount < remaining
     how = f"입금({display_name(db, 'bank', account)})" if method == "deposit" else f"법인카드({display_name(db, 'card', account)})"
     payment = Payment(
         type=PaymentType.withdrawal,
-        payment_date=date.today(),
+        payment_date=when,
         category=LEDGER_CATEGORY,
         description=f"{p.title} (구매 품의서 {p.doc_no})"[:300],
         amount=amount,
@@ -276,3 +292,49 @@ def remove_purchase_payment(db: Session, p: Proposal, payment_id: int) -> None:
     db.delete(payment)
     db.flush()
     logger.debug(f"[PurchaseLedger] 결제 내역 삭제: proposal_id={p.id}, payment_id={payment_id}")
+
+
+def update_purchase_payment(
+    db: Session, p: Proposal, payment_id: int, method: str, account: str | None, amount: int, pay_date: date | None, actor: User
+) -> Payment:
+    """결제 내역 한 줄을 고친다 (결제일·금액·방법·계좌). 입출금관리의 출금과 매입의 잔액도 함께 바뀐다.
+    결제일만 바뀌면 날짜만 고치고, 그 밖에는 결제를 되돌렸다가 새 내용으로 다시 반영한다 (완납 뒤 중간 줄은 400)."""
+    tx = purchase_transaction(db, p)
+    payment = next((x for x in linked_payments(db, tx) if x.id == payment_id), None) if tx is not None else None
+    if tx is None or payment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="결제 내역을 찾을 수 없습니다.")
+    when = _check_pay_date(pay_date or payment.payment_date)
+    require_account(db, "bank" if method == "deposit" else "card", account)
+    current_method = "deposit" if payment.method == PaymentMethod.bank_transfer else "card"
+    current_account = payment.bank_type if current_method == "deposit" else payment.card_type
+    if method == current_method and account == current_account and amount == payment.amount:
+        payment.payment_date = when
+        if tx.settled_payment_id == payment.id:
+            tx.settled_date = when
+        logger.debug(f"[PurchaseLedger] 결제일 변경: proposal_id={p.id}, payment_id={payment_id}, date={when}, by={actor.id}")
+        return payment
+
+    undo_payment_effects(db, payment)  # 완납 뒤 중간 줄이면 400
+    db.flush()
+    remaining = remaining_amount(tx)
+    if amount <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결제 금액은 0보다 커야 합니다.")
+    if amount > remaining:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"잔액(₩{remaining:,})보다 큰 금액은 결제할 수 없습니다.")
+    is_partial = amount < remaining
+    how = f"입금({display_name(db, 'bank', account)})" if method == "deposit" else f"법인카드({display_name(db, 'card', account)})"
+    payment.payment_date = when
+    payment.amount = amount
+    payment.method = PaymentMethod.bank_transfer if method == "deposit" else PaymentMethod.corporate_card
+    payment.bank_type = account if method == "deposit" else None
+    payment.card_type = account if method == "card" else None
+    payment.memo = f"구매 품의서 No. {p.doc_no} · {how}"
+    payment.partial_transaction_id = tx.id if is_partial else None
+    apply_transaction_payment(db, payment, tx, partial=is_partial)
+    if p.payment_id == payment.id:  # 품의서의 결제 방법으로 자동 만든 출금이었으면, 직접 고친 결제로 본다
+        p.payment_id = None
+        p.payment_method = None
+        p.payment_card = None
+        p.payment_bank = None
+    logger.debug(f"[PurchaseLedger] 결제 내역 수정: proposal_id={p.id}, payment_id={payment_id}, amount={amount}, partial={is_partial}, by={actor.id}")
+    return payment

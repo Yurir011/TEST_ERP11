@@ -10,7 +10,7 @@ interface ReceiveModalProps {
   proposal: Proposal;
   busy: boolean;
   /** 입고 완료 처리: 대금 결제 여부(외상 / 송금 / 법인카드)를 함께 보낸다 */
-  onConfirm: (payment: OrderPayment, receivedDate: string) => void;
+  onConfirm: (payment: OrderPayment, receivedDate: string, paymentDate?: string) => void;
   onClose: () => void;
 }
 
@@ -19,6 +19,7 @@ export function ReceiveModal({ proposal, busy, onConfirm, onClose }: ReceiveModa
   usePaymentAccounts(); // 카드·계좌 이름이 로드되면 버튼 글자를 다시 그린다
   const [payment, setPayment] = useState<OrderPayment>(() => paymentFromProposal(proposal));
   const [date, setDate] = useState(todayISO()); // 물품을 받은 날 (기본 오늘)
+  const [payDate, setPayDate] = useState(todayISO()); // 대금을 결제한 날 (결제했다고 고른 경우만 보낸다)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -60,6 +61,12 @@ export function ReceiveModal({ proposal, busy, onConfirm, onClose }: ReceiveModa
             결제 방법을 선택해 주세요. 아직 결제하지 않았다면 <b>외상</b>으로 처리됩니다. 결과는 매입매출관리와 입출금관리에 반영됩니다.
           </p>
           <PaymentPicker value={payment} onChange={setPayment} />
+          {payment.payment_method !== null && (
+            <div className="border-t border-border pt-3 flex flex-col gap-2">
+              <p className="text-sm font-medium">결제한 날</p>
+              <ReceiveDatePicker value={payDate} onChange={setPayDate} caption="결제일" groupLabel="결제일" />
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex justify-end gap-2">
@@ -68,7 +75,7 @@ export function ReceiveModal({ proposal, busy, onConfirm, onClose }: ReceiveModa
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(payment, date)}
+            onClick={() => onConfirm(payment, date, payment.payment_method !== null ? payDate : undefined)}
             disabled={busy}
             className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
           >
