@@ -1,8 +1,11 @@
-import { FolderKanban, Plus, Search, X } from "lucide-react";
+import { FolderKanban, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { apiGet } from "../../lib/api";
+import { useDialog } from "../../components/ui/dialog/useDialog";
+import { useAuth } from "../../context/useAuth";
+import { ApiError, apiDelete, apiGet } from "../../lib/api";
+import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ProjectStageBoard } from "./ProjectStageBoard";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES, type Project, type ProjectStatus } from "./types";
@@ -30,6 +33,9 @@ const TABS: { key: ProjectStatus | "all"; label: string }[] = [
 
 export function ProjectsPage() {
   const navigate = useNavigate();
+  const dialog = useDialog();
+  const { user } = useAuth();
+  const canDelete = isAdminRole(user?.role); // 서버도 관리자만 삭제할 수 있다
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [allProjects, setAllProjects] = useState<Project[] | null>(null);
   const [tab, setTab] = useState<ProjectStatus | "all">("all");
@@ -54,6 +60,22 @@ export function ProjectsPage() {
         logError("Projects", "목록 조회 실패", err);
         setError("프로젝트 목록을 불러오지 못했습니다.");
       });
+  }
+
+  async function deleteProject(p: Project) {
+    if (!(await dialog.confirm(`폐기한 프로젝트 "${p.name}"을(를) 완전히 삭제할까요?
+올려 둔 거버·BOM 등 파일도 함께 지워지며 되돌릴 수 없습니다.`, { okLabel: "삭제", danger: true }))) return;
+    try {
+      logDebug("Projects", `폐기 프로젝트 삭제 시도: id=${p.id}`);
+      await apiDelete(`/api/projects/${p.id}`);
+      logDebug("Projects", `폐기 프로젝트 삭제 성공: id=${p.id}`);
+      setProjects((list) => list?.filter((x) => x.id !== p.id) ?? null);
+      setAllProjects((list) => list?.filter((x) => x.id !== p.id) ?? null);
+      dialog.notify("프로젝트를 삭제했습니다.");
+    } catch (err) {
+      logError("Projects", "폐기 프로젝트 삭제 실패", err);
+      dialog.notifyError(err instanceof ApiError ? err.message : "삭제하지 못했습니다.");
+    }
   }
 
   useEffect(() => {
@@ -207,6 +229,20 @@ export function ProjectsPage() {
                   <span className={`shrink-0 text-xs px-2.5 py-1 font-medium ${PROJECT_STATUS_STYLES[p.status]}`}>
                     {PROJECT_STATUS_LABELS[p.status]}
                   </span>
+                  {tab === "discarded" && p.status === "discarded" && canDelete && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void deleteProject(p);
+                      }}
+                      aria-label={`${p.name} 삭제`}
+                      title="삭제"
+                      className="shrink-0 rounded-lg border border-border p-2 text-text-muted hover:bg-bg hover:text-danger"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
               </div>
             );

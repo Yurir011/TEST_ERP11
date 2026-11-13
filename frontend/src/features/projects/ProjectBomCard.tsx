@@ -23,7 +23,7 @@ const TOP_BUTTONS: { key: TopKey; label: string }[] = [
 ];
 /** 윗줄 버튼은 모두 같은 크기 (Gerber Viewer 는 글자를 줄여 두 줄로) */
 const TOP_BTN_BASE = "inline-flex h-11 w-28 items-center justify-center px-2 text-center text-sm font-medium text-white transition-colors disabled:opacity-60";
-const TOP_BTN = `${TOP_BTN_BASE} rounded-xl border-2 border-[#2F528F] bg-[#4472C4] hover:bg-[#3A64AE]`;
+const TOP_BTN = `${TOP_BTN_BASE} rounded-xl border-2 border-[#5a6ea3] bg-[#6a7eb3] hover:bg-[#5a6ea3]`;
 /** 출고 버튼: 다른 화면의 [등록] 버튼과 같은 파랑 */
 const RELEASE_BTN = `${TOP_BTN_BASE} rounded-lg bg-primary hover:bg-primary-hover`;
 
