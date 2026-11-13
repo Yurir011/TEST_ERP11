@@ -2,6 +2,7 @@ import { Download, Paperclip, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiDelete, apiGet, apiUploadForm, downloadFile } from "../../lib/api";
+import { offerInvoiceRegistration } from "../../lib/invoiceOffer";
 import { logDebug, logError } from "../../lib/logger";
 import { useFileDropZone } from "../../lib/useFileDropZone";
 import { openAttachment } from "../../lib/openAttachment";
@@ -69,6 +70,7 @@ export function TransactionFilesSection({ txId, pending, onPendingChange }: { tx
     try {
       logDebug("TransactionFile", `파일 올리기 시도: tx_id=${txId}, files=${files.length}`);
       setRows(await uploadTransactionFiles(txId, files));
+      offerInvoiceRegistration({ files, transactionId: txId }); // 세금계산서 목록에도 등록할지 묻는다
     } catch (err) {
       logError("TransactionFile", "파일 올리기 실패", err);
       const message = err instanceof ApiError ? err.message : "파일을 올리지 못했습니다.";

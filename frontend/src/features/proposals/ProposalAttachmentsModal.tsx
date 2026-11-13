@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiDelete, apiPut, apiUploadForm, downloadFile } from "../../lib/api";
 import { isViewableInBrowser, openAttachment } from "../../lib/openAttachment";
+import { offerInvoiceRegistration } from "../../lib/invoiceOffer";
 import { logDebug, logError } from "../../lib/logger";
 import { ATTACHMENT_DOC_KIND_LABELS, type AttachmentDocKind, type Proposal, type ProposalAttachment } from "./types";
 
@@ -83,6 +84,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, canModify, onChang
     const { accepted, problems: rejected } = pickUploadable(files, remaining);
     const failed = [...rejected];
     let current = proposal;
+    const uploaded: File[] = [];
     for (let i = 0; i < accepted.length; i++) {
       const file = accepted[i];
       setUploading(`${file.name} (${i + 1}/${accepted.length})`);
@@ -93,6 +95,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, canModify, onChang
         form.append("doc_kind", uploadKind === "other" ? "" : uploadKind);
         current = await apiUploadForm<Proposal>(`/api/proposals/${proposal.id}/attachments/file`, form);
         onChanged(current);
+        uploaded.push(file);
       } catch (err) {
         logError("ProposalAttachments", "첨부 업로드 실패", err);
         failed.push(`${file.name}: ${err instanceof ApiError ? err.message : "업로드 중 오류가 발생했습니다."}`);
@@ -100,6 +103,7 @@ export function ProposalAttachmentsModal({ proposal, canEdit, canModify, onChang
     }
     setUploading(null);
     setProblems(failed);
+    if (uploadKind === "tax_invoice" && uploaded.length > 0) offerInvoiceRegistration({ files: uploaded, proposalId: proposal.id }); // 세금계산서 목록에도 등록할지 묻는다
     setUploadKind(defaultUploadKind(current)); // 올린 뒤에는 다음으로 빠진 서류를 기본으로
   }
 

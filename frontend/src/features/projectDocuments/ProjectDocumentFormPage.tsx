@@ -1,6 +1,7 @@
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import { Info } from "lucide-react";
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { X } from "lucide-react";
+import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { ApprovalEndTitle } from "../../components/approval/ApprovalChainPicker";
@@ -14,6 +15,7 @@ import { isPurchaseProposal } from "../proposals/purchaseFlow";
 import type { Proposal } from "../proposals/types";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { GRADE_LABELS, TITLE_LABELS, hasMenuPermission } from "../../lib/auth";
+import { isInvoiceImage } from "../../lib/invoiceOffer";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "./ApproverPickerModal";
 import { DocumentItemsEditor } from "./DocumentItemsEditor";
@@ -38,15 +40,48 @@ import { useDialog } from "../../components/ui/dialog/useDialog";
 
 const PURPOSE_OPTIONS: TaxInvoicePurpose[] = ["청구", "영수"];
 
-export function ProjectDocumentFormPage() {
+/** 세금계산서 파일을 올린 뒤 "등록하기"로 여는 팝업 모드: 올린 사진으로 시작하고, 끝나면 onDone */
+export interface InvoiceModalProps {
+  files: File[];
+  proposalId?: number | null;
+  transactionId?: number | null;
+  onDone: (doc: ProjectDocument) => void;
+  onClose: () => void;
+}
+
+/** 팝업 모드의 바깥 틀 */
+function InvoiceModalFrame({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
+      <div role="dialog" aria-modal="true" aria-label="새 세금계산서 작성 및 등록" className="mx-auto w-full max-w-3xl rounded-2xl border border-border bg-bg p-5 shadow-xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-bold">새 세금계산서 작성 및 등록</h2>
+          <button type="button" onClick={onClose} aria-label="닫기" className="rounded-lg p-1.5 text-text-muted hover:bg-surface">
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function ProjectDocumentFormPage({ modal }: { modal?: InvoiceModalProps } = {}) {
   const { notify } = useDialog();
   const [searchParams] = useSearchParams();
-  const typeParam = searchParams.get("type");
+  const typeParam = modal ? "tax_invoice" : searchParams.get("type");
   // ?type=set 이면 견적서+거래명세서를 같은 내용으로 한 번에 작성하고, 한 번의 결재로 함께 승인/반려된다.
   const isSet = typeParam === "set";
   // ?edit=문서ID 이면 기존 문서를 수정한다. 세금계산서는 팝빌 발행 전이면 승인된 문서도 수정할 수 있고,
   // 견적서/거래명세서는 반려(또는 작성 중)된 문서를 수정할 수 있다. 저장하면 결재를 다시 받아야 한다.
-  const editId = searchParams.get("edit");
+  const editId = modal ? null : searchParams.get("edit");
   // ?proposal=품의서ID 이면 그 구매 품의서에서 발주서를 만든다 (구매 품의서 카드의 발주 버튼).
   const proposalParam = searchParams.get("proposal");
   const isEdit = editId !== null && !isSet && isProjectDocType(typeParam);
@@ -293,6 +328,17 @@ export function ProjectDocumentFormPage() {
     }
   }
 
+  // 팝업 모드: 올린 사진으로 시작하고 첫 사진을 바로 인식해 입력란을 채운다
+  useEffect(() => {
+    if (!modal) return;
+    const images = modal.files.filter(isInvoiceImage);
+    if (images.length === 0) return;
+    setInvoiceImages(images);
+    void scanInvoice(images[0]);
+    // 팝업이 열릴 때 한 번만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleInvoiceFilesSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
@@ -301,11 +347,15 @@ export function ProjectDocumentFormPage() {
     const isFirst = invoiceImages.length === 0;
     setInvoiceImages((prev) => [...prev, ...files]);
     if (!isFirst) return;
+    await scanInvoice(files[0]);
+  }
 
+  /** 사진 한 장을 인식해 입력란을 채운다 */
+  async function scanInvoice(file: File) {
     setIsScanning(true);
     try {
-      logDebug("ProjectDocumentForm", `세금계산서 사진 인식 요청: filename=${files[0].name}`);
-      const result = await apiUpload<TaxInvoiceOcrResult>("/api/project-documents/ocr/tax-invoice", files[0]);
+      logDebug("ProjectDocumentForm", `세금계산서 사진 인식 요청: filename=${file.name}`);
+      const result = await apiUpload<TaxInvoiceOcrResult>("/api/project-documents/ocr/tax-invoice", file);
       setScanSummary(result);
       applyOcrResult(result);
       logDebug("ProjectDocumentForm", `세금계산서 사진 인식 성공: direction=${result.direction}, warnings=${result.warnings.length}`);
@@ -402,7 +452,8 @@ export function ProjectDocumentFormPage() {
       const createdResult = await apiPost<ProjectDocument | ProjectDocument[]>(endpoint, {
         ...projectPayload(projectId, projectOtherName),
         doc_type: docType,
-        proposal_id: docType === "purchase_order" ? (sourceProposal?.id ?? null) : null,
+        proposal_id: docType === "purchase_order" ? (sourceProposal?.id ?? null) : docType === "tax_invoice" ? (modal?.proposalId ?? null) : null,
+        ledger_transaction_id: docType === "tax_invoice" ? (modal?.transactionId ?? null) : null,
         issue_date: issueDate,
         currency,
         purpose_type: purposeType,
@@ -431,6 +482,11 @@ export function ProjectDocumentFormPage() {
         }
       }
       if (docType === "purchase_order") await syncAttachments(createdDocs[0].id);
+      if (modal) {
+        notify("세금계산서가 등록되었습니다. 결재 요청이 완료되었습니다.");
+        modal.onDone(createdDocs[0]);
+        return;
+      }
       notify(sourceProposal ? "발주서가 작성되었습니다. 거래처에 보낸 뒤 카드에서 발송 확인을 눌러 주세요." : "결재 요청이 완료되었습니다.");
       // 구매 품의서 카드에서 왔으면 전자결재 화면(카드)으로 돌아간다.
       navigate(
@@ -446,25 +502,27 @@ export function ProjectDocumentFormPage() {
     }
   }
 
-  if (docType === "tax_invoice" && !hasMenuPermission(user, "tax_invoice")) {
+  if (!modal && docType === "tax_invoice" && !hasMenuPermission(user, "tax_invoice")) {
     return <Navigate to="/tax-invoices" replace />;
   }
 
-  return (
-    <MainLayout
-      showBack
-      title={
-        isSet
-          ? "새 견적서 · 거래명세서 작성"
-          : docType === "tax_invoice"
-            ? isEdit
-              ? "세금계산서 수정"
-              : "새 세금계산서 작성 및 등록"
-            : isEdit
-              ? `${PROJECT_DOC_TYPE_LABELS[docType]} 수정`
-              : `새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`
-      }
-    >
+  const pageTitle = isSet
+    ? "새 견적서 · 거래명세서 작성"
+    : docType === "tax_invoice"
+      ? isEdit
+        ? "세금계산서 수정"
+        : "새 세금계산서 작성 및 등록"
+      : isEdit
+        ? `${PROJECT_DOC_TYPE_LABELS[docType]} 수정`
+        : `새 ${PROJECT_DOC_TYPE_LABELS[docType]} 작성`;
+
+  const inner = (
+    <>
+      {modal && modal.files.some((f) => !isInvoiceImage(f)) && (
+        <p className="mb-3 rounded-xl bg-tile-orange px-4 py-2.5 text-xs text-tile-orange-fg">
+          올린 파일 중 사진(jpg·png·webp)이 아닌 파일은 자동 입력과 문서 사진 저장 대상이 아닙니다. 내용은 직접 입력해 주세요. (올린 파일은 그대로 저장되어 있습니다)
+        </p>
+      )}
       <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-2xl">
         {docType === "tax_invoice" && (
           <div className="flex items-start gap-2 bg-tile-purple text-tile-purple-fg rounded-xl px-4 py-3 text-xs">
@@ -741,7 +799,7 @@ export function ProjectDocumentFormPage() {
           </button>
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={() => (modal ? modal.onClose() : navigate(-1))}
             className="rounded-lg border border-border text-sm text-text-muted px-5 py-2.5 hover:bg-bg transition-colors"
           >
             취소
@@ -758,6 +816,14 @@ export function ProjectDocumentFormPage() {
           onCancel={() => setShowApproverPicker(false)}
         />
       )}
+    </>
+  );
+
+  return modal ? (
+    <InvoiceModalFrame onClose={modal.onClose}>{inner}</InvoiceModalFrame>
+  ) : (
+    <MainLayout showBack title={pageTitle}>
+      {inner}
     </MainLayout>
   );
 }

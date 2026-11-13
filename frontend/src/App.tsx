@@ -12,6 +12,7 @@ import { SiteAdminDashboardPage } from "./features/dashboard/SiteAdminDashboardP
 import { LoginPage } from "./features/auth/LoginPage";
 import { ScheduleReminderPopup } from "./features/schedule/ScheduleReminderPopup";
 import { FilePreviewHost } from "./components/ui/FilePreviewHost";
+import { InvoiceRegisterHost } from "./features/projectDocuments/InvoiceRegisterHost";
 import { useOpenConversationFromDesktop } from "./features/messenger/useOpenConversationFromDesktop";
 import { useFileDrop } from "./lib/fileDrop";
 
@@ -441,6 +442,7 @@ function App() {
     <Suspense fallback={pageFallback}>
     <ScheduleReminderPopup />
     <FilePreviewHost />
+    <InvoiceRegisterHost />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 

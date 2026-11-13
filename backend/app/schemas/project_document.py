@@ -104,6 +104,8 @@ class ProjectDocumentCreate(BaseModel):
     is_paper: bool = False  # 세금계산서 등록: 종이로 받은 매입 세금계산서 (팝빌 등록 대상 아님)
     kind_label: str | None = Field(default=None, max_length=30)  # 세금계산서 등록: 세금계산서가 아닌 서류일 때 직접 적는 종류 이름
     counterparty: TaxInvoicePartyIn | None = None  # 세금계산서 등록: 사진에서 인식한 상대방 정보
+    # 세금계산서 등록: 이미 있는 매입매출 거래(또는 구매 품의서)에서 파일을 올려 만드는 경우, 그 거래·품의서와 연결해 승인될 때 같은 건이 두 번 기록되지 않게 한다.
+    ledger_transaction_id: int | None = None
 
     @field_validator("items")
     @classmethod

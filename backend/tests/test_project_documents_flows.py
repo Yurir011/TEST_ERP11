@@ -356,3 +356,23 @@ def test_document_response_includes_creator_name(client, staff, auth_headers):
     """결재 히스토리의 '작성' 칸에 쓰이는 작성자 이름이 문서 응답에 들어 있다."""
     doc = _create(client, auth_headers(staff["writer"]), approver_ids=[staff["dept_head"].id])
     assert doc["creator_name"] == "작성자"
+
+
+def test_tax_invoice_can_link_existing_transaction(client, db, staff, auth_headers):
+    """이미 있는 매입매출 거래에서 만든 세금계산서는 그 거래와 연결되어, 승인돼도 거래가 새로 생기지 않고 같은 거래가 갱신된다."""
+    h = auth_headers(staff["writer"])
+    tx = Transaction(
+        type=TransactionType.purchase, transaction_date=__import__("datetime").date(2026, 11, 1), item_name="기존 거래", supply_amount=1, vat_amount=0, total_amount=1,
+        created_by=staff["writer"].id,
+    )
+    db.add(tx)
+    db.flush()
+    doc = _create(client, h, doc_type="tax_invoice", approver_ids=[staff["dept_head"].id], ledger_transaction_id=tx.id)
+    assert db.get(ProjectDocument, doc["id"]).ledger_transaction_id == tx.id
+    _approve(client, auth_headers(staff["dept_head"]), doc["id"])
+    assert db.query(Transaction).count() == 1  # 새 거래가 만들어지지 않았다
+    # 이미 다른 세금계산서가 쓰는 거래는 다시 연결할 수 없다
+    bad = client.post("/api/project-documents", headers=h, json=_payload(doc_type="tax_invoice", approver_ids=[staff["dept_head"].id], ledger_transaction_id=tx.id))
+    assert bad.status_code == 400
+    missing = client.post("/api/project-documents", headers=h, json=_payload(doc_type="tax_invoice", approver_ids=[staff["dept_head"].id], ledger_transaction_id=999999))
+    assert missing.status_code == 400

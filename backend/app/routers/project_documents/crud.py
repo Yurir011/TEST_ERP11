@@ -12,6 +12,7 @@ from app.models.client import Client
 from app.models.project import Project
 from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentItem, ProjectDocumentStatus
 from app.models.proposal import PURCHASE_KIND, Proposal, ProposalStatus
+from app.models.transaction import Transaction
 from app.models.user import User, has_menu_permission
 from app.schemas.project_document import ProjectDocumentCreate, ProjectDocumentOut, ProjectDocumentSetCreate, ProjectDocumentUpdate
 from app.services import project_document_files as doc_files
@@ -56,13 +57,29 @@ def _check_source_proposal(db: Session, payload: ProjectDocumentCreate) -> None:
     """구매 품의서에서 발주서를 만드는 경우, 품의서가 실제로 있고 승인된 구매 품의서인지 확인한다."""
     if payload.proposal_id is None:
         return
-    if payload.doc_type != ProjectDocType.purchase_order:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주서만 품의서와 연결할 수 있습니다.")
+    if payload.doc_type not in (ProjectDocType.purchase_order, ProjectDocType.tax_invoice):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주서·세금계산서만 품의서와 연결할 수 있습니다.")
     proposal = db.query(Proposal).filter(Proposal.id == payload.proposal_id).first()
     if proposal is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="연결할 품의서를 찾을 수 없습니다.")
+    if payload.doc_type == ProjectDocType.tax_invoice:
+        if proposal.kind != PURCHASE_KIND:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="구매 품의서만 세금계산서와 연결할 수 있습니다.")
+        return
     if proposal.kind != PURCHASE_KIND or proposal.status != ProposalStatus.approved:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 구매 품의서에서만 발주서를 만들 수 있습니다.")
+
+
+def _link_ledger_transaction(db: Session, doc: ProjectDocument, tx_id: int) -> None:
+    """이미 있는 매입매출 거래와 세금계산서를 연결한다 (거래가 없거나 다른 세금계산서가 이미 쓰고 있으면 400)."""
+    tx = db.get(Transaction, tx_id)
+    if tx is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="연결할 매입매출 거래를 찾을 수 없습니다.")
+    taken = db.query(ProjectDocument.id).filter(ProjectDocument.ledger_transaction_id == tx_id, ProjectDocument.id != doc.id).first()
+    if taken is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 세금계산서가 연결된 거래입니다.")
+    doc.ledger_transaction_id = tx.id
+    logger.debug(f"[ProjectDocuments] 세금계산서를 기존 거래에 연결: doc_id={doc.id}, tx_id={tx.id}")
 
 
 def _save_proposal_payment(db: Session, payload: ProjectDocumentCreate) -> None:
@@ -84,7 +101,7 @@ def _new_document(
     doc = ProjectDocument(
         project_id=payload.project_id,
         project_other_name=payload.project_other_name,
-        proposal_id=payload.proposal_id if doc_type == ProjectDocType.purchase_order else None,
+        proposal_id=payload.proposal_id if doc_type in (ProjectDocType.purchase_order, ProjectDocType.tax_invoice) else None,
         doc_type=doc_type,
         issue_date=payload.issue_date,
         currency=payload.currency.value,
@@ -131,7 +148,7 @@ def create_project_document(
 
     project = _resolve_project(db, payload)
     _check_source_proposal(db, payload)
-    if payload.proposal_id is not None:
+    if payload.proposal_id is not None and payload.doc_type == ProjectDocType.purchase_order:
         # 승인된 구매 품의서에서 만드는 발주서는 품의 결재로 이미 승인된 것이므로 별도 결재 없이 바로 확정한다.
         payload.is_final_decision = True
         payload.end_title = None
@@ -143,6 +160,8 @@ def create_project_document(
         f"items={len(payload.items)}, end_title={payload.end_title}, by={current_user.id}"
     )
     doc = _new_document(db, payload, payload.doc_type, project, current_user)
+    if payload.ledger_transaction_id is not None and payload.doc_type == ProjectDocType.tax_invoice:
+        _link_ledger_transaction(db, doc, payload.ledger_transaction_id)
     _save_proposal_payment(db, payload)
     steps = _apply_approval_request(db, doc, payload.end_title, payload.approver_ids, payload.is_final_decision, current_user)
     db.commit()
