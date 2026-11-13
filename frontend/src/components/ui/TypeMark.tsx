@@ -29,7 +29,8 @@ const CIRCLE: Record<TypeMarkKind, string> = {
   balance: "bg-[color-mix(in_srgb,var(--color-text-muted)_20%,var(--color-surface))]",
 };
 
-const ICON_COLOR = "text-[color-mix(in_srgb,#12338a_60%,var(--color-text))]";
+// 밝은 테마에서 #3E5799 정도의 연한 남색, 어두운 테마에서는 본문 글자색과 섞여 밝은 파랑이 된다
+const ICON_COLOR = "text-[color-mix(in_srgb,#537ce7_60%,var(--color-text))]";
 
 // 24x24 단순 선 아이콘: 입금=은행과 들어오는 화살표, 출금=지갑과 오른쪽으로 나가는 화살표, 매출=문서와 글줄 두 줄,
 // 매입=장바구니, 이체=좌우 화살표, 결제=카드, 환불=되돌리기 화살표, 잔액조회=막대 그래프
@@ -96,12 +97,12 @@ function Glyph({ kind }: { kind: TypeMarkKind }) {
 export function TypeMark({ kind, className = "" }: { kind: TypeMarkKind; className?: string }) {
   return (
     <span
-      className={`inline-grid place-items-center w-9 h-9 rounded-[10px] shrink-0 ${CIRCLE[kind]} ${ICON_COLOR} ${className}`}
+      className={`inline-grid place-items-center w-8 h-8 rounded-[9px] shrink-0 ${CIRCLE[kind]} ${ICON_COLOR} ${className}`}
       title={LABELS[kind]}
       role="img"
       aria-label={LABELS[kind]}
     >
-      <svg viewBox="0 0 24 24" className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className={kind === "purchase" ? "w-[18px] h-[18px]" : "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <Glyph kind={kind} />
       </svg>
     </span>
