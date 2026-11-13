@@ -68,6 +68,11 @@ EXPECTED_OPERATIONS = [
     ("POST", "/api/transactions/import-hometax", "import_hometax_api_transactions_import_hometax_post", ["200", "422"]),
     ("POST", "/api/transactions/import-hometax/preview", "preview_hometax_import_api_transactions_import_hometax_preview_post", ["200", "422"]),
     ("PUT", "/api/transactions/{tx_id}", "update_transaction_api_transactions__tx_id__put", ["200", "422"]),
+    # 세금계산서 파일 붙이기 (transaction_files 라우터)
+    ("GET", "/api/transactions/{tx_id}/files", "list_files_api_transactions__tx_id__files_get", ["200", "422"]),
+    ("POST", "/api/transactions/{tx_id}/files", "upload_files_api_transactions__tx_id__files_post", ["201", "422"]),
+    ("GET", "/api/transactions/{tx_id}/files/{file_id}/file", "download_file_api_transactions__tx_id__files__file_id__file_get", ["200", "422"]),
+    ("DELETE", "/api/transactions/{tx_id}/files/{file_id}", "delete_file_api_transactions__tx_id__files__file_id__delete", ["200", "422"]),
 ]
 
 
@@ -198,3 +203,25 @@ def test_items_are_saved_and_must_match_supply(client, h):
     assert bad.status_code == 400
     upd = client.put(f"/api/transactions/{body['id']}", headers=h, json=_tx(item_name="단일", supply_amount=100_000, vat_amount=10_000))
     assert upd.status_code == 200 and upd.json()["items"] is None
+
+
+def test_tax_invoice_files_upload_download_delete(client, h, tmp_path, monkeypatch):
+    """거래에 세금계산서 파일을 여러 개 붙이고, 받고, 지운다. 허용하지 않는 형식은 거절하고, 거래를 지우면 파일도 지운다."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "transaction_files_dir", str(tmp_path))
+    tx_id = _create(client, h)["id"]
+    url = f"/api/transactions/{tx_id}/files"
+    assert client.get(url, headers=h).json() == []
+    res = client.post(url, headers=h, files=[("files", ("계산서.pdf", b"%PDF-1", "application/pdf")), ("files", ("스캔.png", b"png", "image/png"))])
+    assert res.status_code == 201, res.text
+    rows = res.json()
+    assert [r["filename"] for r in rows] == ["계산서.pdf", "스캔.png"] and len(list(tmp_path.iterdir())) == 2
+    got = client.get(f"{url}/{rows[0]['id']}/file", headers=h)
+    assert got.status_code == 200 and got.content == b"%PDF-1"
+    assert client.post(url, headers=h, files=[("files", ("악성.exe", b"x", "application/octet-stream"))]).status_code == 400
+    assert len(client.get(url, headers=h).json()) == 2  # 거절하면 아무것도 붙지 않는다
+    left = client.delete(f"{url}/{rows[0]['id']}", headers=h).json()
+    assert [r["filename"] for r in left] == ["스캔.png"] and len(list(tmp_path.iterdir())) == 1
+    assert client.delete(f"/api/transactions/{tx_id}", headers=h).status_code == 204
+    assert list(tmp_path.iterdir()) == []

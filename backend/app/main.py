@@ -39,6 +39,7 @@ from app.routers import (
     recurring_payments,
     project_bom,
     project_files,
+    transaction_files,
     project_gerbers,
     project_documents,
     project_notes,
@@ -103,6 +104,7 @@ app.include_router(sales_documents.router)
 app.include_router(transactions.router)
 app.include_router(project_gerbers.router)
 app.include_router(project_files.router)
+app.include_router(transaction_files.router)
 app.include_router(payments.router)
 app.include_router(payment_accounts.router)
 app.include_router(recurring_payments.router)

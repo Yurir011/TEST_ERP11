@@ -12,6 +12,7 @@ import { TX_TYPE_LABELS, TX_TYPE_STYLES, type TaxInvoiceCandidate, type Transact
 import { NumberInput } from "../../components/ui/NumberInput";
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import { todayISO } from "../../lib/date";
+import { TransactionFilesSection, uploadTransactionFiles } from "./TransactionFilesSection";
 
 interface ItemRow {
   name: string;
@@ -149,6 +150,7 @@ export function TransactionFormPage() {
   const [settledDate, setSettledDate] = useState(todayISO());
   const [linkedDoc, setLinkedDoc] = useState<TaxInvoiceCandidate | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]); // 새 거래에 붙일 세금계산서 파일 (저장할 때 함께 올린다)
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -314,7 +316,18 @@ export function TransactionFormPage() {
         logDebug("TransactionForm", `수정 저장: id=${editingId}`);
         await apiPut<Transaction>(`/api/transactions/${editingId}`, body);
       } else {
-        await apiPost<Transaction>("/api/transactions", body);
+        const created = await apiPost<Transaction>("/api/transactions", body);
+        if (pendingFiles.length > 0) {
+          try {
+            logDebug("TransactionForm", `세금계산서 파일 올리기: tx_id=${created.id}, files=${pendingFiles.length}`);
+            await uploadTransactionFiles(created.id, pendingFiles);
+          } catch (err) {
+            // 거래는 이미 저장됐으니 수정 화면에서 파일만 다시 올리게 한다
+            logError("TransactionForm", "세금계산서 파일 올리기 실패", err);
+            navigate(`/transactions/${created.id}/edit`, { replace: true });
+            return;
+          }
+        }
       }
       navigate("/transactions", { replace: true });
     } catch (err) {
@@ -475,6 +488,8 @@ export function TransactionFormPage() {
           </div>
         </div>
         <p className="text-xs text-text-muted">합계: {formatCurrency(total)}</p>
+
+        <TransactionFilesSection txId={editingId} pending={pendingFiles} onPendingChange={setPendingFiles} />
 
         <div>
           <label className="block text-xs text-text-muted mb-1.5">세금계산서 번호 (선택)</label>

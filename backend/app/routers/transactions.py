@@ -1,3 +1,4 @@
+import os
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -12,6 +13,7 @@ from app.models.client import Client
 from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus
 from app.models.payment import Payment
 from app.models.transaction import Transaction, TransactionType
+from app.models.transaction_file import TransactionFile
 from app.models.user import User, has_menu_permission
 from app.schemas.transaction import (
     HometaxImportResult,
@@ -369,7 +371,14 @@ def delete_transaction(tx_id: int, db: Session = Depends(get_db), current_user: 
             detail=f"이 거래를 결제한 입출금 내역 {linked_payments}건이 있어 삭제할 수 없습니다. 입출금관리에서 먼저 삭제해주세요.",
         )
     credit_remove(db, tx)
+    stored = [f.file_path for f in db.query(TransactionFile).filter(TransactionFile.transaction_id == tx_id)]
     db.delete(tx)
     db.commit()
-    logger.debug(f"[Transactions] 삭제: id={tx_id}, by={current_user.id}")
+    for path in stored:  # 붙여 둔 세금계산서 파일도 지운다 (실패해도 삭제는 끝난 상태)
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except OSError:
+            logger.warning(f"[Transactions] 첨부 파일 삭제 실패: {path}")
+    logger.debug(f"[Transactions] 삭제: id={tx_id}, files={len(stored)}, by={current_user.id}")
     return None
