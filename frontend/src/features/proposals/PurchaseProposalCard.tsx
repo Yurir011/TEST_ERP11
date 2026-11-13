@@ -252,6 +252,8 @@ interface PurchaseProposalCardProps {
   onOrder: () => void;
   onToggleSent: (sent: boolean) => void;
   onToggleReceived: (received: boolean) => void;
+  /** 입고 날짜 변경 창 열기 (입고 처리한 본인 또는 작성자·관리자) */
+  onEditReceivedDate?: () => void;
   onAttach: () => void;
   /** 품의서 PDF 저장 / 엑셀 저장 / 출력 */
   onDownloadProposal: () => void;
@@ -275,12 +277,14 @@ interface PurchaseProposalCardProps {
 export function PurchaseProposalCard({
   proposal,
   orders,
+  canManage,
   currentUserId,
   busy,
   onOpen,
   onOrder,
   onToggleSent,
   onToggleReceived,
+  onEditReceivedDate,
   onAttach,
   onDownloadProposal,
   onDownloadProposalExcel,
@@ -433,7 +437,30 @@ export function PurchaseProposalCard({
           onClick={() => onToggleReceived(!flow.received)}
         >
           <Badge chip={flow.receiveLabel} />
-          {flow.received && <span className="text-[11px] text-text-muted">{monthDay(proposal.received_at)}</span>}
+          {flow.received &&
+            (onEditReceivedDate && (canCancelReceived || canManage) ? (
+              <span
+                role="button"
+                tabIndex={0}
+                title="눌러서 입고 날짜 변경"
+                aria-label="입고 날짜 변경"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditReceivedDate();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onEditReceivedDate();
+                  }
+                }}
+                className="cursor-pointer text-[11px] text-text-muted underline decoration-dotted underline-offset-2 hover:text-primary"
+              >
+                {monthDay(proposal.received_at)}
+              </span>
+            ) : (
+              <span className="text-[11px] text-text-muted">{monthDay(proposal.received_at)}</span>
+            ))}
         </FlowButton>
         <FlowButton
           icon={<Paperclip size={17} />}

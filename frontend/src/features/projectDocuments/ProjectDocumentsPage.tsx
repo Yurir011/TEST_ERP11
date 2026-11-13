@@ -27,6 +27,7 @@ import { ProposalDetailModal } from "../proposals/ProposalDetailModal";
 import { OrderChoiceModal } from "../proposals/OrderChoiceModal";
 import { PaymentBox } from "../proposals/PaymentBox";
 import type { OrderPayment } from "../proposals/PaymentPicker";
+import { ReceiveDateModal } from "../proposals/ReceiveDateModal";
 import { ReceiveModal } from "../proposals/ReceiveModal";
 import { ProposalAttachmentsModal } from "../proposals/ProposalAttachmentsModal";
 import { PurchaseProposalCard } from "../proposals/PurchaseProposalCard";
@@ -133,6 +134,7 @@ export function ProjectDocumentsPage({
   const [purchaseOrders, setPurchaseOrders] = useState<ProjectDocument[]>([]);
   const [deleteRequestProposal, setDeleteRequestProposal] = useState<Proposal | null>(null);
   const [orderChoiceId, setOrderChoiceId] = useState<number | null>(null);
+  const [receiveDateId, setReceiveDateId] = useState<number | null>(null); // 입고 날짜를 고치는 창
   const [receiveId, setReceiveId] = useState<number | null>(null); // 입고 완료 때 대금 결제 여부를 확인하는 창
   const [attachmentsId, setAttachmentsId] = useState<number | null>(null);
   const openTargetId = useOpenTarget(openId);
@@ -533,7 +535,7 @@ export function ProjectDocumentsPage({
   }
 
   // 입고 완료는 대금 결제 여부(외상 / 입금 / 법인카드)를 확인하는 창을 거치고, 입고 취소는 확인만 한다.
-  async function handleToggleReceived(p: Proposal, received: boolean, payment?: OrderPayment) {
+  async function handleToggleReceived(p: Proposal, received: boolean, payment?: OrderPayment, receivedDate?: string) {
     if (received && !payment) {
       setReceiveId(p.id);
       return;
@@ -542,12 +544,28 @@ export function ProjectDocumentsPage({
     logDebug("ProjectDocuments", `입고 확인 변경: proposal_id=${p.id}, received=${received}, 결제=${payment ? (payment.payment_method ?? "외상") : "-"}`);
     setBusyId(p.id);
     try {
-      await apiPut(`/api/proposals/${p.id}/received`, received && payment ? { value: true, payment_asked: true, ...payment } : { value: received });
+      await apiPut(`/api/proposals/${p.id}/received`, received && payment ? { value: true, payment_asked: true, received_date: receivedDate, ...payment } : { value: received });
       setReceiveId(null);
       loadPurchaseCards();
     } catch (err) {
       logError("ProjectDocuments", "입고 확인 변경 실패", err);
       notifyError(err instanceof ApiError ? err.message : "입고 처리 중 오류가 발생했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // 입고 처리된 건의 입고 날짜 고치기
+  async function handleChangeReceivedDate(p: Proposal, date: string) {
+    logDebug("ProjectDocuments", `입고 날짜 변경: proposal_id=${p.id}, date=${date}`);
+    setBusyId(p.id);
+    try {
+      await apiPut(`/api/proposals/${p.id}/received-date`, { received_date: date });
+      setReceiveDateId(null);
+      loadPurchaseCards();
+    } catch (err) {
+      logError("ProjectDocuments", "입고 날짜 변경 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "입고 날짜를 바꾸지 못했습니다.");
     } finally {
       setBusyId(null);
     }
@@ -641,6 +659,7 @@ export function ProjectDocumentsPage({
 
   const orderChoiceProposal = purchaseProposals.find((p) => p.id === orderChoiceId) ?? null;
   const receiveProposal = purchaseProposals.find((p) => p.id === receiveId) ?? null;
+  const receiveDateProposal = purchaseProposals.find((p) => p.id === receiveDateId) ?? null;
   const attachmentsProposal = purchaseProposals.find((p) => p.id === attachmentsId) ?? null;
 
   // 검색 패널(기간·상태·검색어·정렬)에 맞는 구매 품의만 카드로 보여 준다
@@ -670,6 +689,7 @@ export function ProjectDocumentsPage({
             onOrder={() => handleOrderClick(p)}
             onToggleSent={(sent) => handleToggleSent(p, sent)}
             onToggleReceived={(received) => handleToggleReceived(p, received)}
+            onEditReceivedDate={() => setReceiveDateId(p.id)}
             onAttach={() => setAttachmentsId(p.id)}
             onDownloadProposal={() => handleProposalDownload(p)}
             onDownloadProposalExcel={() => handleProposalExcelDownload(p)}
@@ -1073,8 +1093,18 @@ export function ProjectDocumentsPage({
         <ReceiveModal
           proposal={receiveProposal}
           busy={busyId === receiveProposal.id}
-          onConfirm={(payment) => void handleToggleReceived(receiveProposal, true, payment)}
+          onConfirm={(payment, date) => void handleToggleReceived(receiveProposal, true, payment, date)}
           onClose={() => setReceiveId(null)}
+        />
+      )}
+
+      {receiveDateProposal && (
+        <ReceiveDateModal
+          title={receiveDateProposal.title}
+          initial={receiveDateProposal.received_at ? toLocalISODate(new Date(receiveDateProposal.received_at)) : ""}
+          busy={busyId === receiveDateProposal.id}
+          onSave={(date) => void handleChangeReceivedDate(receiveDateProposal, date)}
+          onClose={() => setReceiveDateId(null)}
         />
       )}
 

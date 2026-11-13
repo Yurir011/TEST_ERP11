@@ -111,6 +111,13 @@ class OrderFlowToggle(BaseModel):
     payment_card: str | None = None
     payment_bank: str | None = None
     payment_asked: bool = False  # 입고 확인에서만 사용: true 면 위 결제 상태로 바꾼다 (입고 때 대금 결제 여부를 물어 본 경우)
+    received_date: date | None = None  # 입고 확인에서만 사용: 실제로 물품을 받은 날 (없으면 오늘)
+
+
+class ReceivedDateIn(BaseModel):
+    """입고 처리된 건의 입고 날짜를 고친다."""
+
+    received_date: date
 
 
 class ProposalOut(BaseModel):

@@ -1,5 +1,5 @@
 """구매 품의서의 발주·입고 진행: 발송 확인과 입고 확인 (사용자가 직접 눌러 확인한다)."""
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -10,11 +10,22 @@ from app.models.project_document import ProjectDocType, ProjectDocument, Project
 from app.models.proposal import PURCHASE_KIND, Proposal, ProposalStatus
 from app.models.user import User, is_admin_role
 from app.routers.proposals._common import PREFIX, _get_or_404, _to_out, logger
-from app.schemas.proposal import OrderFlowToggle, OrderPaymentIn, ProposalOut, ProposalPaymentIn
+from app.schemas.proposal import OrderFlowToggle, OrderPaymentIn, ProposalOut, ProposalPaymentIn, ReceivedDateIn
 from app.services.payment_accounts import require_account
 from app.services.purchase_ledger import add_purchase_payment, has_extra_payments, remove_purchase_payment, sync_purchase_transaction
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
+
+KST = timezone(timedelta(hours=9))
+
+
+def _received_at(d: date | None) -> datetime:
+    """입고 날짜를 저장 시각으로 바꾼다 (한국 시간 낮 12시). 날짜를 안 주면 지금. 미래 날짜는 받을 수 없다."""
+    if d is None:
+        return datetime.now(timezone.utc)
+    if d > datetime.now(KST).date():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입고 날짜는 오늘보다 뒤일 수 없습니다.")
+    return datetime.combine(d, time(12, 0), tzinfo=KST).astimezone(timezone.utc)
 
 
 def _set_payment(db: Session, p: Proposal, method: str | None, card: str | None, bank: str | None) -> None:
@@ -136,7 +147,7 @@ def set_received(
     if payload.value:
         if p.order_sent_at is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주서 발송 확인 후에 입고 처리를 할 수 있습니다.")
-        p.received_at = p.received_at or datetime.now(timezone.utc)
+        p.received_at = p.received_at or _received_at(payload.received_date)
         p.received_by = p.received_by or current_user.id
         if payload.payment_asked:  # 입고 때 대금 결제 여부(외상 / 입금 / 법인카드)를 확인한 경우
             _set_payment(db, p, payload.payment_method, payload.payment_card, payload.payment_bank)
@@ -146,5 +157,22 @@ def set_received(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="입고 처리한 본인만 취소할 수 있습니다.")
         p.received_at = None
         p.received_by = None
+    db.commit()
+    return _to_out(_get_or_404(db, proposal_id))
+
+
+@router.put("/{proposal_id}/received-date", response_model=ProposalOut)
+def set_received_date(
+    proposal_id: int, payload: ReceivedDateIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """입고 처리된 건의 입고 날짜를 고친다. 입고 처리한 사람, 작성자, 관리자만 할 수 있다."""
+    p = _get_or_404(db, proposal_id)
+    _check_actor_and_kind(p, current_user, anyone=True)
+    if p.received_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="입고 처리된 건만 날짜를 바꿀 수 있습니다.")
+    if current_user.id not in (p.received_by, p.created_by) and not is_admin_role(current_user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="입고 처리한 사람, 작성자 또는 관리자만 날짜를 바꿀 수 있습니다.")
+    p.received_at = _received_at(payload.received_date)
+    logger.debug(f"[Proposals] 입고 날짜 변경: id={proposal_id}, date={payload.received_date}, by={current_user.id}")
     db.commit()
     return _to_out(_get_or_404(db, proposal_id))

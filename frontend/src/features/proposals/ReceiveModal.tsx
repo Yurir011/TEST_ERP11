@@ -1,6 +1,8 @@
 import { usePaymentAccounts } from "../payments/paymentAccounts";
 import { PackageCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { todayISO } from "../../lib/date";
+import { ReceiveDatePicker } from "./ReceiveDatePicker";
 import { PaymentPicker, paymentFromProposal, paymentLabel, type OrderPayment } from "./PaymentPicker";
 import type { Proposal } from "./types";
 
@@ -8,7 +10,7 @@ interface ReceiveModalProps {
   proposal: Proposal;
   busy: boolean;
   /** 입고 완료 처리: 대금 결제 여부(외상 / 송금 / 법인카드)를 함께 보낸다 */
-  onConfirm: (payment: OrderPayment) => void;
+  onConfirm: (payment: OrderPayment, receivedDate: string) => void;
   onClose: () => void;
 }
 
@@ -16,6 +18,7 @@ interface ReceiveModalProps {
 export function ReceiveModal({ proposal, busy, onConfirm, onClose }: ReceiveModalProps) {
   usePaymentAccounts(); // 카드·계좌 이름이 로드되면 버튼 글자를 다시 그린다
   const [payment, setPayment] = useState<OrderPayment>(() => paymentFromProposal(proposal));
+  const [date, setDate] = useState(todayISO()); // 물품을 받은 날 (기본 오늘)
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -46,6 +49,11 @@ export function ReceiveModal({ proposal, busy, onConfirm, onClose }: ReceiveModa
           </button>
         </div>
 
+        <div className="mb-3 rounded-xl border border-border bg-bg px-4 py-3 flex flex-col gap-2">
+          <p className="text-sm font-medium">언제 받았나요?</p>
+          <ReceiveDatePicker value={date} onChange={setDate} />
+        </div>
+
         <div className="rounded-xl border border-border bg-bg px-4 py-3 flex flex-col gap-3">
           <p className="text-sm font-medium">대금을 결제하셨나요?</p>
           <p className="text-xs text-text-muted">
@@ -60,7 +68,7 @@ export function ReceiveModal({ proposal, busy, onConfirm, onClose }: ReceiveModa
           </button>
           <button
             type="button"
-            onClick={() => onConfirm(payment)}
+            onClick={() => onConfirm(payment, date)}
             disabled={busy}
             className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
           >

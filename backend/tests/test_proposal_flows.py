@@ -36,6 +36,7 @@ EXPECTED_OPERATIONS = [
     ('PUT', '/api/proposals/{proposal_id}/order-payment', 'set_order_payment_api_proposals__proposal_id__order_payment_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/order-sent', 'set_order_sent_api_proposals__proposal_id__order_sent_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/received', 'set_received_api_proposals__proposal_id__received_put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/received-date', 'set_received_date_api_proposals__proposal_id__received_date_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/attachments/{attachment_id}/kind', 'set_attachment_kind_api_proposals__proposal_id__attachments__attachment_id__kind_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/approve', 'approve_proposal_api_proposals__proposal_id__approve_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/reject', 'reject_proposal_api_proposals__proposal_id__reject_put', ['200', '422']),
@@ -574,3 +575,18 @@ def test_doc_no_does_not_collide_after_a_same_day_proposal_is_deleted(client, db
     assert client.delete(f"/api/proposals/{first['id']}", headers=h).status_code in (200, 204)  # 01 삭제 → 건수는 2, 가장 큰 번호는 03
     fourth = _create(client, h, [staff["dept_head"].id, staff["team_lead"].id])
     assert fourth["doc_no"].endswith("-04") and fourth["doc_no"] not in (second["doc_no"], third["doc_no"])
+
+
+def test_receive_date_can_be_chosen_and_changed(client, staff, auth_headers):
+    """입고 날짜를 고르고(오늘 이전만), 입고 뒤에도 본인이 고칠 수 있다."""
+    h = auth_headers(staff["writer"])
+    p = _purchase(client, h)
+    client.put(f"/api/proposals/{p['id']}/order-sent", headers=h, json={"value": True, "online": True})
+    assert client.put(f"/api/proposals/{p['id']}/received", headers=h, json={"value": True, "received_date": "2999-01-01"}).status_code == 400
+    res = client.put(f"/api/proposals/{p['id']}/received", headers=h, json={"value": True, "received_date": "2026-11-05"})
+    assert res.status_code == 200 and res.json()["received_at"].startswith("2026-11-05T12:00")  # 한국 낮 12시
+    res = client.put(f"/api/proposals/{p['id']}/received-date", headers=h, json={"received_date": "2026-11-07"})
+    assert res.status_code == 200 and res.json()["received_at"].startswith("2026-11-07T12:00")
+    assert client.put(f"/api/proposals/{p['id']}/received-date", headers=h, json={"received_date": "2999-01-01"}).status_code == 400
+    q = _purchase(client, h)
+    assert client.put(f"/api/proposals/{q['id']}/received-date", headers=h, json={"received_date": "2026-11-07"}).status_code == 400  # 입고 전
