@@ -1,5 +1,6 @@
 import { ImagePlus, ScanText, X } from "lucide-react";
 import type { ChangeEvent } from "react";
+import { useFileDropZone } from "../../lib/useFileDropZone";
 import type { TaxInvoiceOcrResult } from "./types";
 
 interface TaxInvoicePhotoSectionProps {
@@ -12,8 +13,14 @@ interface TaxInvoicePhotoSectionProps {
 
 /** 세금계산서 작성 화면의 "사진 등록(선택)" 영역: 사진 목록과 첫 사진의 인식 결과 요약 */
 export function TaxInvoicePhotoSection({ images, isScanning, scanSummary, onFilesSelect, onRemove }: TaxInvoicePhotoSectionProps) {
+  const zone = useFileDropZone("TaxInvoicePhoto");
+
   return (
-    <div className="border border-dashed border-border rounded-xl px-4 py-3">
+    <div
+      ref={zone.box}
+      {...zone.handlers}
+      className={`border border-dashed rounded-xl px-4 py-3 ${zone.dragOver ? "border-primary bg-tile-blue" : "border-border"}`}
+    >
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs font-medium">
           <ScanText size={14} />
@@ -22,13 +29,14 @@ export function TaxInvoicePhotoSection({ images, isScanning, scanSummary, onFile
         <label className="flex items-center gap-1 text-xs text-primary hover:opacity-80 cursor-pointer">
           <ImagePlus size={14} />
           사진 선택
-          <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={onFilesSelect} className="hidden" />
+          <input ref={zone.input} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={onFilesSelect} className="hidden" />
         </label>
       </div>
       <p className="text-[11px] text-text-muted mt-1">
         홈택스에서 받은 세금계산서 이미지(jpg, png, webp)를 올리면 첫 번째 사진에서 작성일자·거래처·품목·금액이 자동 입력되고,
         내용은 청구 / 금액은 미지급으로 처리됩니다. 올린 사진은 문서와 함께 저장됩니다.
       </p>
+      <p className="text-[11px] text-primary mt-1">사진을 이 칸으로 끌어다 놓거나, 캡처·복사한 이미지를 Ctrl+V 로 붙여 넣을 수도 있습니다.</p>
       {isScanning && <p className="text-xs text-primary mt-2">사진에서 내용을 인식하는 중...</p>}
       {images.length > 0 && (
         <ul className="mt-2 space-y-1">

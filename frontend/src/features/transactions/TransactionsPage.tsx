@@ -334,10 +334,10 @@ export function TransactionsPage() {
               <col style={{ width: "7%" }} />
               <col style={{ width: "11%" }} />
               <col style={{ width: "14%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "12%" }} />
+              <col style={{ width: "17%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: "12%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "15%" }} />
               <col style={{ width: "5rem" }} />
             </colgroup>
@@ -350,7 +350,7 @@ export function TransactionsPage() {
                 <th className="py-2.5 px-4 font-semibold text-right">공급가액</th>
                 <th className="py-2.5 px-4 font-semibold text-right">부가세</th>
                 <th className="py-2.5 px-4 font-semibold text-right">합계</th>
-                <th className="py-2.5 px-4 font-semibold">결제</th>
+                <th className="py-2.5 px-4 font-semibold text-center">결제</th>
                 <th className="w-20"></th>
               </tr>
             </thead>
@@ -373,7 +373,7 @@ export function TransactionsPage() {
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.supply_amount)}</td>
                   <td className="py-2.5 px-4 text-right">{formatCurrency(tx.vat_amount)}</td>
                   <td className={`py-2.5 px-4 text-right font-semibold ${tx.type === "sales" ? "text-success" : "text-[#8b2942]"}`}>{formatCurrency(tx.total_amount)}</td>
-                  <td className="py-2.5 px-4 whitespace-nowrap">
+                  <td className="py-2.5 px-4 whitespace-nowrap text-center">
                     {tx.settled ? (
                       <span className={`text-xs px-2 py-1 font-medium ${CODE_BADGE.green}`}>
                         {tx.type === "sales" ? "입금완료" : "결제완료"}

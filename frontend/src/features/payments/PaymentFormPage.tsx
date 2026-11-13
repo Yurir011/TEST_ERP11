@@ -23,6 +23,7 @@ import {
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import { NumberInput } from "../../components/ui/NumberInput";
 import { todayISO } from "../../lib/date";
+import { useFileDropZone } from "../../lib/useFileDropZone";
 import { OptionButtons } from "./OptionButtons";
 import { usePaymentAccounts } from "./paymentAccounts";
 import {
@@ -58,6 +59,7 @@ export function PaymentFormPage() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const receiptZone = useFileDropZone("PaymentReceipt"); // 영수증 사진 끌어다 놓기·붙여넣기
   const [memo, setMemo] = useState("");
   const [proofType, setProofType] = useState<ProofType | null>(null);
   const [proofTypeDetail, setProofTypeDetail] = useState("");
@@ -440,17 +442,26 @@ export function PaymentFormPage() {
           {selectedClient && <p className="text-xs text-success mt-1.5">선택됨: {selectedClient.name}</p>}
         </div>
 
-        <div>
+        <div
+          ref={receiptZone.box}
+          {...receiptZone.handlers}
+          className={`rounded-xl border border-dashed px-3 py-2.5 ${receiptZone.dragOver ? "border-primary bg-tile-blue" : "border-border"}`}
+        >
           <label className="block text-xs text-text-muted mb-1.5">
             영수증 이미지 (선택){isEdit && hasReceipt && " · 이미 첨부되어 있습니다. 새 파일을 고르면 교체됩니다."}
           </label>
           <input
             key={formKey}
+            ref={receiptZone.input}
             type="file"
             accept="image/jpeg,image/png,image/webp"
             onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
             className="w-full text-sm"
           />
+          <p className="text-[11px] text-primary mt-1.5">
+            사진을 이 칸으로 끌어다 놓거나, 캡처·복사한 이미지를 Ctrl+V 로 붙여 넣을 수도 있습니다.
+            {receiptFile && <span className="text-text-muted"> · 선택됨: {receiptFile.name}</span>}
+          </p>
         </div>
 
         <div>
