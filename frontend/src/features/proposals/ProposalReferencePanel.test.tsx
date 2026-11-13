@@ -70,7 +70,7 @@ describe("참조 품의서 패널", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
     render(<ProposalReferencePanel proposal={proposal()} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "견적서.pdf 열기" }));
-    expect(api.openFile).toHaveBeenCalledWith("/api/proposals/7/attachments/1/file");
+    expect(api.openFile).toHaveBeenCalledWith("/api/proposals/7/attachments/1/file", expect.any(String));
     fireEvent.click(screen.getByRole("button", { name: "단가표.xlsx 열기" }));
     expect(api.downloadFile).toHaveBeenCalledWith("/api/proposals/7/attachments/2/file", "단가표.xlsx");
     fireEvent.click(screen.getByRole("button", { name: "거래처 페이지 열기" }));

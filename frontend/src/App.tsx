@@ -11,6 +11,7 @@ import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { SiteAdminDashboardPage } from "./features/dashboard/SiteAdminDashboardPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { ScheduleReminderPopup } from "./features/schedule/ScheduleReminderPopup";
+import { FilePreviewHost } from "./components/ui/FilePreviewHost";
 import { useOpenConversationFromDesktop } from "./features/messenger/useOpenConversationFromDesktop";
 import { useFileDrop } from "./lib/fileDrop";
 
@@ -439,6 +440,7 @@ function App() {
   return (
     <Suspense fallback={pageFallback}>
     <ScheduleReminderPopup />
+    <FilePreviewHost />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 

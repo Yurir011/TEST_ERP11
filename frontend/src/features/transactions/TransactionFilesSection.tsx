@@ -4,6 +4,7 @@ import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiDelete, apiGet, apiUploadForm, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { useFileDropZone } from "../../lib/useFileDropZone";
+import { openAttachment } from "../../lib/openAttachment";
 import { formatBytes } from "../gerber/types";
 
 export interface TransactionFileRow {
@@ -89,6 +90,16 @@ export function TransactionFilesSection({ txId, pending, onPendingChange }: { tx
     }
   }
 
+  /** 이름을 누르면 팝업으로 바로 본다 (사진·PDF·글자 파일. 그 밖의 문서는 받기/기본 프로그램) */
+  async function open(row: TransactionFileRow) {
+    try {
+      await openAttachment(`/api/transactions/${row.transaction_id}/files/${row.id}/file`, row.filename);
+    } catch (err) {
+      logError("TransactionFile", "파일 열기 실패", err);
+      notifyError(err instanceof ApiError ? err.message : "파일을 열지 못했습니다.");
+    }
+  }
+
   async function download(row: TransactionFileRow) {
     try {
       await downloadFile(`/api/transactions/${row.transaction_id}/files/${row.id}/file`, row.filename);
@@ -121,9 +132,9 @@ export function TransactionFilesSection({ txId, pending, onPendingChange }: { tx
         <ul className="mt-2 space-y-1">
           {(rows ?? []).map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-2 rounded-lg bg-bg px-2.5 py-1.5 text-xs">
-              <span className="min-w-0 truncate" title={r.filename}>
+              <button type="button" onClick={() => void open(r)} title="눌러서 내용 보기" aria-label={`${r.filename} 열기`} className="min-w-0 flex-1 truncate text-left hover:text-primary hover:underline underline-offset-2">
                 {r.filename} <span className="text-text-muted">· {formatBytes(r.file_size)}</span>
-              </span>
+              </button>
               <span className="flex shrink-0 items-center gap-1.5">
                 <button type="button" onClick={() => void download(r)} aria-label={`${r.filename} 받기`} title="받기" className="text-text-muted hover:text-primary">
                   <Download size={14} />

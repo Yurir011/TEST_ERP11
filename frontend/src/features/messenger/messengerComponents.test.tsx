@@ -221,7 +221,7 @@ describe("MessageBubble", () => {
     const att = (id: number, name: string, type: string) => ({ id, file_name: name, size: 2048, content_type: type });
     const { unmount } = renderBubble(msg({ attachments: [att(7, "견적서.pdf", "application/pdf")] }));
     fireEvent.click(screen.getByTitle("열기"));
-    await waitFor(() => expect(api.openFile).toHaveBeenCalledWith("/api/messenger/attachments/7"));
+    await waitFor(() => expect(api.openFile).toHaveBeenCalledWith("/api/messenger/attachments/7", expect.any(String)));
     unmount();
 
     renderBubble(msg({ attachments: [att(8, "자료.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")] }));

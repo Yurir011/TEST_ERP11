@@ -70,9 +70,9 @@ describe("첨부 파일 팝업", () => {
     ] } as unknown as Proposal;
     renderModal(p);
     fireEvent.click(screen.getByRole("button", { name: "견적서.pdf 열기" }));
-    expect(api.openFile).toHaveBeenCalledWith("/api/proposals/1/attachments/1/file");
+    expect(api.openFile).toHaveBeenCalledWith("/api/proposals/1/attachments/1/file", expect.any(String));
     fireEvent.click(screen.getByRole("button", { name: "사진.PNG 열기" }));
-    expect(api.openFile).toHaveBeenCalledWith("/api/proposals/1/attachments/2/file"); // 대문자 확장자도 인식
+    expect(api.openFile).toHaveBeenCalledWith("/api/proposals/1/attachments/2/file", expect.any(String)); // 대문자 확장자도 인식
     fireEvent.click(screen.getByRole("button", { name: "거래명세서.xlsx 열기" }));
     expect(api.downloadFile).toHaveBeenCalledWith("/api/proposals/1/attachments/3/file", "거래명세서.xlsx");
     expect(api.openFile).toHaveBeenCalledTimes(2);

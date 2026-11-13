@@ -1,4 +1,5 @@
 import { getToken } from "./auth";
+import { filenameFromDisposition, showFilePreview } from "./filePreview";
 import { logDebug, logError } from "./logger";
 
 class ApiError extends Error {
@@ -90,7 +91,7 @@ export async function fetchFileBytes(path: string): Promise<ArrayBuffer> {
   }
 }
 
-export async function openFile(path: string) {
+export async function openFile(path: string, filename?: string) {
   logDebug("Api", `파일 열기 시작: ${path}`);
   const token = getToken();
   try {
@@ -101,6 +102,12 @@ export async function openFile(path: string) {
       throw new ApiError(res.status, `HTTP ${res.status}`);
     }
     const blob = await res.blob();
+    // 모바일 화면(/m)이 아니면 새 탭 대신 화면 위 팝업으로 바로 보여 준다 (팝업이 꺼져 있으면 예전처럼 새 창)
+    const name = filename ?? filenameFromDisposition(res.headers.get("Content-Disposition")) ?? decodeURIComponent(path.split("?")[0].split("/").pop() ?? "파일");
+    if (!window.location.pathname.startsWith("/m") && showFilePreview({ blob, filename: name, path })) {
+      logDebug("Api", `파일 열기 성공(팝업): ${path}`);
+      return;
+    }
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
     logDebug("Api", `파일 열기 성공: ${path}`);

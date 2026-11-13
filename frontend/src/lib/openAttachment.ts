@@ -2,8 +2,8 @@ import { downloadFile, fetchFileBytes, openFile } from "./api";
 import { getBenchClient } from "./desktop";
 import { logDebug } from "./logger";
 
-/** 브라우저가 새 창에서 바로 보여 줄 수 있는 형식 (사진·PDF·텍스트) */
-const VIEWABLE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "pdf", "txt"];
+/** 팝업(또는 새 창)에서 바로 보여 줄 수 있는 형식 (사진·PDF·텍스트·XML·CSV) */
+const VIEWABLE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "pdf", "txt", "xml", "csv"];
 
 const extensionOf = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
 
@@ -18,7 +18,7 @@ export const isViewableInBrowser = (name: string) => VIEWABLE_EXTENSIONS.include
 export async function openAttachment(path: string, filename: string): Promise<void> {
   if (isViewableInBrowser(filename)) {
     logDebug("OpenAttachment", `새 창으로 열기: ${filename}`);
-    return openFile(path);
+    return openFile(path, filename);
   }
   const bench = getBenchClient();
   if (bench?.openFile) {
