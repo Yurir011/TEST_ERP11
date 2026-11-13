@@ -13,10 +13,24 @@ const MAX_SCALE = 40;
  * 거버 뷰어 팝업. 서버에서 zip 을 받아 브라우저에서 그린다.
  * [실물 위]·[실물 아래]는 색을 입힌 보드 모양, [레이어]는 레이어를 켜고 끄며 겹쳐 본다. 휠로 확대·축소, 끌어서 이동한다.
  */
-export function GerberViewerModal({ projectId, gerber, onClose }: { projectId: number; gerber: Gerber; onClose: () => void }) {
+export function GerberViewerModal({
+  projectId,
+  gerber,
+  onClose,
+  versions,
+  onPickVersion,
+}: {
+  projectId: number;
+  gerber: Gerber;
+  onClose?: () => void;
+  /** 새 창에서 열 때: 버전을 골라 바꿀 수 있는 목록 (있으면 팝업이 아니라 창 전체에 그린다) */
+  versions?: Gerber[];
+  onPickVersion?: (g: Gerber) => void;
+}) {
+  const embedded = onClose === undefined;
   const [render, setRender] = useState<GerberRender | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>("top");
+  const [mode, setMode] = useState<Mode>("layers");
   const [visible, setVisible] = useState<Set<string>>(new Set());
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const stage = useRef<HTMLDivElement>(null);
@@ -32,7 +46,7 @@ export function GerberViewerModal({ projectId, gerber, onClose }: { projectId: n
         logDebug("GerberViewer", `거버 그리기 성공: 레이어 ${r.layers.length}개, 건너뜀 ${r.skipped.length}개`);
         setRender(r);
         setVisible(defaultVisible(r.layers));
-        if (!r.boardTop && !r.boardBottom) setMode("layers"); // 실물 모양을 못 만들면 레이어로 본다
+        setMode("layers"); // 처음에는 레이어를 켜고 끄며 보는 화면
       })
       .catch((err) => {
         logError("GerberViewer", "거버 그리기 실패", err);
@@ -45,7 +59,7 @@ export function GerberViewerModal({ projectId, gerber, onClose }: { projectId: n
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onClose?.();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -102,20 +116,40 @@ export function GerberViewerModal({ projectId, gerber, onClose }: { projectId: n
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-3 py-6" onClick={onClose}>
-      <div role="dialog" aria-label="거버 뷰어" onClick={(e) => e.stopPropagation()} className="flex max-h-full w-full max-w-5xl flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-xl">
+    <div className={embedded ? "min-h-screen bg-bg p-3" : "fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-3 py-6"} onClick={onClose}>
+      <div role="dialog" aria-label="거버 뷰어" onClick={(e) => e.stopPropagation()} className={`flex w-full flex-col gap-3 rounded-2xl border border-border bg-surface p-4 shadow-xl ${embedded ? "" : "max-h-full max-w-5xl"}`}>
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-base font-bold">
-            거버 뷰어 · {gerber.revision} <span className="ml-1 text-xs font-normal text-text-muted">{gerber.filename}</span>
+            Gerber Viewer · {gerber.revision} <span className="ml-1 text-xs font-normal text-text-muted">{gerber.filename}</span>
           </h2>
+          {versions && versions.length > 1 && (
+            <select
+              aria-label="거버 버전 선택"
+              value={gerber.id}
+              onChange={(e) => {
+                const g = versions.find((v) => v.id === Number(e.target.value));
+                if (g) onPickVersion?.(g);
+              }}
+              className="rounded-lg border border-border bg-bg px-2 py-1.5 text-sm"
+            >
+              {versions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.revision}
+                  {v.is_latest ? " (최신)" : ""} · {v.filename}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="ml-auto inline-flex" role="group" aria-label="보기 방식">
             {modeBtn("top", "실물 위", !render?.boardTop)}
             {modeBtn("bottom", "실물 아래", !render?.boardBottom)}
             {modeBtn("layers", "레이어")}
           </div>
-          <button type="button" onClick={onClose} aria-label="닫기" className="rounded-lg p-1.5 text-text-muted hover:bg-bg">
-            <X size={18} />
-          </button>
+          {onClose && (
+            <button type="button" onClick={onClose} aria-label="닫기" className="rounded-lg p-1.5 text-text-muted hover:bg-bg">
+              <X size={18} />
+            </button>
+          )}
         </div>
 
         {error && <p className="rounded-lg border border-danger/40 bg-tile-red px-3 py-2 text-sm text-danger">{error}</p>}

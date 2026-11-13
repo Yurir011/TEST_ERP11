@@ -7,7 +7,6 @@ import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
 import { ProjectBomCard } from "./ProjectBomCard";
-import { ProjectGerberCard } from "./ProjectGerberCard";
 import { ProjectPurchaseList } from "./ProjectPurchaseList";
 import { ScheduleProgressCard } from "./ScheduleProgressCard";
 import { DocColumn } from "./DocColumn";
@@ -235,11 +234,7 @@ export function ProjectDetailPage() {
 
           <DateNotesCard project={project} />
 
-          {/* 구매(발주) 옆에 거버 등록·뷰어 */}
-          <div className="grid items-start gap-x-6 lg:grid-cols-2">
-            <ProjectPurchaseList projectId={project.id} />
-            <ProjectGerberCard projectId={project.id} />
-          </div>
+          <ProjectPurchaseList projectId={project.id} />
 
           {setGroups !== null && setGroups.length > 0 && (
             <h3 className="text-xs font-medium text-text-muted mb-2">이전 방식으로 작성한 문서</h3>

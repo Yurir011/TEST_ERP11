@@ -21,6 +21,7 @@ from app.models.recurring_payment import RecurringPayment, RecurringPaymentRun
 from app.models.presence import MessengerFavorite, UserPresence
 from app.models.project import Project
 from app.models.project_bom import ProjectBomLine
+from app.models.project_file import ProjectFile
 from app.models.project_gerber import ProjectGerber
 from app.models.project_document import ProjectDocument, ProjectDocumentImage, ProjectDocumentItem
 from app.models.proposal import Proposal, ProposalAttachment

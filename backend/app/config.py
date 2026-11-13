@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     tax_invoice_images_dir: str = "storage/tax_invoice_images"
     proposals_dir: str = "storage/proposals"
     project_gerbers_dir: str = "storage/project_gerbers"
+    project_files_dir: str = "storage/project_files"  # BOM·P&P·KiCad·STEP 버전 파일
     proposal_attachments_dir: str = "storage/proposal_attachments"
     business_reg_images_dir: str = "storage/business_reg_images"
     bankbook_images_dir: str = "storage/bankbook_images"

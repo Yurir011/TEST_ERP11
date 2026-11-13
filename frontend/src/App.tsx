@@ -50,6 +50,7 @@ const ClientDetailPage = lazyPage(() => import("./features/clients/ClientDetailP
 const ClientFormPage = lazyPage(() => import("./features/clients/ClientFormPage"), "ClientFormPage");
 const ProjectsPage = lazyPage(() => import("./features/projects/ProjectsPage"), "ProjectsPage");
 const ProjectFormPage = lazyPage(() => import("./features/projects/ProjectFormPage"), "ProjectFormPage");
+const GerberViewerPage = lazyPage(() => import("./features/gerber/GerberViewerPage"), "GerberViewerPage");
 const ProjectDetailPage = lazyPage(() => import("./features/projects/ProjectDetailPage"), "ProjectDetailPage");
 const ProjectDocumentsPage = lazyPage(() => import("./features/projectDocuments/ProjectDocumentsPage"), "ProjectDocumentsPage");
 const ProjectDocumentFormPage = lazyPage(() => import("./features/projectDocuments/ProjectDocumentFormPage"), "ProjectDocumentFormPage");
@@ -459,6 +460,8 @@ function App() {
       <Route path="/m/me" element={mobileRoute(<MobileMePage />, { siteAdminAllowed: true })} />
       <Route path="/m/messenger" element={mobileRoute(<MobileMessengerPage />, { siteAdminAllowed: true })} />
       <Route path="/m/messenger/:conversationId" element={mobileRoute(<MobileMessengerPage />, { siteAdminAllowed: true })} />
+
+      <Route path="/gerber-viewer/:projectId" element={<ProtectedRoute menuKey="projects"><GerberViewerPage /></ProtectedRoute>} />
 
       <Route
         path="/*"
