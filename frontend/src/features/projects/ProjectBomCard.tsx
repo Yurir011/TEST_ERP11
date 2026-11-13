@@ -22,8 +22,10 @@ const TOP_BUTTONS: { key: TopKey; label: string }[] = [
   { key: "step", label: "STEP" },
 ];
 /** 윗줄 버튼은 모두 같은 크기 (Gerber Viewer 는 글자를 줄여 두 줄로) */
-const TOP_BTN =
-  "inline-flex h-11 w-28 items-center justify-center rounded-lg border border-border bg-bg px-2 text-center text-sm font-medium text-text transition-colors hover:bg-border/40 disabled:opacity-60";
+const TOP_BTN_BASE = "inline-flex h-11 w-28 items-center justify-center px-2 text-center text-sm font-medium text-white transition-colors disabled:opacity-60";
+const TOP_BTN = `${TOP_BTN_BASE} rounded-xl border-2 border-[#2F528F] bg-[#4472C4] hover:bg-[#3A64AE]`;
+/** 출고 버튼: 다른 화면의 [등록] 버튼과 같은 파랑 */
+const RELEASE_BTN = `${TOP_BTN_BASE} rounded-lg bg-primary hover:bg-primary-hover`;
 
 const STATE_BADGE: Record<BomState, string> = { bad: SOFT_BADGE.red, warn: SOFT_BADGE.orange, good: SOFT_BADGE.green };
 /** 상태 막대와 필터 점의 색 */
@@ -375,9 +377,9 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
           onClick={toggleReleaseOpen}
           disabled={!canRelease}
           title={canRelease ? undefined : "자재관리에 등록된 자재가 BOM에 있어야 출고할 수 있습니다"}
-          className={`${TOP_BTN} ml-auto gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${releaseOpen ? "border-primary bg-tile-blue text-primary" : ""}`}
+          className={`${RELEASE_BTN} ml-auto gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${releaseOpen ? "ring-2 ring-primary/40" : ""}`}
         >
-          <PackageMinus size={16} className="text-primary" aria-hidden />
+          <PackageMinus size={16} aria-hidden />
           출고
           {pendingRows.length > 0 && <span className="rounded-full bg-tile-orange px-1.5 text-[11px] font-bold text-tile-orange-fg">보류 {pendingRows.length}</span>}
         </button>
