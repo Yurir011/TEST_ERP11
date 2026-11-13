@@ -350,10 +350,10 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
             className={TOP_BTN}
           >
             {b.key === "viewer" ? (
-              <span className="text-[11px] leading-tight">
+              <span className="leading-tight">
                 Gerber
                 <br />
-                Viewer ↗
+                Viewer
               </span>
             ) : (
               b.label
