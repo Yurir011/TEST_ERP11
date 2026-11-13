@@ -3,6 +3,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, String, Text, false
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -30,6 +31,8 @@ class Transaction(Base):
     supply_amount: Mapped[int] = mapped_column(BigInteger)
     vat_amount: Mapped[int] = mapped_column(BigInteger)
     total_amount: Mapped[int] = mapped_column(BigInteger)
+    # 품목 내역 [{name, quantity, unit_price}]. 새 거래 등록에서 여러 품목을 넣었을 때만 있다 (없으면 item_name 한 줄)
+    items: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     tax_invoice_no: Mapped[str | None] = mapped_column(String(50), nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 외상 상태. settled=False면 아직 대금을 주고받지 않은 외상매출/외상매입이고, 입출금관리에서 이 거래를 불러 입금/출금 처리하면

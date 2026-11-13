@@ -49,6 +49,16 @@ def _payment_history(tx: Transaction) -> list[TransactionPaymentOut]:
     return [TransactionPaymentOut(id=p.id, payment_date=p.payment_date, amount=p.amount, method=p.method.value) for p in rows]
 
 
+def _items_json(payload: TransactionCreate) -> list[dict] | None:
+    """품목 내역을 저장 모양으로 바꾼다. 있으면 공급가액이 품목 합계(수량×단가)와 같아야 한다."""
+    if not payload.items:
+        return None
+    total = sum(i.quantity * i.unit_price for i in payload.items)
+    if total != payload.supply_amount:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"공급가액({payload.supply_amount:,})이 품목 합계({total:,})와 다릅니다.")
+    return [i.model_dump() for i in payload.items]
+
+
 def _to_out(tx: Transaction) -> TransactionOut:
     return TransactionOut(
         id=tx.id,
@@ -61,6 +71,7 @@ def _to_out(tx: Transaction) -> TransactionOut:
         supply_amount=tx.supply_amount,
         vat_amount=tx.vat_amount,
         total_amount=tx.total_amount,
+        items=tx.items or None,
         tax_invoice_no=tx.tax_invoice_no,
         memo=tx.memo,
         settled=tx.settled,
@@ -273,6 +284,7 @@ def create_transaction(
         supply_amount=payload.supply_amount,
         vat_amount=payload.vat_amount,
         total_amount=payload.supply_amount + payload.vat_amount,
+        items=_items_json(payload),
         tax_invoice_no=payload.tax_invoice_no,
         memo=payload.memo,
         settled=payload.settled,
@@ -321,6 +333,7 @@ def update_transaction(
     tx.supply_amount = payload.supply_amount
     tx.vat_amount = payload.vat_amount
     tx.total_amount = payload.supply_amount + payload.vat_amount
+    tx.items = _items_json(payload)
     tx.tax_invoice_no = payload.tax_invoice_no
     tx.memo = payload.memo
     if payload.settled:

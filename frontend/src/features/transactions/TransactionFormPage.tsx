@@ -13,6 +13,46 @@ import { NumberInput } from "../../components/ui/NumberInput";
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import { todayISO } from "../../lib/date";
 
+interface ItemRow {
+  name: string;
+  quantity: string;
+  unitPrice: string;
+}
+const EMPTY_ROW: ItemRow = { name: "", quantity: "1", unitPrice: "0" };
+const MAX_ROWS = 50;
+const rowAmount = (r: ItemRow) => (Number(r.quantity) || 0) * (Number(r.unitPrice) || 0);
+const isBlankRow = (r: ItemRow) => r.name.trim() === "" && rowAmount(r) === 0;
+
+/** 저장된 거래를 품목 줄로: 품목 내역이 있으면 그대로, 없으면 품목명 한 줄(수량 1, 단가 = 공급가액) */
+function rowsFromTransaction(tx: Pick<Transaction, "items" | "item_name" | "supply_amount">): ItemRow[] {
+  if (tx.items && tx.items.length > 0) return tx.items.map((it) => ({ name: it.name, quantity: String(it.quantity), unitPrice: String(it.unit_price) }));
+  return [{ name: tx.item_name, quantity: "1", unitPrice: String(tx.supply_amount) }];
+}
+
+/** 스크린샷에서 읽은 품목을 줄로. 품목 금액 합계가 읽은 공급가액과 같을 때만 줄별로 쓰고, 아니면 한 줄로 요약한다. */
+function rowsFromScan(r: TaxInvoiceOcrResult): ItemRow[] | null {
+  const lines = r.items.filter((it) => it.content);
+  const supply = r.supply_amount;
+  if (lines.length === 0) return supply !== null ? [{ name: "", quantity: "1", unitPrice: String(supply) }] : null;
+  const detailed = lines.map((it) => ({ name: it.content, quantity: String(it.quantity || 1), unitPrice: String(it.unit_price || 0) }));
+  if (supply === null || detailed.reduce((sum, d) => sum + rowAmount(d), 0) === supply) return detailed;
+  const first = lines[0].content;
+  return [{ name: lines.length > 1 ? `${first} 외 ${lines.length - 1}건` : first, quantity: "1", unitPrice: String(supply) }];
+}
+
+/** 목록에 보이는 품목명: 한 줄이면 그대로, 여러 줄이면 "첫 품목 외 N건" */
+function summaryName(rows: ItemRow[]): string {
+  const used = rows.filter((r) => !isBlankRow(r));
+  const first = (used[0]?.name ?? "").trim();
+  return used.length > 1 ? `${first} 외 ${used.length - 1}건` : first;
+}
+
+function itemsPayload(rows: ItemRow[]) {
+  return rows
+    .filter((r) => !isBlankRow(r))
+    .map((r) => ({ name: r.name.trim() || "품목", quantity: Math.max(1, Number(r.quantity) || 1), unit_price: Number(r.unitPrice) || 0 }));
+}
+
 function TaxInvoicePicker({ onPick, onClose }: { onPick: (c: TaxInvoiceCandidate) => void; onClose: () => void }) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<TaxInvoiceCandidate[] | null>(null);
@@ -100,8 +140,7 @@ export function TransactionFormPage() {
   const [partyQuery, setPartyQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
-  const [itemName, setItemName] = useState("");
-  const [supplyAmount, setSupplyAmount] = useState("0");
+  const [rows, setRows] = useState<ItemRow[]>([{ ...EMPTY_ROW }]); // 품목 줄 (품목명 · 수량 · 단가)
   const [vatAmount, setVatAmount] = useState("0");
   const [vatManuallyEdited, setVatManuallyEdited] = useState(false);
   const [taxInvoiceNo, setTaxInvoiceNo] = useState("");
@@ -125,8 +164,7 @@ export function TransactionFormPage() {
       .then(async (tx) => {
         setType(tx.type);
         setTransactionDate(tx.transaction_date);
-        setItemName(tx.item_name);
-        setSupplyAmount(String(tx.supply_amount));
+        setRows(rowsFromTransaction(tx));
         setVatAmount(String(tx.vat_amount));
         setVatManuallyEdited(true);
         setTaxInvoiceNo(tx.tax_invoice_no ?? "");
@@ -159,6 +197,8 @@ export function TransactionFormPage() {
       .catch((err) => logError("TransactionForm", "거래처 목록 불러오기 실패", err));
   }, []);
 
+  const supplyAmount = String(rows.reduce((sum, r) => sum + rowAmount(r), 0)); // 공급가액 = 품목 금액 합계
+
   // 부가세를 직접 고치기 전까지는 공급가액이 바뀔 때마다 10%로 자동 계산한다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
   const vatKey = `${supplyAmount}|${vatManuallyEdited}`;
   const [prevVatKey, setPrevVatKey] = useState(vatKey);
@@ -179,8 +219,7 @@ export function TransactionFormPage() {
     setSettled(false);
     setType(c.type);
     setTransactionDate(c.issue_date);
-    setItemName(c.item_name);
-    setSupplyAmount(String(c.supply_amount));
+    setRows([{ name: c.item_name, quantity: "1", unitPrice: String(c.supply_amount) }]);
     setVatAmount(String(c.vat_amount));
     setVatManuallyEdited(true);
     setTaxInvoiceNo(c.tax_invoice_no ?? "");
@@ -210,9 +249,8 @@ export function TransactionFormPage() {
       setLinkedDoc(null); // 스크린샷은 문서와 연결하지 않는다 (입력란만 채움)
       if (r.direction) setType(r.direction);
       if (r.issue_date) setTransactionDate(r.issue_date);
-      const firstItem = r.items[0]?.content;
-      if (firstItem) setItemName(r.items.length > 1 ? `${firstItem} 외 ${r.items.length - 1}건` : firstItem);
-      if (r.supply_amount !== null) setSupplyAmount(String(r.supply_amount));
+      const scanned = rowsFromScan(r);
+      if (scanned) setRows(scanned);
       if (r.vat_amount !== null) {
         setVatAmount(String(r.vat_amount));
         setVatManuallyEdited(true);
@@ -242,6 +280,16 @@ export function TransactionFormPage() {
 
   const total = (Number(supplyAmount) || 0) + (Number(vatAmount) || 0);
 
+  function updateRow(i: number, patch: Partial<ItemRow>) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function addRow() {
+    setRows((prev) => (prev.length >= MAX_ROWS ? prev : [...prev, { ...EMPTY_ROW }]));
+  }
+  function removeRow(i: number) {
+    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -252,9 +300,10 @@ export function TransactionFormPage() {
         transaction_date: transactionDate,
         client_id: selectedClient?.id ?? null,
         counterparty: selectedClient ? null : partyQuery.trim() || null,
-        item_name: itemName,
+        item_name: summaryName(rows),
         supply_amount: Number(supplyAmount) || 0,
         vat_amount: Number(vatAmount) || 0,
+        items: itemsPayload(rows),
         tax_invoice_no: taxInvoiceNo || null,
         memo: memo || null,
         settled,
@@ -357,23 +406,61 @@ export function TransactionFormPage() {
         </div>
 
         <div>
-          <label className="block text-xs text-text-muted mb-1.5">품목/내용</label>
-          <input
-            required
-            value={itemName}
-            onChange={(e) => setItemName(e.target.value)}
-            className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-          />
+          <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_6rem_6rem_1.5rem] items-center gap-2 mb-1.5 text-xs text-text-muted">
+            <span>품목/내용</span>
+            <span className="text-right">수량</span>
+            <span className="text-right">단가</span>
+            <span className="text-right">금액</span>
+            <span />
+          </div>
+          <div className="space-y-2">
+            {rows.map((r, i) => (
+              <div key={i} className="grid grid-cols-[minmax(0,1fr)_3.5rem_6rem_6rem_1.5rem] items-center gap-2">
+                <input
+                  required={i === 0}
+                  aria-label={`품목 ${i + 1}`}
+                  value={r.name}
+                  onChange={(e) => updateRow(i, { name: e.target.value })}
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+                />
+                <NumberInput
+                  aria-label={`수량 ${i + 1}`}
+                  value={r.quantity}
+                  onChange={(v) => updateRow(i, { quantity: v })}
+                  className="w-full rounded-lg border border-border px-2 py-2 text-sm text-right outline-none focus:border-primary bg-bg"
+                />
+                <NumberInput
+                  aria-label={`단가 ${i + 1}`}
+                  value={r.unitPrice}
+                  onChange={(v) => updateRow(i, { unitPrice: v })}
+                  className="w-full rounded-lg border border-border px-2 py-2 text-sm text-right outline-none focus:border-primary bg-bg"
+                />
+                <span className="text-right text-sm font-semibold tabular-nums">{formatCurrency(rowAmount(r))}</span>
+                {rows.length > 1 ? (
+                  <button type="button" onClick={() => removeRow(i)} aria-label={`품목 ${i + 1} 삭제`} title="삭제" className="text-text-muted hover:text-danger">
+                    <X size={15} />
+                  </button>
+                ) : (
+                  <span />
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={addRow}
+            aria-label="품목 추가"
+            title="품목 추가"
+            className="mt-2 rounded-lg border border-dashed border-primary bg-tile-blue px-5 py-1.5 text-base font-bold leading-none text-primary hover:opacity-80"
+          >
+            +
+          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-text-muted mb-1.5">공급가액</label>
-            <NumberInput
-              value={supplyAmount}
-              onChange={setSupplyAmount}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
-            />
+            <label className="block text-xs text-text-muted mb-1.5">공급가액 (품목 금액 합계)</label>
+            <div className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-bg text-right tabular-nums">{formatCurrency(Number(supplyAmount) || 0)}</div>
           </div>
           <div>
             <label className="block text-xs text-text-muted mb-1.5">부가세 (자동계산, 수정 가능)</label>

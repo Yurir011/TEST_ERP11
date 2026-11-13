@@ -1,8 +1,16 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.transaction import TransactionType
+
+
+class TransactionItem(BaseModel):
+    """거래 품목 한 줄: 품목명 · 수량 · 단가 (금액 = 수량 × 단가)."""
+
+    name: str = Field(min_length=1, max_length=200)
+    quantity: int = Field(default=1, ge=1)
+    unit_price: int = Field(default=0, ge=0)
 
 
 class TransactionCreate(BaseModel):
@@ -13,6 +21,7 @@ class TransactionCreate(BaseModel):
     item_name: str
     supply_amount: int
     vat_amount: int
+    items: list[TransactionItem] | None = Field(default=None, max_length=50)  # 여러 품목 내역 (있으면 공급가액은 품목 합계와 같아야 한다)
     tax_invoice_no: str | None = None
     memo: str | None = None
     # 새 거래 등록 시 불러온 세금계산서 문서. 지정하면 그 문서를 이 거래와 연결해 같은 세금계산서가 매입매출에 두 번 잡히지 않게 한다.
@@ -59,6 +68,7 @@ class TransactionOut(BaseModel):
     supply_amount: int
     vat_amount: int
     total_amount: int
+    items: list[TransactionItem] | None = None
     tax_invoice_no: str | None
     memo: str | None
     settled: bool

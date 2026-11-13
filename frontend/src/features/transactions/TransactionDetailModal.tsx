@@ -42,6 +42,21 @@ export function TransactionDetailModal({ tx, onClose, onSettle }: TransactionDet
         <div className="mb-4">
           <Row label="거래일">{tx.transaction_date}</Row>
           <Row label="거래처">{tx.client_name ?? tx.counterparty ?? "-"}</Row>
+          {tx.items && tx.items.length > 1 && (
+            <div className="py-2 border-b border-border text-sm" aria-label="품목 내역">
+              <p className="text-text-muted mb-1.5">품목 내역</p>
+              <ul className="space-y-1">
+                {tx.items.map((it, i) => (
+                  <li key={i} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 text-xs">
+                    <span className="min-w-0 break-words">
+                      {it.name} <span className="text-text-muted">× {it.quantity.toLocaleString()} @ {formatCurrency(it.unit_price)}</span>
+                    </span>
+                    <span className="font-semibold tabular-nums">{formatCurrency(it.quantity * it.unit_price)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <Row label="공급가액">{formatCurrency(tx.supply_amount)}</Row>
           <Row label="부가세">{formatCurrency(tx.vat_amount)}</Row>
           <Row label="합계">

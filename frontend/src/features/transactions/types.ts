@@ -19,6 +19,13 @@ export interface TransactionPayment {
   method: string;
 }
 
+/** 거래 품목 한 줄 (금액 = 수량 × 단가) */
+export interface TransactionItem {
+  name: string;
+  quantity: number;
+  unit_price: number;
+}
+
 export interface Transaction {
   id: number;
   type: TransactionType;
@@ -30,6 +37,7 @@ export interface Transaction {
   supply_amount: number;
   vat_amount: number;
   total_amount: number;
+  items?: TransactionItem[] | null; // 새 거래 등록에서 넣은 품목 내역 (없으면 item_name 한 줄)
   tax_invoice_no: string | null;
   memo: string | null;
   settled: boolean;

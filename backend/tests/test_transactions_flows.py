@@ -184,3 +184,17 @@ def test_update_cannot_shrink_below_partial_payments(client, h, make_client):
     assert "50,000원이 부분 수금/지급되어" in res.json()["detail"]
     got = client.get(f"/api/transactions/{tx['id']}", headers=h).json()
     assert (got["paid_amount"], [p["amount"] for p in got["payment_history"]]) == (50_000, [50_000])
+
+
+def test_items_are_saved_and_must_match_supply(client, h):
+    """새 거래 등록의 품목 내역(수량×단가)은 저장되고, 공급가액이 품목 합계와 다르면 거절한다."""
+    items = [{"name": "USB 메모리", "quantity": 5, "unit_price": 7800}, {"name": "카드리더기", "quantity": 2, "unit_price": 5500}]
+    res = client.post("/api/transactions", headers=h, json=_tx(item_name="USB 메모리 외 1건", supply_amount=50_000, vat_amount=5_000, items=items))
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["items"] == items and body["total_amount"] == 55_000
+    assert client.get(f"/api/transactions/{body['id']}", headers=h).json()["items"] == items
+    bad = client.post("/api/transactions", headers=h, json=_tx(supply_amount=49_999, vat_amount=5_000, items=items))
+    assert bad.status_code == 400
+    upd = client.put(f"/api/transactions/{body['id']}", headers=h, json=_tx(item_name="단일", supply_amount=100_000, vat_amount=10_000))
+    assert upd.status_code == 200 and upd.json()["items"] is None
