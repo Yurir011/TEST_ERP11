@@ -39,7 +39,7 @@ export function GerberViewerModal({
   useEffect(() => {
     let alive = true;
     logDebug("GerberViewer", `거버 불러오기 시작: project_id=${projectId}, id=${gerber.id}`);
-    fetchFileBytes(`/api/projects/${projectId}/gerbers/${gerber.id}/file`)
+    fetchFileBytes(gerber.file_url ?? `/api/projects/${projectId}/gerbers/${gerber.id}/file`)
       .then((bytes) => renderGerberZip(bytes))
       .then((r) => {
         if (!alive) return;
@@ -55,7 +55,7 @@ export function GerberViewerModal({
     return () => {
       alive = false;
     };
-  }, [projectId, gerber.id]);
+  }, [projectId, gerber.id, gerber.file_url]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

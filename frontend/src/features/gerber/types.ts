@@ -12,6 +12,8 @@ export interface Gerber {
   uploaded_by: string | null;
   created_at: string;
   is_latest: boolean;
+  /** 파일 버전(프로젝트 파일 관리)의 Gerber 항목에서 온 zip 이면 받는 주소 (없으면 예전 거버 목록의 파일) */
+  file_url?: string;
 }
 
 export function formatBytes(n: number): string {

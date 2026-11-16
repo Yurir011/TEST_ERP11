@@ -33,7 +33,7 @@ export interface Release {
 }
 
 const fmtDate = (iso: string) => iso.replace(/-/g, "/");
-const iconBtn = "h-9 min-w-10 rounded-lg border border-border bg-surface px-2 text-base hover:border-primary disabled:opacity-50";
+const iconBtn = "h-7 min-w-8 rounded-md border border-border bg-surface px-1.5 text-sm hover:border-primary disabled:opacity-50";
 
 /**
  * 프로젝트 파일 관리: 왼쪽 히스토리(파일 버전, 최신순) → 가운데 7개 항목(BOM·Gerber·Pick Place·KiCad·STEP·Firmware·GUI) → 오른쪽 파일.
@@ -60,7 +60,8 @@ export function ProjectReleasePanel({
   const [curId, setCurId] = useState<number | null>(null);
   const [cat, setCat] = useState<ReleaseCategory>("bom");
   const [group, setGroup] = useState<"bin" | "src">("bin"); // Firmware·GUI 에 올릴 때 고른 묶음
-  const [mode, setMode] = useState<"edit" | "del" | null>(null);
+  const [delMode, setDelMode] = useState(false); // ➖ 를 누르면 파일마다 체크박스가 생겨 한꺼번에 지운다
+  const [checked, setChecked] = useState<Set<number>>(new Set());
   const [version, setVersion] = useState("");
   const [date, setDate] = useState(todayISO());
   const [busy, setBusy] = useState(false);
@@ -83,6 +84,10 @@ export function ProjectReleasePanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setChecked(new Set());
+  }, [curId, cat, delMode]);
 
   const cur = rows?.find((r) => r.id === curId) ?? rows?.[0] ?? null;
   const catInfo = RELEASE_CATEGORIES.find((c) => c.key === cat)!;
@@ -168,13 +173,23 @@ export function ProjectReleasePanel({
     }
   }
 
-  async function removeFile(f: ReleaseFile) {
-    if (!cur) return;
-    if (!(await dialog.confirm(`${f.filename} 을(를) 삭제할까요? 되돌릴 수 없습니다.`, { okLabel: "삭제", danger: true }))) return;
+  async function removeChecked() {
+    if (!cur || checked.size === 0) return;
+    const ids = [...checked];
+    if (!(await dialog.confirm(`선택한 파일 ${ids.length}개를 삭제할까요? 되돌릴 수 없습니다.`, { okLabel: "삭제", danger: true }))) return;
+    setBusy(true);
     try {
-      replaceRelease(await apiDelete<Release>(`${base}/${cur.id}/files/${f.id}`));
+      logDebug("ProjectRelease", `파일 일괄 삭제 시도: release=${cur.id}, files=${ids.length}`);
+      let last: Release | null = null;
+      for (const id of ids) last = await apiDelete<Release>(`${base}/${cur.id}/files/${id}`);
+      if (last) replaceRelease(last);
+      setChecked(new Set());
+      setDelMode(false);
     } catch (err) {
       fail("파일 삭제 실패", err, "삭제하지 못했습니다.");
+      await load();
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -190,26 +205,34 @@ export function ProjectReleasePanel({
   function fileRow(f: ReleaseFile) {
     return (
       <div key={f.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 text-sm">
-        <span aria-hidden>📄</span>
-        <button type="button" onClick={() => void download(f)} title="눌러서 받기" className="min-w-0 flex-1 break-all text-left hover:text-primary hover:underline">
+        {delMode ? (
+          <input
+            type="checkbox"
+            aria-label={`${f.filename} 선택`}
+            checked={checked.has(f.id)}
+            onChange={(e) =>
+              setChecked((c) => {
+                const n = new Set(c);
+                if (e.target.checked) n.add(f.id);
+                else n.delete(f.id);
+                return n;
+              })
+            }
+            className="h-4 w-4 shrink-0 accent-primary"
+          />
+        ) : (
+          <span aria-hidden>📄</span>
+        )}
+        <button type="button" onClick={() => void download(f)} title="눌러서 받기" className="min-w-0 break-all text-left hover:text-primary hover:underline">
           {f.filename}
         </button>
-        <span className="shrink-0 text-xs text-text-muted">{formatBytes(f.file_size)}</span>
-        {mode === "edit" && (
-          <button type="button" onClick={() => void renameFile(f)} aria-label={`${f.filename} 이름 바꾸기`} className="shrink-0 rounded-md border border-border px-2 py-0.5 text-xs hover:border-primary">
-            이름 바꾸기
-          </button>
-        )}
-        {mode === "del" && (
-          <button type="button" onClick={() => void removeFile(f)} aria-label={`${f.filename} 삭제`} className="shrink-0 rounded-md border border-border px-2 py-0.5 text-xs text-danger hover:border-danger">
-            🗑️ 삭제
-          </button>
-        )}
+        <button type="button" onClick={() => void renameFile(f)} title="파일 이름 바꾸기" aria-label={`${f.filename} 이름 바꾸기`} className="shrink-0 rounded px-1 text-xs hover:bg-surface">
+          ✏️
+        </button>
+        <span className="ml-auto shrink-0 text-xs text-text-muted">{formatBytes(f.file_size)}</span>
       </div>
     );
   }
-
-  const modeBtn = (m: "edit" | "del") => `${iconBtn} ${mode === m ? "border-primary bg-tile-blue" : ""}`;
 
   return (
     <div className="border-t border-border px-4 py-4" aria-label="프로젝트 파일 관리">
@@ -231,7 +254,7 @@ export function ProjectReleasePanel({
             onChange={(e) => setVersion(e.target.value)}
             placeholder="예: V.1.20.000"
             maxLength={30}
-            className="min-w-0 flex-1 basis-40 rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary"
+            className="w-36 min-w-0 rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary"
           />
           <input type="date" aria-label="버전 날짜" value={date} max="2999-12-31" onChange={(e) => setDate(e.target.value || todayISO())} className="rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary" />
           <button type="submit" disabled={busy || !version.trim()} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50">
@@ -246,9 +269,9 @@ export function ProjectReleasePanel({
       {rows === null && !error && <p className="py-4 text-center text-sm text-text-muted">불러오는 중...</p>}
 
       {rows !== null && (
-        <div className="grid gap-4 md:grid-cols-[200px_180px_minmax(0,1fr)]">
+        <div className="grid gap-4 md:min-h-[380px] md:grid-cols-[200px_180px_minmax(0,1fr)]">
           {/* 히스토리 */}
-          <div className="min-w-0 md:border-r md:border-border md:pr-4">
+          <div className="flex min-w-0 flex-col md:border-r md:border-border md:pr-4">
             <b className="mb-2 block text-sm">히스토리</b>
             {rows.length === 0 && <p className="py-3 text-xs text-text-muted">[파일 등록]으로 첫 버전을 만들어 주세요.</p>}
             {rows.map((r, i) => (
@@ -268,7 +291,7 @@ export function ProjectReleasePanel({
                 </button>
               </div>
             ))}
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
               <button type="button" title="버전 추가" aria-label="버전 추가" onClick={() => setFormOpen(true)} className={iconBtn}>
                 ➕
               </button>
@@ -350,12 +373,26 @@ export function ProjectReleasePanel({
                 <button type="button" title="파일 올리기" aria-label="파일 올리기" onClick={() => input.current?.click()} disabled={busy} className={iconBtn}>
                   ➕
                 </button>
-                <button type="button" title="이름 바꾸기" aria-label="파일 이름 바꾸기 모드" aria-pressed={mode === "edit"} onClick={() => setMode(mode === "edit" ? null : "edit")} className={modeBtn("edit")}>
-                  ✏️
+                <button type="button" title="삭제할 파일 고르기" aria-label="삭제할 파일 고르기" aria-pressed={delMode} onClick={() => setDelMode(!delMode)} className={`${iconBtn} ${delMode ? "border-primary bg-tile-blue" : ""}`}>
+                  ➖
                 </button>
-                <button type="button" title="삭제" aria-label="파일 삭제 모드" aria-pressed={mode === "del"} onClick={() => setMode(mode === "del" ? null : "del")} className={modeBtn("del")}>
-                  🗑️
-                </button>
+                {delMode && (
+                  <>
+                    <label className="flex items-center gap-1.5 text-xs">
+                      <input
+                        type="checkbox"
+                        aria-label="모두 선택"
+                        checked={catFiles.length > 0 && checked.size === catFiles.length}
+                        onChange={(e) => setChecked(e.target.checked ? new Set(catFiles.map((f) => f.id)) : new Set())}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      모두 선택
+                    </label>
+                    <button type="button" onClick={() => void removeChecked()} disabled={busy || checked.size === 0} className="rounded-md border border-border px-2 py-1 text-xs font-semibold text-danger hover:border-danger disabled:opacity-50">
+                      선택 삭제 ({checked.size})
+                    </button>
+                  </>
+                )}
                 {busy && <span className="text-xs text-text-muted">올리는 중...</span>}
               </div>
               <input

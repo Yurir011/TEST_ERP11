@@ -5,7 +5,7 @@ import { ProjectReleasePanel, type Release } from "./ProjectReleasePanel";
 
 const api = vi.hoisted(() => ({ apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn(), apiUploadForm: vi.fn(), downloadFile: vi.fn() }));
 vi.mock("../../lib/api", () => ({ ...api, ApiError: class extends Error {} }));
-vi.mock("../../components/ui/dialog/useDialog", () => ({ useDialog: () => ({ confirm: vi.fn(), prompt: vi.fn(), notify: vi.fn(), notifyError: vi.fn() }) }));
+vi.mock("../../components/ui/dialog/useDialog", () => ({ useDialog: () => ({ confirm: vi.fn().mockResolvedValue(true), prompt: vi.fn(), notify: vi.fn(), notifyError: vi.fn() }) }));
 
 const file = (id: number, category: string, group: string | null, filename: string) => ({ id, category, group, filename, file_size: 10, created_at: "2026-08-10T00:00:00Z" });
 const releases: Release[] = [
@@ -46,5 +46,16 @@ describe("프로젝트 파일 관리", () => {
     fireEvent.change(await screen.findByLabelText("파일 버전"), { target: { value: "V.1.20.000" } });
     fireEvent.click(screen.getByRole("button", { name: "등록" }));
     await waitFor(() => expect(api.apiPost).toHaveBeenCalledWith("/api/projects/1/releases", expect.objectContaining({ version: "V.1.20.000" })));
+  });
+
+  it("➖ 를 누르면 체크박스가 생기고 고른 파일을 한꺼번에 지운다", async () => {
+    api.apiDelete.mockResolvedValue({ ...releases[0], files: [] });
+    renderPanel();
+    await screen.findByText("aaa.xlsx");
+    expect(screen.queryByLabelText("aaa.xlsx 선택")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "삭제할 파일 고르기" }));
+    fireEvent.click(screen.getByLabelText("aaa.xlsx 선택"));
+    fireEvent.click(screen.getByRole("button", { name: /선택 삭제 \(1\)/ }));
+    await waitFor(() => expect(api.apiDelete).toHaveBeenCalledWith("/api/projects/1/releases/2/files/1"));
   });
 });
