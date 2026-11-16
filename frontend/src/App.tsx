@@ -32,6 +32,7 @@ const MobileContactsPage = lazyPage(() => import("./features/mobile/MobileContac
 const MobileMaterialsPage = lazyPage(() => import("./features/mobile/MobileMaterialsPage"), "MobileMaterialsPage");
 const MobileMaterialDetailPage = lazyPage(() => import("./features/mobile/MobileMaterialDetailPage"), "MobileMaterialDetailPage");
 const MobileMaterialFormPage = lazyPage(() => import("./features/mobile/MobileMaterialFormPage"), "MobileMaterialFormPage");
+const MobileReceivePage = lazyPage(() => import("./features/mobile/MobileReceivePage"), "MobileReceivePage");
 const MobileCardPage = lazyPage(() => import("./features/mobile/MobileCardPage"), "MobileCardPage");
 const ContactsPage = lazyPage(() => import("./features/contacts/ContactsPage"), "ContactsPage");
 const MobileDocumentsPage =lazyPage(() => import("./features/mobile/MobileDocumentsPage"), "MobileDocumentsPage");
@@ -457,6 +458,7 @@ function App() {
       <Route path="/m/materials/new" element={mobileRoute(<MobileMaterialFormPage />)} />
       <Route path="/m/materials/:id/edit" element={mobileRoute(<MobileMaterialFormPage />)} />
       <Route path="/m/materials/:id" element={mobileRoute(<MobileMaterialDetailPage />)} />
+      <Route path="/m/receive" element={mobileRoute(<MobileReceivePage />)} />
       <Route path="/m/card" element={mobileRoute(<MobileCardPage />, { menuKey: "payments" })} />
       <Route path="/m/notifications"element={mobileRoute(<MobileNotificationsPage />, { siteAdminAllowed: true })} />
       <Route path="/m/approvals" element={mobileRoute(<MobileApprovalsPage />)} />

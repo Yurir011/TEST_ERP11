@@ -11,6 +11,7 @@ from app.logging_config import get_logger
 from app.models.client import Client
 from app.models.project import Project, ProjectStatus
 from app.models.project_file import ProjectFile
+from app.models.project_release import ProjectRelease, ProjectReleaseFile
 from app.models.project_gerber import ProjectGerber
 from app.models.user import User
 from app.schemas.project import (
@@ -208,6 +209,7 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="폐기한 프로젝트만 삭제할 수 있습니다.")
     stored = [g.file_path for g in db.query(ProjectGerber).filter(ProjectGerber.project_id == project_id)]
     stored += [f.file_path for f in db.query(ProjectFile).filter(ProjectFile.project_id == project_id)]
+    stored += [f.file_path for f in db.query(ProjectReleaseFile).join(ProjectRelease).filter(ProjectRelease.project_id == project_id)]
     db.delete(project)
     db.commit()
     for path in stored:  # 올려 둔 거버·BOM 등 파일도 지운다 (실패해도 삭제는 끝난 상태)

@@ -12,6 +12,7 @@ from app.models.user import User, is_admin_role
 from app.routers.proposals._common import PREFIX, _get_or_404, _to_out, logger
 from app.schemas.proposal import OrderFlowToggle, OrderPaymentIn, ProposalOut, ProposalPaymentIn, ReceivedDateIn
 from app.services.payment_accounts import require_account
+from app.services.receive_stock import apply_receive_stock, revert_receive_stock
 from app.services.purchase_ledger import (
     add_purchase_payment,
     has_extra_payments,
@@ -166,8 +167,11 @@ def set_received(
     if payload.value:
         if p.order_sent_at is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주서 발송 확인 후에 입고 처리를 할 수 있습니다.")
+        first_time = p.received_at is None
         p.received_at = p.received_at or _received_at(payload.received_date)
         p.received_by = p.received_by or current_user.id
+        if first_time and payload.materials:  # 처음 입고할 때만 자재 재고에 반영한다 (같은 건을 다시 눌러도 두 번 들어가지 않는다)
+            apply_receive_stock(db, p, payload.materials, p.received_at.astimezone(KST).date(), current_user)
         if payload.payment_asked:  # 입고 때 대금 결제 여부(외상 / 입금 / 법인카드)를 확인한 경우
             _set_payment(db, p, payload.payment_method, payload.payment_card, payload.payment_bank)
             if payload.payment_date is not None and payload.payment_date > datetime.now(KST).date():
@@ -176,6 +180,7 @@ def set_received(
     else:
         if p.received_by != current_user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="입고 처리한 본인만 취소할 수 있습니다.")
+        revert_receive_stock(db, p)  # 입고로 늘린 자재 재고도 되돌린다
         p.received_at = None
         p.received_by = None
     db.commit()

@@ -147,3 +147,42 @@ def test_writing_order_without_payment_choice_keeps_credit(client, staff, auth_h
     p = _proposal(client, h)
     assert _order(client, h, p["id"]).status_code == 201
     assert _find(client, h, p["id"])["payment_method"] is None
+
+
+def _material(client, headers):
+    res = client.post("/api/materials", headers=headers, json={"category": "consumable", "name": "테스트 자재"})
+    assert res.status_code == 201, res.text
+    return res.json()["id"]
+
+
+def _stock_of(client, headers, material_id):
+    return client.get(f"/api/materials/{material_id}", headers=headers).json()["current_qty"]
+
+
+def test_receive_adds_material_stock_once_and_cancel_reverts(client, staff, auth_headers):
+    h = auth_headers(staff["writer"])
+    p = _proposal(client, h)
+    assert _order(client, h, p["id"]).status_code == 201
+    assert client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True}, headers=h).status_code == 200
+    mid = _material(client, h)
+    body = {"value": True, "materials": [{"material_id": mid, "quantity": 30}]}
+    assert client.put(f"/api/proposals/{p['id']}/received", json=body, headers=h).status_code == 200
+    assert _stock_of(client, h, mid) == 30
+    # 같은 건을 다시 눌러도 두 번 들어가지 않는다
+    assert client.put(f"/api/proposals/{p['id']}/received", json=body, headers=h).status_code == 200
+    assert _stock_of(client, h, mid) == 30
+    # 입고를 취소하면 재고도 되돌아간다
+    assert client.put(f"/api/proposals/{p['id']}/received", json={"value": False}, headers=h).status_code == 200
+    assert _stock_of(client, h, mid) == 0
+
+
+def test_receive_cancel_blocked_when_stock_already_used(client, staff, auth_headers):
+    h = auth_headers(staff["writer"])
+    p = _proposal(client, h)
+    assert _order(client, h, p["id"]).status_code == 201
+    client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True}, headers=h)
+    mid = _material(client, h)
+    client.put(f"/api/proposals/{p['id']}/received", json={"value": True, "materials": [{"material_id": mid, "quantity": 10}]}, headers=h)
+    out = client.post(f"/api/materials/{mid}/movements", headers=h, json={"kind": "out", "movement_date": "2026-11-16", "quantity": 8, "reason": "생산"})
+    assert out.status_code == 201, out.text
+    assert client.put(f"/api/proposals/{p['id']}/received", json={"value": False}, headers=h).status_code == 400

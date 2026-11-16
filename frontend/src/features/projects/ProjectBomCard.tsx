@@ -8,19 +8,8 @@ import { CodeText } from "../materials/CodeText";
 import { classLabel, levelPath, matchKeyword, type Material, type MaterialDetail } from "../materials/types";
 import { BOM_FILTERS, bomCounts, bomPendingRows, bomReleaseRows, bomReleaseTotals, bomState, bomStateLabel, groupBom, type BomFilter, type BomLine, type BomState } from "./bom";
 import { BomRegisterModal } from "./BomRegisterModal";
-import { useGerbers } from "./ProjectGerberCard";
-import { useProjectFiles } from "./useProjectFiles";
-import { VersionListModal, type VersionSource } from "./VersionListModal";
+import { ProjectReleasePanel } from "./ProjectReleasePanel";
 
-type TopKey = "bom" | "gerber" | "viewer" | "pnp" | "kicad" | "step";
-const TOP_BUTTONS: { key: TopKey; label: string }[] = [
-  { key: "bom", label: "BOM" },
-  { key: "gerber", label: "Gerber" },
-  { key: "viewer", label: "Gerber Viewer" },
-  { key: "pnp", label: "P&P" },
-  { key: "kicad", label: "KiCad" },
-  { key: "step", label: "STEP" },
-];
 /** 윗줄 버튼은 모두 같은 크기 (Gerber Viewer 는 글자를 줄여 두 줄로) */
 const TOP_BTN_BASE = "inline-flex h-11 w-28 items-center justify-center px-2 text-center text-sm font-medium text-white transition-colors disabled:opacity-60";
 const TOP_BTN = `${TOP_BTN_BASE} rounded-xl border-2 border-[#5a6ea3] bg-[#6a7eb3] hover:bg-[#5a6ea3]`;
@@ -69,12 +58,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   // 출고: 체크한 줄, 확인 창, 줄마다 출고 수량(글), 처리 중·오류
-  const gerbers = useGerbers(projectId);
-  const [popup, setPopup] = useState<TopKey | null>(null); // 버전 목록 팝업
-  const bomFiles = useProjectFiles(projectId, "bom", popup === "bom");
-  const pnpFiles = useProjectFiles(projectId, "pnp", popup === "pnp");
-  const kicadFiles = useProjectFiles(projectId, "kicad", popup === "kicad");
-  const stepFiles = useProjectFiles(projectId, "step", popup === "step");
+  const [fileFormOpen, setFileFormOpen] = useState(false); // [파일 등록] 버전 입력 칸
   function openGerberViewer() {
     logDebug("ProjectBom", `Gerber Viewer 새 창 열기: project_id=${projectId}`);
     window.open(`/gerber-viewer/${projectId}`, "_blank", "width=1200,height=820");
@@ -344,24 +328,9 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
   return (
     <div className="bg-surface border border-border rounded-2xl mb-6" aria-label="BOM 등록">
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-        {TOP_BUTTONS.map((b) => (
-          <button
-            key={b.key}
-            type="button"
-            onClick={() => (b.key === "viewer" ? openGerberViewer() : setPopup(b.key))}
-            className={TOP_BTN}
-          >
-            {b.key === "viewer" ? (
-              <span className="leading-tight">
-                Gerber
-                <br />
-                Viewer
-              </span>
-            ) : (
-              b.label
-            )}
-          </button>
-        ))}
+        <button type="button" onClick={() => setFileFormOpen(true)} className={TOP_BTN}>
+          파일 등록
+        </button>
         {lines !== null && lines.length > 0 && (
           <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5 text-xs" aria-label="BOM 요약">
             <span className="rounded-full bg-bg px-2.5 py-1 font-medium text-text-muted">총 {lines.length}종</span>
@@ -387,29 +356,13 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
 
       {error && <p className="px-5 pb-3 text-sm text-danger">{error}</p>}
 
-      {popup === "bom" && (
-        <VersionListModal
-          title="BOM"
-          source={bomFiles}
-          onClose={() => setPopup(null)}
-          extra={
-            <button
-              type="button"
-              onClick={() => {
-                setPopup(null);
-                setOpen(true);
-              }}
-              className="self-start rounded-lg border border-border bg-bg px-3 py-1.5 text-xs font-medium hover:bg-border/40"
-            >
-              BOM 표(자재 줄) 열기
-            </button>
-          }
-        />
-      )}
-      {popup === "gerber" && <VersionListModal title="Gerber" source={gerbers as unknown as VersionSource} accept=".zip,.gbr,.gtl,.gbl,.gts,.gbs,.gto,.gbo,.gm1,.drl,.xln,.txt" onClose={() => setPopup(null)} />}
-      {popup === "pnp" && <VersionListModal title="P&P" source={pnpFiles} onClose={() => setPopup(null)} />}
-      {popup === "kicad" && <VersionListModal title="KiCad" source={kicadFiles} onClose={() => setPopup(null)} />}
-      {popup === "step" && <VersionListModal title="STEP" source={stepFiles} onClose={() => setPopup(null)} />}
+      <ProjectReleasePanel
+        projectId={projectId}
+        formOpen={fileFormOpen}
+        setFormOpen={setFileFormOpen}
+        onOpenBom={() => setOpen(true)}
+        onOpenGerberViewer={openGerberViewer}
+      />
 
       {releaseOpen && lines !== null && (
         <div id="bom-release" className="border-t border-border bg-bg px-5 py-4 space-y-3" aria-label="BOM 출고">

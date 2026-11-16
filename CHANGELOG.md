@@ -2,6 +2,13 @@
 
 버전 표기와 올리는 규칙은 [`docs/version-policy.md`](docs/version-policy.md). 새 버전은 맨 위에 추가한다.
 
+## V.0.75.002 — 2026-11-16
+
+### 모바일 입고 처리(자재 재고·대금 결제·사진), 프로젝트 파일 버전 관리 (DB 구조 변경 있음 — `alembic upgrade head` 필요, 데스크톱 앱 코드 변경은 버전뿐)
+- **모바일 입고**: 모바일 홈에 "입고" 버튼(`/m/receive`)이 생겼다. 전자결재에서 발주를 마친 구매 품의서 목록에서 건을 고르고, 받은 날·자재별 수량(개/릴)·대금 결제(송금/법인카드/외상, 결제일)·사진을 입력해 입고 완료한다. 기존 입고 확인 API(`PUT /api/proposals/{id}/received`)를 그대로 써서 PC 전자결재 카드와 매입매출·입출금에도 반영된다. 사진은 품의서 첨부로 저장된다.
+- **자재 재고 자동 반영**: 입고 때 고른 자재마다 입고(첫 입고) 또는 추가 입고 기록이 만들어지고, 같은 건을 다시 눌러도 두 번 들어가지 않는다. 입고를 취소하면 재고도 되돌리며, 이미 출고해 재고가 모자라게 되면 취소할 수 없다. `material_movements.proposal_id` 컬럼 추가(마이그레이션 0043).
+- **프로젝트 파일 버전 관리**: BOM 카드 윗줄의 버튼 6개(BOM·Gerber·Gerber Viewer·P&P·KiCad·STEP)를 [파일 등록] 하나로 바꿨다. 파일 버전(V.x.xx.xxx)을 등록하면 왼쪽 히스토리에 최신순으로 쌓이고, 버전을 누르면 BOM·Gerber·Pick Place·KiCad·STEP·Firmware·GUI 7개 항목이 나오며 항목마다 파일을 올린다(Firmware·GUI 는 bin/src). 히스토리 아래 ➕ ➖ ✏️, 파일 목록 아래 ➕ ✏️ 🗑️ 로 버전·파일을 추가·삭제·이름 변경한다. BOM 표와 Gerber Viewer 는 각 항목 안의 버튼으로 연다. 이전 방식으로 올린 파일은 서버에 남아 있지만 이 화면에는 나오지 않는다. `project_releases`, `project_release_files` 표 추가(마이그레이션 0044), `/api/projects/{id}/releases`.
+
 ## V.0.75.001 — 2026-11-12
 
 ### 프로젝트 BOM 출고, BOM 자재 속성 표시, 거버 등록·뷰어 (DB 구조 변경 있음 — `alembic upgrade head` 필요, 데스크톱 앱 코드 변경은 버전뿐)

@@ -77,6 +77,8 @@ class MaterialMovement(Base):
     used_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # 프로젝트 BOM 에서 출고한 기록이면 그 BOM 줄 (BOM 줄이 지워져도 출고 기록은 남는다)
     bom_line_id: Mapped[int | None] = mapped_column(ForeignKey("project_bom_lines.id", ondelete="SET NULL"), nullable=True, index=True)
+    # 구매 품의서 입고(모바일 입고 화면 등)로 생긴 입고 기록이면 그 품의서 (입고를 취소하면 이 기록도 지운다)
+    proposal_id: Mapped[int | None] = mapped_column(ForeignKey("proposals.id", ondelete="SET NULL"), nullable=True, index=True)
     reason: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 출고 사유 (출고에서 필수)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)  # 메모(입고) / 사유 자세히(출고)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))

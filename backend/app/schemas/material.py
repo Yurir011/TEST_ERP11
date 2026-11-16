@@ -78,6 +78,12 @@ class MovementIn(_Qty):
         return self
 
 
+class ReceiveStockLine(_Qty):
+    """구매 품의서 입고에서 재고에 넣을 자재 한 줄: 자재 + 개수(또는 릴 묶음)."""
+
+    material_id: int
+
+
 class InitialInIn(_Qty):
     movement_date: date
 
