@@ -23,6 +23,13 @@ describe("거버 zip 읽기", () => {
     expect(r.boardTop).toContain("<svg");
   });
 
+  it("거버처럼 보여도 형식을 못 알아보는 파일이 섞여 있으면 그 파일만 건너뛰고 나머지를 그린다", async () => {
+    const zip = zipSync({ "top.gtl": enc(TOP), "outline.gko": enc(OUTLINE), "notes.txt": enc("T1C0.8 설명 메모 입니다 T2C1.0") });
+    const r = await renderGerberZip(zip.buffer as ArrayBuffer);
+    expect(r.layers.map((l) => l.filename).sort()).toEqual(["outline.gko", "top.gtl"]);
+    expect(r.skipped).toContain("notes.txt");
+  });
+
   it("거버가 하나도 없는 zip 은 알기 쉬운 오류를 낸다", async () => {
     const zip = zipSync({ "readme.txt": enc("없음") });
     await expect(renderGerberZip(zip.buffer as ArrayBuffer)).rejects.toThrow("거버 파일을 찾지 못했습니다");

@@ -78,7 +78,23 @@ export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender>
   }
   if (files.length === 0) throw new Error("zip 안에서 거버 파일을 찾지 못했습니다.");
 
-  const readResult = await core.read(files);
+  // 파일 하나라도 형식을 못 알아보면(.gbrjob 같은 보조 파일 등) 전체가 실패하므로, 그때는 하나씩 읽어 보고 읽히는 파일만 쓴다
+  let readResult;
+  try {
+    readResult = await core.read(files);
+  } catch {
+    const usable: File[] = [];
+    for (const f of files) {
+      try {
+        await core.read([f]);
+        usable.push(f);
+      } catch {
+        skipped.push(f.name);
+      }
+    }
+    if (usable.length === 0) throw new Error("zip 안에서 읽을 수 있는 거버 파일을 찾지 못했습니다.");
+    readResult = await core.read(usable);
+  }
   const plotResult = core.plot(readResult);
   const rendered = core.renderLayers(plotResult);
   const svgs = readResult.layers.map((layer) => ({ layer, svg: core.stringifySvg(rendered.rendersById[layer.id]) })).filter((x) => isSafeSvg(x.svg));
