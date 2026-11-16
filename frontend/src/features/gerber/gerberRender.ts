@@ -68,17 +68,18 @@ export function isSafeSvg(svg: string): boolean {
 export function classifyByName(filename: string, type: string, side: string): { type: string; side: string } {
   const n = filename.toLowerCase();
   if (/drillmap|drill_map|drawing/.test(n)) return { type: "drawing", side: "none" };
-  if (type !== "drawing" && side !== "all") return { type, side };
-  if (type === "outline" || type === "drill") return { type, side };
-  const s = /(^|[^a-z])(bot|bottom|back)([^a-z]|$)/.test(n) ? "bottom" : /(^|[^a-z])(top|front)([^a-z]|$)/.test(n) ? "top" : null;
-  let t: string | null = null;
   if (/profile|outline|edge/.test(n)) return { type: "outline", side: "all" };
+  // 파일 이름에 종류가 분명히 적혀 있으면 이름을 먼저 믿는다 (라이브러리가 Legend·Soldermask 를 동박으로 잘못 알아보는 경우가 있다)
+  let t: string | null = null;
   if (/solder_?mask|soldermask|mask/.test(n)) t = "soldermask";
   else if (/paste/.test(n)) t = "solderpaste";
   else if (/legend|silk/.test(n)) t = "silkscreen";
-  else if (/copper|signal|plane|\bcu\b/.test(n)) t = "copper";
+  else if (/copper|signal|plane|cu/.test(n)) t = "copper";
+  const s = /(^|[^a-z])(bot|bottom|back)([^a-z]|$)/.test(n) ? "bottom" : /(^|[^a-z])(top|front)([^a-z]|$)/.test(n) ? "top" : side === "top" || side === "bottom" || side === "inner" ? side : null;
   if (t && s) return { type: t, side: s };
-  return { type: type === "drawing" ? "drawing" : type, side: type === "drawing" ? "none" : side };
+  if (type === "outline" || type === "drill") return { type, side };
+  if (type !== "drawing" && side !== "all") return { type, side };
+  return { type: "drawing", side: "none" };
 }
 
 /** 극성이 한 번이라도 clear 로 바뀌는 파일을 극성 구간별 트리로 나눈다 (없으면 null). 구간 밖의 그리기 명령은 위치만 옮기는 move 로 바꿔 좌표 흐름은 유지한다 */

@@ -69,6 +69,8 @@ describe("도우미", () => {
     expect(classifyByName("DIAG_UPS_R2_Legend_Bot.gbr", "drawing", "all")).toEqual({ type: "silkscreen", side: "bottom" });
     expect(classifyByName("DIAG_UPS_R2_Profile.gbr", "drawing", "all")).toEqual({ type: "outline", side: "all" });
     expect(classifyByName("DIAG_UPS_R2_Drillmap_1.gbr", "drill", "all")).toEqual({ type: "drawing", side: "none" });
+    expect(classifyByName("DIAG_UPS_R2_Legend_Top.gbr", "copper", "top")).toEqual({ type: "silkscreen", side: "top" });
+    expect(classifyByName("DIAG_UPS_R2_Soldermask_Top.gbr", "copper", "top")).toEqual({ type: "soldermask", side: "top" });
     expect(classifyByName("top.gtl", "copper", "top")).toEqual({ type: "copper", side: "top" });
   });
   it("레이어 SVG 의 크기를 viewBox 에 맞추고, 스크립트가 든 SVG 는 거른다", () => {
