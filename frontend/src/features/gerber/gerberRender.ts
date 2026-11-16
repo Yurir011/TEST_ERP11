@@ -81,6 +81,48 @@ export function classifyByName(filename: string, type: string, side: string): { 
   return { type: type === "drawing" ? "drawing" : type, side: type === "drawing" ? "none" : side };
 }
 
+/** 극성이 한 번이라도 clear 로 바뀌는 파일을 극성 구간별 트리로 나눈다 (없으면 null). 구간 밖의 그리기 명령은 위치만 옮기는 move 로 바꿔 좌표 흐름은 유지한다 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function splitByPolarity<T extends { children: any[] }>(tree: T): { polarity: string; tree: T }[] | null {
+  if (!tree.children.some((n) => n.type === "loadPolarity" && n.polarity === "clear")) return null;
+  const owner: number[] = [];
+  const pieces: string[] = ["dark"];
+  let cur = 0;
+  tree.children.forEach((n, i) => {
+    if (n.type === "loadPolarity") {
+      const next = n.polarity === "clear" ? "clear" : "dark";
+      if (next !== pieces[cur]) {
+        pieces.push(next);
+        cur = pieces.length - 1;
+      }
+    }
+    owner[i] = cur;
+  });
+  return pieces.map((polarity, k) => ({
+    polarity,
+    tree: { ...tree, children: tree.children.map((n, i) => (n.type === "graphic" && owner[i] !== k ? { ...n, graphic: "move" } : n)) },
+  }));
+}
+
+/** 극성 구간별로 그린 SVG 를 합친다: dark 구간마다, 그 뒤에 오는 clear 구간들을 마스크로 지운다 */
+export function composePolarity(id: string, pieces: { polarity: string; svg: string }[], vb: [number, number, number, number]): string {
+  const [x, y, w, h] = vb;
+  const defs: string[] = [];
+  const body: string[] = [];
+  pieces.forEach((p, k) => {
+    if (p.polarity !== "dark") return;
+    const later = pieces.slice(k + 1).filter((q) => q.polarity === "clear");
+    if (later.length === 0) {
+      body.push(p.svg);
+      return;
+    }
+    const mid = `${id}m${k}`;
+    defs.push(`<mask id="${mid}" maskUnits="userSpaceOnUse" x="${x}" y="${y}" width="${w}" height="${h}"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff" stroke="none"/><g color="#000">${later.map((q) => q.svg).join("")}</g></mask>`);
+    body.push(`<g mask="url(#${mid})">${p.svg}</g>`);
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}" x="${x}" y="${y}" width="${w}" height="${h}"><defs>${defs.join("")}</defs>${body.join("")}</svg>`;
+}
+
 export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender> {
   const [{ unzipSync }, core] = await Promise.all([import("fflate"), import("@tracespace/core")]);
   let entries: Record<string, Uint8Array>;
@@ -115,7 +157,22 @@ export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender>
     if (usable.length === 0) throw new Error("zip 안에서 읽을 수 있는 거버 파일을 찾지 못했습니다.");
     readResult = await core.read(usable);
   }
-  const plotResult = core.plot(readResult);
+  // tracespace 는 레이어 안의 극성(%LPC*% = 지우기)을 무시하므로, 동박 면에 뚫린 구멍·간격이 사라진다.
+  // 그래서 극성이 바뀌는 파일은 극성 구간마다 따로 그려 두었다가 마스크로 지운다.
+  const polarityPieces: Record<string, { polarity: string; id: string }[]> = {};
+  const extraLayers: typeof readResult.layers = [];
+  const extraTrees: Record<string, (typeof readResult.parseTreesById)[string]> = {};
+  for (const layer of readResult.layers) {
+    const pieces = splitByPolarity(readResult.parseTreesById[layer.id]);
+    if (!pieces) continue;
+    polarityPieces[layer.id] = pieces.map((p, i) => {
+      const pid = `${layer.id}p${i}`;
+      extraLayers.push({ ...layer, id: pid });
+      extraTrees[pid] = p.tree;
+      return { polarity: p.polarity, id: pid };
+    });
+  }
+  const plotResult = core.plot({ layers: [...readResult.layers, ...extraLayers], parseTreesById: { ...readResult.parseTreesById, ...extraTrees } });
   const rendered = core.renderLayers(plotResult);
   const svgs = readResult.layers.map((layer) => ({ layer, svg: core.stringifySvg(rendered.rendersById[layer.id]) })).filter((x) => isSafeSvg(x.svg));
   if (svgs.length === 0) throw new Error("거버 파일을 그릴 수 없습니다. 파일 형식을 확인해 주세요.");
@@ -135,7 +192,9 @@ export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender>
   return {
     layers: svgs.map(({ layer, svg }) => {
       const byName = classifyByName(layer.filename, String(layer.type ?? "drawing"), String(layer.side ?? "all"));
-      return { id: layer.id, filename: layer.filename, type: byName.type, side: byName.side, svg: fitLayerSvg(svg, vb) };
+      const pieces = polarityPieces[layer.id];
+      const fitted = pieces ? composePolarity(layer.id, pieces.map((p) => ({ polarity: p.polarity, svg: fitLayerSvg(core.stringifySvg(rendered.rendersById[p.id]), vb) })), vb) : fitLayerSvg(svg, vb);
+      return { id: layer.id, filename: layer.filename, type: byName.type, side: byName.side, svg: fitted };
     }),
     viewBox: vb,
     boardTop,

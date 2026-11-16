@@ -30,6 +30,14 @@ describe("거버 zip 읽기", () => {
     expect(r.skipped).toContain("notes.txt");
   });
 
+  it("지우기 극성(%LPC*%)이 있는 동박은 지운 부분을 마스크로 뚫는다", async () => {
+    const pour = TOP.replace("D10*\nX5000000Y5000000D02*\nX25000000Y5000000D01*\nD11*\nX10000000Y10000000D03*\n", "G36*\nX0Y0D02*\nX30000000Y0D01*\nX30000000Y20000000D01*\nX0Y20000000D01*\nX0Y0D01*\nG37*\n%LPC*%\nD10*\nX5000000Y5000000D02*\nX25000000Y5000000D01*\n");
+    const zip = zipSync({ "top.gtl": enc(pour) });
+    const r = await renderGerberZip(zip.buffer as ArrayBuffer);
+    expect(r.layers[0].svg).toContain("<mask");
+    const plain = await renderGerberZip(zipSync({ "top.gtl": enc(TOP) }).buffer as ArrayBuffer);
+    expect(plain.layers[0].svg).not.toContain("<mask");
+  });
   it("거버가 하나도 없는 zip 은 알기 쉬운 오류를 낸다", async () => {
     const zip = zipSync({ "readme.txt": enc("없음") });
     await expect(renderGerberZip(zip.buffer as ArrayBuffer)).rejects.toThrow("거버 파일을 찾지 못했습니다");
