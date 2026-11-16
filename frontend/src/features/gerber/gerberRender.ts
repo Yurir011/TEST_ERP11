@@ -104,23 +104,35 @@ export function splitByPolarity<T extends { children: any[] }>(tree: T): { polar
   }));
 }
 
-/** 극성 구간별로 그린 SVG 를 합친다: dark 구간마다, 그 뒤에 오는 clear 구간들을 마스크로 지운다 */
-export function composePolarity(id: string, pieces: { polarity: string; svg: string }[], vb: [number, number, number, number]): string {
+type HastNode = { type: string; tagName?: string; properties?: Record<string, unknown>; children?: HastNode[] };
+const el = (tagName: string, properties: Record<string, unknown>, children: HastNode[]): HastNode => ({ type: "element", tagName, properties, children });
+
+/**
+ * 극성 구간별로 그린 SVG 요소를 합친다: dark 구간마다, 그 뒤에 오는 clear 구간들을 마스크로 지운다.
+ * 결과는 일반 레이어 렌더와 같은 모양(루트 svg + children)이라 실물 보기(renderBoard)에도 그대로 쓰인다.
+ */
+export function composePolarity(id: string, pieces: { polarity: string; render: HastNode }[], vb: [number, number, number, number]): HastNode {
   const [x, y, w, h] = vb;
-  const defs: string[] = [];
-  const body: string[] = [];
+  const defs: HastNode[] = [];
+  const body: HastNode[] = [];
   pieces.forEach((p, k) => {
     if (p.polarity !== "dark") return;
     const later = pieces.slice(k + 1).filter((q) => q.polarity === "clear");
     if (later.length === 0) {
-      body.push(p.svg);
+      body.push(...(p.render.children ?? []));
       return;
     }
     const mid = `${id}m${k}`;
-    defs.push(`<mask id="${mid}" maskUnits="userSpaceOnUse" x="${x}" y="${y}" width="${w}" height="${h}"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff" stroke="none"/><g color="#000">${later.map((q) => q.svg).join("")}</g></mask>`);
-    body.push(`<g mask="url(#${mid})">${p.svg}</g>`);
+    defs.push(
+      el("mask", { id: mid }, [
+        el("rect", { x, y, width: w, height: h, fill: "#fff" }, []),
+        el("g", { color: "#000" }, later.flatMap((q) => q.render.children ?? [])),
+      ]),
+    );
+    body.push(el("g", { mask: `url(#${mid})` }, p.render.children ?? []));
   });
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}" x="${x}" y="${y}" width="${w}" height="${h}"><defs>${defs.join("")}</defs>${body.join("")}</svg>`;
+  const root = pieces[0].render;
+  return { ...root, children: [...(defs.length ? [el("defs", {}, defs)] : []), ...body] };
 }
 
 export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender> {
@@ -159,6 +171,12 @@ export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender>
   }
   // tracespace 는 레이어 안의 극성(%LPC*% = 지우기)을 무시하므로, 동박 면에 뚫린 구멍·간격이 사라진다.
   // 그래서 극성이 바뀌는 파일은 극성 구간마다 따로 그려 두었다가 마스크로 지운다.
+  // 종류를 못 알아본 파일은 이름으로 추정한 값을 라이브러리 쪽 레이어에도 반영한다 (실물 보기와 외곽선 판정이 같은 값을 쓰도록)
+  for (const layer of readResult.layers) {
+    const c = classifyByName(layer.filename, String(layer.type ?? "drawing"), String(layer.side ?? "all"));
+    (layer as { type: string; side: string }).type = c.type;
+    (layer as { type: string; side: string }).side = c.side;
+  }
   const polarityPieces: Record<string, { polarity: string; id: string }[]> = {};
   const extraLayers: typeof readResult.layers = [];
   const extraTrees: Record<string, (typeof readResult.parseTreesById)[string]> = {};
@@ -174,6 +192,11 @@ export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender>
   }
   const plotResult = core.plot({ layers: [...readResult.layers, ...extraLayers], parseTreesById: { ...readResult.parseTreesById, ...extraTrees } });
   const rendered = core.renderLayers(plotResult);
+  for (const [lid, pieces] of Object.entries(polarityPieces)) {
+    const first = rendered.rendersById[lid] as unknown as { properties?: { viewBox?: string } };
+    const vbox = (String(first.properties?.viewBox ?? "0 -100 100 100").trim().split(/\s+/).map(Number) as [number, number, number, number]);
+    rendered.rendersById[lid] = composePolarity(lid, pieces.map((p) => ({ polarity: p.polarity, render: rendered.rendersById[p.id] as unknown as HastNode })), vbox) as unknown as (typeof rendered.rendersById)[string];
+  }
   const svgs = readResult.layers.map((layer) => ({ layer, svg: core.stringifySvg(rendered.rendersById[layer.id]) })).filter((x) => isSafeSvg(x.svg));
   if (svgs.length === 0) throw new Error("거버 파일을 그릴 수 없습니다. 파일 형식을 확인해 주세요.");
 
@@ -192,9 +215,7 @@ export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender>
   return {
     layers: svgs.map(({ layer, svg }) => {
       const byName = classifyByName(layer.filename, String(layer.type ?? "drawing"), String(layer.side ?? "all"));
-      const pieces = polarityPieces[layer.id];
-      const fitted = pieces ? composePolarity(layer.id, pieces.map((p) => ({ polarity: p.polarity, svg: fitLayerSvg(core.stringifySvg(rendered.rendersById[p.id]), vb) })), vb) : fitLayerSvg(svg, vb);
-      return { id: layer.id, filename: layer.filename, type: byName.type, side: byName.side, svg: fitted };
+      return { id: layer.id, filename: layer.filename, type: byName.type, side: byName.side, svg: fitLayerSvg(svg, vb) };
     }),
     viewBox: vb,
     boardTop,
@@ -213,12 +234,14 @@ export const layerLabel = (l: Pick<GerberLayer, "type" | "side">): string => [SI
 
 /** 레이어 색 (어두운 배경 위에서 잘 보이는 색) */
 export function layerColor(l: Pick<GerberLayer, "type" | "side">): string {
-  if (l.type === "copper") return l.side === "bottom" ? "#5aa0e0" : l.side === "inner" ? "#b58ce0" : "#e0b84a";
-  if (l.type === "soldermask") return l.side === "bottom" ? "#1f6f4e" : "#2f9e6a";
-  if (l.type === "silkscreen") return "#f2f2f2";
+  // KiCad 기본 색
+  const bot = l.side === "bottom";
+  if (l.type === "copper") return bot ? "#4d7fc4" : l.side === "inner" ? "#7fc87f" : "#c83434";
+  if (l.type === "soldermask") return bot ? "#02ffee" : "#840084";
+  if (l.type === "silkscreen") return bot ? "#e8b2a7" : "#f2eda1";
   if (l.type === "drill") return "#ff6b6b";
-  if (l.type === "outline") return "#e8e8e8";
-  if (l.type === "solderpaste") return "#9aa3ad";
+  if (l.type === "outline") return "#d0d2cd";
+  if (l.type === "solderpaste") return bot ? "#00c2c2" : "#b4a09d";
   return "#c0c6cc";
 }
 
