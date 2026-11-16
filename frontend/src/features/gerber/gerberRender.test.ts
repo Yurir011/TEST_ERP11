@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { composeLayers, defaultVisible, fitLayerSvg, isSafeSvg, layerLabel, layerOrder, looksLikeGerber, renderGerberZip } from "./gerberRender";
+import { classifyByName, composeLayers, defaultVisible, fitLayerSvg, isSafeSvg, layerLabel, layerOrder, looksLikeGerber, renderGerberZip } from "./gerberRender";
 
 // jsdom 에서는 TextEncoder 가 다른 Uint8Array 를 만들어 fflate 가 폴더로 오해하므로, 이 파일의 Uint8Array 로 다시 만든다
 const enc = (s: string) => Uint8Array.from(new TextEncoder().encode(s));
@@ -54,6 +54,14 @@ describe("도우미", () => {
     expect(looksLikeGerber(enc(DRILL))).toBe(true);
     expect(looksLikeGerber(enc("그냥 글입니다"))).toBe(false);
     expect(looksLikeGerber(new Uint8Array([0, 1, 2, 3]))).toBe(false);
+  });
+  it("종류를 못 알아본 파일은 이름으로 추정하고, 도면은 처음에 꺼 둔다", () => {
+    expect(classifyByName("DIAG_UPS_R2_Copper_Signal_Bot.gbr", "drawing", "all")).toEqual({ type: "copper", side: "bottom" });
+    expect(classifyByName("DIAG_UPS_R2_Soldermask_Top.gbr", "drawing", "all")).toEqual({ type: "soldermask", side: "top" });
+    expect(classifyByName("DIAG_UPS_R2_Legend_Bot.gbr", "drawing", "all")).toEqual({ type: "silkscreen", side: "bottom" });
+    expect(classifyByName("DIAG_UPS_R2_Profile.gbr", "drawing", "all")).toEqual({ type: "outline", side: "all" });
+    expect(classifyByName("DIAG_UPS_R2_Drillmap_1.gbr", "drill", "all")).toEqual({ type: "drawing", side: "none" });
+    expect(classifyByName("top.gtl", "copper", "top")).toEqual({ type: "copper", side: "top" });
   });
   it("레이어 SVG 의 크기를 viewBox 에 맞추고, 스크립트가 든 SVG 는 거른다", () => {
     expect(fitLayerSvg('<svg viewBox="0 -20 30 20" width="30mm" height="20mm"><path/></svg>', [0, -20, 30, 20])).toBe('<svg viewBox="0 -20 30 20" x="0" y="-20" width="30" height="20"><path/></svg>');

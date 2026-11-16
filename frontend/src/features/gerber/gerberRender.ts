@@ -61,6 +61,26 @@ export function isSafeSvg(svg: string): boolean {
   return !/<script|<foreignObject|\son\w+\s*=|javascript:/i.test(svg);
 }
 
+/**
+ * 라이브러리가 종류를 못 알아본 파일(예: DIAG_UPS_R2_Copper_Signal_Bot.gbr)은 파일 이름으로 종류·면을 추정한다.
+ * 이름으로도 모르면 그대로 두고, 도면(drawing)은 처음에 꺼 둔다 (면 구분이 없는 레이어가 보드 위를 덮어 회색 판으로 보이는 것을 막는다).
+ */
+export function classifyByName(filename: string, type: string, side: string): { type: string; side: string } {
+  const n = filename.toLowerCase();
+  if (/drillmap|drill_map|drawing/.test(n)) return { type: "drawing", side: "none" };
+  if (type !== "drawing" && side !== "all") return { type, side };
+  if (type === "outline" || type === "drill") return { type, side };
+  const s = /(^|[^a-z])(bot|bottom|back)([^a-z]|$)/.test(n) ? "bottom" : /(^|[^a-z])(top|front)([^a-z]|$)/.test(n) ? "top" : null;
+  let t: string | null = null;
+  if (/profile|outline|edge/.test(n)) return { type: "outline", side: "all" };
+  if (/solder_?mask|soldermask|mask/.test(n)) t = "soldermask";
+  else if (/paste/.test(n)) t = "solderpaste";
+  else if (/legend|silk/.test(n)) t = "silkscreen";
+  else if (/copper|signal|plane|\bcu\b/.test(n)) t = "copper";
+  if (t && s) return { type: t, side: s };
+  return { type: type === "drawing" ? "drawing" : type, side: type === "drawing" ? "none" : side };
+}
+
 export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender> {
   const [{ unzipSync }, core] = await Promise.all([import("fflate"), import("@tracespace/core")]);
   let entries: Record<string, Uint8Array>;
@@ -113,7 +133,10 @@ export async function renderGerberZip(bytes: ArrayBuffer): Promise<GerberRender>
     // 외곽선이 없는 등 실물 모양을 만들 수 없는 거버: 레이어로만 본다
   }
   return {
-    layers: svgs.map(({ layer, svg }) => ({ id: layer.id, filename: layer.filename, type: String(layer.type ?? "drawing"), side: String(layer.side ?? "all"), svg: fitLayerSvg(svg, vb) })),
+    layers: svgs.map(({ layer, svg }) => {
+      const byName = classifyByName(layer.filename, String(layer.type ?? "drawing"), String(layer.side ?? "all"));
+      return { id: layer.id, filename: layer.filename, type: byName.type, side: byName.side, svg: fitLayerSvg(svg, vb) };
+    }),
     viewBox: vb,
     boardTop,
     boardBottom,

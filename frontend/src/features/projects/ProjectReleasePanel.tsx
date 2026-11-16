@@ -254,7 +254,7 @@ export function ProjectReleasePanel({
             onChange={(e) => setVersion(e.target.value)}
             placeholder="예: V.1.20.000"
             maxLength={30}
-            className="w-36 min-w-0 rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary"
+            className="w-72 max-w-full min-w-0 rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary"
           />
           <input type="date" aria-label="버전 날짜" value={date} max="2999-12-31" onChange={(e) => setDate(e.target.value || todayISO())} className="rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary" />
           <button type="submit" disabled={busy || !version.trim()} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50">
@@ -274,9 +274,8 @@ export function ProjectReleasePanel({
           <div className="flex min-w-0 flex-col md:border-r md:border-border md:pr-4">
             <b className="mb-2 block text-sm">히스토리</b>
             {rows.length === 0 && <p className="py-3 text-xs text-text-muted">[파일 등록]으로 첫 버전을 만들어 주세요.</p>}
-            {rows.map((r, i) => (
+            {rows.map((r) => (
               <div key={r.id}>
-                {i > 0 && <div className="ml-1.5 text-xl leading-none text-text-muted" aria-hidden>⇧</div>}
                 <button
                   type="button"
                   aria-pressed={cur?.id === r.id}
