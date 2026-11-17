@@ -46,7 +46,7 @@ export const PROOF_TYPE_LABELS: Record<ProofType, string> = {
 export type CardType = string;
 export type BankType = string;
 
-// 입출금 분류 13개. 인건비/차량/제조만 세부 항목 콤보박스를 갖는다 (PAYMENT_CATEGORY_ITEMS 참고).
+// 입출금 분류 14개. 인건비/차량/제조만 세부 항목 콤보박스를 갖는다 (PAYMENT_CATEGORY_ITEMS 참고).
 export const PAYMENT_CATEGORIES = [
   "복리후생비",
   "소모품비",
@@ -60,6 +60,7 @@ export const PAYMENT_CATEGORIES = [
   "외상매입금",
   "선수금",
   "미지급금",
+  "접대비",
   "기타",
 ] as const;
 
