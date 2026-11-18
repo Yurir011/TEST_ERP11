@@ -1,4 +1,5 @@
-import { Paperclip, Send, X } from "lucide-react";
+import { Paperclip, Send, Smile, X } from "lucide-react";
+import { EmojiPicker } from "./EmojiPicker";
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { MAX_ATTACHMENT_BYTES, MAX_BODY_LENGTH, formatBytes } from "./messengerState";
 
@@ -66,6 +67,23 @@ export function MessageInput({
   const [staged, setStaged] = useState<File[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+
+  /** 커서 위치(선택한 글이 있으면 그 자리)에 이모지를 넣고 커서를 이모지 뒤로 옮긴다. */
+  function insertEmoji(emoji: string) {
+    const el = textRef.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + emoji + text.slice(end);
+    if (next.length > MAX_BODY_LENGTH) return;
+    setText(next);
+    const pos = start + emoji.length;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(pos, pos);
+    });
+  }
 
   /** 파일들을 "보낼 파일"에 더한다. 크기 제한을 넘는 파일은 빼고 이유를 보여 준다. */
   function pickFiles(files: File[]) {
@@ -117,7 +135,8 @@ export function MessageInput({
   }
 
   return (
-    <div className="border-t border-border bg-surface">
+    <div className="relative border-t border-border bg-surface">
+      {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
       {(staged.length > 0 || fileError) && (
         <div className="px-3 pt-3">
           {staged.length > 0 && (
@@ -157,7 +176,19 @@ export function MessageInput({
             if (files.length) pickFiles(files);
           }}
         />
+        <button
+          type="button"
+          title="이모티콘"
+          aria-label="이모티콘"
+          aria-expanded={emojiOpen}
+          disabled={disabled}
+          onClick={() => setEmojiOpen((v) => !v)}
+          className="p-2.5 rounded-lg text-text-muted hover:bg-bg hover:text-text disabled:opacity-50"
+        >
+          <Smile size={18} />
+        </button>
         <textarea
+          ref={textRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
