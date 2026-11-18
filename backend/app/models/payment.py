@@ -34,10 +34,11 @@ class ProofType(str, enum.Enum):
     other = "other"  # 기타 (자유 입력)
 
 
-# 입출금 분류(14개). 콤보박스 선택지로 사용 — category 컬럼은 자유 입력 String이지만 이 목록으로 값을 제한한다.
+# 입출금 분류(15개). 콤보박스 선택지로 사용 — category 컬럼은 자유 입력 String이지만 이 목록으로 값을 제한한다.
 PAYMENT_CATEGORIES = (
     "복리후생비",
     "소모품비",
+    "배송비",
     "공과금",
     "지급수수료",
     "인건비",
