@@ -115,9 +115,9 @@ export function ProjectProgressSets({ items }: { items: ProgressOverviewItem[] }
           <div
             key={p.id}
             onClick={() => navigate(`/projects/${p.id}`)}
-            className="grid cursor-pointer grid-cols-[210px_1fr] overflow-hidden rounded-2xl border border-border bg-surface transition-shadow hover:shadow-md"
+            className="grid cursor-pointer grid-cols-[280px_1fr] overflow-hidden rounded-2xl border border-border bg-surface transition-shadow hover:shadow-md"
           >
-            <div className="flex flex-col items-center gap-3 border-r border-border p-[18px]">
+            <div className="flex flex-col items-center gap-4 border-r border-border px-8 py-[22px]">
               <Ring percent={p.progress_percent} color={color} />
               <dl className="grid w-full grid-cols-[auto_1fr] gap-x-2.5 gap-y-1 text-xs">
                 <dt className="text-text-muted">거래처</dt>
@@ -133,7 +133,7 @@ export function ProjectProgressSets({ items }: { items: ProgressOverviewItem[] }
               </dl>
             </div>
 
-            <div className="flex min-w-0 flex-col gap-3.5 px-[22px] py-[18px]">
+            <div className="flex min-w-0 max-w-[640px] flex-col gap-3.5 px-[28px] py-[22px]">
               <div className="flex items-center gap-2.5">
                 <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{p.name}</span>
                 <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${TONE_CHIP[due.tone]}`}>{due.label}</span>
