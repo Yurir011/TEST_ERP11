@@ -62,7 +62,7 @@ export function ProjectDocumentsTable({
       {/* 표 스타일: 연한 세로선 + 줄무늬 + 톤다운 파랑 머리글 (첫 열 앞만 제외). 짧은 열은 내용 폭에 맞춘다. */}
       <table className="w-full text-sm [&_th:not(:first-child)]:border-l [&_th:not(:first-child)]:border-white/20 [&_td:not(:first-child)]:border-l [&_td:not(:first-child)]:border-text/[0.07]">
         <thead>
-          <tr className="text-center bg-[#6a7eb3] border-b border-[#5a6ea3]">
+          <tr className="text-center bg-header border-b border-header-border">
             {lockedDocType === "tax_invoice" && <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">구분</th>}
             {lockedDocType !== "tax_invoice" && (
               <th className="py-2.5 px-4 font-semibold text-white text-center w-px whitespace-nowrap">구분</th>

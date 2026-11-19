@@ -66,7 +66,7 @@ function Pane({
             <col style={{ width: "5rem" }} />
           </colgroup>
           <thead>
-            <tr className="bg-[#6a7eb3] border-b border-[#5a6ea3]">
+            <tr className="bg-header border-b border-header-border">
               <th className={TH}>날짜</th>
               <th className={TH}>거래처</th>
               <th className={TH}>금액</th>

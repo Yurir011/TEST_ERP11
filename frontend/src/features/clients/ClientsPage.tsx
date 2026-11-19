@@ -231,7 +231,7 @@ export function ClientsPage() {
           <table className="w-full min-w-[920px] table-fixed text-sm border-collapse">
             <thead>
               {/* 머리글: 중간 톤 남색 띠에 흰 글씨와 아래선, 글자는 가로 가운데 */}
-              <tr className="text-center text-xs bg-[#6a7eb3] border-b border-[#5a6ea3]">
+              <tr className="text-center text-xs bg-header border-b border-header-border">
                 <th className="py-3.5 px-4 font-semibold text-white text-center w-[22%]">업체명</th>
                 <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[14%]">사업자번호</th>
                 <th className="py-3.5 px-4 font-semibold text-white text-center whitespace-nowrap w-[14%]">유선번호</th>

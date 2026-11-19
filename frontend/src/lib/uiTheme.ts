@@ -30,6 +30,8 @@ function lightTheme(c: {
   primary: string;
   hover: string;
   soft: string;
+  header: string;
+  headerBorder: string;
 }): Record<string, string> {
   return {
     "--color-bg": c.bg,
@@ -42,6 +44,8 @@ function lightTheme(c: {
     "--color-primary-hover": c.hover,
     "--color-tile-blue": c.soft,
     "--color-tile-blue-fg": c.primary,
+    "--color-header": c.header,
+    "--color-header-border": c.headerBorder,
   };
 }
 
@@ -53,7 +57,7 @@ export const UI_THEMES: UiThemeInfo[] = [
     description: "따뜻한 갈색 포인트",
     swatch: ["#f7f6f5", "#f1ede9", "#8c5a32"],
     dark: false,
-    vars: lightTheme({ bg: "#f7f6f5", sidebar: "#f1ede9", border: "#e2dcd6", text: "#211d1a", muted: "#665d55", primary: "#8c5a32", hover: "#764a27", soft: "#f4e9dc" }),
+    vars: lightTheme({ bg: "#f7f6f5", sidebar: "#f1ede9", border: "#e2dcd6", text: "#211d1a", muted: "#665d55", primary: "#8c5a32", hover: "#764a27", soft: "#f4e9dc", header: "#826a54", headerBorder: "#6e5844" }),
   },
   {
     key: "rose",
@@ -61,7 +65,7 @@ export const UI_THEMES: UiThemeInfo[] = [
     description: "부드러운 와인 핑크",
     swatch: ["#faf6f6", "#f5eaea", "#b04a62"],
     dark: false,
-    vars: lightTheme({ bg: "#faf6f6", sidebar: "#f5eaea", border: "#ebdcdd", text: "#2a2022", muted: "#75636a", primary: "#b04a62", hover: "#963d53", soft: "#f8e6ea" }),
+    vars: lightTheme({ bg: "#faf6f6", sidebar: "#f5eaea", border: "#ebdcdd", text: "#2a2022", muted: "#75636a", primary: "#b04a62", hover: "#963d53", soft: "#f8e6ea", header: "#a2707f", headerBorder: "#8d5f6d" }),
   },
   {
     key: "lavender",
@@ -69,7 +73,7 @@ export const UI_THEMES: UiThemeInfo[] = [
     description: "산뜻한 보라",
     swatch: ["#f7f5fb", "#eeeaf7", "#7357c8"],
     dark: false,
-    vars: lightTheme({ bg: "#f7f5fb", sidebar: "#eeeaf7", border: "#e3ddf0", text: "#231f30", muted: "#6a6480", primary: "#7357c8", hover: "#5e44ad", soft: "#efeafb" }),
+    vars: lightTheme({ bg: "#f7f5fb", sidebar: "#eeeaf7", border: "#e3ddf0", text: "#231f30", muted: "#6a6480", primary: "#7357c8", hover: "#5e44ad", soft: "#efeafb", header: "#8377aa", headerBorder: "#716596" }),
   },
   {
     key: "teal",
@@ -77,7 +81,7 @@ export const UI_THEMES: UiThemeInfo[] = [
     description: "시원한 청록",
     swatch: ["#f2f7f7", "#e3efef", "#0e7c86"],
     dark: false,
-    vars: lightTheme({ bg: "#f2f7f7", sidebar: "#e3efef", border: "#d5e5e5", text: "#14282b", muted: "#58706f", primary: "#0e7c86", hover: "#0b656d", soft: "#dff1f2" }),
+    vars: lightTheme({ bg: "#f2f7f7", sidebar: "#e3efef", border: "#d5e5e5", text: "#14282b", muted: "#58706f", primary: "#0e7c86", hover: "#0b656d", soft: "#dff1f2", header: "#4e7e84", headerBorder: "#406d73" }),
   },
   {
     key: "hotpink",
@@ -85,7 +89,7 @@ export const UI_THEMES: UiThemeInfo[] = [
     description: "선명한 핫핑크",
     swatch: ["#fff7fa", "#ffe6f1", "#f0147d"],
     dark: false,
-    vars: lightTheme({ bg: "#fff7fa", sidebar: "#ffe6f1", border: "#f6d3e3", text: "#2a1220", muted: "#82506b", primary: "#f0147d", hover: "#d10f6b", soft: "#ffe0ee" }),
+    vars: lightTheme({ bg: "#fff7fa", sidebar: "#ffe6f1", border: "#f6d3e3", text: "#2a1220", muted: "#82506b", primary: "#f0147d", hover: "#d10f6b", soft: "#ffe0ee", header: "#bc648d", headerBorder: "#a6557c" }),
   },
   {
     key: "midnight",
@@ -109,6 +113,8 @@ export const UI_THEMES: UiThemeInfo[] = [
       "--color-badge-bg": "#4a1d33",
       "--color-badge-fg": "#fbcfe8",
       "--color-badge-border": "#7a2f52",
+      "--color-header": "#3e4f73",
+      "--color-header-border": "#324160",
       "--color-tile-blue": "#26386a",
       "--color-tile-blue-fg": "#8cc1ff",
       "--color-tile-green": "#1f3b33",

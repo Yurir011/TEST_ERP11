@@ -41,7 +41,7 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
           <col style={{ width: "8.5rem" }} /> {/* 영수증·인쇄·엑셀·삭제 아이콘 4개가 한 줄에 들어가는 고정 폭 */}
         </colgroup>
         <thead>
-          <tr className="text-center text-white bg-[#6a7eb3] border-b border-[#5a6ea3]">
+          <tr className="text-center text-white bg-header border-b border-header-border">
             <th className="py-2.5 px-2 font-semibold whitespace-nowrap">구분</th>
             <th className="py-2.5 px-2 font-semibold whitespace-nowrap">날짜</th>
             <th className="py-2.5 px-2 font-semibold whitespace-nowrap">분류</th>

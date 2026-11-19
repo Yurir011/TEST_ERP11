@@ -342,7 +342,7 @@ export function TransactionsPage() {
               <col style={{ width: "5rem" }} />
             </colgroup>
             <thead>
-              <tr className="text-left text-white bg-[#6a7eb3] border-b border-[#5a6ea3]">
+              <tr className="text-left text-white bg-header border-b border-header-border">
                 <th className="py-2.5 px-4 font-semibold">구분</th>
                 <th className="py-2.5 px-4 font-semibold">날짜</th>
                 <th className="py-2.5 px-4 font-semibold">거래처</th>
