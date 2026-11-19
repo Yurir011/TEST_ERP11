@@ -1,8 +1,7 @@
 /**
- * 입금·출금·매출·매입(과 이체·결제·환불·잔액조회) 구분 표시: 구분별 색 둥근 네모(테두리 없음) 안에 남색 선 아이콘만 보인다.
+ * 입금·출금·매출·매입(과 이체·결제·환불·잔액조회) 구분 표시: 구분별 연한 색 원 안에 같은 색의 선 아이콘이 들어간다.
  * 입출금관리와 매입매출관리의 목록·상세에서 같은 모양으로 쓴다. 이름은 마우스를 올리면 뜨고(title), 화면 낭독용 이름(aria-label)으로 남긴다.
- * 그림 색은 어두운 남색에 본문 글자색을 섞어, 밝은 테마에서는 남색, 어두운 테마에서는 밝은 파랑으로 보이게 한다.
- * Tailwind가 클래스를 소스에서 그대로 찾기 때문에 색마다 전체 문자열을 적어 두었다.
+ * 색은 채도를 낮춘 뮤트 톤(index.css 의 --color-tm-*)이고, 원 바탕은 같은 색을 14% 섞은 흰색이다.
  */
 export type TypeMarkKind = "deposit" | "withdrawal" | "sales" | "purchase" | "transfer" | "payment" | "refund" | "balance";
 
@@ -17,92 +16,62 @@ const LABELS: Record<TypeMarkKind, string> = {
   balance: "잔액조회",
 };
 
-/** 바탕 색: 입금 초록, 출금 빨강, 매출 파랑, 매입 주황, 이체 보라, 결제 청록, 환불 호박색, 잔액조회 회색 */
-const CIRCLE: Record<TypeMarkKind, string> = {
-  deposit: "bg-[color-mix(in_srgb,var(--color-tile-green-fg)_20%,var(--color-surface))]",
-  withdrawal: "bg-[color-mix(in_srgb,var(--color-danger)_20%,var(--color-surface))]",
-  sales: "bg-[color-mix(in_srgb,var(--color-tile-blue-fg)_20%,var(--color-surface))]",
-  purchase: "bg-[color-mix(in_srgb,var(--color-tile-orange-fg)_20%,var(--color-surface))]",
-  transfer: "bg-[color-mix(in_srgb,var(--color-tile-purple-fg)_20%,var(--color-surface))]",
-  payment: "bg-[color-mix(in_srgb,var(--color-tile-teal-fg)_20%,var(--color-surface))]",
-  refund: "bg-[color-mix(in_srgb,var(--color-tile-yellow-fg)_20%,var(--color-surface))]",
-  balance: "bg-[color-mix(in_srgb,var(--color-text-muted)_20%,var(--color-surface))]",
+/** 아이콘·바탕에 쓰는 색 변수: 입금 세이지 초록, 출금 로즈, 매출 슬레이트, 매입 클레이, 이체 모브, 결제 청회색, 환불 샌드, 잔액조회 차콜 */
+const TONE: Record<TypeMarkKind, string> = {
+  deposit: "var(--color-tm-deposit)",
+  withdrawal: "var(--color-tm-withdrawal)",
+  sales: "var(--color-tm-sales)",
+  purchase: "var(--color-tm-purchase)",
+  transfer: "var(--color-tm-transfer)",
+  payment: "var(--color-tm-payment)",
+  refund: "var(--color-tm-refund)",
+  balance: "var(--color-tm-balance)",
 };
 
-// 밝은 테마에서 #3E5799 정도의 연한 남색, 어두운 테마에서는 본문 글자색과 섞여 밝은 파랑이 된다
-const ICON_COLOR = "text-[color-mix(in_srgb,#537ce7_60%,var(--color-text))]";
-
-// 24x24 단순 선 아이콘: 입금=은행과 들어오는 화살표, 출금=지갑과 오른쪽으로 나가는 화살표, 매출=문서와 글줄 두 줄,
-// 매입=장바구니, 이체=좌우 화살표, 결제=카드, 환불=되돌리기 화살표, 잔액조회=막대 그래프
+// 24x24 단순 선 아이콘: 입금=아래로 향한 화살표와 바, 출금=위로 향한 화살표와 바(바는 둘 다 아래), 매출=오르는 선, 매입=쇼핑백,
+// 이체=좌우 화살표, 결제=카드, 환불=되돌리기 화살표, 잔액조회=막대
 function Glyph({ kind }: { kind: TypeMarkKind }) {
   switch (kind) {
     case "deposit":
-      return (
-        <>
-          <path d="M10 7l8 4.5H2z" />
-          <path d="M4.5 14.5v4M8 14.5v4M12 14.5v4M15.5 14.5v4M2 21h16" />
-          <path d="M20.5 2v8M17.5 7l3 3 3-3" />
-        </>
-      );
+      return <path d="M12 3v12M7 10l5 5 5-5M4 20h16" />;
     case "withdrawal":
-      return (
-        <>
-          <path d="M2 12a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" />
-          <path d="M20 14h-3a1.5 1.5 0 0 0 0 3h3" />
-          <path d="M8 4h14M18 1l4 3-4 3" />
-        </>
-      );
+      return <path d="M12 15V3M7 8l5-5 5 5M4 20h16" />;
     case "sales":
-      return (
-        <>
-          <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
-          <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-          <path d="M8 13h8M8 17h8" />
-        </>
-      );
+      return <path d="M3 17l6-6 4 4 8-8M15 7h6v6" />;
     case "purchase":
       return (
         <>
-          <circle cx="8" cy="21" r="1" />
-          <circle cx="19" cy="21" r="1" />
-          <path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6L22 7H5" />
+          <path d="M6 8h12l1 12H5z" />
+          <path d="M9 8a3 3 0 0 1 6 0" />
         </>
       );
     case "transfer":
-      return <path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4" />;
+      return <path d="M4 8h16M16 4l4 4-4 4M20 16H4M8 12l-4 4 4 4" />;
     case "payment":
       return (
         <>
-          <rect x="2" y="5" width="20" height="14" rx="2" />
-          <path d="M2 10h20" />
+          <rect x="3" y="6" width="18" height="12" rx="2.5" />
+          <path d="M3 10.5h18M7 15h3" />
         </>
       );
     case "refund":
-      return (
-        <>
-          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-          <path d="M3 3v5h5" />
-        </>
-      );
+      return <path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5M4 4v4.5h4.5" />;
     case "balance":
-      return (
-        <>
-          <path d="M3 3v16a2 2 0 0 0 2 2h16" />
-          <path d="M18 17V9M13 17V5M8 17v-3" />
-        </>
-      );
+      return <path d="M5 20v-8M12 20V5M19 20v-5" />;
   }
 }
 
 export function TypeMark({ kind, className = "" }: { kind: TypeMarkKind; className?: string }) {
+  const tone = TONE[kind];
   return (
     <span
-      className={`inline-grid place-items-center w-8 h-8 rounded-[9px] shrink-0 ${CIRCLE[kind]} ${ICON_COLOR} ${className}`}
+      className={`inline-grid place-items-center w-8 h-8 rounded-full shrink-0 ${className}`}
+      style={{ color: tone, backgroundColor: `color-mix(in srgb, ${tone} 14%, var(--color-surface))` }}
       title={LABELS[kind]}
       role="img"
       aria-label={LABELS[kind]}
     >
-      <svg viewBox="0 0 24 24" className={kind === "purchase" ? "w-[18px] h-[18px]" : "w-5 h-5"} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="w-[17px] h-[17px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <Glyph kind={kind} />
       </svg>
     </span>
