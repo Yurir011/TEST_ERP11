@@ -92,7 +92,7 @@ export function ScheduleReminderPopup() {
             return (
               <li key={e.id} className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{e.title}</p>
+                  <p className="truncate text-sm font-semibold">{e.sticker}{e.title}</p>
                   <p className="text-xs text-text-muted">{e.start_date === e.end_date ? e.start_date : `${e.start_date} ~ ${e.end_date}`}</p>
                 </div>
                 <span className="shrink-0 rounded-md px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: c.bg, color: c.fg }}>

@@ -26,6 +26,16 @@ EVENT_COLORS = (
 )
 
 
+class ScheduleDayColor(Base):
+    """직원별로 캘린더 날짜 칸에 칠한 배경색. 색을 지우면 행을 삭제한다."""
+
+    __tablename__ = "schedule_day_colors"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    color: Mapped[str] = mapped_column(String(20))
+
+
 class ScheduleEvent(Base):
     __tablename__ = "schedule_events"
 
@@ -36,6 +46,7 @@ class ScheduleEvent(Base):
     end_date: Mapped[date] = mapped_column(Date, index=True)
     color: Mapped[str] = mapped_column(String(20), default="grayblue")
     is_lunar: Mapped[bool] = mapped_column(Boolean, default=False)  # 음력 날짜로 입력된 일정인지 (저장은 항상 환산된 양력 날짜)
+    sticker: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 스티커(이모지 1개, 일정 칩 앞에 표시)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     # 알림: 시작일 며칠 전부터 팝업으로 알릴지 (None=알림 없음, 0=당일, 1·3·7=그 일수 전)

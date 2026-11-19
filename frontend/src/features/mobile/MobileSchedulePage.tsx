@@ -234,6 +234,7 @@ export function MobileSchedulePage() {
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: eventColorStyle(ev.color).fg }} />
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm ${ev.is_completed ? "line-through text-text-muted" : ""}`}>
+                      {ev.sticker}
                       {ev.is_lunar && "[음] "}
                       {ev.title}
                     </p>

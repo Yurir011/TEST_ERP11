@@ -21,6 +21,7 @@ export function CalendarPage() {
   const [view, setView] = useState<CalendarView>("month");
   const [anchor, setAnchor] = useState(new Date());
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
+  const [dayColors, setDayColors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const [modalDate, setModalDate] = useState<string | null>(null);
@@ -44,8 +45,33 @@ export function CalendarPage() {
       });
   }
 
+  function loadDayColors() {
+    const start = toISODate(rangeStart);
+    const end = toISODate(rangeEnd);
+    apiGet<{ day: string; color: string }[]>(`/api/schedule/day-colors?start=${start}&end=${end}`)
+      .then((rows) => setDayColors(Object.fromEntries(rows.map((r) => [r.day, r.color]))))
+      .catch((err) => logError("Calendar", "날짜 색 조회 실패", err));
+  }
+
+  async function handleDayColor(date: string, color: string | null) {
+    logDebug("Calendar", `날짜 색 변경: ${date} -> ${color}`);
+    setDayColors((prev) => {
+      const next = { ...prev };
+      if (color) next[date] = color;
+      else delete next[date];
+      return next;
+    });
+    try {
+      await apiPut(`/api/schedule/day-colors/${date}`, { color });
+    } catch (err) {
+      logError("Calendar", "날짜 색 변경 실패", err);
+      loadDayColors();
+    }
+  }
+
   useEffect(() => {
     loadEvents();
+    loadDayColors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, anchor.getFullYear(), anchor.getMonth(), anchor.getDate()]);
 
@@ -113,6 +139,7 @@ export function CalendarPage() {
         color: ev.color,
         is_lunar: ev.is_lunar,
         remind_days_before: ev.remind_days_before,
+        sticker: ev.sticker,
       });
       loadEvents();
     } catch (err) {
@@ -318,6 +345,8 @@ export function CalendarPage() {
           days={monthDays}
           anchor={anchor}
           eventsByDate={eventsByDate}
+          dayColors={dayColors}
+          onDayColor={handleDayColor}
           onDayClick={openCreate}
           onDayNumberClick={openDay}
           onEventClick={openEdit}

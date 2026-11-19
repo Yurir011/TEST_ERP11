@@ -75,6 +75,7 @@ export function WeekView({ days, eventsByDate, onDayClick, onDayNumberClick, onE
                   style={{ backgroundColor: eventColorStyle(ev.color).bg, color: eventColorStyle(ev.color).fg }}
                   title={ev.title}
                 >
+                  {ev.sticker}
                   {ev.is_lunar && "[음] "}
                   {ev.title}
                 </div>

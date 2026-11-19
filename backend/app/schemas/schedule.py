@@ -23,6 +23,15 @@ class ScheduleEventCreate(BaseModel):
     # 음력은 해마다 대응 양력 날짜가 달라 서버에서 solar+N년 방식으로 생성할 수 없어 이 목록을 그대로 사용한다.
     lunar_occurrence_dates: list[date] | None = None
     remind_days_before: int | None = None  # None=알림 없음, 0=당일, 1·3·7=며칠 전
+    sticker: str | None = None  # 이모지 1개(최대 16자). 비우면 None
+
+    @field_validator("sticker")
+    @classmethod
+    def validate_sticker(cls, v: str | None) -> str | None:
+        v = (v or "").strip()
+        if len(v) > 16:
+            raise ValueError("sticker is too long")
+        return v or None
 
     @field_validator("remind_days_before")
     @classmethod
@@ -82,10 +91,27 @@ class ScheduleEventOut(BaseModel):
     is_completed: bool
     sort_order: int
     remind_days_before: int | None = None
+    sticker: str | None = None
     recurrence_group_id: str | None
     created_by: int
     created_by_name: str
     created_at: datetime
+
+
+class DayColorIn(BaseModel):
+    color: str | None = None  # None 이면 색 지우기
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: str | None) -> str | None:
+        if v is not None and v not in EVENT_COLORS:
+            raise ValueError(f"color must be one of {EVENT_COLORS}")
+        return v
+
+
+class DayColorOut(BaseModel):
+    day: date
+    color: str
 
 
 class ScheduleReorderRequest(BaseModel):

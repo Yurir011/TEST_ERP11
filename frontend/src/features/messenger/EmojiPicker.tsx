@@ -47,7 +47,15 @@ export const EMOJI_GROUPS: { label: string; icon: string; emojis: string[] }[] =
 ];
 
 /** 이모지 고르기 팝업. 이모지를 누르면 onPick 으로 넘기고 팝업은 열어 둔다(여러 개 연달아 넣을 수 있게). 바깥을 누르거나 Esc 로 닫힌다. */
-export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
+export function EmojiPicker({
+  onPick,
+  onClose,
+  className = "absolute bottom-full left-3 z-40 mb-2",
+}: {
+  onPick: (emoji: string) => void;
+  onClose: () => void;
+  className?: string;
+}) {
   const [group, setGroup] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -69,7 +77,7 @@ export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => vo
       ref={ref}
       role="dialog"
       aria-label="이모티콘 선택"
-      className="absolute bottom-full left-3 z-40 mb-2 w-72 rounded-lg border border-border bg-surface shadow-lg"
+      className={`${className} w-72 rounded-lg border border-border bg-surface shadow-lg`}
     >
       <div className="flex border-b border-border">
         {EMOJI_GROUPS.map((g, i) => (

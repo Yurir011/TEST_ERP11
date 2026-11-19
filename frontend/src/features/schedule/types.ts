@@ -52,6 +52,7 @@ export interface ScheduleEvent {
   is_completed: boolean;
   sort_order: number;
   remind_days_before: number | null;
+  sticker?: string | null;
   recurrence_group_id: string | null;
   created_by: number;
   created_by_name: string;
@@ -72,6 +73,7 @@ export interface ScheduleEventInput {
   recurrence_until?: string | null;
   lunar_occurrence_dates?: string[] | null;
   remind_days_before?: number | null;
+  sticker?: string | null;
 }
 
 /** 알림 시점 선택지: null=없음, 0=당일, 그 외=며칠 전 */

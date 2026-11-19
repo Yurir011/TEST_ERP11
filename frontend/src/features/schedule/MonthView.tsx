@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { isSameDay, isSameMonth, toISODate, WEEKDAY_LABELS } from "./dateUtils";
 import { getHolidayMap, getLunarLabel } from "./holidays";
-import { eventColorStyle, type ScheduleEvent } from "./types";
+import { EVENT_COLORS, EVENT_COLOR_STYLES, eventColorStyle, type ScheduleEvent } from "./types";
 
 interface MonthViewProps {
   days: Date[];
   anchor: Date;
   eventsByDate: Map<string, ScheduleEvent[]>;
+  dayColors: Record<string, string>;
+  onDayColor: (date: string, color: string | null) => void;
   onDayClick: (date: Date) => void;
   onDayNumberClick: (date: Date) => void;
   onEventClick: (event: ScheduleEvent) => void;
@@ -16,9 +18,11 @@ interface MonthViewProps {
   onDropOnDate: (date: string) => void;
 }
 
-export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberClick, onEventClick, canDrag, onDragStart, onDragEnd, onDropOnDate }: MonthViewProps) {
+export function MonthView({ days, anchor, eventsByDate, dayColors, onDayColor, onDayClick, onDayNumberClick, onEventClick, canDrag, onDragStart, onDragEnd, onDropOnDate }: MonthViewProps) {
   const today = new Date();
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  // 날짜 칸을 오른쪽 클릭하면 뜨는 색 고르기 (화면 좌표 기준)
+  const [colorMenu, setColorMenu] = useState<{ key: string; x: number; y: number } | null>(null);
   const years = useMemo(() => Array.from(new Set(days.map((d) => d.getFullYear()))), [days]);
   const holidayMap = useMemo(() => getHolidayMap(years), [years]);
 
@@ -55,6 +59,10 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
             <div
               key={key}
               onClick={() => onDayClick(day)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setColorMenu({ key, x: e.clientX, y: e.clientY });
+              }}
               onDragOver={(e) => {
                 e.preventDefault();
                 setDragOverKey(key);
@@ -69,6 +77,7 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
               className={`min-h-24 border-b border-r border-border p-1.5 text-left align-top hover:bg-bg transition-colors cursor-pointer ${
                 inMonth ? "" : "bg-bg/50"
               } ${dragOverKey === key ? "ring-2 ring-primary ring-inset" : ""}`}
+              style={dayColors[key] ? { backgroundColor: eventColorStyle(dayColors[key]).bg } : undefined}
             >
               <div className="flex items-center gap-1">
                 <button
@@ -108,6 +117,7 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
                     style={{ backgroundColor: eventColorStyle(ev.color).bg, color: eventColorStyle(ev.color).fg }}
                     title={ev.title}
                   >
+                    {ev.sticker}
                     {ev.is_lunar && "[음] "}
                     {ev.title}
                   </div>
@@ -128,6 +138,49 @@ export function MonthView({ days, anchor, eventsByDate, onDayClick, onDayNumberC
           );
         })}
       </div>
+      {colorMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setColorMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setColorMenu(null);
+            }}
+          />
+          <div
+            className="fixed z-50 w-40 rounded-lg border border-border bg-surface p-2 shadow-lg"
+            style={{ left: Math.min(colorMenu.x, window.innerWidth - 170), top: Math.min(colorMenu.y, window.innerHeight - 120) }}
+          >
+            <p className="mb-1.5 text-[11px] text-text-muted">{colorMenu.key} 칸 색</p>
+            <div className="flex flex-wrap gap-1.5">
+              {EVENT_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={c}
+                  onClick={() => {
+                    onDayColor(colorMenu.key, c);
+                    setColorMenu(null);
+                  }}
+                  className="h-5 w-5 rounded-full border border-border"
+                  style={{ backgroundColor: EVENT_COLOR_STYLES[c].bg }}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onDayColor(colorMenu.key, null);
+                setColorMenu(null);
+              }}
+              className="mt-2 text-xs text-text-muted hover:text-text"
+            >
+              색 지우기
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -30,7 +30,7 @@ from app.models.proposal import Proposal, ProposalAttachment
 from app.models.project_note import ProjectDateNote
 from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
 from app.models.sales_document import SalesDocument, SalesDocumentItem
-from app.models.schedule import ScheduleEvent
+from app.models.schedule import ScheduleDayColor, ScheduleEvent
 from app.models.todo import TodoItem
 from app.models.transaction import Transaction
 from app.models.passkey import PasskeyCredential
@@ -75,6 +75,7 @@ __all__ = [
     "PaymentAccountDelegate",
     "RecurringPayment",
     "RecurringPaymentRun",
+    "ScheduleDayColor",
     "ScheduleEvent",
     "TodoItem",
 ]

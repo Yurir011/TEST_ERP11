@@ -1,5 +1,6 @@
 import { Trash2, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { EmojiPicker } from "../messenger/EmojiPicker";
 import { parseISODate, toISODate, WEEKDAY_LABELS } from "./dateUtils";
 import {
   generateLunarYearlyOccurrences,
@@ -44,6 +45,8 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
   const [startDate, setStartDate] = useState(event?.start_date ?? initialDate);
   const [endDate, setEndDate] = useState(event?.end_date ?? initialDate);
   const [color, setColor] = useState<EventColor>(event?.color ?? "grayblue");
+  const [sticker, setSticker] = useState<string | null>(event?.sticker ?? null);
+  const [pickerFor, setPickerFor] = useState<"sticker" | "title" | null>(null);
   const [remindDays, setRemindDays] = useState<number | null>(event?.remind_days_before ?? null);
   const [recurrenceFreq, setRecurrenceFreq] = useState<RecurrenceFreq>("none");
   const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
@@ -141,6 +144,7 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
         recurrence_until: recurrenceFreq !== "none" ? recurrenceUntil : null,
         lunar_occurrence_dates: lunarOccurrenceDates,
         remind_days_before: remindDays,
+        sticker,
       });
     } catch {
       setError("저장 중 오류가 발생했습니다.");
@@ -165,14 +169,64 @@ export function EventFormModal({ initialDate, event, canEdit, onSave, onDelete, 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs text-text-muted mb-1.5">제목</label>
-            <input
-              required
-              disabled={!canEdit}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg disabled:opacity-60"
-              autoFocus
-            />
+            <div className="relative flex gap-2">
+              <input
+                required
+                disabled={!canEdit}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg disabled:opacity-60"
+                autoFocus
+              />
+              {canEdit && (
+                <button
+                  type="button"
+                  aria-label="이모티콘"
+                  title="이모티콘 넣기"
+                  onClick={() => setPickerFor(pickerFor === "title" ? null : "title")}
+                  className="shrink-0 rounded-lg border border-border px-2.5 text-lg hover:bg-bg"
+                >
+                  😀
+                </button>
+              )}
+              {pickerFor === "title" && (
+                <EmojiPicker
+                  className="absolute right-0 top-full z-40 mt-1"
+                  onPick={(emoji) => setTitle((t) => t + emoji)}
+                  onClose={() => setPickerFor(null)}
+                />
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-text-muted mb-1.5">스티커 (일정 앞에 표시)</label>
+            <div className="relative flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={() => setPickerFor(pickerFor === "sticker" ? null : "sticker")}
+                className="flex h-9 min-w-9 items-center justify-center rounded-lg border border-border bg-bg px-2 text-xl hover:bg-surface disabled:opacity-60"
+                aria-label="스티커 선택"
+              >
+                {sticker ?? <span className="text-xs text-text-muted">선택</span>}
+              </button>
+              {sticker && canEdit && (
+                <button type="button" onClick={() => setSticker(null)} className="text-xs text-text-muted hover:text-text">
+                  지우기
+                </button>
+              )}
+              {pickerFor === "sticker" && (
+                <EmojiPicker
+                  className="absolute left-0 top-full z-40 mt-1"
+                  onPick={(emoji) => {
+                    setSticker(emoji);
+                    setPickerFor(null);
+                  }}
+                  onClose={() => setPickerFor(null)}
+                />
+              )}
+            </div>
           </div>
 
           <div>

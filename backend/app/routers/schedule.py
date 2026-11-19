@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
-from app.models.schedule import ScheduleEvent
+from app.models.schedule import ScheduleDayColor, ScheduleEvent
 from app.models.user import User, is_admin_role
-from app.schemas.schedule import MAX_OCCURRENCES, ScheduleEventCreate, ScheduleEventOut, ScheduleReorderRequest
+from app.schemas.schedule import MAX_OCCURRENCES, DayColorIn, DayColorOut, ScheduleEventCreate, ScheduleEventOut, ScheduleReorderRequest
 
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
 logger = get_logger("Schedule")
@@ -27,6 +27,7 @@ def _to_out(event: ScheduleEvent) -> ScheduleEventOut:
         is_completed=event.is_completed,
         sort_order=event.sort_order,
         remind_days_before=event.remind_days_before,
+        sticker=event.sticker,
         recurrence_group_id=event.recurrence_group_id,
         created_by=event.created_by,
         created_by_name=event.creator.name,
@@ -55,6 +56,43 @@ def list_events(
         .all()
     )
     return [_to_out(e) for e in events]
+
+
+@router.get("/day-colors", response_model=list[DayColorOut])
+def list_day_colors(
+    start: date = Query(...),
+    end: date = Query(..., description="조회 종료일 (포함)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """내가 칠한 날짜 칸 색상 (개인 설정이라 본인 것만)."""
+    rows = (
+        db.query(ScheduleDayColor)
+        .filter(ScheduleDayColor.user_id == current_user.id, ScheduleDayColor.day >= start, ScheduleDayColor.day <= end)
+        .all()
+    )
+    return [DayColorOut(day=r.day, color=r.color) for r in rows]
+
+
+@router.put("/day-colors/{day}", status_code=status.HTTP_204_NO_CONTENT)
+def set_day_color(
+    day: date,
+    payload: DayColorIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """날짜 칸 색 지정. color=null 이면 색을 지운다."""
+    row = db.get(ScheduleDayColor, (current_user.id, day))
+    if payload.color is None:
+        if row is not None:
+            db.delete(row)
+    elif row is None:
+        db.add(ScheduleDayColor(user_id=current_user.id, day=day, color=payload.color))
+    else:
+        row.color = payload.color
+    db.commit()
+    logger.debug(f"[Schedule] 날짜 색 변경: day={day}, color={payload.color}, by={current_user.id}")
+    return None
 
 
 @router.get("/reminders", response_model=list[ScheduleEventOut])
@@ -156,6 +194,7 @@ def create_event(
             color=payload.color,
             is_lunar=payload.is_lunar,
             remind_days_before=payload.remind_days_before,
+            sticker=payload.sticker,
             recurrence_group_id=group_id,
             created_by=current_user.id,
         )
@@ -200,6 +239,7 @@ def update_event(
     event.color = payload.color
     event.is_lunar = payload.is_lunar
     event.remind_days_before = payload.remind_days_before
+    event.sticker = payload.sticker
     db.commit()
     db.refresh(event)
     logger.debug(f"[Schedule] 일정 수정: id={event_id}, by={current_user.id}")

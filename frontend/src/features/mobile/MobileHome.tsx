@@ -217,7 +217,7 @@ export function MobileHome() {
               {events.slice(0, 4).map((ev) => (
                 <li key={ev.id} className="flex items-center gap-2 text-sm">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: eventColorStyle(ev.color).fg }} />
-                  <span className={`truncate ${ev.is_completed ? "line-through text-text-muted" : ""}`}>{ev.title}</span>
+                  <span className={`truncate ${ev.is_completed ? "line-through text-text-muted" : ""}`}>{ev.sticker}{ev.title}</span>
                 </li>
               ))}
               {events.length > 4 && <li className="text-xs text-text-muted">외 {events.length - 4}건</li>}
