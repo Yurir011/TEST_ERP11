@@ -3,7 +3,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.deps import get_current_user, require_admin
 from app.database import get_db
@@ -14,10 +14,12 @@ from app.models.project_file import ProjectFile
 from app.models.project_release import ProjectRelease, ProjectReleaseFile
 from app.models.project_gerber import ProjectGerber
 from app.models.user import User
+from app.routers.project_progress import _purchase_step_out
 from app.schemas.project import (
     ProjectCreate,
     ProjectNameUpdate,
     ProjectOut,
+    ProjectProgressOverviewOut,
     ProjectProgressUpdate,
     ProjectScheduleUpdate,
     ProjectStatusUpdate,
@@ -85,6 +87,32 @@ def list_projects(
         logger.debug(f"[Projects] 기간 검색: {date_from} ~ {date_to}")
     projects = query.order_by(Project.created_at.desc()).all()
     return [_to_out(p) for p in projects]
+
+
+@router.get("/progress-overview", response_model=list[ProjectProgressOverviewOut])
+def progress_overview(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """진행 중 프로젝트를 마감 임박순(마감일 없는 것은 뒤)으로, 진행 단계·구매 단계와 함께 돌려준다."""
+    projects = (
+        db.query(Project)
+        .options(joinedload(Project.client), selectinload(Project.progress_stages), selectinload(Project.purchase_steps))
+        .filter(Project.status == ProjectStatus.in_progress)
+        .all()
+    )
+    projects.sort(key=lambda p: (p.end_date is None, p.end_date or date.max, p.id))
+    logger.debug(f"[Projects] 진행 현황 조회: 진행 중 {len(projects)}건, by={current_user.id}")
+    return [
+        ProjectProgressOverviewOut(
+            id=p.id,
+            name=p.name,
+            client_name=p.client.name,
+            start_date=p.start_date,
+            end_date=p.end_date,
+            progress_percent=p.progress_percent,
+            stages=p.progress_stages,
+            purchase_steps=[_purchase_step_out(s) for s in p.purchase_steps],
+        )
+        for p in projects
+    ]
 
 
 @router.get("/{project_id}", response_model=ProjectOut)

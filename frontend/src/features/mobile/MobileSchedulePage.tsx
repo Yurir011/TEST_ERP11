@@ -21,7 +21,7 @@ export function MobileSchedulePage() {
   const monthDays = getMonthGridDays(selected.getFullYear(), selected.getMonth() + 1);
   const holidayMap = getHolidayMap(Array.from(new Set(monthDays.map((d) => d.getFullYear()))));
   const rangeStart = toISODate(monthDays[0]);
-  const rangeEnd = toISODate(monthDays[41]);
+  const rangeEnd = toISODate(monthDays[monthDays.length - 1]);
 
   function load() {
     logDebug("MobileSchedule", `조회: ${rangeStart} ~ ${rangeEnd}`);

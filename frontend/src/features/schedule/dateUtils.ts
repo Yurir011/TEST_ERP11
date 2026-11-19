@@ -33,7 +33,9 @@ export function isSameMonth(a: Date, b: Date): boolean {
 export function getMonthGridDays(year: number, month: number): Date[] {
   const firstOfMonth = new Date(year, month - 1, 1);
   const gridStart = startOfWeek(firstOfMonth);
-  return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
+  // 그 달이 걸치는 주 수만큼만(5주 또는 6주) 만든다
+  const weeks = Math.ceil((firstOfMonth.getDay() + new Date(year, month, 0).getDate()) / 7);
+  return Array.from({ length: weeks * 7 }, (_, i) => addDays(gridStart, i));
 }
 
 export function getWeekDays(anchor: Date): Date[] {

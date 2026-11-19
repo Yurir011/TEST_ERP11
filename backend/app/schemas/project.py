@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from app.schemas.project_progress import ProgressStageOut, PurchaseStepOut
 from app.models.project import ProjectStatus
 
 
@@ -59,6 +60,19 @@ class ProjectProgressUpdate(BaseModel):
         if self.progress_percent < 0 or self.progress_percent > 100 or self.progress_percent % 10 != 0:
             raise ValueError("진행율은 0~100 사이의 10 단위 값이어야 합니다.")
         return self
+
+
+class ProjectProgressOverviewOut(BaseModel):
+    """프로젝트 메인 화면용: 진행 중 프로젝트 + 진행 단계 + 구매 5단계를 한 번에"""
+
+    id: int
+    name: str
+    client_name: str
+    start_date: date | None
+    end_date: date | None
+    progress_percent: int
+    stages: list[ProgressStageOut]
+    purchase_steps: list[PurchaseStepOut]
 
 
 class ProjectOut(BaseModel):

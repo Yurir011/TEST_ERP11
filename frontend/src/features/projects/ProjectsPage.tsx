@@ -7,7 +7,7 @@ import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiGet } from "../../lib/api";
 import { isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
-import { ProjectStageBoard } from "./ProjectStageBoard";
+import { ProjectProgressSets, type ProgressOverviewItem } from "./ProjectProgressSets";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES, type Project, type ProjectStatus } from "./types";
 import { todayISO } from "../../lib/date";
 
@@ -37,7 +37,7 @@ export function ProjectsPage() {
   const { user } = useAuth();
   const canDelete = isAdminRole(user?.role); // 서버도 관리자만 삭제할 수 있다
   const [projects, setProjects] = useState<Project[] | null>(null);
-  const [allProjects, setAllProjects] = useState<Project[] | null>(null);
+  const [overview, setOverview] = useState<ProgressOverviewItem[] | null>(null);
   const [tab, setTab] = useState<ProjectStatus | "all">("all");
   const [query, setQuery] = useState("");
   // 기간 검색: 프로젝트 일정(시작일~종료일)과 하루라도 겹치는 프로젝트만 보여준다.
@@ -54,8 +54,12 @@ export function ProjectsPage() {
     if (dateTo) params.set("date_to", dateTo);
     const path = params.toString() ? `/api/projects?${params.toString()}` : "/api/projects";
     apiGet<Project[]>(path)
-      // "전체" 탭에서는 폐기된 프로젝트를 숨기고, "폐기" 탭에서만 보여준다.
-      .then((list) => setProjects(status === "all" ? list.filter((p) => p.status !== "discarded") : list))
+      // "전체" 탭에서는 폐기를 숨기고, 검색·기간 조건이 없으면 위에 이미 보이는 진행 중 프로젝트도 숨긴다.
+      .then((list) =>
+        setProjects(
+          status === "all" ? list.filter((p) => p.status !== "discarded" && (q || dateFrom || dateTo || p.status !== "in_progress")) : list,
+        ),
+      )
       .catch((err) => {
         logError("Projects", "목록 조회 실패", err);
         setError("프로젝트 목록을 불러오지 못했습니다.");
@@ -70,7 +74,6 @@ export function ProjectsPage() {
       await apiDelete(`/api/projects/${p.id}`);
       logDebug("Projects", `폐기 프로젝트 삭제 성공: id=${p.id}`);
       setProjects((list) => list?.filter((x) => x.id !== p.id) ?? null);
-      setAllProjects((list) => list?.filter((x) => x.id !== p.id) ?? null);
       dialog.notify("프로젝트를 삭제했습니다.");
     } catch (err) {
       logError("Projects", "폐기 프로젝트 삭제 실패", err);
@@ -85,10 +88,13 @@ export function ProjectsPage() {
   }, [tab, query, dateFrom, dateTo]);
 
   useEffect(() => {
-    logDebug("Projects", "프로젝트 진행 현황(단계별 보드) 조회 시작");
-    apiGet<Project[]>("/api/projects")
-      .then(setAllProjects)
-      .catch((err) => logError("Projects", "프로젝트 진행 현황 조회 실패", err));
+    logDebug("Projects", "진행 중 프로젝트 현황(원그래프+단계 막대) 조회 시작");
+    apiGet<ProgressOverviewItem[]>("/api/projects/progress-overview")
+      .then((list) => {
+        logDebug("Projects", `진행 중 프로젝트 현황 조회 성공: ${list.length}건`);
+        setOverview(list);
+      })
+      .catch((err) => logError("Projects", "진행 중 프로젝트 현황 조회 실패", err));
   }, []);
 
   const today = todayISO();
@@ -108,12 +114,10 @@ export function ProjectsPage() {
       }
     >
       <section className="mb-8">
-        <h2 className="text-sm font-medium text-text-muted mb-3">프로젝트 진행 현황</h2>
-        {allProjects === null ? (
-          <p className="text-sm text-text-muted">불러오는 중...</p>
-        ) : (
-          <ProjectStageBoard projects={allProjects} />
-        )}
+        <h2 className="text-sm font-medium text-text-muted mb-3">
+          진행 중 {overview?.length ?? 0}건 <span className="font-normal">· 마감 임박순</span>
+        </h2>
+        {overview === null ? <p className="text-sm text-text-muted">불러오는 중...</p> : <ProjectProgressSets items={overview} />}
       </section>
 
       <div className="flex items-center justify-between gap-4 mb-5">
@@ -197,28 +201,15 @@ export function ProjectsPage() {
             const overdue = isOverdue(p, today);
             const color = overdue ? "var(--color-danger)" : FILL_COLOR[p.status];
             return (
-              // 이름 바로 아래 밑줄이 진행 게이지다: 이름 칸 전체 폭(거래처 바로 앞까지)이 100%
               <div
                 key={p.id}
                 onClick={() => navigate(`/projects/${p.id}`)}
                 className="border-b border-border last:border-0 cursor-pointer hover:bg-bg/60"
               >
-                <div className="flex items-center gap-4 px-[18px] py-3.5">
-                  <div className="min-w-0 flex-1">
-                    <div className={`text-sm font-semibold ${overdue ? "text-danger" : "text-text"}`}>
-                      <span className="break-words">{p.name}</span>
-                      {overdue && <span className="text-[11px] font-normal ml-1.5">· 지연</span>}
-                    </div>
-                    <div
-                      className="mt-[7px] h-1 w-full overflow-hidden rounded-full bg-text/[0.08]"
-                      role="progressbar"
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={p.progress_percent}
-                      aria-label={`${p.name} 진행률`}
-                    >
-                      <div className="h-full rounded-full" style={{ width: `${p.progress_percent}%`, background: color }} />
-                    </div>
+                <div className="flex items-center gap-4 px-[18px] py-3">
+                  <div className={`min-w-0 flex-1 truncate text-sm font-semibold ${overdue ? "text-danger" : "text-text"}`} title={p.name}>
+                    {p.name}
+                    {overdue && <span className="text-[11px] font-normal ml-1.5">· 지연</span>}
                   </div>
                   <span className="w-[140px] shrink-0 truncate text-[13px] text-text-muted" title={p.client_name}>
                     {p.client_name}

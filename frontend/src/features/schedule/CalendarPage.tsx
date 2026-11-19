@@ -31,7 +31,7 @@ export function CalendarPage() {
   const weekDays = useMemo(() => getWeekDays(anchor), [anchor]);
 
   const rangeStart = view === "month" ? monthDays[0] : view === "week" ? weekDays[0] : anchor;
-  const rangeEnd = view === "month" ? monthDays[41] : view === "week" ? weekDays[6] : anchor;
+  const rangeEnd = view === "month" ? monthDays[monthDays.length - 1] : view === "week" ? weekDays[6] : anchor;
 
   function loadEvents() {
     const start = toISODate(rangeStart);
