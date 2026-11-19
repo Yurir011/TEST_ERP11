@@ -7,15 +7,15 @@ from app.core.deps import get_current_user
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.client import Client
-from app.models.contact import Contact
+from app.models.contact import Contact, ContactFavorite
 from app.models.user import User
-from app.schemas.contact import ClientOptionOut, ClientSummaryOut, ContactIn, ContactOut
+from app.schemas.contact import ClientOptionOut, ClientSummaryOut, ContactIn, ContactOut, FavoriteIn
 
 router = APIRouter(prefix="/api/contacts", tags=["contacts"])
 logger = get_logger("Contacts")
 
 
-def _out(c: Contact) -> ContactOut:
+def _out(c: Contact, is_favorite: bool = False) -> ContactOut:
     return ContactOut(
         id=c.id,
         name=c.name,
@@ -27,6 +27,7 @@ def _out(c: Contact) -> ContactOut:
         email=c.email,
         memo=c.memo,
         updated_at=c.updated_at,
+        is_favorite=is_favorite,
     )
 
 
@@ -52,6 +53,26 @@ def _get_or_404(db: Session, contact_id: int) -> Contact:
     if c is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="연락처를 찾을 수 없습니다.")
     return c
+
+
+def _favorite_ids(db: Session, user: User) -> set[int]:
+    return {r.contact_id for r in db.query(ContactFavorite.contact_id).filter(ContactFavorite.user_id == user.id)}
+
+
+@router.put("/{contact_id}/favorite", status_code=status.HTTP_204_NO_CONTENT)
+def set_favorite(
+    contact_id: int, payload: FavoriteIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """내 즐겨찾기 지정/해제 (다른 직원에게는 영향 없음)."""
+    _get_or_404(db, contact_id)
+    row = db.get(ContactFavorite, (current_user.id, contact_id))
+    if payload.favorite and row is None:
+        db.add(ContactFavorite(user_id=current_user.id, contact_id=contact_id))
+    elif not payload.favorite and row is not None:
+        db.delete(row)
+    db.commit()
+    logger.debug(f"[Contacts] 즐겨찾기 변경: id={contact_id}, favorite={payload.favorite}, by={current_user.id}")
+    return None
 
 
 @router.get("", response_model=list[ContactOut])
@@ -80,8 +101,11 @@ def list_contacts(
                 conds.append(func.regexp_replace(col, "[^0-9]", "", "g").like(f"%{digits}%"))
         query = query.filter(or_(*conds))
     contacts = query.order_by(Contact.name).all()
-    logger.debug(f"[Contacts] 목록 조회: q={q!r}, count={len(contacts)}, by={current_user.id}")
-    return [_out(c) for c in contacts]
+    fav_ids = _favorite_ids(db, current_user)
+    # 즐겨찾기를 맨 위로 (같은 묶음 안에서는 가나다순 유지)
+    contacts.sort(key=lambda c: c.id not in fav_ids)
+    logger.debug(f"[Contacts] 목록 조회: q={q!r}, count={len(contacts)}, 즐겨찾기={len(fav_ids)}, by={current_user.id}")
+    return [_out(c, c.id in fav_ids) for c in contacts]
 
 
 @router.get("/client-options", response_model=list[ClientOptionOut])
@@ -119,7 +143,7 @@ def update_contact(contact_id: int, payload: ContactIn, db: Session = Depends(ge
     db.commit()
     c = _get_or_404(db, contact_id)
     logger.debug(f"[Contacts] 수정: id={contact_id}, by={current_user.id}")
-    return _out(c)
+    return _out(c, contact_id in _favorite_ids(db, current_user))
 
 
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)

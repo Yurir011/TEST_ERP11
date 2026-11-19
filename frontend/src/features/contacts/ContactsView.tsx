@@ -1,7 +1,7 @@
-import { Pencil, Phone, Plus, Search, Trash2 } from "lucide-react";
+import { Pencil, Phone, Plus, Search, Star, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
-import { ApiError, apiDelete, apiGet } from "../../lib/api";
+import { ApiError, apiDelete, apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { ClientPopup } from "./ClientPopup";
 import { ContactFormModal } from "./ContactFormModal";
@@ -34,6 +34,18 @@ export function ContactsView() {
     return () => clearTimeout(t);
   }, [query, load]);
 
+  async function toggleFavorite(c: Contact) {
+    const next = !c.is_favorite;
+    logDebug("Contacts", `즐겨찾기 ${next ? "지정" : "해제"}: id=${c.id}`);
+    try {
+      await apiPut(`/api/contacts/${c.id}/favorite`, { favorite: next });
+      load(query); // 서버가 즐겨찾기를 맨 위로 정렬해 준다
+    } catch (err) {
+      logError("Contacts", "즐겨찾기 변경 실패", err);
+      dialog.notifyError(err instanceof ApiError ? err.message : "즐겨찾기를 바꾸지 못했습니다.");
+    }
+  }
+
   async function remove(c: Contact) {
     if (!(await dialog.confirm(`'${c.name}' 연락처를 삭제할까요?\n모든 직원의 연락처에서 사라집니다.`, { okLabel: "삭제", danger: true }))) return;
     try {
@@ -44,6 +56,8 @@ export function ContactsView() {
       dialog.notifyError(err instanceof ApiError ? err.message : "삭제하지 못했습니다.");
     }
   }
+
+  const favCount = contacts?.filter((c) => c.is_favorite).length ?? 0;
 
   return (
     <div className="space-y-3 max-w-3xl">
@@ -76,11 +90,35 @@ export function ContactsView() {
         <p className="text-sm text-text-muted text-center py-10">{query ? "검색 결과가 없습니다." : "등록된 연락처가 없습니다. 오른쪽 위 '추가'로 등록하세요."}</p>
       ) : (
         <>
-          <p className="text-xs text-text-muted px-1">{contacts.length}명</p>
+          <p className="text-xs text-text-muted px-1">
+            {favCount > 0 && (
+              <span className="inline-flex items-center gap-1 mr-2">
+                <Star size={12} strokeLinejoin="round" className="fill-star text-star" />
+                즐겨찾기 {favCount}명
+              </span>
+            )}
+            전체 {contacts.length}명
+          </p>
           <ul className="space-y-2">
             {contacts.map((c) => (
-              <li key={c.id} className="bg-surface border border-border rounded-2xl p-4">
+              <li key={c.id} className={`bg-surface border rounded-2xl p-4 ${c.is_favorite ? "border-star/40" : "border-border"}`}>
                 <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void toggleFavorite(c)}
+                    aria-pressed={c.is_favorite}
+                    aria-label={`${c.name} 즐겨찾기 ${c.is_favorite ? "해제" : "추가"}`}
+                    title="즐겨찾기"
+                    className="-ml-0.5 mt-0.5 shrink-0 rounded p-0.5"
+                  >
+                    <Star
+                      size={17}
+                      strokeWidth={2.4}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      className={c.is_favorite ? "fill-star text-star" : "text-text-muted/40 hover:text-star"}
+                    />
+                  </button>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold break-words">
                       {c.name}

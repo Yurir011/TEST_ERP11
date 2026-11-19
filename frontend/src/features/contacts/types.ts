@@ -9,6 +9,7 @@ export interface Contact {
   email: string | null;
   memo: string | null;
   updated_at: string;
+  is_favorite: boolean; // 내가 별표한 연락처 (직원별)
 }
 
 export interface ContactInput {

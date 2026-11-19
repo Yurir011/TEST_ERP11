@@ -45,6 +45,11 @@ class ContactOut(BaseModel):
     email: str | None
     memo: str | None
     updated_at: datetime
+    is_favorite: bool = False  # 내가 별표한 연락처인지 (직원별)
+
+
+class FavoriteIn(BaseModel):
+    favorite: bool
 
 
 class ClientOptionOut(BaseModel):

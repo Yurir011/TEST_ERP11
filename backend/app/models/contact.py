@@ -13,6 +13,15 @@ if TYPE_CHECKING:
 MAX_PHONES = 2  # 한 사람당 전화번호 최대 개수 (phone, phone2)
 
 
+class ContactFavorite(Base):
+    """직원별 즐겨찾기. 연락처는 전 직원이 공유하지만 별표는 본인에게만 보인다."""
+
+    __tablename__ = "contact_favorites"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    contact_id: Mapped[int] = mapped_column(ForeignKey("contacts.id", ondelete="CASCADE"), primary_key=True)
+
+
 class Contact(Base):
     """연락처. 전 직원이 함께 보고 쓰는 주소록으로, 주로 거래처 사람들을 적는다.
 

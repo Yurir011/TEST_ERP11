@@ -66,3 +66,18 @@ def test_deleting_client_keeps_contact_with_company_name(client, db, make_user, 
     db.expire_all()
     c = db.query(Contact).filter(Contact.name == "최남음").one()
     assert c.client_id is None and c.company_name == "사라질회사"
+
+
+def test_favorites_are_per_user_and_listed_first(client, make_user, auth_headers):
+    a, b = make_user(name="직원A"), make_user(name="직원B")
+    ha, hb = auth_headers(a), auth_headers(b)
+    first = _new(client, ha, name="가나다")
+    second = _new(client, ha, name="하하하")
+    assert client.put(f"/api/contacts/{second['id']}/favorite", headers=ha, json={"favorite": True}).status_code == 204
+    rows_a = client.get("/api/contacts", headers=ha).json()
+    assert [r["id"] for r in rows_a] == [second["id"], first["id"]] and rows_a[0]["is_favorite"] is True
+    rows_b = client.get("/api/contacts", headers=hb).json()  # 다른 직원에게는 별표가 보이지 않는다
+    assert [r["id"] for r in rows_b] == [first["id"], second["id"]] and not any(r["is_favorite"] for r in rows_b)
+    assert client.put(f"/api/contacts/{second['id']}/favorite", headers=ha, json={"favorite": False}).status_code == 204
+    assert [r["id"] for r in client.get("/api/contacts", headers=ha).json()] == [first["id"], second["id"]]
+    assert client.put("/api/contacts/99999/favorite", headers=ha, json={"favorite": True}).status_code == 404

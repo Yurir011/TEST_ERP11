@@ -4,7 +4,7 @@ from app.models.audit_log import AuditLog
 from app.models.attendance import Attendance
 from app.models.client import Client
 from app.models.client_device import ClientDevice
-from app.models.contact import Contact
+from app.models.contact import Contact, ContactFavorite
 from app.models.mail_log import MailLog
 from app.models.material import Material, MaterialMovement
 from app.models.nfc_card import NfcCard
@@ -47,6 +47,7 @@ __all__ = [
     "Client",
     "ClientDevice",
     "Contact",
+    "ContactFavorite",
     "Material",
     "MaterialMovement",
     "NfcCard",

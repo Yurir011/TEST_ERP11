@@ -133,7 +133,7 @@ export function ProjectProgressSets({ items }: { items: ProgressOverviewItem[] }
               </dl>
             </div>
 
-            <div className="flex min-w-0 max-w-[930px] flex-col gap-3.5 px-[28px] py-[22px]">
+            <div className="flex min-w-0 max-w-[710px] flex-col gap-3.5 px-[28px] py-[22px]">
               <div className="flex items-center gap-2.5">
                 <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{p.name}</span>
                 <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${TONE_CHIP[due.tone]}`}>{due.label}</span>
