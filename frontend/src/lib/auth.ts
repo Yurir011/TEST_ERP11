@@ -61,6 +61,7 @@ export interface CurrentUser {
   address: string | null;
   is_active: boolean;
   menu_permissions: MenuPermissionKey[];
+  ui_theme: string | null; // 직원이 고른 화면 색 테마 (null = 클래식 블루)
 }
 
 export function hasMenuPermission(user: CurrentUser | null | undefined, menu: MenuPermissionKey): boolean {

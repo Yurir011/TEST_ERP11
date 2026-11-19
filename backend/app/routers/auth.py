@@ -9,7 +9,7 @@ from app.core.security import create_access_token, verify_password
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.user import User
-from app.schemas.user import LoginRequest, TokenResponse, UserOut
+from app.schemas.user import LoginRequest, TokenResponse, UiThemeIn, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 logger = get_logger("Auth")
@@ -64,3 +64,12 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
 def get_me(current_user: User = Depends(get_current_user)):
     logger.debug(f"[Auth] 내 정보 조회: user_id={current_user.id}")
     return current_user
+
+
+@router.put("/me/theme", status_code=status.HTTP_204_NO_CONTENT)
+def set_my_theme(payload: UiThemeIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """내가 고른 화면 색 테마를 계정에 저장한다 (다른 PC·폰에서 로그인해도 같은 색)."""
+    current_user.ui_theme = None if payload.theme == "classic" else payload.theme
+    db.commit()
+    logger.debug(f"[Auth] 테마 변경: user_id={current_user.id}, theme={payload.theme}")
+    return None

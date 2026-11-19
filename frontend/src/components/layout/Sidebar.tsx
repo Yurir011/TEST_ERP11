@@ -30,6 +30,7 @@ import { useMailUnread } from "../../features/mail/useMailUnread";
 import { getBenchClient } from "../../lib/desktop";
 import { logError } from "../../lib/logger";
 import { Logo } from "../ui/Logo";
+import { ThemeButton } from "../ui/ThemePicker";
 import { DesktopDownloadLink } from "../../features/desktop/DesktopDownloadLink";
 import { useTabMenu } from "./tabs/TabShellContext";
 import { VersionLabel } from "./VersionLabel";
@@ -245,7 +246,8 @@ export function Sidebar() {
       <div className="mt-14 flex-1 min-h-0 flex flex-col">{!collapsed && <TodoPanel />}</div>
 
       {user && collapsed && (
-        <div className="px-2 py-3 border-t border-border flex justify-center">
+        <div className="px-2 py-3 border-t border-border flex flex-col items-center gap-1">
+          <ThemeButton />
           <button
             onClick={logout}
             title="로그아웃"
@@ -264,13 +266,16 @@ export function Sidebar() {
                 {user.role === "admin" ? "관리자" : "일반직원"} · {user.employee_no}
               </p>
             </div>
-            <button
-              onClick={logout}
-              title="로그아웃"
-              className="p-2 rounded-lg text-text-muted hover:bg-surface hover:text-text transition-colors shrink-0"
-            >
-              <LogOut size={16} />
-            </button>
+            <div className="flex shrink-0">
+              <ThemeButton />
+              <button
+                onClick={logout}
+                title="로그아웃"
+                className="p-2 rounded-lg text-text-muted hover:bg-surface hover:text-text transition-colors shrink-0"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
           <VersionLabel />
           <DesktopDownloadLink className="mt-2" />

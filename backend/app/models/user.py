@@ -79,4 +79,6 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # 일반직원(employee)에게 개별로 열람을 허용한 메뉴 키 목록. admin/site_admin은 이 값과 무관하게 항상 전체 접근 가능.
     menu_permissions: Mapped[list[str]] = mapped_column(ARRAY(String(50)), default=list, server_default="{}")
+    # 직원이 고른 화면 색 테마 키 (None = 기본 클래식 블루). 허용 키는 app/schemas/user.py 의 UI_THEMES
+    ui_theme: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

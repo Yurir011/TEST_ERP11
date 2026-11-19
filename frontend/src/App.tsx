@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import type { MenuPermissionKey } from "./lib/auth";
 import { MobileHome } from "./features/mobile/MobileHome";
 import { useMobilePush } from "./features/mobile/useMobilePush";
-import { useMobileThemeSync } from "./features/mobile/mobileTheme";
+import { useUiThemeSync } from "./lib/uiTheme";
 import { ProtectedRoute } from "./components/layout/ProtectedRoute";
 import { TabShell } from "./components/layout/tabs/TabShell";
 import { useAuth } from "./context/useAuth";
@@ -437,7 +437,7 @@ function App() {
   usePrefetchPages(user !== null);
   useOpenConversationFromDesktop(); // 앱에서 메시지 알림을 누르면 그 대화방으로
   useFileDrop(); // 파일 첨부 칸 위에 파일을 끌어다 놓으면 첨부
-  useMobileThemeSync(); // 모바일 화면(/m)에서만 직원이 고른 테마 색을 쓴다
+  useUiThemeSync(); // 직원이 고른 화면 색 테마(계정에 저장)를 PC·모바일 모두에 적용
   useMobilePush(); // 앱(아이폰)에서만: 로그인하면 푸시 토큰 등록, 알림을 탭하면 해당 화면으로 이동
   return (
     <Suspense fallback={pageFallback}>

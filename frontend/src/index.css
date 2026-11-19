@@ -126,8 +126,8 @@ textarea {
   border: 2px solid rgba(0, 0, 0, 0.45);
 }
 
-/* 모바일 슬레이트 다크 테마: 메신저의 크림색 바탕을 어두운 노랑 계열로 바꾼다 */
-html[data-mobile-theme="slate"] .messenger-theme {
+/* 미드나잇 블루(다크) 테마: 메신저의 크림색 바탕을 어두운 노랑 계열로 바꾼다 */
+html[data-ui-theme="midnight"] .messenger-theme {
   --color-surface: #2a2619;
   --color-bg: #1d1b14;
   --color-border: #4a4126;
@@ -139,12 +139,24 @@ html[data-mobile-theme="slate"] .messenger-theme {
   border-color: #4a4126;
 }
 
-/* 모바일 비비드 테마: 홈 메뉴 아이콘은 진한 색 바탕에 흰 아이콘으로 채운다 */
-html[data-mobile-theme="vivid"] [data-tone="blue"] { background: #2f6bff; color: #fff; }
-html[data-mobile-theme="vivid"] [data-tone="green"] { background: #00b86e; color: #fff; }
-html[data-mobile-theme="vivid"] [data-tone="purple"] { background: #8b3dff; color: #fff; }
-html[data-mobile-theme="vivid"] [data-tone="orange"] { background: #ff7a1a; color: #fff; }
-html[data-mobile-theme="vivid"] [data-tone="sky"] { background: #00a3e0; color: #fff; }
-html[data-mobile-theme="vivid"] [data-tone="teal"] { background: #00a89a; color: #fff; }
-html[data-mobile-theme="vivid"] [data-tone="rose"] { background: #ff3b5c; color: #fff; }
-html[data-mobile-theme="vivid"] [data-tone="yellow"] { background: #ffc400; color: #3b2f00; }
+/* 핫핑크 비비드 테마: 홈 메뉴 아이콘은 진한 색 바탕에 흰 아이콘으로 채운다 */
+html[data-ui-theme="hotpink"] [data-tone="blue"] { background: #2f6bff; color: #fff; }
+html[data-ui-theme="hotpink"] [data-tone="green"] { background: #00b86e; color: #fff; }
+html[data-ui-theme="hotpink"] [data-tone="purple"] { background: #8b3dff; color: #fff; }
+html[data-ui-theme="hotpink"] [data-tone="orange"] { background: #ff7a1a; color: #fff; }
+html[data-ui-theme="hotpink"] [data-tone="sky"] { background: #00a3e0; color: #fff; }
+html[data-ui-theme="hotpink"] [data-tone="teal"] { background: #00a89a; color: #fff; }
+html[data-ui-theme="hotpink"] [data-tone="rose"] { background: #ff3b5c; color: #fff; }
+html[data-ui-theme="hotpink"] [data-tone="yellow"] { background: #ffc400; color: #3b2f00; }
+
+/* 다크 테마(미드나잇 블루): 화면에 흰색·흰 글씨로 고정된 곳을 테마 색으로 맞춘다 */
+html[data-ui-dark] .bg-primary,
+html[data-ui-dark] .hover\:bg-primary-hover:hover {
+  color: var(--color-on-primary);
+}
+html[data-ui-dark] .bg-white {
+  background-color: var(--color-surface);
+}
+html[data-ui-dark] [class*="bg-white/"] {
+  background-color: color-mix(in srgb, var(--color-surface) 70%, transparent);
+}

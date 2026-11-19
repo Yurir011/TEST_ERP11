@@ -66,7 +66,11 @@ export function TypeMark({ kind, className = "" }: { kind: TypeMarkKind; classNa
   return (
     <span
       className={`inline-grid place-items-center w-8 h-8 rounded-full shrink-0 ${className}`}
-      style={{ color: tone, backgroundColor: `color-mix(in srgb, ${tone} 14%, var(--color-surface))` }}
+      style={{
+        color: tone,
+        backgroundColor: `color-mix(in srgb, ${tone} var(--tm-mix, 14%), var(--color-surface))`,
+        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${tone} var(--tm-ring, 0%), transparent)`,
+      }}
       title={LABELS[kind]}
       role="img"
       aria-label={LABELS[kind]}

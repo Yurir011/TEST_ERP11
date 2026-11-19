@@ -8,6 +8,9 @@ from app.models.user import MENU_PERMISSION_KEYS, JobGrade, JobTitle, UserRole
 # 배송 가능성까지 검증하는 EmailStr 대신 형식만 확인하는 패턴을 사용한다.
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
+# 직원이 고를 수 있는 화면 색 테마 (프론트 lib/uiTheme.ts 와 같은 키)
+UI_THEMES = ("classic", "mocha", "rose", "lavender", "teal", "midnight", "hotpink")
+
 
 def _validate_menu_permissions(value: list[str]) -> list[str]:
     invalid = set(value) - set(MENU_PERMISSION_KEYS)
@@ -41,6 +44,18 @@ class UserOut(BaseModel):
     address: str | None
     is_active: bool
     menu_permissions: list[str]
+    ui_theme: str | None = None
+
+
+class UiThemeIn(BaseModel):
+    theme: str | None = None  # None 이면 기본(클래식 블루)으로 되돌린다
+
+    @field_validator("theme")
+    @classmethod
+    def validate_theme(cls, v: str | None) -> str | None:
+        if v is not None and v not in UI_THEMES:
+            raise ValueError(f"theme must be one of {UI_THEMES}")
+        return v
 
 
 class ApproverOut(BaseModel):
