@@ -86,7 +86,7 @@ function Monogram({ name }: { name: string }) {
   const core = name.replace(/^\s*(\(주\)|㈜|주식회사|\(유\)|유한회사)\s*/, "").trim();
   const ch = core.charAt(0) || "?";
   return (
-    <span className={`shrink-0 inline-grid h-[34px] w-[34px] place-items-center rounded-[10px] bg-gradient-to-br text-sm font-bold text-white ${MONO_COLORS[ch.charCodeAt(0) % MONO_COLORS.length]}`}>
+    <span data-mono={ch.charCodeAt(0) % 6} className={`shrink-0 inline-grid h-[34px] w-[34px] place-items-center rounded-[10px] bg-gradient-to-br text-sm font-bold text-white ${MONO_COLORS[ch.charCodeAt(0) % MONO_COLORS.length]}`}>
       {ch}
     </span>
   );
