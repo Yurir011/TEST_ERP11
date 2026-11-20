@@ -1222,6 +1222,7 @@ export function ProjectDocumentsPage({
 
   return (
     <MainLayout
+      showBack
       title={layoutTitle}
       description={layoutDescription}
       actions={
