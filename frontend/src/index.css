@@ -162,12 +162,12 @@ html[data-ui-theme="rose"] [data-mono="4"] { background-image: linear-gradient(1
 html[data-ui-theme="rose"] [data-mono="5"] { background-image: linear-gradient(135deg, #c9a77c, #a98558); }
 
 /* 모카 베이지 테마 */
-html[data-ui-theme="mocha"] [data-mono="0"] { background-image: linear-gradient(135deg, #9a6a42, #7a4f2c); }
-html[data-ui-theme="mocha"] [data-mono="1"] { background-image: linear-gradient(135deg, #b08a5e, #8f6c41); }
-html[data-ui-theme="mocha"] [data-mono="2"] { background-image: linear-gradient(135deg, #b5785a, #935a40); }
-html[data-ui-theme="mocha"] [data-mono="3"] { background-image: linear-gradient(135deg, #8a7a6a, #6b5d4f); }
-html[data-ui-theme="mocha"] [data-mono="4"] { background-image: linear-gradient(135deg, #7d8f6e, #5f7152); }
-html[data-ui-theme="mocha"] [data-mono="5"] { background-image: linear-gradient(135deg, #a68f6f, #85704f); }
+html[data-ui-theme="mocha"] [data-mono="0"] { background-image: linear-gradient(135deg, #8c5a32, #6e4424); }
+html[data-ui-theme="mocha"] [data-mono="1"] { background-image: linear-gradient(135deg, #c4673f, #a44e2a); }
+html[data-ui-theme="mocha"] [data-mono="2"] { background-image: linear-gradient(135deg, #7e8f4e, #617236); }
+html[data-ui-theme="mocha"] [data-mono="3"] { background-image: linear-gradient(135deg, #4f7a94, #3a6078); }
+html[data-ui-theme="mocha"] [data-mono="4"] { background-image: linear-gradient(135deg, #a0506a, #823a52); }
+html[data-ui-theme="mocha"] [data-mono="5"] { background-image: linear-gradient(135deg, #d09a2e, #b07e14); }
 
 /* 라벤더 테마 */
 html[data-ui-theme="lavender"] [data-mono="0"] { background-image: linear-gradient(135deg, #8a70d6, #6a4fb8); }
