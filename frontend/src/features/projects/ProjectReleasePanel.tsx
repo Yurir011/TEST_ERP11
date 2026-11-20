@@ -269,11 +269,11 @@ export function ProjectReleasePanel({
       {rows === null && !error && <p className="py-4 text-center text-sm text-text-muted">불러오는 중...</p>}
 
       {rows !== null && (
-        <div className="grid gap-4 md:min-h-[380px] md:grid-cols-[200px_180px_minmax(0,1fr)]">
-          {/* 히스토리 */}
-          <div className="flex min-w-0 flex-col md:border-r md:border-border md:pr-4">
-            <b className="mb-2 block text-sm">히스토리</b>
-            {rows.length === 0 && <p className="py-3 text-xs text-text-muted">[파일 등록]으로 첫 버전을 만들어 주세요.</p>}
+        <div className={rows.length === 0 ? "flex flex-wrap items-center gap-3.5" : "grid gap-4 md:min-h-[380px] md:grid-cols-[200px_180px_minmax(0,1fr)]"}>
+          {/* 히스토리 (파일이 없으면 한 줄로 축소) */}
+          <div className={rows.length === 0 ? "flex min-w-0 flex-1 flex-wrap items-center gap-3.5" : "flex min-w-0 flex-col md:border-r md:border-border md:pr-4"}>
+            <b className={rows.length === 0 ? "text-sm" : "mb-2 block text-sm"}>히스토리</b>
+            {rows.length === 0 && <p className="min-w-40 flex-1 text-sm text-text-muted">등록된 파일이 없습니다. [파일 등록]으로 첫 버전을 만들어 주세요.</p>}
             {rows.map((r) => (
               <div key={r.id}>
                 <button
@@ -290,7 +290,7 @@ export function ProjectReleasePanel({
                 </button>
               </div>
             ))}
-            <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
+            <div className={rows.length === 0 ? "flex flex-wrap gap-1.5" : "mt-auto flex flex-wrap gap-1.5 pt-3"}>
               <button type="button" title="버전 추가" aria-label="버전 추가" onClick={() => setFormOpen(true)} className={iconBtn}>
                 ➕
               </button>
