@@ -15,16 +15,23 @@ export interface ProgressOverviewItem {
 
 type Tone = "danger" | "amber" | "blue";
 
+// 채도를 낮춘 상태색: 테마의 기존 색을 회색에 섞어, 어느 화면 테마에서도 차분하게 어울리게 한다.
+const MUTE = "#7b8190";
 const TONE_COLOR: Record<Tone, string> = {
-  danger: "var(--color-danger)",
-  amber: "var(--color-tile-yellow-fg)",
-  blue: "var(--color-tile-blue-fg)",
+  danger: `color-mix(in srgb, var(--color-danger) 70%, ${MUTE})`,
+  amber: `color-mix(in srgb, var(--color-tile-yellow-fg) 78%, ${MUTE})`,
+  blue: `color-mix(in srgb, var(--color-primary) 74%, ${MUTE})`,
 };
-const TONE_CHIP: Record<Tone, string> = {
-  danger: "bg-danger/10 text-danger",
-  amber: "bg-tile-yellow text-tile-yellow-fg",
-  blue: "bg-tile-blue text-tile-blue-fg",
-};
+const mixSurface = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, var(--color-surface))`;
+/** 끝낸 단계의 색: 테마 글자색을 표면에 62% 섞은 진한 잉크색 */
+const DONE_COLOR = "color-mix(in srgb, var(--color-text) 62%, var(--color-surface))";
+const DONE_TEXT = "var(--color-surface)";
+
+/** 단계 하나의 색: 끝낸 단계는 잉크색, 지금 단계는 상태색, 나머지는 옅은 상태색 */
+function stageFill(done: boolean, current: boolean, tone: string): string {
+  if (done) return DONE_COLOR;
+  return current ? mixSurface(tone, 52) : mixSurface(tone, 14);
+}
 
 const RING_SIZE = 112;
 const RING_STROKE = 10;
@@ -48,22 +55,42 @@ function shortDate(iso: string): string {
   return iso.slice(5).replace("-", "/");
 }
 
-function Ring({ percent, color }: { percent: number; color: string }) {
+/** 원그래프: 단계마다 호 하나(그 단계 진행률 ÷ 단계 수). 끝낸 단계는 잉크색, 지금 단계는 상태색이라 막대와 색이 대응된다. */
+function Ring({ percent, tone, stages }: { percent: number; tone: string; stages: ProgressStage[] }) {
+  const n = stages.length;
+  const currentIdx = stages.findIndex((s) => s.progress_percent < 100);
+  let offset = 0;
+  const arcs =
+    n === 0
+      ? [{ key: "all", len: (RING_LEN * percent) / 100, off: 0, color: tone, cap: "round" as const }]
+      : stages
+          .filter((s) => s.progress_percent > 0)
+          .map((s) => {
+            const idx = stages.indexOf(s);
+            const len = (RING_LEN * (s.progress_percent / n)) / 100;
+            const arc = { key: String(s.id), len, off: offset, color: stageFill(s.progress_percent === 100, idx === currentIdx, tone), cap: "butt" as const };
+            offset += len;
+            return arc;
+          });
+  const gap = arcs.length > 1 ? 2 : 0;
   return (
     <div className="relative shrink-0" style={{ width: RING_SIZE, height: RING_SIZE }} role="img" aria-label={`진행률 ${percent}%`}>
       <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90">
         <circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R} fill="none" stroke="var(--color-border)" strokeWidth={RING_STROKE} />
-        <circle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={RING_R}
-          fill="none"
-          stroke={color}
-          strokeWidth={RING_STROKE}
-          strokeLinecap="round"
-          strokeDasharray={RING_LEN}
-          strokeDashoffset={RING_LEN * (1 - percent / 100)}
-        />
+        {arcs.map((a) => (
+          <circle
+            key={a.key}
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_R}
+            fill="none"
+            style={{ stroke: a.color }}
+            strokeWidth={RING_STROKE}
+            strokeLinecap={a.cap}
+            strokeDasharray={`${Math.max(0, a.len - gap)} ${RING_LEN}`}
+            strokeDashoffset={-a.off}
+          />
+        ))}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
         <b className="text-[28px] font-bold tracking-tight">
@@ -72,6 +99,48 @@ function Ring({ percent, color }: { percent: number; color: string }) {
         </b>
         <small className="mt-1 text-[10.5px] text-text-muted">진행률</small>
       </div>
+    </div>
+  );
+}
+
+const NOTCH = 13; // 화살표 끝의 뾰족한 부분 폭(px)
+const OVERLAP = 8; // 이웃 칸과 겹치는 폭(px)
+
+/** 진행 단계를 화살표(쉐브론) 모양 칸으로 이어 보여 준다. 칸 안의 색 채움이 단계 진행률이다. 끝낸 단계는 잉크색으로 물러나고 지금 단계만 상태색으로 강조하며 이름도 굵게 표시한다. */
+function StageChevrons({ stages, color }: { stages: ProgressStage[]; color: string }) {
+  const currentIdx = stages.findIndex((s) => s.progress_percent < 100);
+  return (
+    <div className="flex">
+      {stages.map((s, i) => {
+        const done = s.progress_percent === 100;
+        const fill = stageFill(done, i === currentIdx, color);
+        const w = `${s.progress_percent}%`;
+        const first = i === 0;
+        return (
+          <div key={s.id} className="min-w-0 flex-1" style={{ marginLeft: first ? 0 : -OVERLAP }}>
+            <div
+              className="flex h-[42px] items-center justify-center text-[12.5px] font-bold tabular-nums"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={s.progress_percent}
+              aria-label={`${s.name} 진행률`}
+              style={{
+                color: done ? DONE_TEXT : undefined,
+                background: `linear-gradient(90deg, ${fill} ${w}, var(--color-border) ${w})`,
+                clipPath: first
+                  ? `polygon(0 0, calc(100% - ${NOTCH}px) 0, 100% 50%, calc(100% - ${NOTCH}px) 100%, 0 100%)`
+                  : `polygon(0 0, calc(100% - ${NOTCH}px) 0, 100% 50%, calc(100% - ${NOTCH}px) 100%, 0 100%, ${NOTCH}px 50%)`,
+              }}
+            >
+              {s.progress_percent}%
+            </div>
+            <div className={`mt-1.5 truncate text-center text-xs ${i === currentIdx ? "font-bold text-text" : "text-text-muted"}`} title={s.name}>
+              {s.name}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -118,7 +187,7 @@ export function ProjectProgressSets({ items }: { items: ProgressOverviewItem[] }
             className="grid cursor-pointer grid-cols-[280px_1fr] overflow-hidden rounded-2xl border border-border bg-surface transition-shadow hover:shadow-md"
           >
             <div className="flex flex-col items-center justify-center gap-4 border-r border-border px-8 py-[22px]">
-              <Ring percent={p.progress_percent} color={color} />
+              <Ring percent={p.progress_percent} tone={color} stages={p.stages} />
               <dl className="grid w-full grid-cols-[auto_1fr] gap-x-2.5 gap-y-1 text-xs">
                 <dt className="text-text-muted">거래처</dt>
                 <dd className="truncate text-right font-semibold" title={p.client_name}>
@@ -136,35 +205,18 @@ export function ProjectProgressSets({ items }: { items: ProgressOverviewItem[] }
             <div className="flex min-w-0 max-w-[710px] flex-col gap-3.5 px-[28px] py-[22px]">
               <div className="flex items-center gap-2.5">
                 <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{p.name}</span>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${TONE_CHIP[due.tone]}`}>{due.label}</span>
+                <span
+                  className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ color, background: mixSurface(color, 15) }}
+                >
+                  {due.label}
+                </span>
               </div>
 
               {p.stages.length === 0 ? (
                 <p className="py-3 text-xs text-text-muted">등록된 진행 단계가 없습니다. 프로젝트를 열어 진행 단계를 추가하세요.</p>
               ) : (
-                <div className="flex flex-col gap-2.5">
-                  {p.stages.map((s) => (
-                    <div key={s.id} className="grid grid-cols-[84px_1fr_38px] items-center gap-2.5">
-                      <span className={`truncate text-[12.5px] ${s.progress_percent === 0 ? "text-text-muted/60" : "text-text-muted"}`} title={s.name}>
-                        {s.name}
-                      </span>
-                      <div
-                        className="h-2.5 overflow-hidden rounded-full bg-border"
-                        role="progressbar"
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-valuenow={s.progress_percent}
-                        aria-label={`${s.name} 진행률`}
-                      >
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${s.progress_percent}%`, background: s.progress_percent === 100 ? "var(--color-tile-green-fg)" : color }}
-                        />
-                      </div>
-                      <span className="text-right text-xs tabular-nums text-text-muted">{s.progress_percent}%</span>
-                    </div>
-                  ))}
-                </div>
+                <StageChevrons stages={p.stages} color={color} />
               )}
 
               <PurchaseDots steps={p.purchase_steps} />
