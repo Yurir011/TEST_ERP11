@@ -5,6 +5,7 @@ import {
   Boxes,
   Building2,
   CalendarDays,
+  CircleHelp,
   FileSignature,
   FileText,
   LayoutGrid,
@@ -244,6 +245,28 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-14 flex-1 min-h-0 flex flex-col">{!collapsed && <TodoPanel />}</div>
+
+      {/* 도움말: 메뉴 목록과 사용자 줄 사이, 사이드바 맨 아래 */}
+      <div className={`${collapsed ? "px-2" : "px-3"} pb-2 shrink-0`}>
+        <NavLink
+          to="/help"
+          onClick={(e) => {
+            if (!tabMenu || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            console.debug("[Sidebar] 도움말 클릭 → 탭 열기: /help");
+            tabMenu.openMenu("/help");
+          }}
+          title={collapsed ? "도움말" : undefined}
+          className={({ isActive }) =>
+            `flex items-center gap-2.5 py-2 rounded-lg text-sm transition-colors ${collapsed ? "justify-center px-0" : "px-3"} ${
+              isActive ? "bg-surface font-medium text-text shadow-sm" : "text-text-muted hover:bg-surface/60"
+            }`
+          }
+        >
+          <CircleHelp size={17} />
+          {!collapsed && "도움말"}
+        </NavLink>
+      </div>
 
       {user && collapsed && (
         <div className="px-2 py-3 border-t border-border flex flex-col items-center gap-1">

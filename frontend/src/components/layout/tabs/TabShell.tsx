@@ -3,6 +3,7 @@ import {
   Bell,
   Building2,
   CalendarDays,
+  CircleHelp,
   FileSignature,
   FileText,
   LayoutGrid,
@@ -78,6 +79,7 @@ const SECTION_LABELS: Record<string, string> = {
   payments: "입출금관리",
   notices: "업무 알림",
   settings: "직원등록",
+  help: "도움말",
 };
 
 type TabColor = "blue" | "green" | "purple" | "orange";
@@ -98,6 +100,7 @@ const SECTION_STYLE: Record<string, { icon: LucideIcon; color: TabColor }> = {
   mail: { icon: Mail, color: "blue" },
   notices: { icon: Bell, color: "blue" },
   settings: { icon: Settings, color: "blue" },
+  help: { icon: CircleHelp, color: "blue" },
   clients: { icon: Building2, color: "green" },
   transactions: { icon: Receipt, color: "green" },
   payments: { icon: Banknote, color: "green" },

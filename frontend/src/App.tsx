@@ -72,6 +72,7 @@ const UserFormPage = lazyPage(() => import("./features/settings/UserFormPage"), 
 const MessengerPage = lazyPage(() => import("./features/messenger/MessengerPage"), "MessengerPage");
 const MailPage = lazyPage(() => import("./features/mail/MailPage"), "MailPage");
 const CalendarPage = lazyPage(() => import("./features/schedule/CalendarPage"), "CalendarPage");
+const HelpPage = lazyPage(() => import("./features/help/HelpPage"), "HelpPage");
 
 function usePrefetchPages(enabled: boolean) {
   useEffect(() => {
@@ -119,6 +120,14 @@ const desktopRoutes = (
         element={
           <ProtectedRoute siteAdminAllowed>
             <CalendarPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/help"
+        element={
+          <ProtectedRoute siteAdminAllowed>
+            <HelpPage />
           </ProtectedRoute>
         }
       />
