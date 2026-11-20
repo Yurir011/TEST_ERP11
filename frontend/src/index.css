@@ -178,12 +178,12 @@ html[data-ui-theme="lavender"] [data-mono="4"] { background-image: linear-gradie
 html[data-ui-theme="lavender"] [data-mono="5"] { background-image: linear-gradient(135deg, #c4a06e, #a48050); }
 
 /* 오션 틸 테마 */
-html[data-ui-theme="teal"] [data-mono="0"] { background-image: linear-gradient(135deg, #2a9099, #0e7c86); }
-html[data-ui-theme="teal"] [data-mono="1"] { background-image: linear-gradient(135deg, #5aa6b0, #3d8893); }
-html[data-ui-theme="teal"] [data-mono="2"] { background-image: linear-gradient(135deg, #6f9fc4, #5281a8); }
-html[data-ui-theme="teal"] [data-mono="3"] { background-image: linear-gradient(135deg, #8a9fb0, #6c8294); }
-html[data-ui-theme="teal"] [data-mono="4"] { background-image: linear-gradient(135deg, #7fae8a, #5f9070); }
-html[data-ui-theme="teal"] [data-mono="5"] { background-image: linear-gradient(135deg, #c9a46c, #a98450); }
+html[data-ui-theme="teal"] [data-mono="0"] { background-image: linear-gradient(135deg, #0e7c86, #0a5f67); }
+html[data-ui-theme="teal"] [data-mono="1"] { background-image: linear-gradient(135deg, #e0735a, #c05540); }
+html[data-ui-theme="teal"] [data-mono="2"] { background-image: linear-gradient(135deg, #e2a23c, #bf8120); }
+html[data-ui-theme="teal"] [data-mono="3"] { background-image: linear-gradient(135deg, #6b6fc4, #4f53a8); }
+html[data-ui-theme="teal"] [data-mono="4"] { background-image: linear-gradient(135deg, #a35a8f, #84406f); }
+html[data-ui-theme="teal"] [data-mono="5"] { background-image: linear-gradient(135deg, #5f7d8c, #46626f); }
 
 /* 핫핑크 비비드 테마 */
 html[data-ui-theme="hotpink"] [data-mono="0"] { background-image: linear-gradient(135deg, #f0388f, #d10f6b); }
