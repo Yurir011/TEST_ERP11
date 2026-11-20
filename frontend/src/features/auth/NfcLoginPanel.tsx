@@ -16,10 +16,17 @@ export function NfcLoginPanel({ onToken }: { onToken: (token: string) => Promise
 
   useNfcMode("login", true);
 
+  const [lastCause, setLastCause] = useState<string | null>(null); // "연결하는 중"과 오류가 번갈아 나올 때도 마지막 원인을 계속 보여 준다
+
   useEffect(() => {
     if (!bench) return;
-    void bench.nfc.status().then(setReader);
-    return bench.nfc.onStatus(setReader);
+    const apply = (s: NfcReaderStatus | null) => {
+      setReader(s);
+      if (s?.message) setLastCause(s.message);
+      if (s?.state === "ready") setLastCause(null);
+    };
+    void bench.nfc.status().then(apply);
+    return bench.nfc.onStatus(apply);
   }, [bench]);
 
   useEffect(() => {
@@ -55,7 +62,10 @@ export function NfcLoginPanel({ onToken }: { onToken: (token: string) => Promise
       ) : ready ? (
         <p className="text-xs text-text-muted">등록된 카드를 리더에 대면 바로 로그인됩니다.</p>
       ) : (
-        <p className="text-xs text-danger">{reader ? NFC_STATE_LABELS[reader.state] : "리더 상태 확인 중..."} — 카드 로그인을 쓸 수 없습니다.</p>
+        <p className="text-xs text-danger">
+          {reader ? NFC_STATE_LABELS[reader.state] : "리더 상태 확인 중..."} — 카드 로그인을 쓸 수 없습니다.
+          {lastCause && <span className="mt-1 block break-all text-text-muted">원인: {lastCause}</span>}
+        </p>
       )}
       {message && (
         <p className="text-xs text-danger mt-1.5" role="alert">
