@@ -15,17 +15,17 @@ export interface ProgressOverviewItem {
 
 type Tone = "danger" | "amber" | "blue";
 
-// 채도를 낮춘 상태색: 테마의 기존 색을 회색에 섞어, 어느 화면 테마에서도 차분하게 어울리게 한다.
-const MUTE = "#7b8190";
+// 화면 테마와 상관없는 고정 색(신뢰감 있는 블루·네이비 계열). 지연=크림슨, 마감 7일 이내=앰버, 그 외=블루.
 const TONE_COLOR: Record<Tone, string> = {
-  danger: `color-mix(in srgb, var(--color-danger) 70%, ${MUTE})`,
-  amber: `color-mix(in srgb, var(--color-tile-yellow-fg) 78%, ${MUTE})`,
-  blue: `color-mix(in srgb, var(--color-primary) 74%, ${MUTE})`,
+  danger: "#c93636",
+  amber: "#d08a12",
+  blue: "#2a62d6",
 };
+const PURCHASE_DONE = "#2f9e6e";
 const mixSurface = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, var(--color-surface))`;
-/** 끝낸 단계의 색: 테마 글자색을 표면에 62% 섞은 진한 잉크색 */
-const DONE_COLOR = "color-mix(in srgb, var(--color-text) 62%, var(--color-surface))";
-const DONE_TEXT = "var(--color-surface)";
+/** 끝낸 단계의 색: 스틸 네이비. 흰 글씨 대비 4.9:1, 어두운 테마의 카드 위에서도 3:1 이상 */
+const DONE_COLOR = "#4a6fb8";
+const DONE_TEXT = "#ffffff";
 
 /** 단계 하나의 색: 끝낸 단계는 잉크색, 지금 단계는 상태색, 나머지는 옅은 상태색 */
 function stageFill(done: boolean, current: boolean, tone: string): string {
@@ -154,8 +154,8 @@ function PurchaseDots({ steps }: { steps: PurchaseStep[] }) {
       <em className="mr-1 font-semibold not-italic">구매</em>
       {steps.map((s, i) => (
         <span key={s.id} className="flex items-center gap-2">
-          {i > 0 && <span className={`h-0.5 w-3.5 ${s.is_done ? "bg-tile-green-fg" : "bg-border"}`} />}
-          <span title={s.label} className={`h-[9px] w-[9px] rounded-full ${s.is_done ? "bg-tile-green-fg" : "bg-border"}`} />
+          {i > 0 && <span className="h-0.5 w-3.5 bg-border" style={s.is_done ? { background: PURCHASE_DONE } : undefined} />}
+          <span title={s.label} className="h-[9px] w-[9px] rounded-full bg-border" style={s.is_done ? { background: PURCHASE_DONE } : undefined} />
         </span>
       ))}
       <span>{doneCount === 0 ? "대기" : `${lastDone?.label} 완료`}</span>
@@ -207,7 +207,7 @@ export function ProjectProgressSets({ items }: { items: ProgressOverviewItem[] }
                 <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{p.name}</span>
                 <span
                   className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ color, background: mixSurface(color, 15) }}
+                  style={{ color: `color-mix(in srgb, ${color} 72%, var(--color-text))`, background: mixSurface(color, 15) }}
                 >
                   {due.label}
                 </span>
