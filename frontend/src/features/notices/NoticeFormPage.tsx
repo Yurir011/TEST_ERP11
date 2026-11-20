@@ -52,7 +52,7 @@ export function NoticeFormPage() {
   }
 
   return (
-    <MainLayout title={isEdit ? "공지사항 수정" : "새 공지사항 작성"}>
+    <MainLayout showBack title={isEdit ? "공지사항 수정" : "새 공지사항 작성"}>
       {isLoading ? (
         <p className="text-sm text-text-muted">불러오는 중...</p>
       ) : (

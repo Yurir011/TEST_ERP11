@@ -110,6 +110,7 @@ export function NoticesPage() {
 
   return (
     <MainLayout
+      showBack
       title="업무 알림"
       description="결재 완료 등 나에게 온 업무 알림과 전 직원 공지사항을 확인하세요."
       actions={
