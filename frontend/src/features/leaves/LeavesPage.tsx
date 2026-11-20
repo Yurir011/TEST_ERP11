@@ -500,7 +500,7 @@ export function LeavesPage({ embedded = false, openId, modalOnly = false, onDeci
   if (embedded) return content;
 
   return (
-    <MainLayout title="연차관리" description="연차를 신청하고 승인 현황을 확인합니다.">
+    <MainLayout showBack title="연차관리" description="연차를 신청하고 승인 현황을 확인합니다.">
       {content}
     </MainLayout>
   );
