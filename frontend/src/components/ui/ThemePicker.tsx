@@ -1,8 +1,7 @@
 import { Check, Palette } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { apiPut } from "../../lib/api";
-import { logDebug, logError } from "../../lib/logger";
-import { UI_THEMES, applyUiTheme, loadUiTheme, saveUiTheme, type UiThemeKey } from "../../lib/uiTheme";
+import { logDebug } from "../../lib/logger";
+import { UI_THEMES, applyUiTheme, loadUiTheme, saveUiTheme, saveUiThemeToAccount, type UiThemeKey } from "../../lib/uiTheme";
 
 /** 화면 색 테마 선택: 고르면 바로 적용하고, 이 기기에 기억하며, 계정에도 저장한다 (다른 기기에서도 같은 색). */
 export function useUiThemeChoice(): [UiThemeKey, (key: UiThemeKey) => void] {
@@ -13,7 +12,7 @@ export function useUiThemeChoice(): [UiThemeKey, (key: UiThemeKey) => void] {
     setCurrent(key);
     saveUiTheme(key);
     applyUiTheme(key);
-    apiPut("/api/auth/me/theme", { theme: key }).catch((err) => logError("ThemePicker", "계정에 테마 저장 실패 (이 기기에는 적용됨)", err));
+    void saveUiThemeToAccount(key);
   }
 
   return [current, choose];

@@ -46,7 +46,7 @@ describe("uiTheme", () => {
 
   it("테마 키는 서로 다르고 알 수 없는 키는 걸러낸다", () => {
     expect(new Set(UI_THEMES.map((t) => t.key)).size).toBe(UI_THEMES.length);
-    expect(UI_THEMES.map((t) => t.key)).toEqual(["classic", "mocha", "rose", "lavender", "teal", "hotpink", "midnight"]);
+    expect(UI_THEMES.map((t) => t.key)).toEqual(["classic", "navy", "mocha", "rose", "lavender", "teal", "hotpink", "midnight"]);
     expect(isUiThemeKey("rose")).toBe(true);
     expect(isUiThemeKey("slate")).toBe(false);
     expect(isUiThemeKey(null)).toBe(false);

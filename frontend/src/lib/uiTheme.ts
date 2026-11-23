@@ -1,13 +1,14 @@
 import { useLayoutEffect } from "react";
 import { useAuth } from "../context/useAuth";
-import { logDebug } from "./logger";
+import { apiPut } from "./api";
+import { logDebug, logError } from "./logger";
 
 /**
  * 화면 색 테마 (PC·모바일 공용). 직원이 사이드바(모바일은 내 정보)에서 고르면 계정에 저장되어 어느 기기에서 로그인해도 같다.
  * 색은 index.css 의 `@theme` 변수(--color-*)를 <html> 에 덮어써서 바꾼다. 기본(classic)은 덮어쓰지 않는다.
  * 백엔드 허용 키(app/schemas/user.py 의 UI_THEMES)와 같아야 한다.
  */
-export type UiThemeKey = "classic" | "mocha" | "rose" | "lavender" | "teal" | "midnight" | "hotpink";
+export type UiThemeKey = "classic" | "navy" | "mocha" | "rose" | "lavender" | "teal" | "midnight" | "hotpink";
 
 export interface UiThemeInfo {
   key: UiThemeKey;
@@ -51,6 +52,14 @@ function lightTheme(c: {
 
 export const UI_THEMES: UiThemeInfo[] = [
   { key: "classic", label: "클래식 블루", description: "지금 쓰는 색", swatch: ["#f7f7f8", "#f2f2f3", "#2563eb"], dark: false, vars: {} },
+  {
+    key: "navy",
+    label: "딥 네이비",
+    description: "신뢰감 있는 기업용 네이비 + 그레이",
+    swatch: ["#f4f6fa", "#e6e9ee", "#1f4fa8"],
+    dark: false,
+    vars: lightTheme({ bg: "#f4f6fa", sidebar: "#e6e9ee", border: "#dfe4ee", text: "#111827", muted: "#5b6475", primary: "#1f4fa8", hover: "#173d85", soft: "#e4ebf8", header: "#3b5a94", headerBorder: "#2f4b7e" }),
+  },
   {
     key: "mocha",
     label: "모카 베이지",
@@ -181,6 +190,39 @@ export function saveUiTheme(key: UiThemeKey) {
   }
 }
 
+// 계정 저장에 실패한(세션 만료·네트워크 끊김 등) 선택을 보관한다. 다음 로그인 때 서버의 옛 값으로 덮어쓰지 않고 이 값을 다시 저장한다.
+const PENDING_KEY = "bench_ui_theme_pending";
+
+function loadPendingTheme(): UiThemeKey | null {
+  try {
+    const v = localStorage.getItem(PENDING_KEY);
+    return isUiThemeKey(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function setPendingTheme(key: UiThemeKey | null) {
+  try {
+    if (key) localStorage.setItem(PENDING_KEY, key);
+    else localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // 저장소를 쓸 수 없으면 보관하지 못한다.
+  }
+}
+
+/** 고른 테마를 계정에 저장한다. 실패하면 보관해 두었다가 다음 로그인 때 다시 시도한다. */
+export async function saveUiThemeToAccount(key: UiThemeKey): Promise<void> {
+  setPendingTheme(key);
+  try {
+    await apiPut("/api/auth/me/theme", { theme: key });
+    if (loadPendingTheme() === key) setPendingTheme(null);
+    logDebug("UiTheme", `계정에 테마 저장 성공: ${key}`);
+  } catch (err) {
+    logError("UiTheme", "계정에 테마 저장 실패 (다음 로그인 때 다시 저장 시도)", err);
+  }
+}
+
 function setThemeColorMeta(color: string) {
   document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", color);
 }
@@ -212,7 +254,12 @@ export function useUiThemeSync() {
       applyUiTheme(loadUiTheme());
       return;
     }
-    const key = isUiThemeKey(accountTheme) ? accountTheme : "classic";
+    const pending = loadPendingTheme();
+    const key = pending ?? (isUiThemeKey(accountTheme) ? accountTheme : "classic");
+    if (pending) {
+      logDebug("UiTheme", `저장 못 한 테마를 계정에 다시 저장: ${pending}`);
+      void saveUiThemeToAccount(pending);
+    }
     saveUiTheme(key);
     applyUiTheme(key);
     // 로그인한 직원이 바뀔 때만 계정 값으로 맞춘다 (직접 고른 직후의 값을 되돌리지 않도록 accountTheme 는 제외)

@@ -9,7 +9,7 @@ from app.models.user import MENU_PERMISSION_KEYS, JobGrade, JobTitle, UserRole
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
 # 직원이 고를 수 있는 화면 색 테마 (프론트 lib/uiTheme.ts 와 같은 키)
-UI_THEMES = ("classic", "mocha", "rose", "lavender", "teal", "midnight", "hotpink")
+UI_THEMES = ("classic", "navy", "mocha", "rose", "lavender", "teal", "midnight", "hotpink")
 
 
 def _validate_menu_permissions(value: list[str]) -> list[str]:
