@@ -124,12 +124,13 @@ export function Sidebar() {
       className={`${collapsed ? "w-16" : "w-64"} shrink-0 bg-sidebar border-r border-border h-screen sticky top-0 flex flex-col transition-[width] duration-150 overflow-x-hidden`}
     >
       <div className="pt-3" />
-      {!collapsed && (
-        <div className="px-5 pb-5 flex flex-col items-center text-center">
-          <Logo />
-          <p className="text-xs text-text-muted leading-tight mt-1">사내 ERP 시스템</p>
-        </div>
-      )}
+      {/* 로고 영역은 접어도 같은 높이를 유지한다 (메뉴가 위아래로 움직이지 않게). 마크는 접힌 폭(w-16)의 가운데에 고정하고 글자만 오른쪽부터 접힌다. */}
+      <div className="pl-[17px] pr-3 pb-5 flex flex-col items-start">
+        <Logo markOnly={collapsed} />
+        <p className={`text-xs text-text-muted leading-tight mt-1 whitespace-nowrap transition-opacity duration-150 ${collapsed ? "opacity-0" : "opacity-100"}`} aria-hidden={collapsed}>
+          사내 ERP 시스템
+        </p>
+      </div>
 
       <nav className={`${collapsed ? "px-2" : "px-3"} space-y-1 shrink-0`}>
         <button
