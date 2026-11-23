@@ -27,6 +27,8 @@ interface OutstandingCardsProps {
   onOpenDetail: (kind: OutstandingKind, client: Client) => void;
   onSettle: (kind: OutstandingKind, client: Client) => void;
   onOpenCardDetail: (cardType: CardType) => void;
+  /** 기간과 상관없이 아직 결제 확정 전인 카드 사용내역 전체 건수 (일괄 처리 버튼 표시·배지용) */
+  pendingCount: number;
   /** 카드 결제일 일괄처리 창 열기 */
   onSettleCards: () => void;
 }
@@ -126,14 +128,14 @@ export function OutstandingCards(props: OutstandingCardsProps) {
             </h2>
             <p className="text-[17px] font-semibold tabular-nums mt-1 text-notify">{formatCurrency(cardTotal)}</p>
           </div>
-          {cardRows.length > 0 && (
+          {props.pendingCount > 0 && (
             <button
               type="button"
               onClick={props.onSettleCards}
               title="카드 결제일에 맞춰 사용내역을 한꺼번에 출금 처리합니다"
               className="text-[11px] font-medium border bg-surface rounded-full px-2.5 py-1 shrink-0 transition-colors text-danger border-danger/30 hover:bg-red-50"
             >
-              일괄 처리
+              일괄 처리 ({props.pendingCount}건)
             </button>
           )}
         </div>

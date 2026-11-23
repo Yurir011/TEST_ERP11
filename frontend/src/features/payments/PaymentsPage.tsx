@@ -1,5 +1,4 @@
 import {
-  CalendarCheck,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -373,9 +372,6 @@ export function PaymentsPage() {
           <IconAction label="정기 자동이체" onClick={() => setShowRecurring(true)}>
             <Repeat size={17} />
           </IconAction>
-          <IconAction label="카드 결제일 일괄처리" onClick={() => setShowCardSettle(true)} badge={cardPending.reduce((n, s) => n + s.count, 0)}>
-            <CalendarCheck size={17} />
-          </IconAction>
           <span className="mx-1 h-5 w-px bg-border" aria-hidden />
           <div className="relative">
             <IconAction label={isImporting ? "가져오는 중..." : "법인카드 CSV 가져오기"} onClick={() => setShowCsvMenu((v) => !v)} disabled={isImporting}>
@@ -544,6 +540,7 @@ export function PaymentsPage() {
           logDebug("Payments", `카드 결제예정 상세 열기: card_type=${cardType}`);
           setCardDetail(cardType);
         }}
+        pendingCount={cardPending.reduce((n, s) => n + s.count, 0)}
         onSettleCards={() => {
           logDebug("Payments", "카드 결제예정 카드의 [일괄 처리] 버튼 → 카드 결제일 일괄처리 창 열기");
           setShowCardSettle(true);
