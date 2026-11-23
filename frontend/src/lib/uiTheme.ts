@@ -56,9 +56,9 @@ export const UI_THEMES: UiThemeInfo[] = [
     key: "navy",
     label: "딥 네이비",
     description: "신뢰감 있는 기업용 네이비 + 그레이",
-    swatch: ["#f4f6fa", "#e6e9ee", "#1f4fa8"],
+    swatch: ["#f4f6fa", "#d3d8e0", "#1f4fa8"],
     dark: false,
-    vars: lightTheme({ bg: "#f4f6fa", sidebar: "#e6e9ee", border: "#dfe4ee", text: "#111827", muted: "#5b6475", primary: "#1f4fa8", hover: "#173d85", soft: "#e4ebf8", header: "#3b5a94", headerBorder: "#2f4b7e" }),
+    vars: lightTheme({ bg: "#f4f6fa", sidebar: "#d3d8e0", border: "#dfe4ee", text: "#111827", muted: "#5b6475", primary: "#1f4fa8", hover: "#173d85", soft: "#e4ebf8", header: "#3b5a94", headerBorder: "#2f4b7e" }),
   },
   {
     key: "mocha",
