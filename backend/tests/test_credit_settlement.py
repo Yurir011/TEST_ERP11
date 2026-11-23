@@ -264,6 +264,20 @@ def test_cannot_delete_transaction_with_linked_payments(client, h, make_client, 
     assert c.receivable_amount == 0
 
 
+def test_cannot_delete_transaction_with_paid_amount_even_without_payment_rows(client, h, make_client, db):
+    """이미 받은 금액(paid_amount)이 있으면 입출금 기록이 없어도 삭제할 수 없고, 안내는 수정을 가리킨다."""
+    c = make_client()
+    tx = _create_tx(client, h, c.id)
+    row = db.get(Transaction, tx["id"])
+    row.paid_amount = 300_000
+    db.commit()
+
+    res = client.delete(f"/api/transactions/{tx['id']}", headers=h)
+    assert res.status_code == 400
+    assert "수정" in res.json()["detail"]
+    assert db.get(Transaction, tx["id"]) is not None
+
+
 # ── 거래처 잔액만 줄이는 정산(거래 연결 없음) ────────────────────────
 
 def test_balance_only_receipt_reduces_receivable(client, h, make_client, db):

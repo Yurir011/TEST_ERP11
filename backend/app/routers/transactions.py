@@ -368,7 +368,13 @@ def delete_transaction(tx_id: int, db: Session = Depends(get_db), current_user: 
         logger.debug(f"[Transactions] 삭제 거절(연결된 입출금 {linked_payments}건): id={tx_id}, by={current_user.id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"이 거래를 결제한 입출금 내역 {linked_payments}건이 있어 삭제할 수 없습니다. 입출금관리에서 먼저 삭제해주세요.",
+            detail=f"이 거래를 결제한 입출금 내역 {linked_payments}건이 있어 삭제할 수 없습니다. 내용이 잘못되었다면 삭제 대신 수정으로 바로잡아주세요.",
+        )
+    if (tx.paid_amount or 0) > 0:  # 입출금 기록이 없어도 이미 받은(준) 금액이 있으면 삭제하지 않는다
+        logger.debug(f"[Transactions] 삭제 거절(수금/지급액 {tx.paid_amount}원): id={tx_id}, by={current_user.id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"이미 {tx.paid_amount:,}원이 수금/지급된 거래라 삭제할 수 없습니다. 내용이 잘못되었다면 삭제 대신 수정으로 바로잡아주세요.",
         )
     credit_remove(db, tx)
     stored = [f.file_path for f in db.query(TransactionFile).filter(TransactionFile.transaction_id == tx_id)]

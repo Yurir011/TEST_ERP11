@@ -11,7 +11,7 @@ import { HometaxImportModal } from "./HometaxImportModal";
 import { ReportDetailModal, type ReportCardKind } from "./ReportDetailModal";
 import { TransactionDetailModal } from "./TransactionDetailModal";
 import { TransactionSettleModal } from "./TransactionSettleModal";
-import { type Transaction, type TransactionType, type VatReport } from "./types";
+import { remainingAmount, type Transaction, type TransactionType, type VatReport } from "./types";
 import { CODE_BADGE } from "../../components/ui/softBadge";
 import { toLocalISODate, toMonthValue } from "../../lib/date";
 import { useDialog } from "../../components/ui/dialog/useDialog";
@@ -151,10 +151,21 @@ export function TransactionsPage() {
     }
   }
 
-  async function handleDelete(id: number) {
-    if (!(await confirm("이 거래 내역을 삭제할까요?", { okLabel: "삭제", danger: true }))) return;
+  async function handleDelete(tx: Transaction) {
+    const verb = tx.type === "sales" ? "수금" : "지급";
+    const balanceName = tx.type === "sales" ? "미수금" : "미지급금";
+    logDebug("Transactions", `삭제 시도: id=${tx.id}, settled=${tx.settled}, paid=${tx.paid_amount}`);
+    if ((tx.paid_amount ?? 0) > 0) {
+      // 이미 받은(준) 금액이 있으면 삭제하지 않고 수정으로 바로잡게 한다 (서버도 같은 이유로 거절한다)
+      notifyError(`이미 ${formatCurrency(tx.paid_amount)}이 ${verb}된 거래라 삭제할 수 없습니다. 내용이 잘못되었다면 삭제 대신 [수정]으로 바로잡아주세요.`);
+      return;
+    }
+    const message = tx.settled
+      ? "이 거래 내역을 삭제할까요?"
+      : `아직 ${verb}되지 않은 외상 거래입니다. 삭제하면 거래처의 ${balanceName}에서도 ${formatCurrency(remainingAmount(tx))}이 함께 빠집니다. 삭제할까요?`;
+    if (!(await confirm(message, { okLabel: "삭제", danger: true }))) return;
     try {
-      await apiDelete(`/api/transactions/${id}`);
+      await apiDelete(`/api/transactions/${tx.id}`);
       loadTransactions();
       loadReport();
     } catch (err) {
@@ -401,7 +412,7 @@ export function TransactionsPage() {
                       <Pencil size={14} />
                     </Link>
                     <button
-                      onClick={() => handleDelete(tx.id)}
+                      onClick={() => handleDelete(tx)}
                       className="p-1.5 text-text-muted hover:text-danger"
                     >
                       <Trash2 size={14} />
