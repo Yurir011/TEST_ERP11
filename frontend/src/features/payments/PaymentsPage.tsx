@@ -544,6 +544,10 @@ export function PaymentsPage() {
           logDebug("Payments", `카드 결제예정 상세 열기: card_type=${cardType}`);
           setCardDetail(cardType);
         }}
+        onSettleCards={() => {
+          logDebug("Payments", "카드 결제예정 카드의 [일괄 처리] 버튼 → 카드 결제일 일괄처리 창 열기");
+          setShowCardSettle(true);
+        }}
       />
 
       <div className="flex gap-1 bg-surface border border-border rounded-lg p-1 w-fit mb-4">

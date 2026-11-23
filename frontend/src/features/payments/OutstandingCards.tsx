@@ -27,6 +27,8 @@ interface OutstandingCardsProps {
   onOpenDetail: (kind: OutstandingKind, client: Client) => void;
   onSettle: (kind: OutstandingKind, client: Client) => void;
   onOpenCardDetail: (cardType: CardType) => void;
+  /** 카드 결제일 일괄처리 창 열기 */
+  onSettleCards: () => void;
 }
 
 const CARD_STYLES = [
@@ -115,11 +117,26 @@ export function OutstandingCards(props: OutstandingCardsProps) {
       })}
 
       <div className="bg-surface border border-border rounded-2xl p-5">
-        <h2 className="text-sm font-medium">
-          카드 결제예정
-          <span className="text-xs font-normal text-text-muted">{periodLabel}</span>
-        </h2>
-        <p className="text-[17px] font-semibold tabular-nums mt-1 mb-3 text-notify">{formatCurrency(cardTotal)}</p>
+        {/* 제목·합계 오른쪽 빈 자리에 [일괄 처리] 버튼 (미수금/미지급금 카드의 처리 버튼과 같은 모양) */}
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-medium">
+              카드 결제예정
+              <span className="text-xs font-normal text-text-muted">{periodLabel}</span>
+            </h2>
+            <p className="text-[17px] font-semibold tabular-nums mt-1 text-notify">{formatCurrency(cardTotal)}</p>
+          </div>
+          {cardRows.length > 0 && (
+            <button
+              type="button"
+              onClick={props.onSettleCards}
+              title="카드 결제일에 맞춰 사용내역을 한꺼번에 출금 처리합니다"
+              className="text-[11px] font-medium border bg-surface rounded-full px-2.5 py-1 shrink-0 transition-colors text-danger border-danger/30 hover:bg-red-50"
+            >
+              일괄 처리
+            </button>
+          )}
+        </div>
         {cardRows.length === 0 ? (
           <p className="text-sm text-text-muted">결제 예정인 카드 사용내역이 없습니다.</p>
         ) : (
