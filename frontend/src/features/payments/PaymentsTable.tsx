@@ -96,6 +96,7 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
                   paymentMethodDetailLabel(p, names)
                 )}
                 {p.card_pending && <span className={`ml-1 text-[11px] px-1.5 py-0.5 font-medium ${CODE_BADGE.orange}`}>결제예정</span>}
+                {p.card_settled_date && <span className="ml-1 text-[11px] text-text-muted">{p.card_settled_date} 결제</span>}
               </td>
               <td className="text-center py-2.5 px-2 break-words">
                 {p.proof_type ? (

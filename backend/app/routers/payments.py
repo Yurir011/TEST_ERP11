@@ -73,6 +73,7 @@ def _to_out(p: Payment, occurred_date: date | None = None) -> PaymentOut:
         bank_type=p.bank_type,
         card_pending=bool(p.card_pending),
         card_used_date=p.card_used_date,
+        card_settled_date=p.card_settled_date,
         occurred_date=occurred_date,
         created_at=p.created_at,
     )

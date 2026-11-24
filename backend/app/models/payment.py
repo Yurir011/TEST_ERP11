@@ -82,9 +82,10 @@ class Payment(Base):
     # 법인카드 건의 카드 종류. 법인카드가 아닌 경우 항상 None.
     card_type: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 법인카드 code (payment_accounts.code, kind=card)
     # 법인카드 사용내역은 카드 결제일에 일괄 확정한다. 확정 전(결제예정)에는 card_pending=True이고 월 입출금 집계에서 제외된다.
-    # 확정하면 payment_date가 카드 결제일로 바뀌고, 원래 사용일은 card_used_date에 남는다.
+    # 확정(미지급금 지급)해도 payment_date는 사용일 그대로이고, 실제 결제일은 card_settled_date에 남는다.
     card_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     card_used_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    card_settled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # 계좌이체 건의 계좌 종류. 계좌이체가 아닌 경우 항상 None.
     bank_type: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 계좌 code (payment_accounts.code, kind=bank)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)

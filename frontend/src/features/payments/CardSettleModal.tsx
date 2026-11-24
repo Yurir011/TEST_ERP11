@@ -57,7 +57,7 @@ export function CardSettleModal({
   }
 
   async function handleUnsettle(s: CardPendingSummary) {
-    if (!(await confirm(`${cardName(s.card_type)}의 가장 최근 결제일 일괄처리를 취소하시겠습니까? 출금 내역이 결제예정으로 돌아가고 날짜는 사용일로 복원됩니다.`, { okLabel: "처리 취소" }))) {
+    if (!(await confirm(`${cardName(s.card_type)}의 가장 최근 결제일 일괄처리를 취소하시겠습니까? 출금 내역이 결제예정으로 돌아가고 결제일 표시가 지워집니다.`, { okLabel: "처리 취소" }))) {
       return;
     }
     setError(null);
@@ -91,7 +91,7 @@ export function CardSettleModal({
         </button>
         <h3 className="text-sm font-semibold mb-1 pr-8">카드 결제일 일괄처리</h3>
         <p className="text-xs text-text-muted mb-4">
-          법인카드 사용내역은 결제 전까지 '결제예정'으로 쌓입니다. 사용기간은 매월 1일~말일이고 다음 달 결제일(휴일이면 다음 영업일)에 청구됩니다. 일괄 처리하면 출금 내역으로 확정되고 입출금 날짜가 결제일로 바뀝니다.
+          법인카드 사용내역은 결제 전까지 '결제예정'으로 쌓입니다. 사용기간은 매월 1일~말일이고 다음 달 결제일(휴일이면 다음 영업일)에 청구됩니다. 일괄 처리하면 미지급금을 지급한 것으로 보고 출금 내역으로 확정됩니다. 입출금 날짜는 사용일 그대로이고 결제일은 따로 표시됩니다.
         </p>
 
         <div className="space-y-3 mb-4">

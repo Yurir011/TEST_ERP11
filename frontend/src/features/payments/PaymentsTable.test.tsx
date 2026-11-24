@@ -15,7 +15,7 @@ const pay = (over: Partial<Payment> = {}): Payment =>
   ({
     id: 1, type: "withdrawal", payment_date: "2026-10-21", category: "소모품비", description: "토너 구입", amount: 30000, method: "cash",
     client_id: null, client_name: "동네 문구점", has_receipt: false, memo: null, proof_type: null, proof_type_detail: null,
-    card_type: null, bank_type: null, card_pending: false, card_used_date: null, occurred_date: null, created_at: "x", ...over,
+    card_type: null, bank_type: null, card_pending: false, card_used_date: null, card_settled_date: null, occurred_date: null, created_at: "x", ...over,
   }) as Payment;
 
 function renderTable(payments: Payment[]) {

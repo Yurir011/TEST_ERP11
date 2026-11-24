@@ -33,6 +33,7 @@ def update_pending_on_edit(payment: Payment, new_type: PaymentType, new_method: 
     else:
         payment.card_pending = False
         payment.card_used_date = None
+        payment.card_settled_date = None
 
 
 @dataclass
@@ -88,29 +89,28 @@ def settle(db: Session, card_type: str, settle_date: date) -> tuple[int, int, da
     total = 0
     for p in pending:
         p.card_used_date = p.card_used_date or p.payment_date
-        p.payment_date = settle_date
+        p.card_settled_date = settle_date  # 입출금 날짜(payment_date)는 사용일 그대로 둔다
         p.card_pending = False
         total += p.amount
     return len(pending), total, usage_to
 
 
 def unsettle_latest(db: Session, card_type: str) -> tuple[int, int, date | None]:
-    """그 카드의 가장 최근 결제일 일괄처리를 취소한다: 그 결제일로 확정된 출금을 결제예정으로 되돌리고
-    입출금 날짜를 사용일로 복원한다. (건수, 합계, 취소한 결제일)을 돌려준다. 되돌릴 내역이 없으면 (0, 0, None)."""
+    """그 카드의 가장 최근 결제일 일괄처리를 취소한다: 그 결제일로 확정된 출금을 결제예정으로 되돌리고 결제일을 지운다. (건수, 합계, 취소한 결제일)을 돌려준다. 되돌릴 내역이 없으면 (0, 0, None)."""
     base = db.query(Payment).filter(
         Payment.card_pending.is_(False),
         Payment.card_type == card_type,
         Payment.type == PaymentType.withdrawal,
         Payment.method == PaymentMethod.corporate_card,
-        Payment.card_used_date.is_not(None),
+        Payment.card_settled_date.is_not(None),
     )
-    latest = base.with_entities(sa_func.max(Payment.payment_date)).scalar()
+    latest = base.with_entities(sa_func.max(Payment.card_settled_date)).scalar()
     if latest is None:
         return 0, 0, None
-    rows = base.filter(Payment.payment_date == latest).all()
+    rows = base.filter(Payment.card_settled_date == latest).all()
     total = 0
     for p in rows:
-        p.payment_date = p.card_used_date
+        p.card_settled_date = None
         p.card_pending = True
         total += p.amount
     return len(rows), total, latest

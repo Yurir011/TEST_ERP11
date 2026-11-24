@@ -115,8 +115,8 @@ def test_card_pending_summary_and_settle(client, h, db):
     bc_rows = db.query(Payment).filter(Payment.card_type == "bc").order_by(Payment.card_used_date, Payment.payment_date).all()
     settled = [p for p in bc_rows if not p.card_pending]
     assert len(settled) == 2
-    assert all(p.payment_date == settle for p in settled)  # 날짜가 결제일로 바뀐다
-    assert sorted(p.card_used_date for p in settled) == [date(2026, 9, 5), date(2026, 9, 25)]  # 사용일은 남는다
+    assert all(p.card_settled_date == settle for p in settled)  # 실제 결제일은 따로 남는다
+    assert sorted(p.payment_date for p in settled) == [date(2026, 9, 5), date(2026, 9, 25)]  # 입출금 날짜는 사용일 그대로
     assert [p.amount for p in bc_rows if p.card_pending] == [40_000]
     # 다른 카드는 그대로
     assert db.query(Payment).filter(Payment.card_type == "kb_kookmin", Payment.card_pending.is_(True)).count() == 1
