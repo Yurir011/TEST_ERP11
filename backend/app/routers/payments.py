@@ -35,6 +35,8 @@ from app.schemas.payment import (
     CardPendingSummaryOut,
     CardSettleIn,
     CardSettleOut,
+    CardUnsettleIn,
+    CardUnsettleOut,
     CsvImportResult,
     PaymentCreate,
     PaymentOut,
@@ -157,6 +159,20 @@ def settle_card_payments(
         f"count={count}, total={total}, by={current_user.id}"
     )
     return CardSettleOut(settled_count=count, total_amount=total)
+
+
+@router.post("/card-unsettle", response_model=CardUnsettleOut)
+def unsettle_card_payments(
+    payload: CardUnsettleIn, db: Session = Depends(get_db), current_user: User = Depends(require_payments_access)
+):
+    """해당 카드의 가장 최근 결제일 일괄처리를 취소한다. 확정된 출금이 결제예정으로 돌아가고 날짜는 사용일로 복원된다."""
+    require_account(db, "card", payload.card_type, must_be_active=False)
+    count, total, settle_date = card_pending_service.unsettle_latest(db, payload.card_type)
+    db.commit()
+    logger.debug(
+        f"[Payments] 카드 결제일 일괄처리 취소: card={payload.card_type}, settle_date={settle_date}, count={count}, total={total}, by={current_user.id}"
+    )
+    return CardUnsettleOut(unsettled_count=count, total_amount=total, settle_date=settle_date)
 
 
 @router.get("/linkable-transactions", response_model=list[PaymentTransactionCandidateOut])

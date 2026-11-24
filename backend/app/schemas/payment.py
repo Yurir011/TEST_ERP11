@@ -147,3 +147,13 @@ class CardSettleIn(BaseModel):
 class CardSettleOut(BaseModel):
     settled_count: int
     total_amount: int
+
+
+class CardUnsettleIn(BaseModel):
+    card_type: str
+
+
+class CardUnsettleOut(BaseModel):
+    unsettled_count: int
+    total_amount: int
+    settle_date: date | None = None

@@ -56,6 +56,33 @@ export function CardSettleModal({
     }
   }
 
+  async function handleUnsettle(s: CardPendingSummary) {
+    if (!(await confirm(`${cardName(s.card_type)}의 가장 최근 결제일 일괄처리를 취소하시겠습니까? 출금 내역이 결제예정으로 돌아가고 날짜는 사용일로 복원됩니다.`, { okLabel: "처리 취소" }))) {
+      return;
+    }
+    setError(null);
+    setBusyCard(s.card_type);
+    logDebug("CardSettle", `카드 일괄처리 취소 시도: card=${s.card_type}`);
+    try {
+      const result = await apiPost<{ unsettled_count: number; total_amount: number; settle_date: string | null }>(
+        "/api/payments/card-unsettle",
+        { card_type: s.card_type }
+      );
+      logDebug("CardSettle", `일괄처리 취소 완료: count=${result.unsettled_count}, date=${result.settle_date}`);
+      if (result.unsettled_count === 0) {
+        notify("취소할 일괄처리 내역이 없습니다.");
+        return;
+      }
+      notify(`${result.settle_date} 결제분 ${result.unsettled_count}건, ${formatCurrency(result.total_amount)}을 결제예정으로 되돌렸습니다.`);
+      onSuccess();
+    } catch (err) {
+      logError("CardSettle", "일괄처리 취소 실패", err);
+      setError(err instanceof ApiError ? err.message : "일괄처리 취소 중 오류가 발생했습니다.");
+    } finally {
+      setBusyCard(null);
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
       <div className="relative bg-surface rounded-2xl p-6 w-full max-w-lg">
@@ -106,6 +133,14 @@ export function CardSettleModal({
                   {s.usage_from} ~ {s.usage_to} 사용분({s.default_settle_date} 결제) 중 처리할 내역이 없습니다.
                 </p>
               )}
+              <button
+                type="button"
+                onClick={() => handleUnsettle(s)}
+                disabled={busyCard !== null}
+                className="mt-2 text-xs text-text-muted underline hover:text-text disabled:opacity-60"
+              >
+                마지막 일괄처리 취소
+              </button>
               {s.later_count > 0 && (
                 <p className="text-xs text-text-muted mt-2">
                   이후 사용분 {s.later_count}건 · {formatCurrency(s.later_amount)}은 다음 결제일에 처리됩니다.

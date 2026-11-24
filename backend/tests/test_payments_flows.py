@@ -58,6 +58,7 @@ EXPECTED_OPERATIONS = [
     ("GET", "/api/payments/{payment_id}/receipt", "get_receipt_api_payments__payment_id__receipt_get", ["200", "422"]),
     ("POST", "/api/payments", "create_payment_api_payments_post", ["201", "422"]),
     ("POST", "/api/payments/card-settle", "settle_card_payments_api_payments_card_settle_post", ["200", "422"]),
+    ("POST", "/api/payments/card-unsettle", "unsettle_card_payments_api_payments_card_unsettle_post", ["200", "422"]),
     ("POST", "/api/payments/import-csv", "import_card_statement_api_payments_import_csv_post", ["200", "422"]),
     ("POST", "/api/payments/{payment_id}/receipt", "upload_receipt_api_payments__payment_id__receipt_post", ["200", "422"]),
     ("PUT", "/api/payments/{payment_id}", "update_payment_api_payments__payment_id__put", ["200", "422"]),
@@ -119,6 +120,23 @@ def test_card_pending_summary_and_settle(client, h, db):
     assert [p.amount for p in bc_rows if p.card_pending] == [40_000]
     # 다른 카드는 그대로
     assert db.query(Payment).filter(Payment.card_type == "kb_kookmin", Payment.card_pending.is_(True)).count() == 1
+
+
+def test_card_unsettle_restores_pending(client, h, db):
+    _create(client, h, payment_date="2026-09-05", amount=10_000)
+    _create(client, h, payment_date="2026-09-25", amount=20_000)
+    settle = card_billing.default_settle_date(23, date(2026, 9, 5), date.today())
+    client.post("/api/payments/card-settle", headers=h, json={"card_type": "bc", "settle_date": settle.isoformat()})
+
+    res = client.post("/api/payments/card-unsettle", headers=h, json={"card_type": "bc"})
+    assert res.status_code == 200, res.text
+    assert res.json() == {"unsettled_count": 2, "total_amount": 30_000, "settle_date": settle.isoformat()}
+    rows = db.query(Payment).filter(Payment.card_type == "bc").all()
+    assert all(p.card_pending for p in rows)
+    assert sorted(p.payment_date for p in rows) == [date(2026, 9, 5), date(2026, 9, 25)]
+
+    res = client.post("/api/payments/card-unsettle", headers=h, json={"card_type": "bc"})
+    assert res.json()["unsettled_count"] == 0
 
 
 def test_csv_import_records_card_pending_withdrawals(client, h, db):
