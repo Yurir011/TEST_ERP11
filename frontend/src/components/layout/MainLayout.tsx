@@ -17,10 +17,12 @@ interface MainLayoutProps {
   actions?: ReactNode;
   /** 제목 왼쪽 위에 화살표 [뒤로가기]를 둔다 (작성 화면용) */
   showBack?: boolean;
+  /** 화면에는 제목을 숨기고(탭 이름은 그대로) 설명만 크게 보여 준다 */
+  hideTitle?: boolean;
   children: ReactNode;
 }
 
-export function MainLayout({ title, description, actions, showBack = false, children }: MainLayoutProps) {
+export function MainLayout({ title, description, actions, showBack = false, hideTitle = false, children }: MainLayoutProps) {
   const { user, logout } = useAuth();
   const tabShell = useTabShell();
   const loc = useLocation();
@@ -38,8 +40,8 @@ export function MainLayout({ title, description, actions, showBack = false, chil
         {showBack && <BackButton className="mb-3" />}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-semibold text-text">{title}</h1>
-            {description && <p className="text-sm text-text-muted mt-1">{description}</p>}
+            <h1 className={hideTitle ? "sr-only" : "text-2xl font-semibold text-text"}>{title}</h1>
+            {description && <p className={hideTitle ? "text-xl text-text-muted" : "text-sm text-text-muted mt-1"}>{description}</p>}
           </div>
           {actions && <div className="flex items-center gap-3">{actions}</div>}
         </div>
@@ -86,8 +88,8 @@ export function MainLayout({ title, description, actions, showBack = false, chil
         {showBack && <BackButton className="mb-3" />}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-semibold text-text">{title}</h1>
-            {description && <p className="text-sm text-text-muted mt-1">{description}</p>}
+            <h1 className={hideTitle ? "sr-only" : "text-2xl font-semibold text-text"}>{title}</h1>
+            {description && <p className={hideTitle ? "text-xl text-text-muted" : "text-sm text-text-muted mt-1"}>{description}</p>}
           </div>
           {actions && <div className="flex items-center gap-3">{actions}</div>}
         </div>

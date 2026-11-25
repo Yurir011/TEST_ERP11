@@ -85,6 +85,7 @@ export function DashboardPage() {
   return (
     <MainLayout
       title="대시보드"
+      hideTitle
       description="오늘의 업무 현황을 한눈에 확인하세요."
       // 연결이 정상일 때는 아무것도 보이지 않고, 서버가 응답하지 않을 때만 경고를 띄운다.
       actions={
