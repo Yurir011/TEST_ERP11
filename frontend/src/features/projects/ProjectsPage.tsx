@@ -10,6 +10,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { ProjectProgressSets, type ProgressOverviewItem } from "./ProjectProgressSets";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_STYLES, type Project, type ProjectStatus } from "./types";
 import { todayISO } from "../../lib/date";
+import { mergeRounds } from "./rounds";
 
 function isOverdue(p: Project, today: string): boolean {
   return p.status === "in_progress" && !!p.end_date && p.end_date < today;
@@ -197,7 +198,7 @@ export function ProjectsPage() {
 
       {projects !== null && projects.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl overflow-hidden">
-          {projects.map((p) => {
+          {mergeRounds(projects).map(({ project: p, rounds }) => {
             const overdue = isOverdue(p, today);
             const color = overdue ? "var(--color-danger)" : FILL_COLOR[p.status];
             return (
@@ -209,6 +210,20 @@ export function ProjectsPage() {
                 <div className="flex items-center gap-4 px-[18px] py-3">
                   <div className={`min-w-0 flex-1 truncate text-sm font-semibold ${overdue ? "text-danger" : "text-text"}`} title={p.name}>
                     {p.name}
+                    {rounds.length > 1 && (
+                      <span className="ml-2 inline-flex items-center gap-1 align-middle" title={`올해 ${rounds.length}회차`}>
+                        {rounds.map((r) => (
+                          <span
+                            key={r.id}
+                            className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
+                              r.id === p.id ? "bg-primary text-white" : "bg-bg border border-border text-text-muted"
+                            }`}
+                          >
+                            {r.round_no}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                     {overdue && <span className="text-[11px] font-normal ml-1.5">· 지연</span>}
                   </div>
                   <span className="w-[140px] shrink-0 truncate text-[13px] text-text-muted" title={p.client_name}>

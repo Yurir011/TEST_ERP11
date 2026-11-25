@@ -12,7 +12,9 @@ from app.models.client import Client
 from app.models.project import Project, ProjectStatus
 from app.models.project_file import ProjectFile
 from app.models.project_release import ProjectRelease, ProjectReleaseFile
+from app.models.project_bom import ProjectBomLine
 from app.models.project_gerber import ProjectGerber
+from app.models.project_progress import ProjectProgressStage
 from app.models.user import User
 from app.routers.project_progress import _purchase_step_out
 from app.schemas.project import (
@@ -29,8 +31,44 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 logger = get_logger("Projects")
 
 
-def _to_out(project: Project) -> ProjectOut:
+def _round_year(project: Project) -> int:
+    """회차를 매기는 기준 연도: 시작일이 있으면 시작일의 해, 없으면 등록한 해."""
+    return (project.start_date or project.created_at.date()).year
+
+
+def _round_info(db: Session, projects: list[Project]) -> dict[int, tuple[int, int]]:
+    """묶음(series)에 속한 프로젝트의 올해 회차 번호와 올해 회차 수를 {id: (번호, 수)} 로 계산한다.
+
+    번호는 저장하지 않는다. 올해 시작한 구성원을 시작일(없으면 등록일) 순으로 세어 1부터 매기므로 해가 바뀌면 다시 1회차부터 시작하고,
+    지난해 이전 구성원은 번호가 없다 (목록에만 남는다).
+    """
+    series_ids = {p.series_id for p in projects if p.series_id is not None}
+    if not series_ids:
+        return {}
+    this_year = date.today().year
+    members = db.query(Project).filter(Project.series_id.in_(series_ids)).all()
+    by_series: dict[int, list[Project]] = {}
+    for m in members:
+        if _round_year(m) == this_year:
+            by_series.setdefault(m.series_id, []).append(m)
+    info: dict[int, tuple[int, int]] = {}
+    for rows in by_series.values():
+        rows.sort(key=lambda m: (m.start_date or m.created_at.date(), m.id))
+        for no, m in enumerate(rows, start=1):
+            info[m.id] = (no, len(rows))
+    return info
+
+
+def _outs(db: Session, projects: list[Project]) -> list[ProjectOut]:
+    info = _round_info(db, projects)
+    return [_to_out(p, info.get(p.id)) for p in projects]
+
+
+def _to_out(project: Project, round_info: tuple[int, int] | None = None) -> ProjectOut:
     return ProjectOut(
+        series_id=project.series_id,
+        round_no=round_info[0] if round_info else None,
+        round_total=round_info[1] if round_info else None,
         id=project.id,
         name=project.name,
         client_id=project.client_id,
@@ -86,7 +124,7 @@ def list_projects(
             query = query.filter(or_(Project.end_date.is_(None), Project.end_date >= date_from))
         logger.debug(f"[Projects] 기간 검색: {date_from} ~ {date_to}")
     projects = query.order_by(Project.created_at.desc()).all()
-    return [_to_out(p) for p in projects]
+    return _outs(db, projects)
 
 
 @router.get("/progress-overview", response_model=list[ProjectProgressOverviewOut])
@@ -115,9 +153,26 @@ def progress_overview(db: Session = Depends(get_db), current_user: User = Depend
     ]
 
 
+@router.get("/{project_id}/rounds", response_model=list[ProjectOut])
+def list_rounds(project_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """같은 묶음(회차)의 프로젝트를 시작일 순으로 돌려준다. 묶음이 없는 프로젝트는 자기 자신만."""
+    project = _get_project_or_404(project_id, db)
+    if project.series_id is None:
+        return _outs(db, [project])
+    members = (
+        db.query(Project)
+        .options(joinedload(Project.client), joinedload(Project.creator))
+        .filter(Project.series_id == project.series_id)
+        .all()
+    )
+    members.sort(key=lambda m: (m.start_date or m.created_at.date(), m.id))
+    logger.debug(f"[Projects] 회차 조회: id={project_id}, series_id={project.series_id}, 구성원 {len(members)}건")
+    return _outs(db, members)
+
+
 @router.get("/{project_id}", response_model=ProjectOut)
 def get_project(project_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return _to_out(_get_project_or_404(project_id, db))
+    return _outs(db, [_get_project_or_404(project_id, db)])[0]
 
 
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
@@ -147,12 +202,43 @@ def create_project(
         end_date=payload.end_date,
         created_by=current_user.id,
     )
+    source: Project | None = None
+    if payload.from_project_id is not None:
+        source = db.query(Project).filter(Project.id == payload.from_project_id).first()
+        if source is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="불러올 프로젝트를 찾을 수 없습니다.")
     db.add(project)
+    db.flush()
+    if source is not None:
+        if payload.link_series:
+            # 묶음 번호는 묶음 첫 프로젝트의 id. 원본이 단독이면 원본을 첫 회차로 삼아 함께 묶는다.
+            if source.series_id is None:
+                source.series_id = source.id
+            project.series_id = source.series_id
+        if payload.copy_stages:
+            for st in source.progress_stages:
+                db.add(ProjectProgressStage(project_id=project.id, name=st.name, order_index=st.order_index))
+        if payload.copy_bom:
+            for line in source.bom_lines:
+                db.add(
+                    ProjectBomLine(
+                        project_id=project.id,
+                        material_id=line.material_id,
+                        item_name=line.item_name,
+                        quantity=line.quantity,
+                        note=line.note,
+                        created_by=current_user.id,
+                    )
+                )
+        logger.debug(
+            f"[Projects] 기존 프로젝트에서 불러오기: new={project.id}, from={source.id}, series_id={project.series_id}, "
+            f"stages={payload.copy_stages}, bom={payload.copy_bom}"
+        )
     db.commit()
     db.refresh(project)
     project.client = client
     project.creator = current_user
-    return _to_out(project)
+    return _outs(db, [project])[0]
 
 
 @router.put("/{project_id}/name", response_model=ProjectOut)
@@ -169,7 +255,7 @@ def update_project_name(
     db.refresh(project)
     # 견적서·품의서·구매 등은 프로젝트 이름을 저장하지 않고 그때그때 불러 쓰므로 따로 고칠 것이 없다.
     logger.debug(f"[Projects] 이름 변경: id={project_id}, '{old_name}' -> '{project.name}', by={current_user.id}")
-    return _to_out(project)
+    return _outs(db, [project])[0]
 
 
 @router.put("/{project_id}/status", response_model=ProjectOut)
@@ -186,7 +272,7 @@ def update_project_status(
     db.commit()
     db.refresh(project)
     logger.debug(f"[Projects] 상태 변경: id={project_id}, status={payload.status}, reason={project.discard_reason}, by={current_user.id}")
-    return _to_out(project)
+    return _outs(db, [project])[0]
 
 
 @router.put("/{project_id}/schedule", response_model=ProjectOut)
@@ -205,7 +291,7 @@ def update_project_schedule(
         f"[Projects] 일정 변경: id={project_id}, start_date={payload.start_date}, end_date={payload.end_date}, "
         f"by={current_user.id}"
     )
-    return _to_out(project)
+    return _outs(db, [project])[0]
 
 
 @router.put("/{project_id}/progress", response_model=ProjectOut)
@@ -224,7 +310,7 @@ def update_project_progress(
     db.commit()
     db.refresh(project)
     logger.debug(f"[Projects] 진행율 변경: id={project_id}, progress_percent={payload.progress_percent}, by={current_user.id}")
-    return _to_out(project)
+    return _outs(db, [project])[0]
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

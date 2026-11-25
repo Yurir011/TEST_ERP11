@@ -7,6 +7,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
 import { ProjectBomCard } from "./ProjectBomCard";
+import { ProjectRoundTabs } from "./ProjectRoundTabs";
 import { ProjectPurchaseList } from "./ProjectPurchaseList";
 import { ScheduleProgressCard } from "./ScheduleProgressCard";
 import { DocColumn } from "./DocColumn";
@@ -135,7 +136,7 @@ export function ProjectDetailPage() {
 
       {project && (
         <>
-          <div className="bg-surface border border-border rounded-2xl p-6 mb-6">
+          <div className={`bg-surface border border-border rounded-2xl p-6 ${project.series_id === null ? "mb-6" : "mb-4"}`}>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 {isRenaming ? (
@@ -226,15 +227,17 @@ export function ProjectDetailPage() {
             )}
           </div>
 
-          <ProjectBomCard projectId={project.id} />
+          <ProjectRoundTabs project={project} />
 
-          <ScheduleProgressCard project={project} stages={stages} onUpdated={setProject} />
+          <ProjectBomCard key={project.id} projectId={project.id} />
 
-          <ProgressSectionCard project={project} onStagesChange={setStages} />
+          <ScheduleProgressCard key={project.id} project={project} stages={stages} onUpdated={setProject} />
 
-          <DateNotesCard project={project} />
+          <ProgressSectionCard key={project.id} project={project} onStagesChange={setStages} />
 
-          <ProjectPurchaseList projectId={project.id} />
+          <DateNotesCard key={project.id} project={project} />
+
+          <ProjectPurchaseList key={project.id} projectId={project.id} />
 
           {setGroups !== null && setGroups.length > 0 && (
             <h3 className="text-xs font-medium text-text-muted mb-2">이전 방식으로 작성한 문서</h3>

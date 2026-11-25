@@ -14,6 +14,11 @@ class ProjectCreate(BaseModel):
     memo: str | None = None
     start_date: date | None = None
     end_date: date | None = None
+    # 기존 프로젝트를 도용해 새로 만들 때: 원본 id 와 가져올 내용, 같은 프로젝트의 다음 회차로 묶을지 여부
+    from_project_id: int | None = None
+    copy_stages: bool = False
+    copy_bom: bool = False
+    link_series: bool = False
 
     @model_validator(mode="after")
     def _need_client(self):
@@ -91,3 +96,6 @@ class ProjectOut(BaseModel):
     creator_name: str
     created_at: datetime
     updated_at: datetime
+    series_id: int | None = None
+    round_no: int | None = None  # 올해 회차 번호 (묶음에 속하고 올해 시작한 프로젝트만, 1부터)
+    round_total: int | None = None  # 같은 묶음의 올해 회차 수

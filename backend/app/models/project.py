@@ -36,6 +36,9 @@ class Project(Base):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     progress_percent: Mapped[int] = mapped_column(Integer, default=0)
+    # 같은 프로젝트의 반복(회차) 묶음. 묶음의 첫 프로젝트 id 를 공통으로 쓰며, 단독 프로젝트는 비어 있다.
+    # 회차 번호는 저장하지 않고 올해 시작한 묶음 구성원을 시작일 순으로 세어 매번 계산한다.
+    series_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

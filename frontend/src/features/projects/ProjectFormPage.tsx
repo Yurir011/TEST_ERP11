@@ -1,14 +1,15 @@
-import { Search } from "lucide-react";
+import { ChevronDown, Copy, Search } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import type { Client } from "../clients/types";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
-import { logError } from "../../lib/logger";
+import { logDebug, logError } from "../../lib/logger";
 import type { Project } from "./types";
 
 export function ProjectFormPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [name, setName] = useState("");
   const [memo, setMemo] = useState("");
@@ -22,6 +23,55 @@ export function ProjectFormPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+
+  // 기존 프로젝트에서 불러오기: 평소에는 접어 두고, 프로젝트를 고르면 가져올 항목이 펼쳐진다.
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [importQuery, setImportQuery] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [source, setSource] = useState<Project | null>(null);
+  const [copyStages, setCopyStages] = useState(true);
+  const [copyBom, setCopyBom] = useState(true);
+  const [linkSeries, setLinkSeries] = useState(true);
+  const importRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    apiGet<Project[]>("/api/projects")
+      .then((list) => {
+        setAllProjects(list);
+        // 상세 화면의 "＋ 다음 회차"로 들어오면 그 프로젝트를 바로 불러온다.
+        const from = Number(searchParams.get("from"));
+        const found = from ? list.find((p) => p.id === from) : undefined;
+        if (found) void pickSource(found);
+      })
+      .catch((err) => logError("ProjectForm", "불러올 프로젝트 목록 조회 실패", err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function pickSource(p: Project) {
+    logDebug("ProjectForm", `기존 프로젝트 불러오기: id=${p.id}`);
+    setSource(p);
+    setImportQuery(p.name);
+    setImportOpen(false);
+    setName(p.name);
+    setMemo(p.memo ?? "");
+    try {
+      const c = await apiGet<Client>(`/api/clients/${p.client_id}`);
+      setSelectedClient(c);
+      setClientQuery(c.name);
+    } catch (err) {
+      logError("ProjectForm", "불러온 프로젝트의 거래처 조회 실패", err);
+      setClientQuery(p.client_name);
+    }
+  }
+
+  function clearSource() {
+    setSource(null);
+    setImportQuery("");
+  }
+
+  const importMatches = [...new Map(allProjects.map((p) => [p.name, p])).values()].filter(
+    (p) => !importQuery.trim() || p.name.toLowerCase().includes(importQuery.trim().toLowerCase()),
+  );
 
   useEffect(() => {
     if (selectedClient || !showSuggestions) {
@@ -40,6 +90,9 @@ export function ProjectFormPage() {
     function handleClickOutside(e: MouseEvent) {
       if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
+      }
+      if (importRef.current && !importRef.current.contains(e.target as Node)) {
+        setImportOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -75,6 +128,10 @@ export function ProjectFormPage() {
         memo: memo || null,
         start_date: startDate || null,
         end_date: endDate || null,
+        from_project_id: source?.id ?? null,
+        copy_stages: !!source && copyStages,
+        copy_bom: !!source && copyBom,
+        link_series: !!source && linkSeries,
       });
       navigate(`/projects/${created.id}`, { replace: true });
     } catch (err) {
@@ -88,6 +145,59 @@ export function ProjectFormPage() {
   return (
     <MainLayout title="새 프로젝트">
       <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-2xl p-6 space-y-4 max-w-xl">
+        <div className="relative" ref={importRef}>
+          <label className="block text-xs text-text-muted mb-1.5">기존 프로젝트에서 불러오기 (선택)</label>
+          <div className="relative">
+            <Copy size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+            <input
+              value={importQuery}
+              onChange={(e) => {
+                setImportQuery(e.target.value);
+                setImportOpen(true);
+                if (source) setSource(null);
+              }}
+              onFocus={() => setImportOpen(true)}
+              placeholder="눌러서 기존 프로젝트 고르기"
+              className="w-full rounded-lg border border-border pl-9 pr-9 py-2 text-sm outline-none focus:border-primary bg-bg"
+            />
+            <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          </div>
+          {importOpen && importMatches.length > 0 && (
+            <ul className="absolute z-10 mt-1 w-full bg-surface border border-border rounded-lg shadow-sm max-h-56 overflow-y-auto">
+              {importMatches.map((p) => (
+                <li key={p.id}>
+                  <button type="button" onClick={() => void pickSource(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-bg">
+                    {p.name}
+                    <span className="text-text-muted"> · {p.client_name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {source && (
+            <div className="mt-2 rounded-lg border border-border bg-bg p-3 space-y-1.5 text-sm">
+              <p className="text-xs text-text-muted">
+                '{source.name}'의 이름·거래처·메모를 아래에 채웠습니다. 고쳐서 저장하세요. 일정은 새로 입력합니다.
+              </p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={copyStages} onChange={(e) => setCopyStages(e.target.checked)} />
+                진행 단계 가져오기 (진행율은 0%로 시작)
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={copyBom} onChange={(e) => setCopyBom(e.target.checked)} />
+                BOM 가져오기
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={linkSeries} onChange={(e) => setLinkSeries(e.target.checked)} />
+                다음 회차로 묶기 (목록에서 한 줄로 합치고 상세 화면에 회차 탭이 생깁니다)
+              </label>
+              <button type="button" onClick={clearSource} className="text-xs text-text-muted hover:text-text">
+                불러오기 취소
+              </button>
+            </div>
+          )}
+        </div>
+
         <div>
           <label className="block text-xs text-text-muted mb-1.5">프로젝트명</label>
           <input
