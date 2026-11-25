@@ -6,11 +6,13 @@ export interface Holiday {
   name: string;
 }
 
-const FIXED_HOLIDAYS: { month: number; day: number; name: string }[] = [
+// fromYear: 그 해부터 공휴일 (제헌절은 2008년에 빠졌다가 2026년부터 다시 공휴일이 되었다)
+const FIXED_HOLIDAYS: { month: number; day: number; name: string; fromYear?: number }[] = [
   { month: 1, day: 1, name: "신정" },
   { month: 3, day: 1, name: "삼일절" },
   { month: 5, day: 5, name: "어린이날" },
   { month: 6, day: 6, name: "현충일" },
+  { month: 7, day: 17, name: "제헌절", fromYear: 2026 },
   { month: 8, day: 15, name: "광복절" },
   { month: 10, day: 3, name: "개천절" },
   { month: 10, day: 9, name: "한글날" },
@@ -19,7 +21,7 @@ const FIXED_HOLIDAYS: { month: number; day: number; name: string }[] = [
 
 // 대체공휴일이 적용되는 고정 양력 공휴일 (관공서의 공휴일에 관한 규정 제3조).
 // 신정·현충일·크리스마스·부처님오신날은 대체공휴일 대상이 아니다.
-const SUBSTITUTE_ELIGIBLE_FIXED = new Set(["삼일절", "어린이날", "광복절", "개천절", "한글날"]);
+const SUBSTITUTE_ELIGIBLE_FIXED = new Set(["삼일절", "어린이날", "제헌절", "광복절", "개천절", "한글날"]);
 
 function lunarToSolarDate(year: number, month: number, day: number): Date {
   const solar = Lunar.fromYmd(year, month, day).getSolar();
@@ -27,7 +29,7 @@ function lunarToSolarDate(year: number, month: number, day: number): Date {
 }
 
 function fixedHolidaysOfYear(year: number): Holiday[] {
-  return FIXED_HOLIDAYS.map((h) => ({ date: toISODate(new Date(year, h.month - 1, h.day)), name: h.name }));
+  return FIXED_HOLIDAYS.filter((h) => year >= (h.fromYear ?? 0)).map((h) => ({ date: toISODate(new Date(year, h.month - 1, h.day)), name: h.name }));
 }
 
 interface LunarBlock {
@@ -55,7 +57,7 @@ const holidayCache = new Map<number, Holiday[]>();
  * 대체공휴일 판정은 "관공서의 공휴일에 관한 규정" 제3조를 따른다.
  *  - 설날·추석 연휴(전날·당일·다음날) 중 하루가 일요일이거나 다른 공휴일과 겹치면,
  *    연휴 마지막 날 다음의 첫 번째 비공휴일이 대체공휴일이 된다.
- *  - 삼일절·어린이날·광복절·개천절·한글날이 토요일·일요일이거나 다른 공휴일과 겹치면,
+ *  - 삼일절·어린이날·제헌절(2026년~)·광복절·개천절·한글날이 토요일·일요일이거나 다른 공휴일과 겹치면,
  *    그 다음의 첫 번째 비공휴일이 대체공휴일이 된다.
  *  - 신정·현충일·크리스마스·부처님오신날은 대체공휴일 대상이 아니다.
  */
