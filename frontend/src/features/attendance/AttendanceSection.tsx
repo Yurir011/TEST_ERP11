@@ -1,7 +1,8 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/useAuth";
-import { ApiError, apiGet } from "../../lib/api";
+import { useDialog } from "../../components/ui/dialog/useDialog";
+import { ApiError, apiDelete, apiGet, apiPut } from "../../lib/api";
 import { formatDuration, formatTime, isAutoClockOut } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "./types";
@@ -21,10 +22,53 @@ function todayLabel(record: AttendanceRecord | null) {
   return `${formatTime(record.clock_in)} 출근 · ${formatTime(record.clock_out)} ${isAutoClockOut(record.clock_out) ? "자동퇴근" : "퇴근"} (오늘 근무 완료)`;
 }
 
-function MonthlyTable({ records, showEmployee }: { records: AttendanceRecord[]; showEmployee: boolean }) {
+/** ISO 시각 → <input type="datetime-local"> 값 (이 PC 의 시간대 기준) */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function MonthlyTable({
+  records,
+  showEmployee,
+  onEdit,
+  onDelete,
+}: {
+  records: AttendanceRecord[];
+  showEmployee: boolean;
+  /** 관리자만 넘긴다: 수정·삭제 버튼이 보인다 */
+  onEdit?: (record: AttendanceRecord, clockIn: string, clockOut: string) => Promise<void>;
+  onDelete?: (record: AttendanceRecord) => Promise<void>;
+}) {
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [inValue, setInValue] = useState("");
+  const [outValue, setOutValue] = useState("");
+  const [busy, setBusy] = useState(false);
+
   if (records.length === 0) {
     return <p className="text-sm text-text-muted py-6 text-center">해당 월의 근태 기록이 없습니다.</p>;
   }
+  function startEdit(r: AttendanceRecord) {
+    setEditingId(r.id);
+    setInValue(toLocalInput(r.clock_in));
+    setOutValue(toLocalInput(r.clock_out));
+  }
+
+  async function saveEdit(r: AttendanceRecord) {
+    if (!onEdit || !inValue) return;
+    setBusy(true);
+    try {
+      await onEdit(r, inValue, outValue);
+      setEditingId(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inputCls = "rounded-lg border border-border px-2 py-1 text-xs outline-none focus:border-primary bg-bg";
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -35,6 +79,7 @@ function MonthlyTable({ records, showEmployee }: { records: AttendanceRecord[]; 
             <th className="py-2 pr-4 font-medium">출근</th>
             <th className="py-2 pr-4 font-medium">퇴근</th>
             <th className="py-2 pr-4 font-medium">근무시간</th>
+            {onEdit && <th className="py-2 pr-4 font-medium w-32" />}
           </tr>
         </thead>
         <tbody>
@@ -42,12 +87,36 @@ function MonthlyTable({ records, showEmployee }: { records: AttendanceRecord[]; 
             <tr key={r.id} className="border-b border-border last:border-0">
               {showEmployee && <td className="py-2 pr-4">{r.user_name}</td>}
               <td className="py-2 pr-4">{r.work_date}</td>
-              <td className="py-2 pr-4">{formatTime(r.clock_in)}</td>
-              <td className="py-2 pr-4">
-                {formatTime(r.clock_out)}
-                {isAutoClockOut(r.clock_out) && <span className="ml-1.5 text-xs text-text-muted">자동퇴근</span>}
-              </td>
-              <td className="py-2 pr-4">{formatDuration(r.clock_in, r.clock_out)}</td>
+              {editingId === r.id ? (
+                <>
+                  <td className="py-2 pr-4">
+                    <input type="datetime-local" value={inValue} onChange={(e) => setInValue(e.target.value)} className={inputCls} />
+                  </td>
+                  <td className="py-2 pr-4">
+                    <input type="datetime-local" value={outValue} onChange={(e) => setOutValue(e.target.value)} className={inputCls} />
+                  </td>
+                  <td className="py-2 pr-4 text-text-muted">-</td>
+                  <td className="py-2 pr-4 whitespace-nowrap">
+                    <button onClick={() => saveEdit(r)} disabled={busy || !inValue} className="text-xs text-primary mr-3 disabled:opacity-50">저장</button>
+                    <button onClick={() => setEditingId(null)} disabled={busy} className="text-xs text-text-muted">취소</button>
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className="py-2 pr-4">{formatTime(r.clock_in)}</td>
+                  <td className="py-2 pr-4">
+                    {formatTime(r.clock_out)}
+                    {isAutoClockOut(r.clock_out) && <span className="ml-1.5 text-xs text-text-muted">자동퇴근</span>}
+                  </td>
+                  <td className="py-2 pr-4">{formatDuration(r.clock_in, r.clock_out)}</td>
+                  {onEdit && (
+                    <td className="py-2 pr-4 whitespace-nowrap">
+                      <button onClick={() => startEdit(r)} className="text-xs text-text-muted hover:text-primary mr-3">수정</button>
+                      <button onClick={() => onDelete?.(r)} className="text-xs text-text-muted hover:text-danger">삭제</button>
+                    </td>
+                  )}
+                </>
+              )}
             </tr>
           ))}
         </tbody>
@@ -58,6 +127,7 @@ function MonthlyTable({ records, showEmployee }: { records: AttendanceRecord[]; 
 
 export function AttendanceSection() {
   const { user } = useAuth();
+  const dialog = useDialog();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -83,6 +153,36 @@ export function AttendanceSection() {
       apiGet<AttendanceRecord[]>(`/api/attendance?year=${year}&month=${month}`)
         .then(setAllRecords)
         .catch((err) => logError("Attendance", "전체 월별 기록 조회 실패", err));
+    }
+  }
+
+  async function handleAdminEdit(r: AttendanceRecord, clockIn: string, clockOut: string) {
+    logDebug("Attendance", `관리자 근태 수정 시도: record_id=${r.id}`);
+    try {
+      await apiPut<AttendanceRecord>(`/api/attendance/${r.id}`, {
+        clock_in: new Date(clockIn).toISOString(),
+        clock_out: clockOut ? new Date(clockOut).toISOString() : null,
+      });
+      dialog.notify("근태 기록을 수정했습니다.");
+      loadMonth();
+    } catch (err) {
+      logError("Attendance", "관리자 근태 수정 실패", err);
+      dialog.notifyError(err instanceof ApiError ? err.message : "수정 중 오류가 발생했습니다.");
+      throw err;
+    }
+  }
+
+  async function handleAdminDelete(r: AttendanceRecord) {
+    if (!(await dialog.confirm(`${r.user_name}님의 ${r.work_date} 근태 기록을 삭제할까요?
+삭제하면 되돌릴 수 없습니다.`, { okLabel: "삭제", danger: true }))) return;
+    logDebug("Attendance", `관리자 근태 삭제 시도: record_id=${r.id}`);
+    try {
+      await apiDelete(`/api/attendance/${r.id}`);
+      dialog.notify("근태 기록을 삭제했습니다.");
+      loadMonth();
+    } catch (err) {
+      logError("Attendance", "관리자 근태 삭제 실패", err);
+      dialog.notifyError(err instanceof ApiError ? err.message : "삭제 중 오류가 발생했습니다.");
     }
   }
 
@@ -165,7 +265,7 @@ export function AttendanceSection() {
         <>
           <h3 className="text-sm font-medium text-text-muted mb-3">전체 직원 근태 현황</h3>
           <div className="bg-surface border border-border rounded-2xl p-5">
-            <MonthlyTable records={allRecords} showEmployee />
+            <MonthlyTable records={allRecords} showEmployee onEdit={handleAdminEdit} onDelete={handleAdminDelete} />
           </div>
         </>
       )}

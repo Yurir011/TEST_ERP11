@@ -9,7 +9,7 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.attendance import Attendance
 from app.models.user import User
-from app.schemas.attendance import AttendanceOut
+from app.schemas.attendance import AttendanceOut, AttendanceUpdate
 from app.services import presence
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
@@ -190,3 +190,47 @@ def get_all_attendance(
         query = query.filter(Attendance.user_id == user_id)
     records = query.order_by(Attendance.work_date.desc(), Attendance.user_id).all()
     return [_to_out(r) for r in records]
+
+
+@router.put("/{attendance_id}", response_model=AttendanceOut)
+def update_attendance(
+    attendance_id: int,
+    body: AttendanceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """관리자: 직원의 하루 출근·퇴근 시각을 고친다 (날짜는 그대로)."""
+    record = db.query(Attendance).options(joinedload(Attendance.user)).filter(Attendance.id == attendance_id).first()
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="근태 기록을 찾을 수 없습니다.")
+    if body.clock_out is not None and body.clock_out <= body.clock_in:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="퇴근 시각은 출근 시각보다 늦어야 합니다.")
+    if body.clock_out is None and record.work_date < date.today():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="지난 날짜는 퇴근 시각을 비울 수 없습니다.")
+    logger.info(
+        f"[Attendance] 근태 수정(관리자): by={current_user.id}, record_id={record.id}, user_id={record.user_id}, "
+        f"work_date={record.work_date}, in {record.clock_in} -> {body.clock_in}, out {record.clock_out} -> {body.clock_out}"
+    )
+    record.clock_in = body.clock_in
+    record.clock_out = body.clock_out
+    db.commit()
+    db.refresh(record)
+    return _to_out(record)
+
+
+@router.delete("/{attendance_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_attendance(
+    attendance_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """관리자: 직원의 하루 근태 기록을 지운다."""
+    record = db.query(Attendance).filter(Attendance.id == attendance_id).first()
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="근태 기록을 찾을 수 없습니다.")
+    logger.info(
+        f"[Attendance] 근태 삭제(관리자): by={current_user.id}, record_id={record.id}, user_id={record.user_id}, "
+        f"work_date={record.work_date}, in={record.clock_in}, out={record.clock_out}"
+    )
+    db.delete(record)
+    db.commit()

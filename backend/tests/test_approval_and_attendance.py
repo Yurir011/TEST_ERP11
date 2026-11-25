@@ -162,3 +162,26 @@ def test_clock_in_after_clock_out_reopens_today(client, make_user, auth_headers)
     assert body["clock_out"] is None and body["clock_in"] == first["clock_in"]
     assert client.post("/api/attendance/clock-in", headers=h).status_code == 400  # 출근 중에 또 출근은 여전히 불가
     assert client.post("/api/attendance/clock-out", headers=h).status_code == 200  # 다시 퇴근할 수 있다
+
+
+def test_admin_can_edit_and_delete_attendance(client, make_user, auth_headers):
+    admin = make_user(role=UserRole.admin, title=JobTitle.ceo)
+    staff_user = make_user()
+    record = client.post("/api/attendance/clock-in", headers=auth_headers(staff_user)).json()
+    client.post("/api/attendance/clock-out", headers=auth_headers(staff_user))
+    url = f"/api/attendance/{record['id']}"
+    body = {"clock_in": "2026-01-05T09:00:00+09:00", "clock_out": "2026-01-05T18:00:00+09:00"}
+
+    assert client.put(url, json=body, headers=auth_headers(staff_user)).status_code == 403  # 직원은 못 고친다
+    assert client.delete(url, headers=auth_headers(staff_user)).status_code == 403
+
+    ok = client.put(url, json=body, headers=auth_headers(admin))
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["clock_in"].startswith("2026-01-05T09:00:00")
+    bad = client.put(url, json={**body, "clock_out": "2026-01-05T08:00:00+09:00"}, headers=auth_headers(admin))
+    assert bad.status_code == 400  # 퇴근이 출근보다 빠름
+    reopen = client.put(url, json={"clock_in": body["clock_in"], "clock_out": None}, headers=auth_headers(admin))
+    assert reopen.status_code == 200 and reopen.json()["clock_out"] is None  # 오늘 기록은 퇴근을 비워 근무중으로 되돌릴 수 있다
+
+    assert client.delete(url, headers=auth_headers(admin)).status_code == 204
+    assert client.delete(url, headers=auth_headers(admin)).status_code == 404
