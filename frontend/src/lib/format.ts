@@ -18,6 +18,13 @@ export function formatTime(isoString: string | null): string {
   return new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit" }).format(new Date(isoString));
 }
 
+/** 퇴근을 누르지 않아 서버가 17:00(KST)으로 자동 처리한 퇴근인지 (시각이 정확히 17:00:00 인 경우) */
+export function isAutoClockOut(isoString: string | null): boolean {
+  if (!isoString) return false;
+  const d = new Date(isoString);
+  return d.getUTCHours() === 8 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+}
+
 export function formatDuration(startIso: string | null, endIso: string | null): string {
   if (!startIso || !endIso) return "-";
   const ms = new Date(endIso).getTime() - new Date(startIso).getTime();

@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
-import { formatDuration, formatTime } from "../../lib/format";
+import { formatDuration, formatTime, isAutoClockOut } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "../attendance/types";
 import { MobileCard, MobileEmpty, MobileLayout } from "./MobileLayout";
@@ -132,6 +132,7 @@ export function MobileAttendancePage() {
                   </span>
                   <span className="flex-1 tabular-nums text-text-muted">
                     {formatTime(r.clock_in)} ~ {formatTime(r.clock_out)}
+                    {isAutoClockOut(r.clock_out) && <span className="ml-1 text-xs">(자동퇴근)</span>}
                   </span>
                   <span className="text-xs text-text-muted shrink-0">{formatDuration(r.clock_in, r.clock_out)}</span>
                 </li>

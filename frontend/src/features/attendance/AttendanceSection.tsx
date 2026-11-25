@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet } from "../../lib/api";
-import { formatDuration, formatTime } from "../../lib/format";
+import { formatDuration, formatTime, isAutoClockOut } from "../../lib/format";
 import { logDebug, logError } from "../../lib/logger";
 import type { AttendanceRecord } from "./types";
 import { useAttendanceToday } from "./useAttendanceToday";
@@ -18,7 +18,7 @@ function addMonths(year: number, month: number, delta: number) {
 function todayLabel(record: AttendanceRecord | null) {
   if (!record || !record.clock_in) return "아직 출근 전입니다.";
   if (!record.clock_out) return `${formatTime(record.clock_in)}에 출근했습니다.`;
-  return `${formatTime(record.clock_in)} 출근 · ${formatTime(record.clock_out)} 퇴근 (오늘 근무 완료)`;
+  return `${formatTime(record.clock_in)} 출근 · ${formatTime(record.clock_out)} ${isAutoClockOut(record.clock_out) ? "자동퇴근" : "퇴근"} (오늘 근무 완료)`;
 }
 
 function MonthlyTable({ records, showEmployee }: { records: AttendanceRecord[]; showEmployee: boolean }) {
@@ -43,7 +43,10 @@ function MonthlyTable({ records, showEmployee }: { records: AttendanceRecord[]; 
               {showEmployee && <td className="py-2 pr-4">{r.user_name}</td>}
               <td className="py-2 pr-4">{r.work_date}</td>
               <td className="py-2 pr-4">{formatTime(r.clock_in)}</td>
-              <td className="py-2 pr-4">{formatTime(r.clock_out)}</td>
+              <td className="py-2 pr-4">
+                {formatTime(r.clock_out)}
+                {isAutoClockOut(r.clock_out) && <span className="ml-1.5 text-xs text-text-muted">자동퇴근</span>}
+              </td>
               <td className="py-2 pr-4">{formatDuration(r.clock_in, r.clock_out)}</td>
             </tr>
           ))}
