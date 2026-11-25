@@ -24,27 +24,41 @@ export function ProjectRoundTabs({ project }: { project: Project }) {
 
   if (project.series_id === null) return null;
 
+  // 지금 보는 탭은 아래 카드와 같은 면으로 이어지고, 진행 중인 회차만 테마 포인트 색으로 불이 켜진다. 나머지는 꺼진 듯 흐리게.
   return (
-    <div className="flex items-end gap-1 mb-6 px-2 border-b border-border" role="tablist" aria-label="회차">
+    <div className="flex items-end gap-1 mb-6 px-2" role="tablist" aria-label="회차">
       {rounds.map((r) => {
         const selected = r.id === project.id;
         const active = r.status === "in_progress";
         const period = roundPeriod(r);
+        const style = active
+          ? { background: "var(--color-primary)", color: "var(--color-on-primary)", boxShadow: "0 0 14px color-mix(in srgb, var(--color-primary) 55%, transparent)" }
+          : selected
+            ? { background: "var(--color-surface)", color: "var(--color-text-muted)" }
+            : {
+                background: "color-mix(in srgb, var(--color-text-muted) 12%, var(--color-surface))",
+                color: "color-mix(in srgb, var(--color-text-muted) 65%, var(--color-surface))",
+              };
         return (
           <Link
             key={r.id}
             to={`/projects/${r.id}`}
             role="tab"
             aria-selected={selected}
-            className={`-mb-px rounded-t-xl border px-4 py-2 text-left transition-colors ${
-              active ? "bg-primary border-primary text-white" : "bg-bg border-border text-text-muted hover:text-text"
-            } ${selected ? "border-b-surface" : ""}`}
-            style={selected ? { borderBottomColor: active ? "var(--color-primary)" : "var(--color-surface)" } : undefined}
+            style={style}
+            className="rounded-t-xl px-4 py-2 text-left transition-colors"
           >
-            <span className="block text-sm font-semibold">{r.round_no}회차</span>
-            <span className={`block text-[11px] ${active ? "text-white/85" : "text-text-muted"}`}>
-              {active ? "● 진행" : ""}
-              {active && period ? " · " : ""}
+            <span className="block text-sm font-semibold" style={selected && !active ? { color: "var(--color-text)" } : undefined}>
+              {r.round_no}회차
+            </span>
+            <span className="block text-[11px]">
+              {active && (
+                <span
+                  aria-hidden
+                  className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-[1px]"
+                  style={{ background: "var(--color-on-primary)", boxShadow: "0 0 6px var(--color-on-primary)" }}
+                />
+              )}
               {period}
             </span>
           </Link>
