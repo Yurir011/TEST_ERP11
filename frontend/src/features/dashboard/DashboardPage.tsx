@@ -86,20 +86,11 @@ export function DashboardPage() {
     <MainLayout
       title="대시보드"
       description="오늘의 업무 현황을 한눈에 확인하세요."
+      // 연결이 정상일 때는 아무것도 보이지 않고, 서버가 응답하지 않을 때만 경고를 띄운다.
       actions={
-        <span
-          className={`text-xs px-3 py-1.5 rounded-full border ${
-            backendStatus === "online"
-              ? "border-success/30 text-success bg-tile-green"
-              : backendStatus === "offline"
-                ? "border-danger/30 text-danger bg-red-50"
-                : "border-border text-text-muted bg-surface"
-          }`}
-        >
-          {backendStatus === "online" && "● 백엔드 연결됨"}
-          {backendStatus === "offline" && "● 백엔드 연결 안됨"}
-          {backendStatus === "checking" && "● 연결 확인 중..."}
-        </span>
+        backendStatus === "offline" ? (
+          <span className="text-xs px-3 py-1.5 rounded-full border border-danger/30 text-danger bg-red-50">● 백엔드 연결 안됨</span>
+        ) : undefined
       }
     >
       <section className="grid grid-cols-[1.7fr_1fr] gap-6 mb-8 items-start">
