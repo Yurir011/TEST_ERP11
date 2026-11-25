@@ -38,6 +38,7 @@ import {
   type Navigator,
 } from "react-router-dom";
 import { useAuth } from "../../../context/useAuth";
+import { ClockInPrompt } from "../../../features/attendance/ClockInPrompt";
 import { DesktopUpdateNotice } from "../../../features/desktop/DesktopUpdateNotice";
 import { PresenceSelect } from "../../../features/messenger/PresenceSelect";
 import { useMessengerOptional } from "../../../features/messenger/useMessenger";
@@ -348,6 +349,7 @@ export function TabShell({ routes }: { routes: ReactNode }) {
           <div className="px-10 empty:hidden">
             <DesktopUpdateNotice />
           </div>
+          <ClockInPrompt />
           {state.tabs.map((tab) => (
             <div key={tab.id} hidden={tab.id !== state.activeId}>
               <TabRouter key={tab.reloadKey} tab={tab} dispatch={dispatch}>

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { unregisterPush } from "../lib/push";
 import { apiGet, apiPost } from "../lib/api";
 import { clearToken, getToken, setToken, type CurrentUser } from "../lib/auth";
+import { resetClockInPrompt } from "../features/attendance/clockInPromptState";
 import { logDebug, logError } from "../lib/logger";
 import { AuthContext } from "./useAuth";
 
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logDebug("Auth", "로그아웃");
     unregisterPush(); // 이 폰이 이전 계정의 알림을 받지 않도록 서버의 푸시 토큰을 먼저 지운다 (로그인 토큰을 지우기 전에 요청을 시작해야 한다)
     clearToken();
+    resetClockInPrompt();
     setUser(null);
   }
 
