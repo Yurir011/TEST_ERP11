@@ -54,6 +54,11 @@ export function ProjectDetailPage() {
   }
 
   useEffect(() => {
+    // 회차 탭으로 다른 프로젝트로 넘어갈 때 이전 프로젝트의 항목·진행율이 남아 새 프로젝트에 섞이지 않게 비운다.
+    setProject(null);
+    setStages([]);
+    setDocuments(null);
+    setError(null);
     loadProject();
     loadDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps

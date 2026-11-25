@@ -18,6 +18,7 @@ export function ScheduleProgressCard({
   const [endDate, setEndDate] = useState(project.end_date ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedNotice, setSavedNotice] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const lastSyncedStageProgress = useRef<number | null>(null);
 
@@ -34,6 +35,8 @@ export function ScheduleProgressCard({
         end_date: endDate || null,
       });
       onUpdated(updated);
+      logDebug("ProjectDetail", `일정 저장 완료: project_id=${project.id}`);
+      setSavedNotice(true);
     } catch (err) {
       logError("ProjectDetail", "일정 저장 실패", err);
       setError(err instanceof ApiError ? err.message : "일정 저장 중 오류가 발생했습니다.");
@@ -51,6 +54,13 @@ export function ScheduleProgressCard({
       logError("ProjectDetail", "진행율 변경 실패", err);
     }
   }
+
+  // "저장되었습니다" 팝업은 2초 뒤 저절로 사라진다.
+  useEffect(() => {
+    if (!savedNotice) return;
+    const t = setTimeout(() => setSavedNotice(false), 2000);
+    return () => clearTimeout(t);
+  }, [savedNotice]);
 
   // 진행상황 항목 체크 결과가 바뀌면 종합 진행률을 자동으로 계산해 반영한다.
   useEffect(() => {
@@ -98,6 +108,14 @@ export function ScheduleProgressCard({
       >
         {isSaving ? "저장 중..." : "일정 저장"}
       </button>
+      {savedNotice && (
+        <div
+          role="status"
+          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-text text-bg text-sm px-5 py-3 shadow-lg"
+        >
+          저장되었습니다.
+        </div>
+      )}
 
       <div className="mt-5">
         {/* 바가 너무 길면 시선이 흩어져서 이전 폭의 약 2/3로 줄였다 (제목·% 줄도 같은 폭) */}
