@@ -31,9 +31,9 @@ describe("mergeRounds", () => {
 });
 
 describe("roundPeriod", () => {
-  it("월.일 ~ 월.일", () => {
-    expect(roundPeriod({ start_date: "2026-02-01", end_date: "2026-05-30" })).toBe("02.01 ~ 05.30");
-    expect(roundPeriod({ start_date: "2026-02-01", end_date: null })).toBe("02.01 ~ ");
+  it("월/일 ~ 월/일", () => {
+    expect(roundPeriod({ start_date: "2026-02-01", end_date: "2026-05-30" })).toBe("02/01 ~ 05/30");
+    expect(roundPeriod({ start_date: "2026-02-01", end_date: null })).toBe("02/01 ~ ");
     expect(roundPeriod({ start_date: null, end_date: null })).toBe("");
   });
 });

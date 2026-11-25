@@ -31,9 +31,9 @@ export function mergeRounds(projects: Project[]): ProjectRow[] {
   return rows;
 }
 
-/** 탭 부제: "02.01 ~ 05.30" (일정이 없으면 빈 문자열) */
+/** 탭 부제: "02/01 ~ 05/30" (일정이 없으면 빈 문자열) */
 export function roundPeriod(p: Pick<Project, "start_date" | "end_date">): string {
-  const short = (d: string | null) => (d ? d.slice(5).replace("-", ".") : "");
+  const short = (d: string | null) => (d ? d.slice(5).replace("-", "/") : "");
   if (!p.start_date && !p.end_date) return "";
   return `${short(p.start_date)} ~ ${short(p.end_date)}`;
 }
