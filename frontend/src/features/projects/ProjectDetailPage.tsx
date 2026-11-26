@@ -1,8 +1,9 @@
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
-import { ApiError, apiGet, apiPut, downloadFile } from "../../lib/api";
+import { useDialog } from "../../components/ui/dialog/useDialog";
+import { ApiError, apiGet, apiPost, apiPut, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
@@ -37,6 +38,10 @@ export function ProjectDetailPage() {
   const [nameDraft, setNameDraft] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [isSavingName, setIsSavingName] = useState(false);
+  const [isAddingTab, setIsAddingTab] = useState(false);
+  const [tabError, setTabError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { confirm } = useDialog();
 
   function loadProject() {
     apiGet<Project>(`/api/projects/${id}`)
@@ -127,6 +132,36 @@ export function ProjectDetailPage() {
     }
   }
 
+  // 지금 프로젝트와 같은 내용(거래처·메모·일정·진행 단계)의 프로젝트를 만들어 같은 묶음의 새 탭으로 남긴다. BOM·문서·구매 내역은 복사하지 않는다.
+  async function handleAddTab() {
+    if (!project) return;
+    setTabError(null);
+    if (!(await confirm("같은 내용으로 새 탭(프로젝트)을 추가할까요? 거래처·메모·일정·진행 단계가 복사됩니다.", { okLabel: "탭 추가" }))) return;
+    setIsAddingTab(true);
+    logDebug("ProjectDetail", `탭 추가 시도: from_project_id=${project.id}`);
+    try {
+      const created = await apiPost<Project>("/api/projects", {
+        name: project.name,
+        client_id: project.client_id,
+        client_name: null,
+        memo: project.memo,
+        start_date: project.start_date,
+        end_date: project.end_date,
+        from_project_id: project.id,
+        copy_stages: true,
+        copy_bom: false,
+        link_series: true,
+      });
+      logDebug("ProjectDetail", `탭 추가 완료: new_id=${created.id}, series_id=${created.series_id}`);
+      navigate(`/projects/${created.id}`);
+    } catch (err) {
+      logError("ProjectDetail", "탭 추가 실패", err);
+      setTabError(err instanceof ApiError ? err.message : "탭을 추가하지 못했습니다.");
+    } finally {
+      setIsAddingTab(false);
+    }
+  }
+
   const setGroups = documents ? groupBySet(documents) : null;
 
   return (
@@ -211,6 +246,18 @@ export function ProjectDetailPage() {
                 ))}
               </div>
             </div>
+            <div className="flex justify-end mt-3">
+              <button
+                type="button"
+                onClick={handleAddTab}
+                disabled={isAddingTab}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold bg-primary hover:bg-primary-hover disabled:opacity-60 text-white rounded-lg px-3.5 py-2 transition-colors"
+              >
+                <Plus size={14} />
+                {isAddingTab ? "추가 중..." : "탭 추가"}
+              </button>
+            </div>
+            {tabError && <p className="text-xs text-danger mt-2 text-right">{tabError}</p>}
             {showDiscardForm && (
               <div className="mt-4 pt-4 border-t border-border flex items-center gap-2">
                 <input
