@@ -4,9 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { ApprovalNote, ApprovalStampBox } from "../../components/approval/ApprovalStamps";
 import { WITHDRAW_CONFIRM_MESSAGE, canWithdrawApproval } from "../../components/approval/withdraw";
 import { useAuth } from "../../context/useAuth";
-import { ApiError, apiDelete, apiPost, apiUpload, downloadFile } from "../../lib/api";
+import { NumberInput } from "../../components/ui/NumberInput";
+import { ApiError, apiDelete, apiPost, apiPut, apiUpload, downloadFile } from "../../lib/api";
 import { openAttachment } from "../../lib/openAttachment";
-import { canModifyProposalAttachment, isAdminRole } from "../../lib/auth";
+import { canModifyProposalAttachment, hasMenuPermission, isAdminRole } from "../../lib/auth";
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
 import { objectParticle } from "../../lib/korean";
@@ -60,6 +61,34 @@ export function ProposalDetailModal({
   function handleEdit() {
     logDebug("Proposals", `수정 진입: id=${proposal.id}, status=${proposal.status}`);
     navigate(`/proposals/new?edit=${proposal.id}`);
+  }
+
+  // 입출금 권한자는 승인된 품의서의 금액을 재결재 없이 바꿀 수 있다.
+  const canEditAmount = proposal.status === "approved" && !proposal.delete_requested && hasMenuPermission(user, "payments");
+  const [editingAmount, setEditingAmount] = useState(false);
+  const [amountDraft, setAmountDraft] = useState("");
+
+  function startEditAmount() {
+    setAmountDraft(proposal.amount === null || proposal.amount === undefined ? "" : String(proposal.amount));
+    setEditingAmount(true);
+  }
+
+  async function handleSaveAmount() {
+    setActionError(null);
+    if (!(await confirm(`금액을 ${Number(amountDraft).toLocaleString()}으로 변경할까요? 재결재 없이 바로 반영되고, 연결된 매입매출 내역도 함께 바뀝니다.`, { okLabel: "변경" }))) return;
+    setDeleteBusy(true);
+    logDebug("Proposals", `금액 변경 요청: id=${proposal.id}, amount=${amountDraft}`);
+    try {
+      const updated = await apiPut<Proposal>(`/api/proposals/${proposal.id}/amount`, { amount: Number(amountDraft) });
+      logDebug("Proposals", `금액 변경 완료: id=${proposal.id}, amount=${updated.amount}`);
+      setEditingAmount(false);
+      onAttachmentsChanged(updated);
+    } catch (err) {
+      logError("Proposals", "금액 변경 실패", err);
+      setActionError(err instanceof ApiError ? err.message : "금액 변경 중 오류가 발생했습니다.");
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   async function handleWithdraw() {
@@ -254,7 +283,27 @@ export function ProposalDetailModal({
                   <th scope="row" className={TH}>프로젝트</th>
                   <td className={TD}>{proposal.project_name || "일반"}</td>
                   <th scope="row" className={TH}>금액</th>
-                  <td className={`${TD} font-bold tabular-nums`}>{formatProposalAmount(proposal) ?? "-"}</td>
+                  <td className={`${TD} font-bold tabular-nums`}>
+                    {editingAmount ? (
+                      <span className="flex items-center gap-1.5">
+                        <NumberInput
+                          aria-label="품의서 금액 변경"
+                          value={amountDraft}
+                          onChange={setAmountDraft}
+                          className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary"
+                        />
+                        <button onClick={handleSaveAmount} disabled={deleteBusy || amountDraft.trim() === ""} className="text-xs text-primary font-semibold disabled:opacity-50">저장</button>
+                        <button onClick={() => setEditingAmount(false)} className="text-xs text-text-muted">취소</button>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        {formatProposalAmount(proposal) ?? "-"}
+                        {canEditAmount && (
+                          <button onClick={startEditAmount} className="text-xs font-normal text-primary hover:underline">금액 변경</button>
+                        )}
+                      </span>
+                    )}
+                  </td>
                 </tr>
                 <tr>
                   <th scope="row" className={`${TH} !border-b-[#b4b3b9]`}>거래처</th>

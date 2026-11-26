@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, and_
+from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, and_
 from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 from sqlalchemy.sql import false, func
 
@@ -47,6 +47,10 @@ class Proposal(Base):
     vendor_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="KRW", server_default="KRW")
+    # 외화 구매: amount 는 참고용으로 남기고, 결제 때 수기로 입력한 실결제 원화 금액(제반 비용 포함)·환율로 매입·입출금을 만든다.
+    settle_amount: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    settle_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    no_vat: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # 부가세 없음 (해외결제)
     # 이 구매가 속한 프로젝트. 비어 있으면 프로젝트와 상관없는 일반 구매(사무용품 등)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
     department_code: Mapped[str] = mapped_column(String(20), default=DEPARTMENT_CODE)

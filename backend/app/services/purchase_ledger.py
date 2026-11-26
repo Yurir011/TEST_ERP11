@@ -123,15 +123,22 @@ def sync_purchase_transaction(db: Session, p: Proposal, actor: User, pay_date: d
             logger.debug(f"[PurchaseLedger] 발주 취소로 매입 삭제: proposal_id={p.id}, tx_id={tx.id}")
         return None
 
-    if p.currency != "KRW":
-        logger.debug(f"[PurchaseLedger] 원화가 아닌 품의서는 매입 자동 등록 생략: proposal_id={p.id}, currency={p.currency}")
+    foreign = p.currency != "KRW"
+    if foreign and not p.settle_amount:
+        # 외화 구매는 결제 때 수기로 입력한 실결제 원화 금액이 있어야 매입·입출금을 만든다 (품의서의 외화 금액은 참고용).
+        logger.debug(f"[PurchaseLedger] 외화 품의서는 실결제 원화 금액 입력 전까지 매입 등록 생략: proposal_id={p.id}, currency={p.currency}")
         return None
 
     supply, party = _supply_and_party(db, p)
-    vat = vat_amount(supply)
+    if foreign:
+        supply = int(p.settle_amount)  # 제반 비용 포함 실결제 금액(원화)
+    vat = 0 if p.no_vat else vat_amount(supply)
     total = supply + vat
     client = db.query(Client).filter(Client.name == party).first() if party else None
     memo = f"구매 품의서 No. {p.doc_no} · {payment_note(db, p)}"
+    if foreign:
+        rate = f" · 환율 {float(p.settle_rate):,.2f}" if p.settle_rate else ""
+        memo += f" · 외화 {p.currency} {float(p.amount or 0):,.2f}(참고){rate}"
 
     if tx is None:
         tx = Transaction(

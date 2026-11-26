@@ -78,6 +78,9 @@ export interface Proposal {
   project_name?: string | null;
   amount?: number | null; // 금액 (공급가액)
   currency?: "KRW" | "USD" | "JPY";
+  settle_amount?: number | null; // 외화 구매의 실결제 원화 금액(제반 비용 포함, 수기 입력). amount 는 참고용
+  settle_rate?: number | null; // 적용 환율(수기 입력)
+  no_vat?: boolean; // 부가세 없음(해외결제)
   department_name: string;
   issue_date: string;
   status: ProposalStatus;

@@ -39,7 +39,9 @@ EXPECTED_OPERATIONS = [
     ('PUT', '/api/proposals/{proposal_id}/received', 'set_received_api_proposals__proposal_id__received_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/received-date', 'set_received_date_api_proposals__proposal_id__received_date_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/attachments/{attachment_id}/kind', 'set_attachment_kind_api_proposals__proposal_id__attachments__attachment_id__kind_put', ['200', '422']),
-    ('PUT', '/api/proposals/{proposal_id}/approve', 'approve_proposal_api_proposals__proposal_id__approve_put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/amount', 'update_proposal_amount_api_proposals__proposal_id__amount_put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/settlement', 'set_settlement_api_proposals__proposal_id__settlement_put', ['200', '422']),
+    ('PUT', '/api/proposals/{proposal_id}/approve','approve_proposal_api_proposals__proposal_id__approve_put', ['200', '422']),
     ('PUT', '/api/proposals/{proposal_id}/reject', 'reject_proposal_api_proposals__proposal_id__reject_put', ['200', '422']),
 ]
 

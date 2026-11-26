@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models.project import Project
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.proposal import DEPARTMENT_CODE, DEPARTMENT_NAME, Proposal, ProposalStatus
-from app.models.user import User
+from app.models.user import User, has_menu_permission
 from app.routers.proposals._common import (
     PREFIX,
     _advance_self_approvals,
@@ -20,8 +20,9 @@ from app.routers.proposals._common import (
     logger,
     next_proposal_no,
 )
-from app.schemas.proposal import ProposalCreate, ProposalOut
+from app.schemas.proposal import ProposalAmountIn, ProposalCreate, ProposalOut
 from app.services import proposal_files
+from app.services.purchase_ledger import sync_purchase_transaction
 from app.services.approval_notice import create_decision_notification
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
@@ -162,6 +163,30 @@ def update_proposal(
     proposal_files.regenerate_pdf(p)
     db.commit()
     db.refresh(p)
+    return _to_out(p)
+
+
+@router.put("/{proposal_id}/amount", response_model=ProposalOut)
+def update_proposal_amount(
+    proposal_id: int, payload: ProposalAmountIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """승인된 품의서의 금액만 재결재 없이 바꾼다 (입출금 메뉴 권한자·대표). 발주 완료된 건은 매입매출 장부도 함께 맞춘다."""
+    p = _get_or_404(db, proposal_id)
+    logger.debug(f"[Proposals] 금액 변경 시도: id={proposal_id}, amount={payload.amount}, by={current_user.id}")
+    if not has_menu_permission(current_user, "payments"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="입출금 권한이 있는 사용자만 금액을 변경할 수 있습니다.")
+    if p.status != ProposalStatus.approved or p.delete_requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 품의서만 금액을 변경할 수 있습니다.")
+    old_amount = p.amount
+    p.amount = payload.amount
+    sync_purchase_transaction(db, p, current_user)
+    db.commit()
+
+    p = _get_or_404(db, p.id)
+    proposal_files.regenerate_pdf(p)
+    db.commit()
+    db.refresh(p)
+    logger.debug(f"[Proposals] 금액 변경 완료: id={proposal_id}, {old_amount} -> {p.amount}")
     return _to_out(p)
 
 

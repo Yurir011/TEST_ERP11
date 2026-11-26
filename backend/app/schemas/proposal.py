@@ -31,6 +31,21 @@ class ProposalCreate(BaseModel):
         return v
 
 
+class ProposalAmountIn(BaseModel):
+    """승인된 품의서의 금액만 바꿀 때 사용 (입출금 권한자)."""
+
+    amount: float = Field(ge=0)
+
+
+class ProposalSettlementIn(BaseModel):
+    """외화 구매의 실결제: 제반 비용 포함 실제 결제된 원화 금액과 적용 환율(수기 입력), 부가세 없음 여부."""
+
+    settle_amount: int = Field(gt=0)
+    settle_rate: float = Field(gt=0)
+    no_vat: bool = True
+    payment_date: date | None = None  # 이미 결제한 건의 자동 출금 날짜를 유지하려고 쓴다 (보통 비움)
+
+
 class ProposalDeleteRequestIn(BaseModel):
     """승인된 품의서의 삭제 결재를 요청할 때 사용 (결재선은 새로 지정한다)."""
 
@@ -138,6 +153,9 @@ class ProposalOut(BaseModel):
     project_name: str | None = None
     amount: float | None = None
     currency: str = "KRW"
+    settle_amount: int | None = None  # 외화 구매의 실결제 원화 금액
+    settle_rate: float | None = None  # 적용 환율
+    no_vat: bool = False
     department_name: str
     issue_date: date
     status: ProposalStatus
