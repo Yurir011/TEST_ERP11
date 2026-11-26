@@ -19,8 +19,10 @@ logger = get_logger("CardPending")
 
 
 def starts_pending(payment_type: PaymentType, method: PaymentMethod, linked_tx: Transaction | None) -> bool:
-    """새 입출금이 결제예정으로 시작하는지. 법인카드 출금만 해당하고, 외상 매입매출 결제 건은 즉시 확정한다."""
-    return payment_type == PaymentType.withdrawal and method == PaymentMethod.corporate_card and linked_tx is None
+    """새 입출금이 결제예정으로 시작하는지. 법인카드 출금은 모두 해당한다.
+    외상 매입매출을 카드로 결제한 건도 매입(외상)은 바로 결제완료가 되지만, 카드값은 일반 카드 사용내역처럼
+    카드 결제일에 일괄처리할 때까지 결제예정으로 둔다 (linked_tx 는 더 이상 영향을 주지 않는다)."""
+    return payment_type == PaymentType.withdrawal and method == PaymentMethod.corporate_card
 
 
 def update_pending_on_edit(payment: Payment, new_type: PaymentType, new_method: PaymentMethod, new_date: date) -> None:

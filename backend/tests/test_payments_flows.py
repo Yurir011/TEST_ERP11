@@ -286,3 +286,25 @@ def test_card_foreign_payment_krw_pending_then_filled(client, h, monkeypatch):
 def test_foreign_only_for_card_withdrawal(client, h):
     res = client.post("/api/payments", headers=h, json=_payment(method="cash", card_type=None, foreign_currency="USD", foreign_amount=10))
     assert res.status_code == 422
+
+
+def test_card_payment_linked_to_purchase_is_pending_and_script_fixes_old_ones(client, h, db, admin):
+    """외상 매입을 법인카드로 결제해도 카드값은 결제예정으로 남는다. 예전에 확정으로 만들어진 건은 일회성 스크립트가 되돌린다."""
+    from app.models.transaction import Transaction, TransactionType
+    from app.scripts.fix_card_linked_pending import find_candidates
+
+    tx = Transaction(type=TransactionType.purchase, transaction_date=date(2026, 10, 29), item_name="원재료", supply_amount=100_000,
+                     vat_amount=10_000, total_amount=110_000, counterparty="JLCPCB", created_by=admin.id)
+    db.add(tx)
+    db.flush()
+    created = _create(client, h, amount=110_000, category="외상매입금", description="원재료", transaction_id=tx.id, payment_date="2026-10-29")
+    assert created["card_pending"] is True and created["card_used_date"] == "2026-10-29"
+    db.expire_all()
+    assert db.get(Transaction, tx.id).settled is True  # 외상매입은 바로 완료
+
+    # 예전 방식(확정)으로 만들어진 건을 흉내 내고, 스크립트 대상에 잡히는지 확인
+    pay = db.get(Payment, created["id"])
+    pay.card_pending, pay.card_used_date = False, None
+    db.flush()
+    assert [p.id for p in find_candidates(db, date(2026, 10, 1))] == [pay.id]
+    assert find_candidates(db, date(2026, 11, 1)) == []  # 기준일 이전 건은 건드리지 않는다
