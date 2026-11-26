@@ -33,6 +33,12 @@ LEDGER_SYNC_ENABLED = True
 LEDGER_CATEGORY = "외상매입금"  # 입출금 분류: 매입(외상 매입)의 대금 지급
 
 
+def _card_fields(method: str | None, used_on: date) -> tuple[bool, date | None]:
+    """법인카드로 결제한 구매 건은 일반 카드 사용내역과 같이 결제예정으로 두고(월 집계 제외) 사용일을 남긴다.
+    입출금 날짜는 사용일이고, 카드 결제일에 일괄처리하면 그때 결제완료(출금 확정)가 된다. 외상매입은 바로 완료된다."""
+    return (True, used_on) if method == "card" else (False, None)
+
+
 def payment_note(db: Session, p: Proposal) -> str:
     if p.payment_method == "deposit":
         return f"입금({display_name(db, 'bank', p.payment_bank) or '계좌 미선택'})"
@@ -200,13 +206,18 @@ def sync_purchase_transaction(db: Session, p: Proposal, actor: User, pay_date: d
 
     if existing is not None and pay_date is not None and existing.payment_date != pay_date:
         existing.payment_date = pay_date  # 같은 결제 상태에서 결제일만 바뀐 경우
+        if existing.card_pending:
+            existing.card_used_date = pay_date
         if tx.settled_payment_id == existing.id:
             tx.settled_date = pay_date
 
     if wanted and existing is None and not tx.settled:
+        used_on = pay_date or (p.order_sent_at.date() if p.order_sent_at else date.today())
+        card_pending, card_used = _card_fields(p.payment_method, used_on)
         payment = Payment(
             type=PaymentType.withdrawal,
-            payment_date=pay_date or date.today(),
+            # 카드 사용일은 입력한 날이 아니라 발주 완료일이다 (해외결제 원화를 나중에 입력해도 입출금 날짜가 입력일이 되지 않게)
+            payment_date=used_on,
             category=LEDGER_CATEGORY,
             description=f"{p.title} (구매 품의서 {p.doc_no})"[:300],
             amount=total,
@@ -215,7 +226,8 @@ def sync_purchase_transaction(db: Session, p: Proposal, actor: User, pay_date: d
             memo=memo,
             bank_type=p.payment_bank if p.payment_method == "deposit" else None,
             card_type=p.payment_card if p.payment_method == "card" else None,
-            card_pending=False,
+            card_pending=card_pending,
+            card_used_date=card_used,
             created_by=actor.id,
         )
         db.add(payment)
@@ -296,7 +308,8 @@ def add_purchase_payment(
         memo=f"구매 품의서 No. {p.doc_no} · {how}",
         bank_type=account if method == "deposit" else None,
         card_type=account if method == "card" else None,
-        card_pending=False,
+        card_pending=_card_fields(method, when)[0],
+        card_used_date=_card_fields(method, when)[1],
         partial_transaction_id=tx.id if is_partial else None,
         created_by=actor.id,
     )
@@ -338,6 +351,8 @@ def update_purchase_payment(
     current_account = payment.bank_type if current_method == "deposit" else payment.card_type
     if method == current_method and account == current_account and amount == payment.amount:
         payment.payment_date = when
+        if payment.card_pending:
+            payment.card_used_date = when
         if tx.settled_payment_id == payment.id:
             tx.settled_date = when
         logger.debug(f"[PurchaseLedger] 결제일 변경: proposal_id={p.id}, payment_id={payment_id}, date={when}, by={actor.id}")
@@ -359,6 +374,11 @@ def update_purchase_payment(
     payment.card_type = account if method == "card" else None
     payment.memo = f"구매 품의서 No. {p.doc_no} · {how}"
     payment.partial_transaction_id = tx.id if is_partial else None
+    if method == "card":
+        if payment.card_settled_date is None:  # 아직 카드 결제 전이면 결제예정으로 두고 사용일을 맞춘다 (이미 일괄처리한 건은 그대로)
+            payment.card_pending, payment.card_used_date = True, when
+    else:
+        payment.card_pending, payment.card_used_date, payment.card_settled_date = False, None, None
     apply_transaction_payment(db, payment, tx, partial=is_partial)
     if p.payment_id == payment.id:  # 품의서의 결제 방법으로 자동 만든 출금이었으면, 직접 고친 결제로 본다
         p.payment_id = None

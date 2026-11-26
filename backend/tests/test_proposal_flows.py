@@ -429,7 +429,7 @@ def test_order_with_card_or_deposit_creates_payment_and_settles(client, db, staf
     (tx,) = _ledger(db, p["id"])
     (pay,) = _payments(db, p["id"])
     assert tx.settled is True and tx.settled_payment_id == pay.id
-    assert (pay.type.value, pay.method.value, pay.card_type, pay.amount, pay.card_pending) == ("withdrawal", "corporate_card", "bc", 1100000, False)
+    assert (pay.type.value, pay.method.value, pay.card_type, pay.amount, pay.card_pending) == ("withdrawal", "corporate_card", "bc", 1100000, True)  # 법인카드는 결제예정으로 남고 카드 결제일에 확정된다
 
     # 입금(계좌)으로 바꾸면 카드 출금을 지우고 계좌이체 출금으로 다시 만든다
     res = client.put(f"/api/proposals/{p['id']}/order-payment", headers=h, json={"payment_method": "deposit", "payment_bank": "ibk"})

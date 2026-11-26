@@ -303,7 +303,7 @@ export function ProjectDetailPage() {
               </div>
             )}
             {statusError && <p className="text-xs text-danger mt-2">{statusError}</p>}
-            <div className="flex justify-end gap-2 mt-3">
+            <div className="flex justify-end gap-2 mt-3 -mr-2">
               {project.status === "discarded" && isAdminRole(user?.role) && (
                 <button
                   type="button"

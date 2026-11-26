@@ -99,3 +99,32 @@ def test_amount_change_keeps_won_ledger_and_edits_reference(client, db, make_use
     assert res.status_code == 200, res.text
     db.expire_all()
     assert db.query(Transaction).one().total_amount == 1_700_000
+
+
+def test_card_purchase_is_pending_with_usage_date_and_settled_at_card_day(client, db, make_user, auth_headers):
+    """구매 품의서 카드 결제: 외상매입은 바로 완료, 카드값은 사용일 날짜의 결제예정으로 남고 카드 결제일에 확정된다.
+    해외결제 원화를 나중에 입력해도 입출금 날짜는 입력일이 아니라 발주 완료일(사용일)이다."""
+    from datetime import date
+
+    from app.models.payment import Payment
+    from app.models.user import JobTitle, UserRole
+
+    admin = make_user(role=UserRole.admin, title=JobTitle.ceo, name="대표")
+    h = auth_headers(admin)
+    p = _usd_proposal(client, h)
+    res = client.put(
+        f"/api/proposals/{p['id']}/order-sent",
+        json={"value": True, "online": True, "payment_method": "card", "payment_card": "bc"},
+        headers=h,
+    )
+    assert res.status_code == 200, res.text
+    res = client.put(f"/api/proposals/{p['id']}/settlement", json={"settle_amount": 1_450_000, "settle_rate": 1380.5, "no_vat": True}, headers=h)
+    assert res.status_code == 200, res.text
+
+    tx = db.query(Transaction).one()
+    assert tx.settled is True  # 외상매입 완료
+    pay = db.query(Payment).one()
+    assert pay.card_pending is True and pay.amount == 1_450_000
+    assert pay.card_used_date == pay.payment_date  # 사용일 = 입출금 날짜 (카드값은 결제일에 확정)
+    assert pay.payment_date == date.today() or pay.payment_date == tx.transaction_date
+    assert pay.card_settled_date is None
