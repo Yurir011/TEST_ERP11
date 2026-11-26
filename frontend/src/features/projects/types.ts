@@ -18,6 +18,7 @@ export interface Project {
   updated_at: string;
   series_id: number | null; // 같은 프로젝트의 반복(회차) 묶음 번호, 단독이면 null
   round_no: number | null; // 올해 회차 번호 (묶음에 속하고 올해 시작한 프로젝트만)
+  round_label?: string | null; // 회차 탭 이름(직접 지정). 없으면 "N회차"
   round_total: number | null; // 같은 묶음의 올해 회차 수
 }
 
@@ -95,4 +96,49 @@ export interface PurchaseStep {
   order_index: number;
   is_done: boolean;
   completed_on: string | null;
+}
+
+/** 프로젝트(회차)의 납품 기록 한 건. 저장하면 곧바로 납품완료로 본다. */
+export interface Delivery {
+  id: number;
+  project_id: number;
+  delivered_on: string;
+  quantity: number;
+  memo: string | null;
+  created_at: string;
+}
+
+export interface DeliveryList {
+  items: Delivery[];
+  total_count: number;
+  total_quantity: number;
+}
+
+export interface DeliveryMonthStat {
+  month: number;
+  count: number;
+  quantity: number;
+}
+
+export interface DeliveryProjectStat {
+  project_id: number;
+  name: string;
+  client_name: string;
+  count: number;
+  quantity: number;
+  months: DeliveryMonthStat[];
+}
+
+/** 연간 납품 통계 (GET /api/projects/delivery-stats) */
+export interface DeliveryStats {
+  year: number;
+  years: number[];
+  total_count: number;
+  total_quantity: number;
+  project_count: number;
+  client_count: number;
+  prev_count: number;
+  prev_quantity: number;
+  monthly: DeliveryMonthStat[];
+  projects: DeliveryProjectStat[];
 }

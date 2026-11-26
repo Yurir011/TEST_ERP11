@@ -11,6 +11,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.client import Client
     from app.models.project_bom import ProjectBomLine
+    from app.models.project_delivery import ProjectDelivery
     from app.models.project_note import ProjectDateNote
     from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
     from app.models.user import User
@@ -39,6 +40,7 @@ class Project(Base):
     # 같은 프로젝트의 반복(회차) 묶음. 묶음의 첫 프로젝트 id 를 공통으로 쓰며, 단독 프로젝트는 비어 있다.
     # 회차 번호는 저장하지 않고 올해 시작한 묶음 구성원을 시작일 순으로 세어 매번 계산한다.
     series_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    round_label: Mapped[str | None] = mapped_column(String(50), nullable=True)  # 회차 탭 이름(직접 지정). 없으면 "N회차"
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -55,6 +57,9 @@ class Project(Base):
     )
     bom_lines: Mapped[list["ProjectBomLine"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ProjectBomLine.id"
+    )
+    deliveries: Mapped[list["ProjectDelivery"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan", order_by="ProjectDelivery.delivered_on"
     )
     purchase_steps: Mapped[list["ProjectPurchaseStep"]] = relationship(
         back_populates="project", cascade="all, delete-orphan", order_by="ProjectPurchaseStep.order_index"

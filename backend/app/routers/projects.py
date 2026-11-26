@@ -23,6 +23,7 @@ from app.schemas.project import (
     ProjectOut,
     ProjectProgressOverviewOut,
     ProjectProgressUpdate,
+    ProjectRoundLabelUpdate,
     ProjectScheduleUpdate,
     ProjectStatusUpdate,
 )
@@ -69,6 +70,7 @@ def _to_out(project: Project, round_info: tuple[int, int] | None = None) -> Proj
         series_id=project.series_id,
         round_no=round_info[0] if round_info else None,
         round_total=round_info[1] if round_info else None,
+        round_label=project.round_label,
         id=project.id,
         name=project.name,
         client_id=project.client_id,
@@ -267,6 +269,22 @@ def create_project(
     db.refresh(project)
     project.client = client
     project.creator = current_user
+    return _outs(db, [project])[0]
+
+
+@router.put("/{project_id}/round-label", response_model=ProjectOut)
+def update_round_label(
+    project_id: int,
+    payload: ProjectRoundLabelUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """회차 탭에 보여 줄 이름을 바꾼다 (예: "1차 시제품"). 비우면 기본 "N회차" 로 보인다."""
+    project = _get_project_or_404(project_id, db)
+    project.round_label = payload.label
+    db.commit()
+    db.refresh(project)
+    logger.debug(f"[Projects] 회차 이름 변경: id={project_id}, label={payload.label}, by={current_user.id}")
     return _outs(db, [project])[0]
 
 

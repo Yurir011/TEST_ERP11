@@ -45,6 +45,7 @@ from app.routers import (
     project_documents,
     project_notes,
     project_progress,
+    project_deliveries,
     projects,
     proposals,
     sales_documents,
@@ -95,6 +96,7 @@ app.include_router(documents.router)
 app.include_router(clients.router)
 app.include_router(contacts.router)
 app.include_router(materials.router)
+app.include_router(project_deliveries.router)  # /delivery-stats 가 /{project_id} 보다 먼저 맞도록 projects 앞에 둔다
 app.include_router(projects.router)
 app.include_router(project_documents.router)
 app.include_router(proposals.router)

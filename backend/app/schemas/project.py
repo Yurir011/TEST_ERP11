@@ -34,6 +34,17 @@ class ProjectStatusUpdate(BaseModel):
     reason: str | None = None  # 폐기 사유 (상태가 discarded일 때만 저장)
 
 
+class ProjectRoundLabelUpdate(BaseModel):
+    """회차 탭 이름. 비우면 기본 \"N회차\"로 되돌린다."""
+
+    label: str | None = None
+
+    @model_validator(mode="after")
+    def _clean(self):
+        self.label = (self.label or "").strip()[:50] or None
+        return self
+
+
 class ProjectNameUpdate(BaseModel):
     name: str
 
@@ -100,3 +111,4 @@ class ProjectOut(BaseModel):
     series_id: int | None = None
     round_no: int | None = None  # 올해 회차 번호 (묶음에 속하고 올해 시작한 프로젝트만, 1부터)
     round_total: int | None = None  # 같은 묶음의 올해 회차 수
+    round_label: str | None = None  # 회차 탭 이름(직접 지정한 경우)

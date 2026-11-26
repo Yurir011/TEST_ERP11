@@ -1,4 +1,4 @@
-import { FolderKanban, Plus, Search, Trash2, X } from "lucide-react";
+import { BarChart3, FolderKanban, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
@@ -105,13 +105,22 @@ export function ProjectsPage() {
       title="프로젝트관리"
       description="프로젝트를 관리하고 견적서·거래명세서를 작성합니다."
       actions={
-        <Link
-          to="/projects/new"
-          className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={16} />
-          새 프로젝트
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/projects/delivery-stats"
+            className="flex items-center gap-1.5 bg-surface border border-border hover:bg-bg text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <BarChart3 size={16} />
+            납품 통계
+          </Link>
+          <Link
+            to="/projects/new"
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={16} />
+            새 프로젝트
+          </Link>
+        </div>
       }
     >
       <section className="mb-8">

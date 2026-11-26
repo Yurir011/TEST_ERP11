@@ -90,3 +90,18 @@ def test_tab_add_copies_progress_of_pressed_round(client, db, make_user, make_cl
     nxt = _create(client, headers, c.id, "원본", f"{year}-06-01", from_project_id=src["id"], copy_stages=True, link_series=True)
     q = db.query(Project).filter(Project.id == nxt["id"]).first()
     assert q.progress_stages[0].progress_percent == 0 and q.status == ProjectStatus.estimate
+
+
+def test_round_label_can_be_renamed_and_cleared(client, make_user, make_client, auth_headers):
+    headers = auth_headers(make_user())
+    c = make_client(name="거래처")
+    year = date.today().year
+    r1 = _create(client, headers, c.id, "중계기", f"{year}-02-01")
+    r2 = _create(client, headers, c.id, "중계기", f"{year}-06-01", from_project_id=r1["id"], link_series=True)
+    assert r2["round_label"] is None
+    res = client.put(f"/api/projects/{r2['id']}/round-label", json={"label": "  양산 1차  "}, headers=headers)
+    assert res.status_code == 200 and res.json()["round_label"] == "양산 1차"
+    rounds = client.get(f"/api/projects/{r2['id']}/rounds", headers=headers).json()
+    assert [r["round_label"] for r in rounds] == [None, "양산 1차"] and [r["round_no"] for r in rounds] == [1, 2]
+    res = client.put(f"/api/projects/{r2['id']}/round-label", json={"label": "   "}, headers=headers)
+    assert res.json()["round_label"] is None

@@ -1,14 +1,41 @@
-import { Plus } from "lucide-react";
+import { Check, Pencil, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiGet } from "../../lib/api";
+import { ApiError, apiGet, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { roundPeriod } from "./rounds";
 import type { Project } from "./types";
 
 // 상세 화면 제목 바로 밑의 회차 탭 (올해 회차만, 1회차부터). 진행 중인 회차는 파란색으로 채운다.
-export function ProjectRoundTabs({ project }: { project: Project }) {
+/** 탭에 보이는 이름: 직접 지정한 이름이 있으면 그것, 없으면 "N회차" */
+export function roundName(r: Pick<Project, "round_no" | "round_label">): string {
+  return r.round_label?.trim() || `${r.round_no}회차`;
+}
+
+export function ProjectRoundTabs({ project, onRenamed }: { project: Project; onRenamed?: (updated: Project) => void }) {
   const [rounds, setRounds] = useState<Project[]>([]);
+  // 지금 보는 탭의 이름 바꾸기 (연필 → 입력칸, Enter 저장 / Esc 취소, 비우고 저장하면 기본 이름으로 되돌아간다)
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  async function saveLabel() {
+    setSaving(true);
+    setRenameError(null);
+    logDebug("ProjectRounds", `회차 이름 변경 시도: project_id=${project.id}, label=${draft}`);
+    try {
+      const updated = await apiPut<Project>(`/api/projects/${project.id}/round-label`, { label: draft });
+      setRounds((list) => list.map((r) => (r.id === updated.id ? { ...r, round_label: updated.round_label } : r)));
+      onRenamed?.(updated);
+      setEditing(false);
+    } catch (err) {
+      logError("ProjectRounds", "회차 이름 변경 실패", err);
+      setRenameError(err instanceof ApiError ? err.message : "이름을 바꾸지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (project.series_id === null) {
@@ -39,17 +66,51 @@ export function ProjectRoundTabs({ project }: { project: Project }) {
                 background: "color-mix(in srgb, var(--color-text-muted) 12%, var(--color-surface))",
                 color: "color-mix(in srgb, var(--color-text-muted) 65%, var(--color-surface))",
               };
-        return (
-          <Link
-            key={r.id}
-            to={`/projects/${r.id}`}
-            role="tab"
-            aria-selected={selected}
-            style={style}
-            className="rounded-t-xl px-4 py-2 text-left transition-colors"
-          >
+        const inner = (
+          <>
             <span className="block text-sm font-semibold" style={selected && !active ? { color: "var(--color-text)" } : undefined}>
-              {r.round_no}회차
+              {selected && editing ? (
+                <span className="flex items-center gap-1">
+                  <input
+                    autoFocus
+                    aria-label="회차 이름"
+                    value={draft}
+                    maxLength={50}
+                    placeholder={`${r.round_no}회차`}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void saveLabel();
+                      if (e.key === "Escape") setEditing(false);
+                    }}
+                    className="w-28 rounded-md border border-border bg-bg px-2 py-0.5 text-sm font-semibold text-text outline-none focus:border-primary"
+                  />
+                  <button type="button" onClick={() => void saveLabel()} disabled={saving} aria-label="이름 저장" title="저장" className="p-1 text-primary disabled:opacity-50">
+                    <Check size={14} />
+                  </button>
+                  <button type="button" onClick={() => setEditing(false)} aria-label="이름 변경 취소" title="취소" className="p-1 text-text-muted">
+                    <X size={14} />
+                  </button>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  {roundName(r)}
+                  {selected && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft(r.round_label ?? "");
+                        setRenameError(null);
+                        setEditing(true);
+                      }}
+                      aria-label="회차 이름 변경"
+                      title="이름 변경"
+                      className="p-0.5 opacity-60 hover:opacity-100"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  )}
+                </span>
+              )}
             </span>
             <span className="block text-[11px]">
               {active && (
@@ -61,9 +122,19 @@ export function ProjectRoundTabs({ project }: { project: Project }) {
               )}
               {period}
             </span>
+          </>
+        );
+        return selected ? (
+          <div key={r.id} role="tab" aria-selected style={style} className="rounded-t-xl px-4 py-2 text-left transition-colors">
+            {inner}
+          </div>
+        ) : (
+          <Link key={r.id} to={`/projects/${r.id}`} role="tab" aria-selected={false} style={style} className="rounded-t-xl px-4 py-2 text-left transition-colors">
+            {inner}
           </Link>
         );
       })}
+      {renameError && <p className="mb-1 ml-2 text-xs text-danger">{renameError}</p>}
       <Link
         to={`/projects/new?from=${project.id}`}
         className="mb-1 ml-1 flex items-center gap-1 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-text-muted hover:text-primary hover:border-primary"

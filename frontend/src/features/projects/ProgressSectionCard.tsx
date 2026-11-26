@@ -1,9 +1,10 @@
-import { ChevronDown, ChevronUp, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListChecks, Pencil, PackageCheck, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { DateTextInput } from "../../components/ui/DateTextInput";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PercentPickerPopover } from "./PercentPickerPopover";
+import { ProjectDeliveryPanel } from "./ProjectDeliveryPanel";
 import { PROGRESS_ROW_STYLES, stageColorIndex } from "./progressRowStyles";
 import { MAX_PROGRESS_STAGES, type Project, type ProgressStage } from "./types";
 import { diffDays, formatMonthDay, labelLayout, parseDate, stageDayRange, todayFraction } from "./timeline";
@@ -27,6 +28,7 @@ export function ProgressSectionCard({
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [openPickerId, setOpenPickerId] = useState<number | null>(null);
+  const [showDelivery, setShowDelivery] = useState(false); // [납품] 입력 패널
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -375,16 +377,30 @@ export function ProgressSectionCard({
           </button>
         </form>
       ) : (
-        <button
-          type="button"
-          onClick={() => setShowAddForm(true)}
-          disabled={atMax}
-          className="flex items-center gap-1 text-xs border border-dashed border-border rounded-lg px-3 py-2 text-text-muted hover:bg-bg hover:text-text disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Plus size={14} />
-          항목 추가 ({count}/{MAX_PROGRESS_STAGES})
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAddForm(true)}
+            disabled={atMax}
+            className="flex items-center gap-1 text-xs border border-dashed border-border rounded-lg px-3 py-2 text-text-muted hover:bg-bg hover:text-text disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus size={14} />
+            항목 추가 ({count}/{MAX_PROGRESS_STAGES})
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowDelivery((v) => !v)}
+            aria-expanded={showDelivery}
+            className={`flex items-center gap-1 text-xs border border-dashed rounded-lg px-3 py-2 hover:bg-bg hover:text-text ${
+              showDelivery ? "border-primary text-primary" : "border-border text-text-muted"
+            }`}
+          >
+            <PackageCheck size={14} aria-hidden />
+            납품
+          </button>
+        </div>
       )}
+      {showDelivery && <ProjectDeliveryPanel projectId={project.id} />}
 
       {error && <p className="text-xs text-danger mt-2">{error}</p>}
     </div>

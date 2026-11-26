@@ -53,6 +53,7 @@ const ClientDetailPage = lazyPage(() => import("./features/clients/ClientDetailP
 const ClientFormPage = lazyPage(() => import("./features/clients/ClientFormPage"), "ClientFormPage");
 const ProjectsPage = lazyPage(() => import("./features/projects/ProjectsPage"), "ProjectsPage");
 const ProjectFormPage = lazyPage(() => import("./features/projects/ProjectFormPage"), "ProjectFormPage");
+const ProjectDeliveryStatsPage = lazyPage(() => import("./features/projects/ProjectDeliveryStatsPage"), "ProjectDeliveryStatsPage");
 const GerberViewerPage = lazyPage(() => import("./features/gerber/GerberViewerPage"), "GerberViewerPage");
 const ProjectDetailPage = lazyPage(() => import("./features/projects/ProjectDetailPage"), "ProjectDetailPage");
 const ProjectDocumentsPage = lazyPage(() => import("./features/projectDocuments/ProjectDocumentsPage"), "ProjectDocumentsPage");
@@ -168,6 +169,14 @@ const desktopRoutes = (
         element={
           <ProtectedRoute menuKey="projects">
             <ProjectFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/projects/delivery-stats"
+        element={
+          <ProtectedRoute menuKey="projects">
+            <ProjectDeliveryStatsPage />
           </ProtectedRoute>
         }
       />

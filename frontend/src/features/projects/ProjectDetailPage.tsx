@@ -10,7 +10,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
 import { ProjectBomCard } from "./ProjectBomCard";
-import { ProjectRoundTabs } from "./ProjectRoundTabs";
+import { ProjectRoundTabs, roundName } from "./ProjectRoundTabs";
 import { ProjectPurchaseList } from "./ProjectPurchaseList";
 import { ScheduleProgressCard } from "./ScheduleProgressCard";
 import { DocColumn } from "./DocColumn";
@@ -175,7 +175,7 @@ export function ProjectDetailPage() {
   async function handleDeleteRound() {
     if (!project) return;
     setTabError(null);
-    const label = project.round_no !== null ? `${project.round_no}회차` : "이 프로젝트";
+    const label = project.round_no !== null ? roundName(project) : "이 프로젝트";
     if (!(await confirm(`폐기한 ${label} "${project.name}"을(를) 완전히 삭제할까요?
 올려 둔 거버·BOM 등 파일도 함께 지워지며 되돌릴 수 없습니다.`, { okLabel: "삭제", danger: true }))) return;
     setIsDeletingRound(true);
@@ -328,7 +328,7 @@ export function ProjectDetailPage() {
             {tabError && <p className="text-xs text-danger mt-2 text-right">{tabError}</p>}
           </div>
 
-          <ProjectRoundTabs project={project} />
+          <ProjectRoundTabs project={project} onRenamed={(u) => setProject((cur) => (cur && cur.id === u.id ? { ...cur, round_label: u.round_label } : cur))} />
 
           <ProjectBomCard key={project.id} projectId={project.id} />
 
