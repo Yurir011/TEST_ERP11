@@ -1,6 +1,7 @@
 import { Check, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
+import { DateField } from "../../components/ui/DateField";
 import { NumberInput } from "../../components/ui/NumberInput";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { todayISO } from "../../lib/date";
@@ -96,12 +97,12 @@ export function ProjectDeliveryPanel({ projectId }: { projectId: number }) {
       <form onSubmit={handleSave} className="grid grid-cols-2 gap-2 sm:grid-cols-[9rem_8rem_1fr_auto] sm:items-end">
         <label className="flex flex-col gap-1 text-xs text-text-muted">
           납품일
-          <input
-            type="date"
+          <DateField
+            block
             aria-label="납품일"
             value={date}
             max={todayISO()}
-            onChange={(e) => e.target.value && setDate(e.target.value)}
+            onChange={(v) => v && setDate(v)}
             className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm text-text outline-none focus:border-primary"
           />
         </label>

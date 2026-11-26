@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDialog } from "../../components/ui/dialog/useDialog";
+import { DateField } from "../../components/ui/DateField";
 import { ApiError, apiDelete, apiGet, apiPost, apiPut, apiUploadForm, downloadFile } from "../../lib/api";
 import { todayISO } from "../../lib/date";
 import { logDebug, logError } from "../../lib/logger";
@@ -256,7 +257,7 @@ export function ProjectReleasePanel({
             maxLength={30}
             className="w-72 max-w-full min-w-0 rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary"
           />
-          <input type="date" aria-label="버전 날짜" value={date} max="2999-12-31" onChange={(e) => setDate(e.target.value || todayISO())} className="rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary" />
+          <DateField aria-label="버전 날짜" value={date} max="2999-12-31" onChange={(v) => v && setDate(v)} className="rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-primary" />
           <button type="submit" disabled={busy || !version.trim()} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-50">
             등록
           </button>

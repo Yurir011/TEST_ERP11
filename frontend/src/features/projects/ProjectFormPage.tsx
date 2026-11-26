@@ -2,6 +2,7 @@ import { ChevronDown, Copy, Search } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import { DateField } from "../../components/ui/DateField";
 import type { Client } from "../clients/types";
 import { ApiError, apiGet, apiPost } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
@@ -265,20 +266,22 @@ export function ProjectFormPage() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs text-text-muted mb-1.5">시작일 (선택)</label>
-            <input
-              type="date"
+            <DateField
+              block
+              aria-label="시작일"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              onChange={setStartDate}
+              className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
           </div>
           <div>
             <label className="block text-xs text-text-muted mb-1.5">종료일 (선택)</label>
-            <input
-              type="date"
+            <DateField
+              block
+              aria-label="종료일"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+              onChange={setEndDate}
+              className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             />
           </div>
         </div>

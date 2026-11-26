@@ -48,9 +48,15 @@ def _round_info(db: Session, projects: list[Project]) -> dict[int, tuple[int, in
         return {}
     this_year = date.today().year
     members = db.query(Project).filter(Project.series_id.in_(series_ids)).all()
+    # 번호를 매기는 해: 묶음에 올해 시작한 구성원이 있으면 올해, 없으면 그 묶음의 가장 최근 해.
+    # (시작일이 작년인 프로젝트에서 [탭 추가]를 눌러도 탭이 생기도록 — 올해 구성원이 생기면 그 해부터 다시 1회차)
+    latest_year: dict[int, int] = {}
+    for m in members:
+        y = _round_year(m)
+        latest_year[m.series_id] = max(latest_year.get(m.series_id, 0), min(y, this_year))
     by_series: dict[int, list[Project]] = {}
     for m in members:
-        if _round_year(m) == this_year:
+        if _round_year(m) == latest_year[m.series_id]:
             by_series.setdefault(m.series_id, []).append(m)
     info: dict[int, tuple[int, int]] = {}
     for rows in by_series.values():
@@ -365,7 +371,13 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
     project = db.query(Project).filter(Project.id == project_id).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="프로젝트를 찾을 수 없습니다.")
-    if project.status != ProjectStatus.discarded:
+    # 폐기한 프로젝트, 또는 같은 묶음에 다른 회차가 남는 회차(탭)는 삭제할 수 있다. 단독 프로젝트는 먼저 폐기해야 한다.
+    other_rounds = (
+        db.query(Project).filter(Project.series_id == project.series_id, Project.id != project.id).count()
+        if project.series_id is not None
+        else 0
+    )
+    if project.status != ProjectStatus.discarded and other_rounds == 0:
         logger.debug(f"[Projects] 삭제 거절(폐기 아님): id={project_id}, status={project.status}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="폐기한 프로젝트만 삭제할 수 있습니다.")
     stored = [g.file_path for g in db.query(ProjectGerber).filter(ProjectGerber.project_id == project_id)]

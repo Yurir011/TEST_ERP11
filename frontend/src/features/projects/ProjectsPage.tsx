@@ -2,6 +2,7 @@ import { BarChart3, FolderKanban, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
+import { DateField } from "../../components/ui/DateField";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 import { useAuth } from "../../context/useAuth";
 import { ApiError, apiDelete, apiGet } from "../../lib/api";
@@ -158,19 +159,19 @@ export function ProjectsPage() {
           <label className="text-xs text-text-muted whitespace-nowrap shrink-0" title="프로젝트 일정과 하루라도 겹치는 프로젝트를 찾습니다">
             기간
           </label>
-          <input
-            type="date"
+          <DateField
+            aria-label="기간 시작일"
             value={dateFrom}
             max={dateTo || undefined}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={setDateFrom}
             className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface shrink-0"
           />
           <span className="text-text-muted text-sm shrink-0">~</span>
-          <input
-            type="date"
+          <DateField
+            aria-label="기간 종료일"
             value={dateTo}
             min={dateFrom || undefined}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={setDateTo}
             className="text-sm border border-border rounded-lg px-2 py-1.5 outline-none focus:border-primary bg-surface shrink-0"
           />
           {(query || dateFrom || dateTo) && (

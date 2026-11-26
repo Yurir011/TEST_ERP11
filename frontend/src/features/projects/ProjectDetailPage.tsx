@@ -171,12 +171,12 @@ export function ProjectDetailPage() {
     }
   }
 
-  // 이 회차(프로젝트) 삭제: 폐기한 프로젝트만, 관리자만 (서버도 같은 규칙). 지운 뒤에는 같은 묶음의 다른 회차로, 없으면 목록으로 간다.
+  // 이 회차(프로젝트) 삭제: 폐기한 프로젝트, 또는 같은 묶음에 다른 회차가 남는 회차만, 관리자만 (서버도 같은 규칙). 지운 뒤에는 같은 묶음의 다른 회차로, 없으면 목록으로 간다.
   async function handleDeleteRound() {
     if (!project) return;
     setTabError(null);
     const label = project.round_no !== null ? roundName(project) : "이 프로젝트";
-    if (!(await confirm(`폐기한 ${label} "${project.name}"을(를) 완전히 삭제할까요?
+    if (!(await confirm(`${project.status === "discarded" ? "폐기한 " : ""}${label} "${project.name}"을(를) 완전히 삭제할까요?
 올려 둔 거버·BOM 등 파일도 함께 지워지며 되돌릴 수 없습니다.`, { okLabel: "삭제", danger: true }))) return;
     setIsDeletingRound(true);
     logDebug("ProjectDetail", `회차 삭제 시도: project_id=${project.id}, series_id=${project.series_id}`);
@@ -304,7 +304,7 @@ export function ProjectDetailPage() {
             )}
             {statusError && <p className="text-xs text-danger mt-2">{statusError}</p>}
             <div className="flex justify-end gap-2 mt-3 -mr-2">
-              {project.status === "discarded" && isAdminRole(user?.role) && (
+              {(project.status === "discarded" || (project.series_id !== null && (project.round_total ?? 0) > 1)) && isAdminRole(user?.role) && (
                 <button
                   type="button"
                   onClick={handleDeleteRound}

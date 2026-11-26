@@ -105,3 +105,23 @@ def test_round_label_can_be_renamed_and_cleared(client, make_user, make_client, 
     assert [r["round_label"] for r in rounds] == [None, "양산 1차"] and [r["round_no"] for r in rounds] == [1, 2]
     res = client.put(f"/api/projects/{r2['id']}/round-label", json={"label": "   "}, headers=headers)
     assert res.json()["round_label"] is None
+
+
+def test_tab_add_on_last_year_project_still_makes_tabs_and_round_can_be_deleted(client, db, make_user, make_client, auth_headers):
+    from app.models.user import UserRole
+
+    admin = make_user(role=UserRole.admin)
+    headers = auth_headers(admin)
+    c = make_client(name="거래처")
+    last = date.today().year - 1
+    src = _create(client, headers, c.id, "작년 프로젝트", f"{last}-11-09")
+    new = _create(client, headers, c.id, "작년 프로젝트", f"{last}-11-09", from_project_id=src["id"], link_series=True)
+    assert new["round_no"] == 2  # 작년 시작이라도 탭(회차 번호)이 생긴다
+    rounds = client.get(f"/api/projects/{new['id']}/rounds", headers=headers).json()
+    assert [r["round_no"] for r in rounds] == [1, 2]
+
+    # 같은 묶음에 다른 회차가 남으면 폐기하지 않아도 그 회차만 삭제할 수 있다
+    assert client.delete(f"/api/projects/{new['id']}", headers=headers).status_code == 204
+    assert client.get(f"/api/projects/{new['id']}", headers=headers).status_code == 404
+    # 남은 회차는 단독이 되었으므로 폐기 전에는 삭제할 수 없다
+    assert client.delete(f"/api/projects/{src['id']}", headers=headers).status_code == 400
