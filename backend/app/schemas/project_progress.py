@@ -9,6 +9,10 @@ class ProgressStageCreate(BaseModel):
     name: str
 
 
+class ProgressStageRename(BaseModel):
+    name: str
+
+
 class ProgressStageProgressUpdate(BaseModel):
     progress_percent: int
 

@@ -71,6 +71,21 @@ export function ProgressSectionCard({
     }
   }
 
+  /** 항목 이름 바꾸기 (연필 패널의 이름 칸). 비었거나 그대로면 저장하지 않는다. */
+  async function handleRename(stage: ProgressStage, value: string) {
+    const next = value.trim();
+    if (!next || next === stage.name) return;
+    logDebug("ProjectProgress", `진행 상황 단계 이름 변경 시도: id=${stage.id}, name=${next}`);
+    try {
+      await apiPut(`/api/projects/${project.id}/progress-stages/${stage.id}/name`, { name: next });
+      setError(null);
+      loadStages();
+    } catch (err) {
+      logError("ProjectProgress", "진행 상황 단계 이름 변경 실패", err);
+      setError(err instanceof Error ? err.message : "이름 변경 중 오류가 발생했습니다.");
+    }
+  }
+
   async function handleSetSchedule(stage: ProgressStage, field: "start_date" | "end_date", value: string) {
     const nextValue = value || null;
     logDebug(
@@ -140,7 +155,7 @@ export function ProgressSectionCard({
       <h2 className="text-sm font-semibold mb-1">진행상황</h2>
       <p className="text-xs text-text-muted mb-4">
         항목을 등록하고 기간을 정하면 실제 날짜 위치에 맞춰 바가 표시됩니다. 바를 클릭해 진행율을 기록하고, 연필 아이콘으로
-        기간을 바꿀 수 있습니다. (최대 {MAX_PROGRESS_STAGES}개)
+        항목 이름과 기간을 바꿀 수 있습니다. (최대 {MAX_PROGRESS_STAGES}개)
       </p>
 
       {!hasSchedule && (
@@ -327,8 +342,20 @@ export function ProgressSectionCard({
           </div>
 
           {editingStage && (
-            <div className="mt-3 flex items-center gap-2 text-xs bg-bg border border-border rounded-lg px-3 py-2">
-              <span className="text-text-muted shrink-0">{editingStage.name} 기간</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs bg-bg border border-border rounded-lg px-3 py-2">
+              <span className="text-text-muted shrink-0">이름</span>
+              <input
+                key={`${editingStage.id}-${editingStage.name}`}
+                aria-label={`${editingStage.name} 이름`}
+                defaultValue={editingStage.name}
+                maxLength={50}
+                onBlur={(e) => void handleRename(editingStage, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-primary"
+              />
+              <span className="text-text-muted shrink-0 ml-2">기간</span>
               <DateTextInput
                 aria-label={`${editingStage.name} 시작일`}
                 value={editingStage.start_date ?? ""}

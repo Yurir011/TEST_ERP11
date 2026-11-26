@@ -19,6 +19,7 @@ from app.schemas.project_progress import (
     ProgressStageCreate,
     ProgressStageOut,
     ProgressStageProgressUpdate,
+    ProgressStageRename,
     ProgressStageReorder,
     ProgressStageScheduleUpdate,
     PurchaseStepOut,
@@ -163,6 +164,34 @@ def set_progress_stage_progress(
     logger.debug(
         f"[ProjectProgress] 진행 상황 단계 진행율 변경: id={stage_id}, progress_percent={stage.progress_percent}"
     )
+    return stage
+
+
+@router.put("/{project_id}/progress-stages/{stage_id}/name", response_model=ProgressStageOut)
+def rename_progress_stage(
+    project_id: int,
+    stage_id: int,
+    payload: ProgressStageRename,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """진행 상황 단계(항목)의 이름을 바꾼다. 진행률·일정은 그대로 둔다."""
+    stage = (
+        db.query(ProjectProgressStage)
+        .filter(ProjectProgressStage.id == stage_id, ProjectProgressStage.project_id == project_id)
+        .first()
+    )
+    if stage is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="진행 상황 항목을 찾을 수 없습니다.")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="항목 이름을 입력해주세요.")
+    if len(name) > 50:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="항목 이름은 50자 이하로 입력해주세요.")
+    stage.name = name
+    db.commit()
+    db.refresh(stage)
+    logger.debug(f"[ProjectProgress] 진행 상황 단계 이름 변경: id={stage_id}, name={name}, by={current_user.id}")
     return stage
 
 
