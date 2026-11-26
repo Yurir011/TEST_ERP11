@@ -170,7 +170,7 @@ export function ProjectProgressSets({ items }: { items: ProgressOverviewItem[] }
   if (items.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
-        <p className="text-sm text-text-muted">진행 중인 프로젝트가 없습니다.</p>
+        <p className="text-sm text-text-muted">진행 중이거나 견적 단계인 프로젝트가 없습니다.</p>
       </div>
     );
   }

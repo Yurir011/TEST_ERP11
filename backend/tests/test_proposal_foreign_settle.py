@@ -76,3 +76,26 @@ def test_settlement_rejected_for_krw_and_before_order(client, make_user, auth_he
     assert client.put(f"/api/proposals/{krw['id']}/settlement", json={"settle_amount": 1000, "settle_rate": 1}, headers=h).status_code == 400
     usd = _usd_proposal(client, h)
     assert client.put(f"/api/proposals/{usd['id']}/settlement", json={"settle_amount": 1000, "settle_rate": 1300}, headers=h).status_code == 400
+
+
+def test_amount_change_keeps_won_ledger_and_edits_reference(client, db, make_user, auth_headers):
+    h = auth_headers(make_user(name="기안자"))
+    p = _usd_proposal(client, h)
+    client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True, "online": True}, headers=h)
+    client.put(f"/api/proposals/{p['id']}/settlement", json={"settle_amount": 1_450_000, "settle_rate": 1380.5, "no_vat": True}, headers=h)
+
+    # 달러 참고 금액만 고치면 원화 장부는 그대로
+    res = client.put(f"/api/proposals/{p['id']}/amount", json={"amount": 1200}, headers=h)
+    assert res.status_code == 200, res.text
+    assert res.json()["amount"] == 1200 and res.json()["settle_amount"] == 1_450_000
+    assert db.query(Transaction).one().total_amount == 1_450_000
+
+    # 달러·환율·원화를 한꺼번에 고치면 원화 장부가 바뀐다
+    res = client.put(
+        f"/api/proposals/{p['id']}/amount",
+        json={"amount": 1200, "settle_amount": 1_700_000, "settle_rate": 1400, "no_vat": True},
+        headers=h,
+    )
+    assert res.status_code == 200, res.text
+    db.expire_all()
+    assert db.query(Transaction).one().total_amount == 1_700_000

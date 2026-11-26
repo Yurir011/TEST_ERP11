@@ -14,7 +14,7 @@ from app.models.project_file import ProjectFile
 from app.models.project_release import ProjectRelease, ProjectReleaseFile
 from app.models.project_bom import ProjectBomLine
 from app.models.project_gerber import ProjectGerber
-from app.models.project_progress import ProjectProgressStage
+from app.models.project_progress import ProjectProgressStage, ProjectPurchaseStep
 from app.models.user import User
 from app.routers.project_progress import _purchase_step_out
 from app.schemas.project import (
@@ -129,11 +129,12 @@ def list_projects(
 
 @router.get("/progress-overview", response_model=list[ProjectProgressOverviewOut])
 def progress_overview(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """진행 중 프로젝트를 마감 임박순(마감일 없는 것은 뒤)으로, 진행 단계·구매 단계와 함께 돌려준다."""
+    """진행 중·견적 프로젝트를 마감 임박순(마감일 없는 것은 뒤)으로, 진행 단계·구매 단계와 함께 돌려준다."""
     projects = (
         db.query(Project)
         .options(joinedload(Project.client), selectinload(Project.progress_stages), selectinload(Project.purchase_steps))
-        .filter(Project.status == ProjectStatus.in_progress)
+        # 새 프로젝트는 견적 상태·진행률 0% 로 시작하므로, 견적도 함께 보여 줘야 등록 즉시 카드가 생긴다.
+        .filter(Project.status.in_([ProjectStatus.estimate, ProjectStatus.in_progress]))
         .all()
     )
     projects.sort(key=lambda p: (p.end_date is None, p.end_date or date.max, p.id))
@@ -217,7 +218,35 @@ def create_project(
             project.series_id = source.series_id
         if payload.copy_stages:
             for st in source.progress_stages:
-                db.add(ProjectProgressStage(project_id=project.id, name=st.name, order_index=st.order_index))
+                if payload.copy_progress:
+                    # 탭 추가: 누른 회차의 진행상황을 그대로 복사한다 (진행률·완료일·단계별 일정)
+                    db.add(
+                        ProjectProgressStage(
+                            project_id=project.id,
+                            name=st.name,
+                            order_index=st.order_index,
+                            progress_percent=st.progress_percent,
+                            completed_on=st.completed_on,
+                            start_date=st.start_date,
+                            end_date=st.end_date,
+                        )
+                    )
+                else:
+                    db.add(ProjectProgressStage(project_id=project.id, name=st.name, order_index=st.order_index))
+        if payload.copy_progress:
+            for ps in source.purchase_steps:
+                db.add(
+                    ProjectPurchaseStep(
+                        project_id=project.id,
+                        step_key=ps.step_key,
+                        order_index=ps.order_index,
+                        is_done=ps.is_done,
+                        completed_on=ps.completed_on,
+                        custom_label=ps.custom_label,
+                    )
+                )
+            if source.status != ProjectStatus.discarded:
+                project.status = source.status  # 진행률이 같으니 상태도 같게 (진행 중이면 진행 중)
         if payload.copy_bom:
             for line in source.bom_lines:
                 db.add(

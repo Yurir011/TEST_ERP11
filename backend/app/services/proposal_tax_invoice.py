@@ -67,8 +67,12 @@ def register_from_attachment(db: Session, p: Proposal, att: ProposalAttachment, 
         return None
 
     ocr = _ocr(att.file_path)
-    supply_fallback = round(float(p.amount)) if p.amount is not None else 0
-    currency = p.currency if p.currency in {c.value for c in DocCurrency} else DocCurrency.KRW.value
+    # 장부(매입매출)에는 항상 원화로 기재한다. 외화 품의서는 외화 금액(참고)이 아니라 실결제 원화 금액을 쓴다.
+    if p.currency != "KRW":
+        supply_fallback = int(p.settle_amount) if p.settle_amount else 0
+    else:
+        supply_fallback = round(float(p.amount)) if p.amount is not None else 0
+    currency = DocCurrency.KRW.value
 
     items: list[ProjectDocumentItem] = []
     if ocr is not None:

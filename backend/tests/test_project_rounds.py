@@ -1,7 +1,7 @@
 """프로젝트 회차: 기존 프로젝트 불러오기 + 같은 묶음으로 잇기, 올해 회차만 번호 매기기."""
 from datetime import date
 
-from app.models.project import Project
+from app.models.project import Project, ProjectStatus
 
 
 def _create(client, headers, client_id, name, start=None, **extra):
@@ -64,3 +64,29 @@ def test_import_unknown_source_is_400(client, make_user, make_client, auth_heade
     c = make_client(name="거래처")
     r = client.post("/api/projects", json={"name": "x", "client_id": c.id, "from_project_id": 999999}, headers=headers)
     assert r.status_code == 400
+
+
+def test_tab_add_copies_progress_of_pressed_round(client, db, make_user, make_client, auth_headers):
+    headers = auth_headers(make_user())
+    c = make_client(name="거래처")
+    year = date.today().year
+    src = _create(client, headers, c.id, "원본", f"{year}-01-01")
+    assert client.post(f"/api/projects/{src['id']}/progress-stages", json={"name": "설계"}, headers=headers).status_code in (200, 201)
+    stage = db.query(Project).filter(Project.id == src["id"]).first().progress_stages[0]
+    stage.progress_percent = 40
+    stage.start_date = date(year, 1, 5)
+    stage.end_date = date(year, 1, 20)
+    db.query(Project).filter(Project.id == src["id"]).first().status = ProjectStatus.in_progress
+    db.flush()
+
+    new = _create(
+        client, headers, c.id, "원본", f"{year}-01-01",
+        from_project_id=src["id"], copy_stages=True, copy_progress=True, link_series=True,
+    )
+    p = db.query(Project).filter(Project.id == new["id"]).first()
+    assert [(s.name, s.progress_percent, s.start_date, s.end_date) for s in p.progress_stages] == [("설계", 40, date(year, 1, 5), date(year, 1, 20))]
+    assert p.status == ProjectStatus.in_progress and p.series_id == src["id"]
+    # 진행상황을 복사하지 않는 다음 회차는 0% 로 시작한다
+    nxt = _create(client, headers, c.id, "원본", f"{year}-06-01", from_project_id=src["id"], copy_stages=True, link_series=True)
+    q = db.query(Project).filter(Project.id == nxt["id"]).first()
+    assert q.progress_stages[0].progress_percent == 0 and q.status == ProjectStatus.estimate

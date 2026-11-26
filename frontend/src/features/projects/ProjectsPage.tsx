@@ -55,10 +55,10 @@ export function ProjectsPage() {
     if (dateTo) params.set("date_to", dateTo);
     const path = params.toString() ? `/api/projects?${params.toString()}` : "/api/projects";
     apiGet<Project[]>(path)
-      // "전체" 탭에서는 폐기를 숨기고, 검색·기간 조건이 없으면 위에 이미 보이는 진행 중 프로젝트도 숨긴다.
+      // "전체" 탭에서는 폐기를 숨기고, 검색·기간 조건이 없으면 위에 이미 보이는 진행 중·견적 프로젝트도 숨긴다.
       .then((list) =>
         setProjects(
-          status === "all" ? list.filter((p) => p.status !== "discarded" && (q || dateFrom || dateTo || p.status !== "in_progress")) : list,
+          status === "all" ? list.filter((p) => p.status !== "discarded" && (q || dateFrom || dateTo || (p.status !== "in_progress" && p.status !== "estimate"))) : list,
         ),
       )
       .catch((err) => {
@@ -116,7 +116,7 @@ export function ProjectsPage() {
     >
       <section className="mb-8">
         <h2 className="text-sm font-medium text-text-muted mb-3">
-          진행 중 {overview?.length ?? 0}건 <span className="font-normal">· 마감 임박순</span>
+          진행 중·견적 {overview?.length ?? 0}건 <span className="font-normal">· 마감 임박순</span>
         </h2>
         {overview === null ? <p className="text-sm text-text-muted">불러오는 중...</p> : <ProjectProgressSets items={overview} />}
       </section>

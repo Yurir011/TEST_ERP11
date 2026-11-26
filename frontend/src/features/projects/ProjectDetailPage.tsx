@@ -132,11 +132,11 @@ export function ProjectDetailPage() {
     }
   }
 
-  // 지금 프로젝트와 같은 내용(거래처·메모·일정·진행 단계)의 프로젝트를 만들어 같은 묶음의 새 탭으로 남긴다. BOM·문서·구매 내역은 복사하지 않는다.
+  // 지금 프로젝트와 같은 내용(거래처·메모·일정·진행상황)의 프로젝트를 만들어 같은 묶음의 새 탭으로 남긴다. BOM·문서·구매 내역은 복사하지 않는다.
   async function handleAddTab() {
     if (!project) return;
     setTabError(null);
-    if (!(await confirm("같은 내용으로 새 탭(프로젝트)을 추가할까요? 거래처·메모·일정·진행 단계가 복사됩니다.", { okLabel: "탭 추가" }))) return;
+    if (!(await confirm("같은 내용으로 새 탭(프로젝트)을 추가할까요? 거래처·메모·일정·진행상황(진행률 포함)이 지금 보고 있는 회차 그대로 복사됩니다.", { okLabel: "탭 추가" }))) return;
     setIsAddingTab(true);
     logDebug("ProjectDetail", `탭 추가 시도: from_project_id=${project.id}`);
     try {
@@ -151,6 +151,7 @@ export function ProjectDetailPage() {
         copy_stages: true,
         copy_bom: false,
         link_series: true,
+        copy_progress: true,
       });
       logDebug("ProjectDetail", `탭 추가 완료: new_id=${created.id}, series_id=${created.series_id}`);
       navigate(`/projects/${created.id}`);
@@ -251,9 +252,9 @@ export function ProjectDetailPage() {
                 type="button"
                 onClick={handleAddTab}
                 disabled={isAddingTab}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold bg-primary hover:bg-primary-hover disabled:opacity-60 text-white rounded-lg px-3.5 py-2 transition-colors"
+                className="inline-flex h-11 w-28 items-center justify-center gap-2 px-2 text-center text-sm font-medium text-white rounded-lg bg-primary hover:bg-primary-hover transition-colors disabled:opacity-60"
               >
-                <Plus size={14} />
+                <Plus size={16} aria-hidden />
                 {isAddingTab ? "추가 중..." : "탭 추가"}
               </button>
             </div>

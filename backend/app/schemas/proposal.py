@@ -32,9 +32,13 @@ class ProposalCreate(BaseModel):
 
 
 class ProposalAmountIn(BaseModel):
-    """승인된 품의서의 금액만 바꿀 때 사용 (입출금 권한자)."""
+    """승인된 품의서의 금액만 바꿀 때 사용 (입출금 권한자). 외화 건은 amount 가 참고용 외화 금액이고,
+    실결제 원화 금액·환율·부가세 없음을 함께 보내면 장부(원화)도 같이 바뀐다."""
 
     amount: float = Field(ge=0)
+    settle_amount: int | None = Field(default=None, gt=0)
+    settle_rate: float | None = Field(default=None, gt=0)
+    no_vat: bool = True
 
 
 class ProposalSettlementIn(BaseModel):

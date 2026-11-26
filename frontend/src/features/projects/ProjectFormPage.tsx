@@ -47,8 +47,20 @@ export function ProjectFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function pickSource(p: Project) {
-    logDebug("ProjectForm", `기존 프로젝트 불러오기: id=${p.id}`);
+  // 같은 묶음(회차)이나 같은 이름의 프로젝트가 여럿이면 가장 최근(최종) 회차를 원본으로 삼는다.
+  function latestRound(p: Project): Project {
+    const same = allProjects.filter((x) => (p.series_id !== null ? x.series_id === p.series_id : x.name === p.name));
+    const pool = same.length > 0 ? same : [p];
+    return pool.reduce((best, x) => {
+      const a = x.start_date ?? x.created_at.slice(0, 10);
+      const b = best.start_date ?? best.created_at.slice(0, 10);
+      return a > b || (a === b && x.id > best.id) ? x : best;
+    });
+  }
+
+  async function pickSource(picked: Project, useLatest = false) {
+    const p = useLatest ? latestRound(picked) : picked;
+    logDebug("ProjectForm", `기존 프로젝트 불러오기: picked=${picked.id}, source=${p.id}, 최종회차=${useLatest}`);
     setSource(p);
     setImportQuery(p.name);
     setImportOpen(false);
@@ -166,7 +178,7 @@ export function ProjectFormPage() {
             <ul className="absolute z-10 mt-1 w-full bg-surface border border-border rounded-lg shadow-sm max-h-56 overflow-y-auto">
               {importMatches.map((p) => (
                 <li key={p.id}>
-                  <button type="button" onClick={() => void pickSource(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-bg">
+                  <button type="button" onClick={() => void pickSource(p, true)} className="w-full text-left px-3 py-2 text-sm hover:bg-bg">
                     {p.name}
                     <span className="text-text-muted"> · {p.client_name}</span>
                   </button>

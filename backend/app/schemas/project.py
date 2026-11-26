@@ -19,6 +19,7 @@ class ProjectCreate(BaseModel):
     copy_stages: bool = False
     copy_bom: bool = False
     link_series: bool = False
+    copy_progress: bool = False  # 진행 단계의 진행률·완료일·일정과 구매 진행 상태까지 그대로 복사 (탭 추가)
 
     @model_validator(mode="after")
     def _need_client(self):

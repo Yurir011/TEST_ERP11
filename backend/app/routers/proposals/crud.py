@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models.project import Project
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.proposal import DEPARTMENT_CODE, DEPARTMENT_NAME, Proposal, ProposalStatus
-from app.models.user import User, has_menu_permission
+from app.models.user import User, has_menu_permission, is_admin_role
 from app.routers.proposals._common import (
     PREFIX,
     _advance_self_approvals,
@@ -22,7 +22,7 @@ from app.routers.proposals._common import (
 )
 from app.schemas.proposal import ProposalAmountIn, ProposalCreate, ProposalOut
 from app.services import proposal_files
-from app.services.purchase_ledger import sync_purchase_transaction
+from app.services.purchase_ledger import apply_settlement, sync_purchase_transaction
 from app.services.approval_notice import create_decision_notification
 
 router = APIRouter(prefix=PREFIX, tags=["proposals"])
@@ -173,13 +173,24 @@ def update_proposal_amount(
     """승인된 품의서의 금액만 재결재 없이 바꾼다 (입출금 메뉴 권한자·대표). 발주 완료된 건은 매입매출 장부도 함께 맞춘다."""
     p = _get_or_404(db, proposal_id)
     logger.debug(f"[Proposals] 금액 변경 시도: id={proposal_id}, amount={payload.amount}, by={current_user.id}")
-    if not has_menu_permission(current_user, "payments"):
+    foreign = p.currency != "KRW"
+    # 외화 건은 작성자·관리자도 고칠 수 있다 (해외결제 박스와 같은 권한)
+    allowed = has_menu_permission(current_user, "payments") or (foreign and (p.created_by == current_user.id or is_admin_role(current_user.role)))
+    if not allowed:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="입출금 권한이 있는 사용자만 금액을 변경할 수 있습니다.")
     if p.status != ProposalStatus.approved or p.delete_requested:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 품의서만 금액을 변경할 수 있습니다.")
     old_amount = p.amount
-    p.amount = payload.amount
-    sync_purchase_transaction(db, p, current_user)
+    if foreign:
+        # 외화 금액은 참고용이라 고쳐도 장부는 그대로다. 실결제 원화·환율이 함께 오면 원화 장부를 맞춘다. (장부에는 항상 원화만 기재)
+        if payload.settle_amount is not None:
+            if payload.settle_rate is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="환율을 입력해 주세요.")
+            apply_settlement(db, p, payload.settle_amount, payload.settle_rate, payload.no_vat, current_user)
+        p.amount = payload.amount
+    else:
+        p.amount = payload.amount
+        sync_purchase_transaction(db, p, current_user)
     db.commit()
 
     p = _get_or_404(db, p.id)

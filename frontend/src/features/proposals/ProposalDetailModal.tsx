@@ -64,22 +64,46 @@ export function ProposalDetailModal({
   }
 
   // 입출금 권한자는 승인된 품의서의 금액을 재결재 없이 바꿀 수 있다.
-  const canEditAmount = proposal.status === "approved" && !proposal.delete_requested && hasMenuPermission(user, "payments");
+  // 외화(달러·엔) 건은 품의서 금액이 참고용이고, 장부(매입매출·입출금)에는 항상 원화 실결제 금액만 기재된다.
+  const isForeign = !!proposal.currency && proposal.currency !== "KRW";
+  const canEditAmount =
+    proposal.status === "approved" &&
+    !proposal.delete_requested &&
+    (hasMenuPermission(user, "payments") || (isForeign && (isMine || isAdminRole(user?.role))));
   const [editingAmount, setEditingAmount] = useState(false);
   const [amountDraft, setAmountDraft] = useState("");
+  const [settleDraft, setSettleDraft] = useState("");
+  const [rateDraft, setRateDraft] = useState("");
+  const [noVatDraft, setNoVatDraft] = useState(true);
 
   function startEditAmount() {
     setAmountDraft(proposal.amount === null || proposal.amount === undefined ? "" : String(proposal.amount));
+    setSettleDraft(proposal.settle_amount ? String(proposal.settle_amount) : "");
+    setRateDraft(proposal.settle_rate ? String(proposal.settle_rate) : "");
+    setNoVatDraft(proposal.settle_amount ? !!proposal.no_vat : true);
     setEditingAmount(true);
   }
 
   async function handleSaveAmount() {
     setActionError(null);
-    if (!(await confirm(`금액을 ${Number(amountDraft).toLocaleString()}으로 변경할까요? 재결재 없이 바로 반영되고, 연결된 매입매출 내역도 함께 바뀝니다.`, { okLabel: "변경" }))) return;
+    const settle = Number(settleDraft.replace(/[^0-9]/g, ""));
+    const rate = Number(rateDraft.replace(/,/g, ""));
+    const withSettle = isForeign && !!proposal.order_sent_at && settle > 0;
+    if (withSettle && !(rate > 0)) {
+      setActionError("환율을 입력해 주세요.");
+      return;
+    }
+    const message = isForeign
+      ? `구매 금액(참고)을 ${proposal.currency} ${Number(amountDraft).toLocaleString()}으로 변경할까요?${withSettle ? ` 실결제 ₩${settle.toLocaleString()}으로 장부(원화)도 함께 바뀝니다.` : " 원화 장부는 바뀌지 않습니다."}`
+      : `금액을 ${Number(amountDraft).toLocaleString()}으로 변경할까요? 재결재 없이 바로 반영되고, 연결된 매입매출 내역도 함께 바뀝니다.`;
+    if (!(await confirm(message, { okLabel: "변경" }))) return;
     setDeleteBusy(true);
-    logDebug("Proposals", `금액 변경 요청: id=${proposal.id}, amount=${amountDraft}`);
+    logDebug("Proposals", `금액 변경 요청: id=${proposal.id}, amount=${amountDraft}, settle=${withSettle ? settle : "-"}`);
     try {
-      const updated = await apiPut<Proposal>(`/api/proposals/${proposal.id}/amount`, { amount: Number(amountDraft) });
+      const body = withSettle
+        ? { amount: Number(amountDraft), settle_amount: settle, settle_rate: rate, no_vat: noVatDraft }
+        : { amount: Number(amountDraft) };
+      const updated = await apiPut<Proposal>(`/api/proposals/${proposal.id}/amount`, body);
       logDebug("Proposals", `금액 변경 완료: id=${proposal.id}, amount=${updated.amount}`);
       setEditingAmount(false);
       onAttachmentsChanged(updated);
@@ -285,22 +309,63 @@ export function ProposalDetailModal({
                   <th scope="row" className={TH}>금액</th>
                   <td className={`${TD} font-bold tabular-nums`}>
                     {editingAmount ? (
-                      <span className="flex items-center gap-1.5">
-                        <NumberInput
-                          aria-label="품의서 금액 변경"
-                          value={amountDraft}
-                          onChange={setAmountDraft}
-                          className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary"
-                        />
-                        <button onClick={handleSaveAmount} disabled={deleteBusy || amountDraft.trim() === ""} className="text-xs text-primary font-semibold disabled:opacity-50">저장</button>
-                        <button onClick={() => setEditingAmount(false)} className="text-xs text-text-muted">취소</button>
+                      <span className="flex flex-col gap-1.5 font-normal">
+                        <label className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                          {isForeign ? `구매 금액 (${proposal.currency}, 참고)` : "금액"}
+                          <NumberInput
+                            aria-label="품의서 금액 변경"
+                            value={amountDraft}
+                            onChange={setAmountDraft}
+                            className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary"
+                          />
+                        </label>
+                        {isForeign && proposal.order_sent_at && (
+                          <>
+                            <label className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                              환율 (원)
+                              <input
+                                aria-label="환율"
+                                inputMode="decimal"
+                                value={rateDraft}
+                                onChange={(e) => setRateDraft(e.target.value.replace(/[^0-9.,]/g, ""))}
+                                className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary"
+                              />
+                            </label>
+                            <label className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                              실결제 (원, 제반 비용 포함)
+                              <NumberInput
+                                aria-label="실결제 원화 금액"
+                                value={settleDraft}
+                                onChange={setSettleDraft}
+                                className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary"
+                              />
+                            </label>
+                            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-muted">
+                              <input type="checkbox" checked={noVatDraft} onChange={(e) => setNoVatDraft(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
+                              부가세 없음 (해외결제)
+                            </label>
+                          </>
+                        )}
+                        <span className="flex justify-end gap-2">
+                          <button onClick={() => setEditingAmount(false)} className="text-xs text-text-muted">취소</button>
+                          <button onClick={handleSaveAmount} disabled={deleteBusy || amountDraft.trim() === ""} className="text-xs text-primary font-semibold disabled:opacity-50">저장</button>
+                        </span>
                       </span>
                     ) : (
-                      <span className="flex items-center gap-2">
-                        {formatProposalAmount(proposal) ?? "-"}
-                        {canEditAmount && (
-                          <button onClick={startEditAmount} className="text-xs font-normal text-primary hover:underline">금액 변경</button>
-                        )}
+                      <span className="flex flex-col gap-0.5">
+                        <span className="flex items-center gap-2">
+                          {formatProposalAmount(proposal) ?? "-"}
+                          {isForeign && <span className="text-[11px] font-normal text-text-muted">(참고)</span>}
+                          {canEditAmount && (
+                            <button onClick={startEditAmount} className="text-xs font-normal text-primary hover:underline">금액 변경</button>
+                          )}
+                        </span>
+                        {isForeign && proposal.settle_amount ? (
+                          <span className="text-xs font-normal text-text-muted">
+                            실결제 <b className="text-text">₩{proposal.settle_amount.toLocaleString()}</b>
+                            {proposal.settle_rate ? ` · 환율 ${proposal.settle_rate.toLocaleString()}` : ""} · {proposal.no_vat ? "부가세 없음" : "부가세 포함"}
+                          </span>
+                        ) : null}
                       </span>
                     )}
                   </td>

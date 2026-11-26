@@ -58,6 +58,28 @@ def _supply_and_party(db: Session, p: Proposal) -> tuple[int, str | None]:
     return (round(float(p.amount)) if p.amount is not None else 0), p.vendor_name
 
 
+def apply_settlement(
+    db: Session, p: Proposal, settle_amount: int, settle_rate: float, no_vat: bool, actor: User, pay_date: date | None = None
+) -> None:
+    """외화 구매의 실결제 원화 금액·환율·부가세 없음을 저장하고 매입·출금(모두 원화)을 맞춘다 (commit 은 호출한 쪽에서).
+    결제 내역을 따로 추가한 뒤에는 원화 금액·부가세를 바꿀 수 없다 (환율만 바꾸는 것은 허용)."""
+    if p.currency == "KRW":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="외화(달러·엔) 품의서에서만 사용할 수 있습니다.")
+    if p.order_sent_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주 완료 후에 실결제 금액을 입력할 수 있습니다.")
+    changed = p.settle_amount != settle_amount or bool(p.no_vat) != no_vat
+    if changed and has_extra_payments(db, p):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결제 내역이 있어 금액을 바꿀 수 없습니다. 결제 내역을 먼저 삭제해 주세요.")
+    if pay_date is None and p.payment_id is not None:
+        existing = db.get(Payment, p.payment_id)
+        pay_date = existing.payment_date if existing is not None else None
+    p.settle_amount = settle_amount
+    p.settle_rate = settle_rate
+    p.no_vat = no_vat
+    sync_purchase_transaction(db, p, actor, pay_date)
+    logger.debug(f"[PurchaseLedger] 실결제 반영: proposal_id={p.id}, ₩{settle_amount}, rate={settle_rate}, no_vat={no_vat}")
+
+
 def _manual_payments(db: Session, tx: Transaction, auto_payment_id: int | None) -> int:
     """입출금관리에서 사람이 이 매입에 직접 연결한 결제(전액·부분) 수. 자동으로 만든 출금은 세지 않는다."""
     query = db.query(Payment).filter((Payment.partial_transaction_id == tx.id) | (Payment.id == tx.settled_payment_id))

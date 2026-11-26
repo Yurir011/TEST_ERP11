@@ -8,13 +8,13 @@ from app.core.deps import get_current_user
 from app.database import get_db
 from app.models.project_document import ProjectDocType, ProjectDocument, ProjectDocumentStatus
 from app.models.proposal import PURCHASE_KIND, Proposal, ProposalStatus
-from app.models.payment import Payment
 from app.models.user import User, has_menu_permission, is_admin_role
 from app.routers.proposals._common import PREFIX, _get_or_404, _to_out, logger
 from app.schemas.proposal import OrderFlowToggle, OrderPaymentIn, ProposalOut, ProposalPaymentIn, ProposalSettlementIn, ReceivedDateIn
 from app.services.payment_accounts import require_account
 from app.services.receive_stock import apply_receive_stock, revert_receive_stock
 from app.services.purchase_ledger import (
+    apply_settlement,
     add_purchase_payment,
     has_extra_payments,
     remove_purchase_payment,
@@ -128,24 +128,10 @@ def set_settlement(
     if p.created_by != current_user.id and not is_admin_role(current_user.role) and not has_menu_permission(current_user, "payments"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="작성자·관리자·입출금 권한자만 처리할 수 있습니다.")
     _check_actor_and_kind(p, current_user, anyone=True)
-    if p.currency == "KRW":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="외화(달러·엔) 품의서에서만 사용할 수 있습니다.")
-    if p.order_sent_at is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="발주 완료 후에 실결제 금액을 입력할 수 있습니다.")
     logger.debug(
         f"[Proposals] 실결제 입력 시도: id={proposal_id}, {p.currency} {p.amount} -> ₩{payload.settle_amount} (환율 {payload.settle_rate}, 부가세없음={payload.no_vat}), by={current_user.id}"
     )
-    changed = p.settle_amount != payload.settle_amount or p.no_vat != payload.no_vat
-    if changed and has_extra_payments(db, p):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="결제 내역이 있어 금액을 바꿀 수 없습니다. 결제 내역을 먼저 삭제해 주세요.")
-    pay_date = payload.payment_date
-    if pay_date is None and p.payment_id is not None:
-        existing = db.get(Payment, p.payment_id)
-        pay_date = existing.payment_date if existing is not None else None
-    p.settle_amount = payload.settle_amount
-    p.settle_rate = payload.settle_rate
-    p.no_vat = payload.no_vat
-    sync_purchase_transaction(db, p, current_user, pay_date)
+    apply_settlement(db, p, payload.settle_amount, payload.settle_rate, payload.no_vat, current_user, payload.payment_date)
     db.commit()
     return _to_out(_get_or_404(db, proposal_id))
 
