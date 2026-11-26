@@ -1,9 +1,11 @@
-import { ArrowLeft, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MainLayout } from "../../components/layout/MainLayout";
 import { useDialog } from "../../components/ui/dialog/useDialog";
-import { ApiError, apiGet, apiPost, apiPut, downloadFile } from "../../lib/api";
+import { useAuth } from "../../context/useAuth";
+import { isAdminRole } from "../../lib/auth";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, downloadFile } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { DateNotesCard } from "./DateNotesCard";
 import { ProgressSectionCard } from "./ProgressSectionCard";
@@ -41,7 +43,10 @@ export function ProjectDetailPage() {
   const [isAddingTab, setIsAddingTab] = useState(false);
   const [tabError, setTabError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { confirm } = useDialog();
+  const { confirm, notify } = useDialog();
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const [isDeletingRound, setIsDeletingRound] = useState(false);
 
   function loadProject() {
     apiGet<Project>(`/api/projects/${id}`)
@@ -75,8 +80,11 @@ export function ProjectDetailPage() {
       const updated = await apiPut<Project>(`/api/projects/${id}/status`, { status, reason: reason ?? null });
       setProject(updated);
       setShowDiscardForm(false);
+      setStatusError(null);
+      if (status === "discarded") notify("폐기 처리했습니다. 폐기한 프로젝트는 [회차 삭제]로 지울 수 있습니다.");
     } catch (err) {
       logError("ProjectDetail", "상태 변경 실패", err);
+      setStatusError(err instanceof ApiError ? err.message : "상태를 바꾸지 못했습니다.");
     }
   }
 
@@ -160,6 +168,32 @@ export function ProjectDetailPage() {
       setTabError(err instanceof ApiError ? err.message : "탭을 추가하지 못했습니다.");
     } finally {
       setIsAddingTab(false);
+    }
+  }
+
+  // 이 회차(프로젝트) 삭제: 폐기한 프로젝트만, 관리자만 (서버도 같은 규칙). 지운 뒤에는 같은 묶음의 다른 회차로, 없으면 목록으로 간다.
+  async function handleDeleteRound() {
+    if (!project) return;
+    setTabError(null);
+    const label = project.round_no !== null ? `${project.round_no}회차` : "이 프로젝트";
+    if (!(await confirm(`폐기한 ${label} "${project.name}"을(를) 완전히 삭제할까요?
+올려 둔 거버·BOM 등 파일도 함께 지워지며 되돌릴 수 없습니다.`, { okLabel: "삭제", danger: true }))) return;
+    setIsDeletingRound(true);
+    logDebug("ProjectDetail", `회차 삭제 시도: project_id=${project.id}, series_id=${project.series_id}`);
+    try {
+      let nextId: number | null = null;
+      if (project.series_id !== null) {
+        const rounds = await apiGet<Project[]>(`/api/projects/${project.id}/rounds`);
+        nextId = rounds.filter((r) => r.id !== project.id).at(-1)?.id ?? null;
+      }
+      await apiDelete(`/api/projects/${project.id}`);
+      logDebug("ProjectDetail", `회차 삭제 완료: project_id=${project.id}, next=${nextId}`);
+      navigate(nextId !== null ? `/projects/${nextId}` : "/projects", { replace: true });
+    } catch (err) {
+      logError("ProjectDetail", "회차 삭제 실패", err);
+      setTabError(err instanceof ApiError ? err.message : "삭제하지 못했습니다.");
+    } finally {
+      setIsDeletingRound(false);
     }
   }
 
@@ -247,21 +281,11 @@ export function ProjectDetailPage() {
                 ))}
               </div>
             </div>
-            <div className="flex justify-end mt-3">
-              <button
-                type="button"
-                onClick={handleAddTab}
-                disabled={isAddingTab}
-                className="inline-flex h-11 w-28 items-center justify-center gap-2 px-2 text-center text-sm font-medium text-white rounded-lg bg-primary hover:bg-primary-hover transition-colors disabled:opacity-60"
-              >
-                <Plus size={16} aria-hidden />
-                {isAddingTab ? "추가 중..." : "탭 추가"}
-              </button>
-            </div>
-            {tabError && <p className="text-xs text-danger mt-2 text-right">{tabError}</p>}
             {showDiscardForm && (
-              <div className="mt-4 pt-4 border-t border-border flex items-center gap-2">
+              <div className="mt-4 pt-4 border-t border-border flex items-center gap-2" role="group" aria-label="폐기 사유">
                 <input
+                  autoFocus
+                  aria-label="폐기 사유"
                   value={discardReason}
                   onChange={(e) => setDiscardReason(e.target.value)}
                   placeholder="폐기 사유 (선택) 예: 가격 불일치, 고객 취소, 경쟁사 선정"
@@ -278,6 +302,30 @@ export function ProjectDetailPage() {
                 </button>
               </div>
             )}
+            {statusError && <p className="text-xs text-danger mt-2">{statusError}</p>}
+            <div className="flex justify-end gap-2 mt-3">
+              {project.status === "discarded" && isAdminRole(user?.role) && (
+                <button
+                  type="button"
+                  onClick={handleDeleteRound}
+                  disabled={isDeletingRound}
+                  className="inline-flex h-11 w-28 items-center justify-center gap-2 px-2 text-center text-sm font-medium rounded-lg border border-danger text-danger hover:bg-danger hover:text-white transition-colors disabled:opacity-60"
+                >
+                  <Trash2 size={16} aria-hidden />
+                  {isDeletingRound ? "삭제 중..." : "회차 삭제"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleAddTab}
+                disabled={isAddingTab}
+                className="inline-flex h-11 w-28 items-center justify-center gap-2 px-2 text-center text-sm font-medium text-white rounded-lg bg-primary hover:bg-primary-hover transition-colors disabled:opacity-60"
+              >
+                <Plus size={16} aria-hidden />
+                {isAddingTab ? "추가 중..." : "탭 추가"}
+              </button>
+            </div>
+            {tabError && <p className="text-xs text-danger mt-2 text-right">{tabError}</p>}
           </div>
 
           <ProjectRoundTabs project={project} />
