@@ -6,6 +6,7 @@ import { ApiError, apiDelete, apiPost, apiPut } from "../../lib/api";
 import { todayISO } from "../../lib/date";
 import { logDebug, logError } from "../../lib/logger";
 import { usePaymentAccounts } from "../payments/paymentAccounts";
+import { formatCurrencyAmount } from "./purchaseFlow";
 import type { Proposal, ProposalPayment } from "./types";
 
 const won = (n: number) => `₩${n.toLocaleString()}`;
@@ -298,7 +299,7 @@ function ForeignSettleBox({ proposal, canManage, onChanged }: { proposal: Propos
   const [noVat, setNoVat] = useState(settled ? !!proposal.no_vat : true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const reference = `${currency} ${(proposal.amount ?? 0).toLocaleString()}`;
+  const reference = `${currency} ${formatCurrencyAmount(proposal.amount ?? 0, currency)}`;
 
   async function handleSave() {
     const won_ = Number(digitsOnly(amount));
@@ -334,12 +335,18 @@ function ForeignSettleBox({ proposal, canManage, onChanged }: { proposal: Propos
       {editing && canManage ? (
         <div className="grid grid-cols-2 gap-1.5">
           <label className="col-span-2 flex flex-col gap-0.5 text-text-muted">
-            실결제 금액 (원, 제반 비용 포함)
-            <NumberInput aria-label="실결제 원화 금액" value={amount} onChange={setAmount} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary" />
+            실결제 금액 (원, 수수료포함)
+            <span className="flex items-center gap-1.5">
+                            <NumberInput aria-label="실결제 원화 금액" value={amount} onChange={setAmount} className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary" />
+                            <span className="w-9 shrink-0 text-xs text-text-muted">원</span>
+                          </span>
           </label>
           <label className="col-span-2 flex flex-col gap-0.5 text-text-muted">
             환율 (1 {currency} = 원)
-            <input aria-label="환율" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value.replace(/[^0-9.,]/g, ""))} className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary" />
+            <span className="flex items-center gap-1.5">
+                            <NumberInput aria-label="환율" allowDecimal maxDecimals={4} value={rate} onChange={setRate} className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary" />
+                            <span className="w-9 shrink-0 text-xs text-text-muted">원</span>
+                          </span>
           </label>
           <label className="col-span-2 flex cursor-pointer items-center gap-1.5">
             <input type="checkbox" checked={noVat} onChange={(e) => setNoVat(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
@@ -360,7 +367,7 @@ function ForeignSettleBox({ proposal, canManage, onChanged }: { proposal: Propos
         <div className="flex items-center justify-between gap-2">
           <span>
             실결제 <b className="tabular-nums">{won(proposal.settle_amount ?? 0)}</b>
-            {proposal.settle_rate ? <span className="text-text-muted"> · 환율 {proposal.settle_rate.toLocaleString()}</span> : null}
+            {proposal.settle_rate ? <span className="text-text-muted"> · 환율 {proposal.settle_rate.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span> : null}
             <span className="text-text-muted"> · {proposal.no_vat ? "부가세 없음" : "부가세 포함"}</span>
           </span>
           {canManage && (

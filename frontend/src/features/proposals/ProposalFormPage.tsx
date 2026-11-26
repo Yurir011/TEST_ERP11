@@ -350,7 +350,8 @@ export function ProposalFormPage() {
                 </select>
                 <NumberInput
                   id="proposal-amount"
-                  allowDecimal
+                  allowDecimal={currency === "USD"}
+                  maxDecimals={2}
                   required={isPurchase}
                   value={amount}
                   onChange={setAmount}

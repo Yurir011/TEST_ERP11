@@ -124,7 +124,13 @@ export function computePurchaseFlow(proposal: Proposal, orders: ProjectDocument[
 /** 품의서에 적은 금액을 통화 기호와 천 단위 구분으로 보여 준다 (금액이 없으면 null) */
 export function formatProposalAmount(p: Pick<Proposal, "amount" | "currency">): string | null {
   if (p.amount === null || p.amount === undefined) return null;
-  return `${DOC_CURRENCY_SYMBOLS[p.currency ?? "KRW"]}${p.amount.toLocaleString()}`;
+  return `${DOC_CURRENCY_SYMBOLS[p.currency ?? "KRW"]}${formatCurrencyAmount(p.amount, p.currency ?? "KRW")}`;
+}
+
+/** 통화에 맞는 소수 자릿수로 천 단위 구분해 보여 준다: 달러는 소수 둘째 자리까지(고정), 원·엔은 정수 */
+export function formatCurrencyAmount(amount: number, currency: "KRW" | "USD" | "JPY"): string {
+  const digits = currency === "USD" ? 2 : 0;
+  return amount.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 /** 발주서가 아직 없을 때 카드에 보여 줄 품의서의 거래처·내용(제목)·금액. 거래처·금액을 안 적었으면 비어 있다. */

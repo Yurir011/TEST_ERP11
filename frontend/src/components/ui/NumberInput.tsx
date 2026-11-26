@@ -6,6 +6,8 @@ interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "
   onChange: (raw: string) => void;
   /** 소수점 입력 허용 (단가 등) */
   allowDecimal?: boolean;
+  /** 소수점 아래 최대 자릿수 (예: 달러 2). allowDecimal 일 때만 쓰고, 생략하면 제한 없음 */
+  maxDecimals?: number;
 }
 
 /** 숫자 문자열에 세 자리마다 콤마를 붙인다 (소수부는 그대로). */
@@ -16,18 +18,19 @@ function formatNumberText(raw: string): string {
   return decPart === undefined ? withComma : `${withComma}.${decPart}`;
 }
 
-function sanitize(text: string, allowDecimal: boolean): string {
+function sanitize(text: string, allowDecimal: boolean, maxDecimals?: number): string {
   let cleaned = text.replace(allowDecimal ? /[^\d.]/g : /\D/g, "");
   if (allowDecimal) {
     const firstDot = cleaned.indexOf(".");
     if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "");
+    if (maxDecimals !== undefined && firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1 + maxDecimals);
   }
   // 불필요한 앞자리 0 제거 ("007" -> "7", "0.5"는 유지)
   return cleaned.replace(/^0+(?=\d)/, "");
 }
 
 /** 입력하면서 세 자리마다 콤마를 자동으로 붙여 보여주는 숫자 입력칸. onChange에는 콤마를 뺀 값이 전달된다. */
-export function NumberInput({ value, onChange, allowDecimal = false, ...rest }: NumberInputProps) {
+export function NumberInput({ value, onChange, allowDecimal = false, maxDecimals, ...rest }: NumberInputProps) {
   const ref = useRef<HTMLInputElement>(null);
   const caretDigits = useRef<number | null>(null);
   const display = formatNumberText(String(value ?? ""));
@@ -50,7 +53,7 @@ export function NumberInput({ value, onChange, allowDecimal = false, ...rest }: 
     const text = e.target.value;
     const caret = e.target.selectionStart ?? text.length;
     caretDigits.current = text.slice(0, caret).replace(/[^\d.]/g, "").length;
-    onChange(sanitize(text, allowDecimal));
+    onChange(sanitize(text, allowDecimal, maxDecimals));
   }
 
   return <input {...rest} ref={ref} type="text" inputMode={allowDecimal ? "decimal" : "numeric"} value={display} onChange={handleChange} />;

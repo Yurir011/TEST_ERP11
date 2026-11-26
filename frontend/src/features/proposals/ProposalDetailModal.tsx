@@ -11,7 +11,7 @@ import { canModifyProposalAttachment, hasMenuPermission, isAdminRole } from "../
 import { logDebug, logError } from "../../lib/logger";
 import { ApproverPickerModal } from "../projectDocuments/ApproverPickerModal";
 import { objectParticle } from "../../lib/korean";
-import { formatProposalAmount } from "./purchaseFlow";
+import { formatCurrencyAmount, formatProposalAmount } from "./purchaseFlow";
 import type { Proposal, ProposalAttachment } from "./types";
 import { useDialog } from "../../components/ui/dialog/useDialog";
 
@@ -94,7 +94,7 @@ export function ProposalDetailModal({
       return;
     }
     const message = isForeign
-      ? `구매 금액(참고)을 ${proposal.currency} ${Number(amountDraft).toLocaleString()}으로 변경할까요?${withSettle ? ` 실결제 ₩${settle.toLocaleString()}으로 장부(원화)도 함께 바뀝니다.` : " 원화 장부는 바뀌지 않습니다."}`
+      ? `구매 금액(참고)을 ${proposal.currency} ${formatCurrencyAmount(Number(amountDraft), proposal.currency ?? "USD")}으로 변경할까요?${withSettle ? ` 실결제 ₩${settle.toLocaleString()}으로 장부(원화)도 함께 바뀝니다.` : " 원화 장부는 바뀌지 않습니다."}`
       : `금액을 ${Number(amountDraft).toLocaleString()}으로 변경할까요? 재결재 없이 바로 반영되고, 연결된 매입매출 내역도 함께 바뀝니다.`;
     if (!(await confirm(message, { okLabel: "변경" }))) return;
     setDeleteBusy(true);
@@ -312,33 +312,45 @@ export function ProposalDetailModal({
                       <span className="flex flex-col gap-1.5 font-normal">
                         <label className="flex items-center justify-between gap-2 text-xs text-text-muted">
                           {isForeign ? `구매 금액 (${proposal.currency}, 참고)` : "금액"}
-                          <NumberInput
+                          <span className="flex items-center gap-1.5">
+                            <NumberInput
                             aria-label="품의서 금액 변경"
+                            allowDecimal={isForeign && proposal.currency === "USD"}
+                            maxDecimals={2}
                             value={amountDraft}
                             onChange={setAmountDraft}
                             className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary"
                           />
+                            <span className="w-9 shrink-0 text-xs text-text-muted">{isForeign ? proposal.currency : "원"}</span>
+                          </span>
                         </label>
                         {isForeign && proposal.order_sent_at && (
                           <>
                             <label className="flex items-center justify-between gap-2 text-xs text-text-muted">
                               환율 (원)
-                              <input
+                              <span className="flex items-center gap-1.5">
+                            <NumberInput
                                 aria-label="환율"
-                                inputMode="decimal"
+                                allowDecimal
+                                maxDecimals={4}
                                 value={rateDraft}
-                                onChange={(e) => setRateDraft(e.target.value.replace(/[^0-9.,]/g, ""))}
+                                onChange={setRateDraft}
                                 className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary"
                               />
+                            <span className="w-9 shrink-0 text-xs text-text-muted">원</span>
+                          </span>
                             </label>
                             <label className="flex items-center justify-between gap-2 text-xs text-text-muted">
-                              실결제 (원, 제반 비용 포함)
-                              <NumberInput
+                              실결제 (원, 수수료포함)
+                              <span className="flex items-center gap-1.5">
+                            <NumberInput
                                 aria-label="실결제 원화 금액"
                                 value={settleDraft}
                                 onChange={setSettleDraft}
                                 className="w-32 rounded-lg border border-border bg-surface px-2 py-1 text-right text-xs font-bold tabular-nums text-text outline-none focus:border-primary"
                               />
+                            <span className="w-9 shrink-0 text-xs text-text-muted">원</span>
+                          </span>
                             </label>
                             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-text-muted">
                               <input type="checkbox" checked={noVatDraft} onChange={(e) => setNoVatDraft(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
@@ -363,7 +375,7 @@ export function ProposalDetailModal({
                         {isForeign && proposal.settle_amount ? (
                           <span className="text-xs font-normal text-text-muted">
                             실결제 <b className="text-text">₩{proposal.settle_amount.toLocaleString()}</b>
-                            {proposal.settle_rate ? ` · 환율 ${proposal.settle_rate.toLocaleString()}` : ""} · {proposal.no_vat ? "부가세 없음" : "부가세 포함"}
+                            {proposal.settle_rate ? ` · 환율 ${proposal.settle_rate.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}` : ""} · {proposal.no_vat ? "부가세 없음" : "부가세 포함"}
                           </span>
                         ) : null}
                       </span>

@@ -116,7 +116,10 @@ describe("구매 품의서 진행 상태", () => {
     expect(summarizeProposal(proposal())).toBeNull();
     const s = summarizeProposal(proposal({ vendor_name: "대성RF", amount: 1234567, currency: "KRW", title: "계측기 구매의 건" }))!;
     expect(s).toEqual({ client: "대성RF", content: "계측기 구매의 건", total: "₩1,234,567", vat: "₩123,457" });
-    expect(formatProposalAmount({ amount: 12.5, currency: "USD" })).toBe("$12.5");
+    expect(formatProposalAmount({ amount: 12.5, currency: "USD" })).toBe("$12.50"); // 달러는 소수 둘째 자리까지 고정
+    expect(formatProposalAmount({ amount: 84.95, currency: "USD" })).toBe("$84.95");
+    expect(formatProposalAmount({ amount: 1000, currency: "USD" })).toBe("$1,000.00");
+    expect(formatProposalAmount({ amount: 1450000, currency: "KRW" })).toBe("₩1,450,000");
     expect(formatProposalAmount({ amount: null, currency: "KRW" })).toBeNull();
   });
 });
