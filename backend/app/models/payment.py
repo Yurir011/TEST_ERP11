@@ -2,7 +2,9 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, String, Text
+from decimal import Decimal
+
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -88,6 +90,10 @@ class Payment(Base):
     card_settled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # 계좌이체 건의 계좌 종류. 계좌이체가 아닌 경우 항상 None.
     bank_type: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 계좌 code (payment_accounts.code, kind=bank)
+    # 법인카드 해외결제: 외화 금액(참고)·환율. amount 는 항상 원화이고, 청구 원화를 입력하기 전에는 0(원화 미입력)이다.
+    foreign_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)  # USD / JPY
+    foreign_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    foreign_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 매입매출 한 건의 일부만 수금/지급한 결제. 연결된 매입매출의 paid_amount에 반영되어 있다 (전액 결제는 Transaction.settled_payment_id로 연결).
     # transactions.settled_payment_id 와 서로 참조하는 순환 관계라 테이블을 만든 뒤 외래키를 추가한다(use_alter). 이름은 실제 DB 와 같다.

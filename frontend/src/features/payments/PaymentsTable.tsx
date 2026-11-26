@@ -5,7 +5,7 @@ import { CODE_BADGE } from "../../components/ui/softBadge";
 import { openFile } from "../../lib/api";
 import { formatCurrency } from "../../lib/format";
 import { AccountName } from "./AccountName";
-import { PAYMENT_METHOD_LABELS, PROOF_TYPE_LABELS, paymentMethodDetailLabel, type Payment } from "./types";
+import { PAYMENT_METHOD_LABELS, PROOF_TYPE_LABELS, paymentMethodDetailLabel, foreignLabel, type Payment } from "./types";
 import { usePaymentAccounts } from "./paymentAccounts";
 
 interface PaymentsTableProps {
@@ -109,7 +109,13 @@ export function PaymentsTable({ payments, onSelect, onPrint, onDownloadExcel, on
                   <span className="text-xs text-text-muted">-</span>
                 )}
               </td>
-              <td className={`py-2.5 px-4 text-right font-semibold whitespace-nowrap ${p.type === "deposit" ? "text-success" : "text-[#8b2942]"} border-r border-text/[0.07]`}>{formatCurrency(p.amount)}</td>
+              <td className={`py-2.5 px-4 text-right font-semibold whitespace-nowrap ${p.type === "deposit" ? "text-success" : "text-[#8b2942]"} border-r border-text/[0.07]`}>{p.krw_missing ? (
+                  <span className="text-xs font-medium px-2 py-1 rounded-full bg-tile-orange text-tile-orange-fg">원화 미입력</span>
+                ) : (
+                  formatCurrency(p.amount)
+                )}
+                {foreignLabel(p) && <span className="block text-[11px] font-normal text-text-muted">{foreignLabel(p)}{p.foreign_rate ? ` · 환율 ${p.foreign_rate.toLocaleString()}` : ""}</span>}
+              </td>
               <td className="py-2.5 px-2">
                 <div className="flex flex-nowrap items-center justify-end gap-x-0.5">
                   {/* 영수증이 아직 없는 지출은 나중에 올릴 수 있다: 아이콘을 눌러 사진을 고르거나, 이 줄 위로 사진을 끌어다 놓는다 */}

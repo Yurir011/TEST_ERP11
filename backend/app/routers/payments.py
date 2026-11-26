@@ -74,6 +74,10 @@ def _to_out(p: Payment, occurred_date: date | None = None) -> PaymentOut:
         card_pending=bool(p.card_pending),
         card_used_date=p.card_used_date,
         card_settled_date=p.card_settled_date,
+        foreign_currency=p.foreign_currency,
+        foreign_amount=float(p.foreign_amount) if p.foreign_amount is not None else None,
+        foreign_rate=float(p.foreign_rate) if p.foreign_rate is not None else None,
+        krw_missing=bool(p.foreign_currency) and p.amount == 0,
         occurred_date=occurred_date,
         created_at=p.created_at,
     )
@@ -153,6 +157,12 @@ def settle_card_payments(
     """카드 결제일에 해당 카드의 결제예정 사용내역 중 그 결제일이 청구하는 사용기간(전월 1일~말일) 이전 건을 한 번에 출금 확정한다.
     입출금 날짜는 결제일로 바뀐다."""
     require_account(db, "card", payload.card_type, must_be_active=False)
+    missing = card_pending_service.missing_krw(db, payload.card_type, payload.settle_date)
+    if missing > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"해외결제 {missing}건의 청구 원화 금액이 입력되지 않았습니다. 결제예정 목록에서 원화를 입력한 뒤 다시 처리해주세요.",
+        )
     count, total, usage_to = card_pending_service.settle(db, payload.card_type, payload.settle_date)
     db.commit()
     logger.debug(
@@ -269,6 +279,9 @@ def create_payment(
         card_type=payload.card_type,
         bank_type=payload.bank_type,
         card_pending=is_card_pending,
+        foreign_currency=payload.foreign_currency,
+        foreign_amount=payload.foreign_amount,
+        foreign_rate=payload.foreign_rate,
         card_used_date=payload.payment_date if is_card_pending else None,
         partial_transaction_id=linked_tx.id if is_partial else None,
         created_by=current_user.id,
@@ -433,6 +446,9 @@ def update_payment(
     payment.proof_type_detail = payload.proof_type_detail
     payment.card_type = payload.card_type
     payment.bank_type = payload.bank_type
+    payment.foreign_currency = payload.foreign_currency
+    payment.foreign_amount = payload.foreign_amount
+    payment.foreign_rate = payload.foreign_rate
     card_pending_service.update_pending_on_edit(payment, payload.type, payload.method, payload.payment_date)
     db.commit()
     db.refresh(payment)

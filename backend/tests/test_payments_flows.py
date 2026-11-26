@@ -261,3 +261,28 @@ def test_unregistered_client_name_is_kept_and_shown(client, h, db):
     picked = client.put(f"/api/payments/{created['id']}", headers=h, json=_payment(method="cash", card_type=None, client_id=c.id, counterparty="무시됨"))
     assert picked.status_code == 200 and picked.json()["client_name"] == "한솔전자"
     assert db.query(Payment).filter(Payment.id == created["id"]).one().counterparty is None
+
+
+def test_card_foreign_payment_krw_pending_then_filled(client, h, monkeypatch):
+    """해외결제: 원화 미입력(0원)으로 등록 → 일괄처리 막힘 → 원화 입력 후 장부 금액이 원화로 확정."""
+    created = _create(client, h, amount=0, foreign_currency="USD", foreign_amount=89, description="Mouser")
+    assert created["amount"] == 0 and created["krw_missing"] is True and created["foreign_currency"] == "USD"
+    _create(client, h, amount=42_000, description="사무용품")
+
+    settle = date(2026, 10, 25)
+    res = client.post("/api/payments/card-settle", headers=h, json={"card_type": "bc", "settle_date": settle.isoformat()})
+    assert res.status_code == 400 and "원화" in res.json()["detail"]
+
+    body = _payment(amount=123_000, foreign_currency="USD", foreign_amount=89, foreign_rate=1382.4, description="Mouser")
+    res = client.put(f"/api/payments/{created['id']}", headers=h, json=body)
+    assert res.status_code == 200, res.text
+    assert res.json()["amount"] == 123_000 and res.json()["krw_missing"] is False and res.json()["foreign_rate"] == 1382.4
+
+    res = client.post("/api/payments/card-settle", headers=h, json={"card_type": "bc", "settle_date": settle.isoformat()})
+    assert res.status_code == 200, res.text
+    assert res.json()["total_amount"] == 165_000
+
+
+def test_foreign_only_for_card_withdrawal(client, h):
+    res = client.post("/api/payments", headers=h, json=_payment(method="cash", card_type=None, foreign_currency="USD", foreign_amount=10))
+    assert res.status_code == 422

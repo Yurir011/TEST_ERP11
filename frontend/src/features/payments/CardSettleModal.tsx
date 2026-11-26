@@ -110,6 +110,11 @@ export function CardSettleModal({
                   <p className="text-xs text-text-muted mb-2">
                     {s.usage_from} ~ {s.usage_to} 사용분이 {s.default_settle_date}에 결제됩니다.
                   </p>
+                  {(s.missing_krw_count ?? 0) > 0 && (
+                    <p role="alert" className="text-xs text-danger mb-2">
+                      해외결제 {s.missing_krw_count}건의 청구 원화 금액이 입력되지 않았습니다. 결제예정 상세에서 [원화 입력]을 한 뒤 처리하세요.
+                    </p>
+                  )}
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-text-muted">결제일</label>
                     <input
@@ -121,7 +126,7 @@ export function CardSettleModal({
                     <button
                       type="button"
                       onClick={() => handleSettle(s)}
-                      disabled={busyCard !== null}
+                      disabled={busyCard !== null || (s.missing_krw_count ?? 0) > 0}
                       className="ml-auto rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-1.5 transition-colors disabled:opacity-60"
                     >
                       {busyCard === s.card_type ? "처리 중..." : "일괄 처리"}

@@ -1,7 +1,8 @@
 import { X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { formatCurrency } from "../../lib/format";
 import { AccountName } from "./AccountName";
-import { type CardType, type Payment } from "./types";
+import { foreignLabel, type CardType, type Payment } from "./types";
 
 interface CardPendingDetailModalProps {
   cardType: CardType;
@@ -12,6 +13,7 @@ interface CardPendingDetailModalProps {
 
 // 카드 결제일 전(결제예정)인 법인카드 사용내역을 카드별로 보여준다.
 export function CardPendingDetailModal({ cardType, items, periodLabel, onClose }: CardPendingDetailModalProps) {
+  const navigate = useNavigate();
   const total = items.reduce((sum, p) => sum + p.amount, 0);
   const sorted = [...items].sort((a, b) => b.payment_date.localeCompare(a.payment_date) || b.id - a.id);
 
@@ -43,10 +45,20 @@ export function CardPendingDetailModal({ cardType, items, periodLabel, onClose }
                     <p className="text-sm font-medium truncate">{p.description}</p>
                     <p className="text-xs text-text-muted mt-0.5">
                       사용일 {p.payment_date} · {p.category}
+                      {foreignLabel(p) && ` · ${foreignLabel(p)}${p.foreign_rate ? ` · 환율 ${p.foreign_rate.toLocaleString()}` : ""}`}
                       {p.client_name && ` · ${p.client_name}`}
                     </p>
                   </div>
-                  <span className="text-sm tabular-nums shrink-0">{formatCurrency(p.amount)}</span>
+                  {p.krw_missing ? (
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-tile-orange text-tile-orange-fg">원화 미입력</span>
+                      <button type="button" onClick={() => navigate(`/payments/${p.id}/edit`)} className="text-xs text-primary hover:underline">
+                        원화 입력
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-sm tabular-nums shrink-0">{formatCurrency(p.amount)}</span>
+                  )}
                 </li>
               ))}
             </ul>

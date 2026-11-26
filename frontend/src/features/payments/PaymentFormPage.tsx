@@ -54,6 +54,11 @@ export function PaymentFormPage() {
   const [customText, setCustomText] = useState("");
   const [manualItem, setManualItem] = useState("");
   const [amount, setAmount] = useState("0");
+  // 법인카드 해외결제: 외화 금액(참고)·환율은 직접 입력하고, 청구 원화(금액 칸)는 알 때 직접 계산해서 입력한다. 모르면 0 으로 두고 나중에 수정한다.
+  const [isForeign, setIsForeign] = useState(false);
+  const [foreignCurrency, setForeignCurrency] = useState<"USD" | "JPY">("USD");
+  const [foreignAmount, setForeignAmount] = useState("");
+  const [foreignRate, setForeignRate] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("corporate_card");
   const [partyQuery, setPartyQuery] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -129,6 +134,10 @@ export function PaymentFormPage() {
         setCustomText(fields.customText);
         setManualItem(fields.manualItem);
         setAmount(String(p.amount));
+        setIsForeign(!!p.foreign_currency);
+        setForeignCurrency(p.foreign_currency ?? "USD");
+        setForeignAmount(p.foreign_amount ? String(p.foreign_amount) : "");
+        setForeignRate(p.foreign_rate ? String(p.foreign_rate) : "");
         setMethod(p.method);
         setCardType(p.card_type);
         setBankType(p.bank_type);
@@ -185,6 +194,9 @@ export function PaymentFormPage() {
   function resetForNext() {
     changeCategory(PAYMENT_CATEGORIES[0]);
     setAmount("0");
+    setIsForeign(false);
+    setForeignAmount("");
+    setForeignRate("");
     setPartyQuery("");
     setSelectedClient(null);
     setReceiptFile(null);
@@ -211,6 +223,12 @@ export function PaymentFormPage() {
     }
 
     const description = resolveDescription(fields);
+    const foreignOn = isForeign && method === "corporate_card" && type === "withdrawal";
+    const foreignNum = Number(foreignAmount.replace(/,/g, ""));
+    if (foreignOn && !(foreignNum > 0)) {
+      setError("외화 금액을 입력해주세요.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -229,6 +247,9 @@ export function PaymentFormPage() {
         proof_type_detail: usesProof && proofType === "other" ? proofTypeDetail : null,
         card_type: method === "corporate_card" ? cardType : null,
         bank_type: method === "bank_transfer" ? bankType : null,
+        foreign_currency: foreignOn ? foreignCurrency : null,
+        foreign_amount: foreignOn ? foreignNum : null,
+        foreign_rate: foreignOn && Number(foreignRate.replace(/,/g, "")) > 0 ? Number(foreignRate.replace(/,/g, "")) : null,
         ...(!isEdit && linkedTx ? { transaction_id: linkedTx.id } : {}),
       };
 
@@ -340,6 +361,46 @@ export function PaymentFormPage() {
           </div>
         )}
 
+        {method === "corporate_card" && type === "withdrawal" && (
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={isForeign} onChange={(e) => setIsForeign(e.target.checked)} className="h-4 w-4 accent-primary" />
+              해외결제 (외화로 결제한 카드 사용)
+            </label>
+            {isForeign && (
+              <div className="rounded-lg border border-border bg-bg p-3 space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1.5">통화</label>
+                    <OptionButtons labels={{ USD: "달러", JPY: "엔" }} value={foreignCurrency} onSelect={setForeignCurrency} columns={2} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1.5">외화 금액 (참고)</label>
+                    <input
+                      aria-label="외화 금액"
+                      inputMode="decimal"
+                      value={foreignAmount}
+                      onChange={(e) => setForeignAmount(e.target.value.replace(/[^0-9.,]/g, ""))}
+                      className="w-full rounded-lg border border-border px-3 py-2 text-sm text-right outline-none focus:border-primary bg-surface"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-muted mb-1.5">환율 (원, 직접 입력)</label>
+                    <input
+                      aria-label="환율"
+                      inputMode="decimal"
+                      value={foreignRate}
+                      onChange={(e) => setForeignRate(e.target.value.replace(/[^0-9.,]/g, ""))}
+                      className="w-full rounded-lg border border-border px-3 py-2 text-sm text-right outline-none focus:border-primary bg-surface"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-text-muted">아래 금액 칸에 카드사에 청구된 <b>원화</b>를 직접 계산해 입력하세요. 아직 모르면 0 으로 두고 나중에 수정해서 입력합니다. (0 이면 "원화 미입력"으로 표시되고 장부 합계에 들어가지 않습니다.)</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {method === "bank_transfer" && (
           <div>
             <label className="block text-xs text-text-muted mb-1.5">계좌 종류</label>
@@ -427,7 +488,7 @@ export function PaymentFormPage() {
         )}
 
         <div>
-          <label className="block text-xs text-text-muted mb-1.5">금액</label>
+          <label className="block text-xs text-text-muted mb-1.5">{isForeign && method === "corporate_card" ? "청구 원화 금액 (직접 계산해서 입력)" : "금액"}</label>
           <NumberInput
             required
             value={amount}

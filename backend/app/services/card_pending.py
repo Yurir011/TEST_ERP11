@@ -48,6 +48,23 @@ class CardPendingSummary:
     usage_to: date
     later_count: int
     later_amount: int
+    missing_krw_count: int = 0
+
+
+def missing_krw(db: Session, card_type: str, settle_date: date) -> int:
+    """그 결제일에 확정될 결제예정 건 중 해외결제인데 청구 원화(amount)가 아직 0 인 건수."""
+    _, usage_to = card_billing.usage_month_of(settle_date)
+    return (
+        db.query(Payment)
+        .filter(
+            Payment.card_pending.is_(True),
+            Payment.card_type == card_type,
+            Payment.payment_date <= usage_to,
+            Payment.foreign_currency.is_not(None),
+            Payment.amount == 0,
+        )
+        .count()
+    )
 
 
 def summarize(db: Session, card_type: str, today: date) -> CardPendingSummary:
@@ -74,6 +91,7 @@ def summarize(db: Session, card_type: str, today: date) -> CardPendingSummary:
         usage_to=usage_to,
         later_count=later_count,
         later_amount=later_amount,
+        missing_krw_count=missing_krw(db, card_type, settle_date),
     )
 
 

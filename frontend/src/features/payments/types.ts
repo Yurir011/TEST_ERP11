@@ -94,8 +94,22 @@ export interface Payment {
   card_pending: boolean;
   card_used_date: string | null;
   card_settled_date: string | null;
+  // 법인카드 해외결제: 외화 금액(참고)·환율. amount 는 항상 원화(장부 기준)이고, 청구 원화 입력 전에는 0 (krw_missing)
+  foreign_currency?: "USD" | "JPY" | null;
+  foreign_amount?: number | null;
+  foreign_rate?: number | null;
+  krw_missing?: boolean;
   occurred_date: string | null;
   created_at: string;
+}
+
+export const FOREIGN_CURRENCY_LABELS: Record<"USD" | "JPY", string> = { USD: "달러", JPY: "엔" };
+
+/** "USD 89.00" / "JPY 12,000" (해외결제가 아니면 null) */
+export function foreignLabel(p: Pick<Payment, "foreign_currency" | "foreign_amount">): string | null {
+  if (!p.foreign_currency || p.foreign_amount === null || p.foreign_amount === undefined) return null;
+  const digits = p.foreign_currency === "JPY" ? 0 : 2;
+  return `${p.foreign_currency} ${p.foreign_amount.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
 export interface CardPendingSummary {
@@ -109,6 +123,7 @@ export interface CardPendingSummary {
   usage_to: string;
   later_count: number;
   later_amount: number;
+  missing_krw_count?: number; // 이번 결제일 대상 중 해외결제 원화 미입력 건수 (있으면 일괄처리 불가)
 }
 
 /** 결제수단 글자 ("법인카드 (별명)"). cardName/bankName 은 code 를 별명으로 바꾸는 함수 (usePaymentAccounts) */

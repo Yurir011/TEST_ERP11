@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -40,6 +41,26 @@ class PaymentCreate(BaseModel):
     bank_type: str | None = None  # 계좌 code
     # 새 입출금 등록 시 불러온 외상 매출/매입(매입매출 내역). 지정하면 그 내역이 결제완료로 바뀌고 이 입출금의 날짜가 완료일로 기록된다.
     transaction_id: int | None = None
+    # 법인카드 해외결제: 외화 금액(참고)·환율. amount 는 청구된 원화이며, 아직 모르면 0 으로 두고 나중에 수정해서 입력한다.
+    foreign_currency: Literal["USD", "JPY"] | None = None
+    foreign_amount: float | None = None
+    foreign_rate: float | None = None
+
+    @model_validator(mode="after")
+    def _validate_foreign(self):
+        if self.foreign_currency is None:
+            self.foreign_amount = None
+            self.foreign_rate = None
+            return self
+        if self.method != PaymentMethod.corporate_card or self.type != PaymentType.withdrawal:
+            raise ValueError("해외결제는 법인카드 출금에서만 쓸 수 있습니다.")
+        if self.foreign_amount is None or self.foreign_amount <= 0:
+            raise ValueError("외화 금액을 입력해주세요.")
+        if self.foreign_rate is not None and self.foreign_rate <= 0:
+            raise ValueError("환율은 0보다 커야 합니다.")
+        if self.amount < 0:
+            raise ValueError("원화 금액은 0 이상이어야 합니다.")
+        return self
 
     @model_validator(mode="after")
     def _validate_proof(self):
@@ -108,6 +129,10 @@ class PaymentOut(BaseModel):
     card_pending: bool = False
     card_used_date: date | None = None
     card_settled_date: date | None = None
+    foreign_currency: str | None = None
+    foreign_amount: float | None = None
+    foreign_rate: float | None = None
+    krw_missing: bool = False  # 해외결제인데 청구 원화를 아직 입력하지 않음 (장부 금액 0)
     # 이 입출금으로 결제완료 처리된 매입매출의 거래일(미수금/미지급금 발생일). 연결된 내역이 없으면 None.
     occurred_date: date | None = None
     created_at: datetime
@@ -138,6 +163,7 @@ class CardPendingSummaryOut(BaseModel):
     usage_to: date
     later_count: int  # 사용기간 이후라 다음 결제일로 넘어가는 결제예정 건수
     later_amount: int
+    missing_krw_count: int = 0  # 이번 결제일 대상 중 해외결제 원화 미입력 건수 (있으면 일괄처리 불가)
 
 
 class CardSettleIn(BaseModel):
