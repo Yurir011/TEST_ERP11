@@ -46,6 +46,9 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [draftQty, setDraftQty] = useState("");
   const [draftNote, setDraftNote] = useState("");
+  const [draftName, setDraftName] = useState(""); // 미등록 줄의 이름
+  const [delMode, setDelMode] = useState(false); // [선택 삭제]: 줄마다 체크박스가 생겨 골라서 한꺼번에 지운다
+  const [checked, setChecked] = useState<Set<number>>(new Set());
   const [panelBusy, setPanelBusy] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
   // 추가 입력줄
@@ -106,6 +109,7 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
   useEffect(() => {
     setDraftQty(selected ? String(selected.quantity) : "");
     setDraftNote(selected?.note ?? "");
+    setDraftName(selected?.item_name ?? "");
     setPanelError(null);
   }, [selected]);
 
@@ -229,11 +233,16 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
     if (!selected) return;
     const qty = Number(draftQty);
     if (!(qty > 0)) return setPanelError("필요 수량을 1 이상으로 입력해 주세요.");
+    if (!selected.registered && !draftName.trim()) return setPanelError("자재 이름을 입력해 주세요.");
     setPanelBusy(true);
     setPanelError(null);
     try {
       logDebug("ProjectBom", `BOM 수정 시도: line_id=${selected.id}, qty=${qty}`);
-      await apiPut<BomLine>(`/api/projects/${projectId}/bom/${selected.id}`, { quantity: qty, note: draftNote.trim() || null });
+      await apiPut<BomLine>(`/api/projects/${projectId}/bom/${selected.id}`, {
+        quantity: qty,
+        note: draftNote.trim() || null,
+        ...(selected.registered ? {} : { item_name: draftName.trim() }),
+      });
       await loadLines();
       dialog.notify("저장했습니다.");
     } catch (err) {
@@ -255,6 +264,32 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
     } catch (err) {
       logError("ProjectBom", "BOM 삭제 실패", err);
       dialog.notifyError(err instanceof ApiError ? err.message : "삭제하지 못했습니다.");
+    }
+  }
+
+  function toggleDelMode() {
+    setDelMode((v) => !v);
+    setChecked(new Set());
+    setSelectedId(null);
+  }
+
+  async function handleDeleteChecked() {
+    const ids = [...checked];
+    if (ids.length === 0) return;
+    if (!(await dialog.confirm(`선택한 ${ids.length}종을 BOM에서 뺄까요? (이미 출고한 기록은 자재관리에 그대로 남습니다)`, { okLabel: "삭제", danger: true }))) return;
+    try {
+      logDebug("ProjectBom", `BOM 선택 삭제 시도: project_id=${projectId}, lines=${ids.length}`);
+      for (const id of ids) await apiDelete(`/api/projects/${projectId}/bom/${id}`);
+      logDebug("ProjectBom", `BOM 선택 삭제 성공: ${ids.length}건`);
+      setChecked(new Set());
+      setDelMode(false);
+      await loadLines();
+      dialog.notify(`${ids.length}종을 BOM에서 뺐습니다.`);
+    } catch (err) {
+      logError("ProjectBom", "BOM 선택 삭제 실패", err);
+      dialog.notifyError(err instanceof ApiError ? err.message : "삭제하지 못했습니다.");
+      setChecked(new Set());
+      await loadLines();
     }
   }
 
@@ -280,6 +315,15 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
     }
   }
 
+  function toggleChecked(id: number) {
+    setChecked((c) => {
+      const n = new Set(c);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
   function renderRow(l: BomLine) {
     const st = bomState(l);
     const on = selectedId === l.id;
@@ -289,21 +333,25 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
         role="button"
         tabIndex={0}
         aria-pressed={on}
-        onClick={() => setSelectedId(on ? null : l.id)}
+        onClick={() => (delMode ? toggleChecked(l.id) : setSelectedId(on ? null : l.id))}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            setSelectedId(on ? null : l.id);
+            if (delMode) toggleChecked(l.id);
+            else setSelectedId(on ? null : l.id);
           }
         }}
         className={`${ROW_GRID} py-3 border-t border-border cursor-pointer text-center ${on ? "bg-tile-blue" : "hover:bg-bg"}`}
       >
-        <div className="min-w-0 text-left">
+        <div className="flex min-w-0 items-start gap-2 text-left">
+          {delMode && <input type="checkbox" aria-label={`${l.item_name} 선택`} checked={checked.has(l.id)} onChange={() => toggleChecked(l.id)} onClick={(e) => e.stopPropagation()} className="mt-1 h-4 w-4 shrink-0 accent-primary" />}
+          <div className="min-w-0">
           <p className="font-semibold break-words">{l.item_name}</p>
           <p className="text-[11px] text-text-muted break-words">
             {l.code ? <CodeText code={l.code} small /> : "코드 없음"}
             {[l.category_label, levelPath(l.sub_levels)].filter(Boolean).map((t) => ` · ${t}`)}
           </p>
+          </div>
         </div>
         <p className="font-bold tabular-nums">{fmt(l.quantity)}개</p>
         <p className="tabular-nums text-text-muted">
@@ -538,6 +586,30 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
       <div className={selected ? "grid lg:grid-cols-[minmax(0,1fr)_300px]" : ""}>
         <div className="min-w-0">
           {hasLines && (
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-2">
+              {delMode && (
+                <>
+                  <label className="mr-auto flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      aria-label="모두 선택"
+                      checked={(lines ?? []).length > 0 && checked.size === (lines ?? []).length}
+                      onChange={(e) => setChecked(e.target.checked ? new Set((lines ?? []).map((l) => l.id)) : new Set())}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    모두 선택
+                  </label>
+                  <button type="button" onClick={() => void handleDeleteChecked()} disabled={checked.size === 0} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-danger hover:border-danger disabled:opacity-50">
+                    선택 삭제 ({checked.size})
+                  </button>
+                </>
+              )}
+              <button type="button" aria-pressed={delMode} onClick={toggleDelMode} className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${delMode ? "border-primary bg-tile-blue" : "border-border hover:bg-bg"}`}>
+                {delMode ? "선택 삭제 끝내기" : "선택 삭제"}
+              </button>
+            </div>
+          )}
+          {hasLines && (
             <div className={`${ROW_GRID} py-2.5 border-t border-border text-xs text-text-muted text-center`}>
               <span>자재</span>
               <span>제품 1개당</span>
@@ -575,6 +647,14 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
         {selected && (
           <aside aria-label="BOM 줄 편집" className="border-t lg:border-t-0 lg:border-l border-border p-5 space-y-3">
             <h3 className="text-sm font-semibold break-words">{selected.item_name}</h3>
+            {!selected.registered && (
+              <div>
+                <label htmlFor="bom-edit-name" className="block text-xs text-text-muted mb-1">
+                  자재 이름 (미등록)
+                </label>
+                <input id="bom-edit-name" value={draftName} maxLength={200} onChange={(e) => setDraftName(e.target.value)} className={inputCls} />
+              </div>
+            )}
             <dl className="text-xs text-text-muted space-y-1">
               <div className="flex justify-between gap-2">
                 <dt>품목 코드</dt>

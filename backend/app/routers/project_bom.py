@@ -118,6 +118,11 @@ def update_bom_line(project_id: int, line_id: int, payload: BomLineUpdate, db: S
         line.quantity = payload.quantity
     if "note" in fields:
         line.note = payload.note
+    if "item_name" in fields and payload.item_name is not None and line.material_id is None:
+        name = payload.item_name.strip()
+        if not name:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="자재 이름을 입력해주세요.")
+        line.item_name = name
     if payload.material_id is not None and line.material_id is None:  # 미등록 줄을 자재관리에 등록한 뒤 연결
         m = _material_or_400(db, payload.material_id)
         if db.query(ProjectBomLine.id).filter(ProjectBomLine.project_id == project_id, ProjectBomLine.material_id == m.id).first():

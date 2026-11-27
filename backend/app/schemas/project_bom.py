@@ -25,6 +25,7 @@ class BomLineCreate(BaseModel):
 class BomLineUpdate(BaseModel):
     quantity: int | None = Field(default=None, gt=0, le=MAX_QUANTITY)
     note: str | None = Field(default=None, max_length=500)
+    item_name: str | None = Field(default=None, max_length=200)  # 미등록 줄의 이름 고치기 (등록된 자재 줄은 자재관리의 이름을 따른다)
     material_id: int | None = None  # 미등록 줄을 자재관리에 등록한 뒤 연결할 때 쓴다 (이미 연결된 줄은 바꾸지 않는다)
 
     @field_validator("note")
