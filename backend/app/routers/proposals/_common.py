@@ -101,6 +101,7 @@ def _to_out(p: Proposal) -> ProposalOut:
         settle_amount=p.settle_amount,
         settle_rate=float(p.settle_rate) if p.settle_rate is not None else None,
         no_vat=bool(p.no_vat),
+        vat_included=bool(p.vat_included),
         department_name=p.department_name,
         issue_date=p.issue_date,
         status=p.status,

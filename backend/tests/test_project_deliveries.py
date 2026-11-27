@@ -115,9 +115,18 @@ def test_delivery_stage_complete_split_edit_and_cancel(client, db, make_user, au
     db.expire_all()
     assert db.get(ProjectProgressStage, stage.id).progress_percent == 0
 
-    # 완료 취소: 기록은 남고 항목만 미완료
+    # 완료 취소: 완료하면서 함께 적은 기록은 지워져 원상복귀, 그 전에 따로 적은 기록은 남는다
     client.post(f"/api/projects/{p.id}/deliveries", json={"delivered_on": today.isoformat(), "quantity": 10}, headers=h)
-    client.put(url, json={"completed": True}, headers=h)
+    res = client.put(url, json={"completed": True, "record": {"delivered_on": today.isoformat(), "quantity": 5}}, headers=h)
+    assert res.json()["progress_percent"] == 100
+    assert client.get(f"/api/projects/{p.id}/deliveries", headers=h).json()["total_count"] == 2
     res = client.put(url, json={"completed": False}, headers=h)
     assert res.json()["progress_percent"] == 0 and res.json()["completed_on"] is None
-    assert client.get(f"/api/projects/{p.id}/deliveries", headers=h).json()["total_count"] == 1
+    listed = client.get(f"/api/projects/{p.id}/deliveries", headers=h).json()
+    assert (listed["total_count"], listed["total_quantity"]) == (1, 10)
+
+    # 기록 없이 완료 → 취소하면 기록 0건 (납품 중이 아니라 미완료)
+    client.delete(f"/api/projects/{p.id}/deliveries/{listed['items'][0]['id']}", headers=h)
+    client.put(url, json={"completed": True, "record": {"delivered_on": today.isoformat(), "quantity": 7}}, headers=h)
+    client.put(url, json={"completed": False}, headers=h)
+    assert client.get(f"/api/projects/{p.id}/deliveries", headers=h).json()["total_count"] == 0

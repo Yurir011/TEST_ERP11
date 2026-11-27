@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -22,6 +22,7 @@ class ProjectDelivery(Base):
     delivered_on: Mapped[date] = mapped_column(Date, index=True)
     quantity: Mapped[int] = mapped_column(Integer)  # 납품 개수
     memo: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    is_completion: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")  # [납품완료]를 누르며 함께 적은 기록: 완료를 취소하면 이 기록도 지운다
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

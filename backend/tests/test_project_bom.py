@@ -163,3 +163,27 @@ def test_short_lines_are_skipped_as_pending_then_released_later(client, db, make
     for _ in range(2):
         assert client.post(f"{url}/release", headers=h, json={"units": 10, "line_ids": [l_ok["id"]], "skipped_line_ids": [l_low["id"]]}).status_code == 200
     assert {r["id"]: r for r in client.get(url, headers=h).json()}[l_low["id"]]["pending_units"] == 20
+
+
+def test_swap_material_only_before_release(client, db, make_user, auth_headers):
+    from app.models.material import Material, MaterialMovement
+    from app.models.project import Project
+    from app.models.client import Client
+
+    me = make_user()
+    h = auth_headers(me)
+    c = Client(name="한솔", created_by=me.id)
+    db.add(c)
+    db.flush()
+    p = Project(name="RF", client_id=c.id, created_by=me.id)
+    a = Material(code="A-1", category="ic", kind="general", name="칩A", created_by=me.id)
+    b = Material(code="B-1", category="ic", kind="general", name="칩B", created_by=me.id)
+    db.add_all([p, a, b])
+    db.flush()
+    line = client.post(f"/api/projects/{p.id}/bom", json={"material_id": a.id, "quantity": 2}, headers=h).json()
+    res = client.put(f"/api/projects/{p.id}/bom/{line['id']}", json={"material_id": b.id}, headers=h)
+    assert res.status_code == 200 and res.json()["item_name"] == "칩B"
+    db.add(MaterialMovement(material_id=b.id, kind="out", movement_date=__import__("datetime").date.today(), quantity=1, reason="생산 불출", bom_line_id=line["id"], created_by=me.id))
+    db.flush()
+    db.expire_all()
+    assert client.put(f"/api/projects/{p.id}/bom/{line['id']}", json={"material_id": a.id}, headers=h).status_code == 400

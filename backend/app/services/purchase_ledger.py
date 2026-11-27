@@ -18,7 +18,7 @@ from app.models.project_document import ProjectDocType, ProjectDocument, Project
 from app.models.proposal import Proposal
 from app.models.transaction import Transaction, TransactionType
 from app.models.user import User
-from app.services.money import line_amount, vat_amount
+from app.services.money import line_amount, split_vat_included, vat_amount
 from app.services.payment_accounts import display_name, require_account
 from fastapi import HTTPException, status
 
@@ -47,8 +47,8 @@ def payment_note(db: Session, p: Proposal) -> str:
     return "외상"
 
 
-def _supply_and_party(db: Session, p: Proposal) -> tuple[int, str | None]:
-    """공급가액과 거래처명: 승인된 발주서가 있으면 발주서 합계, 없으면(온라인 주문) 품의서에 적은 금액."""
+def _supply_and_party(db: Session, p: Proposal) -> tuple[int, str | None, bool]:
+    """공급가액과 거래처명, 발주서에서 온 금액인지: 승인된 발주서가 있으면 발주서 합계, 없으면(온라인 주문) 품의서에 적은 금액."""
     orders = (
         db.query(ProjectDocument)
         .filter(
@@ -60,8 +60,8 @@ def _supply_and_party(db: Session, p: Proposal) -> tuple[int, str | None]:
     )
     if orders:
         supply = sum(line_amount(it.quantity, it.unit_price) for o in orders for it in o.items)
-        return supply, orders[0].client_name
-    return (round(float(p.amount)) if p.amount is not None else 0), p.vendor_name
+        return supply, orders[0].client_name, True
+    return (round(float(p.amount)) if p.amount is not None else 0), p.vendor_name, False
 
 
 def apply_settlement(
@@ -157,10 +157,13 @@ def sync_purchase_transaction(db: Session, p: Proposal, actor: User, pay_date: d
         logger.debug(f"[PurchaseLedger] 외화 품의서는 실결제 원화 금액 입력 전까지 매입 등록 생략: proposal_id={p.id}, currency={p.currency}")
         return None
 
-    supply, party = _supply_and_party(db, p)
+    supply, party, from_orders = _supply_and_party(db, p)
     if foreign:
         supply = int(p.settle_amount)  # 제반 비용 포함 실결제 금액(원화)
-    vat = 0 if p.no_vat else vat_amount(supply)
+    if not foreign and not from_orders and p.vat_included:
+        supply, vat = split_vat_included(supply)  # 품의서에 적은 금액이 부가세 포함이면 공급가액과 부가세로 나눈다
+    else:
+        vat = 0 if p.no_vat else vat_amount(supply)
     total = supply + vat
     client = db.query(Client).filter(Client.name == party).first() if party else None
     memo = f"구매 품의서 No. {p.doc_no} · {payment_note(db, p)}"

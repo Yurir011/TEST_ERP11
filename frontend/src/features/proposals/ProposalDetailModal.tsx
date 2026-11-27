@@ -75,12 +75,14 @@ export function ProposalDetailModal({
   const [settleDraft, setSettleDraft] = useState("");
   const [rateDraft, setRateDraft] = useState("");
   const [noVatDraft, setNoVatDraft] = useState(true);
+  const [vatIncludedDraft, setVatIncludedDraft] = useState(false);
 
   function startEditAmount() {
     setAmountDraft(proposal.amount === null || proposal.amount === undefined ? "" : String(proposal.amount));
     setSettleDraft(proposal.settle_amount ? String(proposal.settle_amount) : "");
     setRateDraft(proposal.settle_rate ? String(proposal.settle_rate) : "");
     setNoVatDraft(proposal.settle_amount ? !!proposal.no_vat : true);
+    setVatIncludedDraft(!!proposal.vat_included);
     setEditingAmount(true);
   }
 
@@ -102,7 +104,7 @@ export function ProposalDetailModal({
     try {
       const body = withSettle
         ? { amount: Number(amountDraft), settle_amount: settle, settle_rate: rate, no_vat: noVatDraft }
-        : { amount: Number(amountDraft) };
+        : { amount: Number(amountDraft), vat_included: vatIncludedDraft };
       const updated = await apiPut<Proposal>(`/api/proposals/${proposal.id}/amount`, body);
       logDebug("Proposals", `금액 변경 완료: id=${proposal.id}, amount=${updated.amount}`);
       setEditingAmount(false);
@@ -324,6 +326,12 @@ export function ProposalDetailModal({
                             <span className="w-9 shrink-0 text-xs text-text-muted">{isForeign ? proposal.currency : "원"}</span>
                           </span>
                         </label>
+                        {!isForeign && (
+                          <label className="flex items-center justify-end gap-1.5 text-xs text-text-muted">
+                            <input type="checkbox" checked={vatIncludedDraft} onChange={(e) => setVatIncludedDraft(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
+                            부가세 포함
+                          </label>
+                        )}
                         {isForeign && proposal.order_sent_at && (
                           <>
                             <label className="flex items-center justify-between gap-2 text-xs text-text-muted">
@@ -368,6 +376,9 @@ export function ProposalDetailModal({
                         <span className="flex items-center gap-2">
                           {formatProposalAmount(proposal) ?? "-"}
                           {isForeign && <span className="text-[11px] font-normal text-text-muted">(참고)</span>}
+                          {!isForeign && proposal.amount !== null && proposal.amount !== undefined && (
+                            <span className="text-[11px] font-normal text-text-muted">({proposal.vat_included ? "부가세 포함" : "부가세 별도"})</span>
+                          )}
                           {canEditAmount && (
                             <button onClick={startEditAmount} className="text-xs font-normal text-primary hover:underline">금액 변경</button>
                           )}

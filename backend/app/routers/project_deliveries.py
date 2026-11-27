@@ -118,19 +118,36 @@ def set_delivery_status(
     project_id: int, stage_id: int, payload: DeliveryStatusIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """"납품" 진행 단계를 완료/미완료로 바꾼다. 완료하려면 납품 기록이 1건 이상 있어야 하고(완료일은 마지막 납품일),
-    미완료로 되돌려도 납품 기록은 그대로 남는다. 분할 납품은 기록을 여러 건 쌓은 뒤 마지막에 완료로 바꾼다."""
+    미완료로 되돌리면 완료하면서 함께 적은 기록은 지워지고, 그 전에 따로 적은 기록은 남는다. 분할 납품은 기록을 여러 건 쌓은 뒤 마지막에 완료로 바꾼다."""
     stage = db.query(ProjectProgressStage).filter(ProjectProgressStage.id == stage_id, ProjectProgressStage.project_id == project_id).first()
     if stage is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="진행 상황 항목을 찾을 수 없습니다.")
     if not is_delivery_stage(stage):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이름이 \"납품\"인 항목에서만 사용할 수 있습니다.")
     if payload.completed:
+        if payload.record is not None:
+            _check_date(payload.record.delivered_on)
+            db.add(
+                ProjectDelivery(
+                    project_id=project_id,
+                    delivered_on=payload.record.delivered_on,
+                    quantity=payload.record.quantity,
+                    memo=payload.record.memo,
+                    is_completion=True,
+                    created_by=current_user.id,
+                )
+            )
+            db.flush()
         last = last_delivery_date(db, project_id)
         if last is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="납품일과 개수를 먼저 기록해 주세요.")
         stage.progress_percent = 100
         stage.completed_on = last
     else:
+        # 완료 취소: [납품완료]와 함께 적은 기록은 지워 완료 전 상태로 되돌린다 (그 전에 따로 적은 분할 납품 기록은 남는다)
+        removed = db.query(ProjectDelivery).filter(ProjectDelivery.project_id == project_id, ProjectDelivery.is_completion.is_(True)).delete()
+        if removed:
+            logger.debug(f"[Deliveries] 완료 취소로 완료 때 적은 기록 {removed}건 삭제: project_id={project_id}")
         stage.progress_percent = 0
         stage.completed_on = None
     db.commit()

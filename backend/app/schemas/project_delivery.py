@@ -16,6 +16,7 @@ class DeliveryIn(BaseModel):
 
 class DeliveryStatusIn(BaseModel):
     completed: bool
+    record: DeliveryIn | None = None  # 완료하면서 함께 적는 납품 한 건 (완료를 취소하면 이 기록도 지워진다)
 
 
 class DeliveryOut(BaseModel):

@@ -47,6 +47,8 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
   const [draftQty, setDraftQty] = useState("");
   const [draftNote, setDraftNote] = useState("");
   const [draftName, setDraftName] = useState(""); // 미등록 줄의 이름
+  const [swapOpen, setSwapOpen] = useState(false); // 선택한 줄의 자재를 다른 자재로 바꾸는 검색 칸
+  const [swapQuery, setSwapQuery] = useState("");
   const [delMode, setDelMode] = useState(false); // [선택 삭제]: 줄마다 체크박스가 생겨 골라서 한꺼번에 지운다
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [panelBusy, setPanelBusy] = useState(false);
@@ -110,6 +112,8 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
     setDraftQty(selected ? String(selected.quantity) : "");
     setDraftNote(selected?.note ?? "");
     setDraftName(selected?.item_name ?? "");
+    setSwapOpen(false);
+    setSwapQuery("");
     setPanelError(null);
   }, [selected]);
 
@@ -264,6 +268,21 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
     } catch (err) {
       logError("ProjectBom", "BOM 삭제 실패", err);
       dialog.notifyError(err instanceof ApiError ? err.message : "삭제하지 못했습니다.");
+    }
+  }
+
+  async function handleSwap(materialId: number) {
+    if (!selected) return;
+    try {
+      logDebug("ProjectBom", `BOM 자재 변경 시도: line_id=${selected.id}, material_id=${materialId}`);
+      await apiPut<BomLine>(`/api/projects/${projectId}/bom/${selected.id}`, { material_id: materialId });
+      setSwapOpen(false);
+      setSwapQuery("");
+      await loadLines();
+      dialog.notify("자재를 바꿨습니다.");
+    } catch (err) {
+      logError("ProjectBom", "BOM 자재 변경 실패", err);
+      setPanelError(err instanceof ApiError ? err.message : "자재를 바꾸지 못했습니다.");
     }
   }
 
@@ -647,6 +666,30 @@ export function ProjectBomCard({ projectId }: { projectId: number }) {
         {selected && (
           <aside aria-label="BOM 줄 편집" className="border-t lg:border-t-0 lg:border-l border-border p-5 space-y-3">
             <h3 className="text-sm font-semibold break-words">{selected.item_name}</h3>
+            <div className="space-y-1.5">
+              <button type="button" onClick={() => setSwapOpen((v) => !v)} aria-expanded={swapOpen} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-bg">
+                {swapOpen ? "자재 변경 닫기" : "자재 변경"}
+              </button>
+              {swapOpen && (
+                <>
+                  <input aria-label="바꿀 자재 검색" autoFocus placeholder="재고 목록에서 검색" value={swapQuery} onChange={(e) => setSwapQuery(e.target.value)} className={inputCls} />
+                  <div role="listbox" className="max-h-56 overflow-auto rounded-lg border border-border bg-surface">
+                    {materials
+                      .filter((m) => m.id !== selected.material_id && !usedMaterialIds.has(m.id) && (!swapQuery.trim() || matchKeyword(m, swapQuery)))
+                      .slice(0, 50)
+                      .map((m) => (
+                        <button key={m.id} type="button" role="option" aria-selected={false} onClick={() => void handleSwap(m.id)} className="flex w-full items-center gap-2 border-b border-border px-3 py-2 text-left text-xs last:border-0 hover:bg-tile-blue">
+                          <span className="min-w-0 flex-1">
+                            <b className="block break-words">{m.name}</b>
+                            <small className="text-text-muted">{m.code} · {classLabel(m) || "-"}</small>
+                          </span>
+                          <span className="whitespace-nowrap text-text-muted">재고 {fmt(m.current_qty)}</span>
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
             {!selected.registered && (
               <div>
                 <label htmlFor="bom-edit-name" className="block text-xs text-text-muted mb-1">

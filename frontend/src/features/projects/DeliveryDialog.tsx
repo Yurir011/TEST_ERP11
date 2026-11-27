@@ -93,9 +93,9 @@ export function DeliveryDialog({
     return true;
   }
 
-  async function setCompleted(completed: boolean) {
+  async function setCompleted(completed: boolean, record?: { delivered_on: string; quantity: number; memo: string | null }) {
     logDebug("DeliveryDialog", `납품 항목 ${completed ? "완료" : "완료 취소"}: stage_id=${stage.id}`);
-    await apiPut(`/api/projects/${projectId}/progress-stages/${stage.id}/delivery-status`, { completed });
+    await apiPut(`/api/projects/${projectId}/progress-stages/${stage.id}/delivery-status`, { completed, record: record ?? null });
     setDone(completed);
   }
 
@@ -133,13 +133,22 @@ export function DeliveryDialog({
       return;
     }
     void run(async () => {
-      if (filled) await saveRecord();
-      await setCompleted(true);
+      if (filled && editId) {
+        await saveRecord(); // 고치던 기록은 저장만 하고
+        await setCompleted(true);
+      } else if (filled) {
+        // 입력한 기록은 완료와 함께 적는다: 완료를 취소하면 이 기록도 함께 사라진다
+        const record = { delivered_on: date, quantity: qty, memo: memo.trim() || null };
+        resetForm();
+        await setCompleted(true, record);
+      } else {
+        await setCompleted(true);
+      }
     });
   }
 
   async function handleCancelComplete() {
-    if (!(await confirm("납품완료를 취소할까요? 납품 기록은 그대로 남고 항목만 미완료(납품 중)로 돌아갑니다.", { okLabel: "완료 취소" }))) return;
+    if (!(await confirm("납품완료를 취소할까요? 완료하면서 적은 납품 기록은 지워지고 완료 전 상태로 돌아갑니다. (그 전에 따로 적은 분할 납품 기록은 남습니다)", { okLabel: "완료 취소" }))) return;
     void run(() => setCompleted(false));
   }
 

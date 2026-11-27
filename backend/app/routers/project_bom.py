@@ -123,7 +123,17 @@ def update_bom_line(project_id: int, line_id: int, payload: BomLineUpdate, db: S
         if not name:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="자재 이름을 입력해주세요.")
         line.item_name = name
-    if payload.material_id is not None and line.material_id is None:  # 미등록 줄을 자재관리에 등록한 뒤 연결
+    if payload.material_id is not None and line.material_id is not None and payload.material_id != line.material_id:
+        # 연결된 자재를 다른 자재로 바꾼다: 이미 출고했거나 보류분이 있으면 출고 기록이 어긋나므로 막는다
+        if _released(line) > 0 or (line.pending_units or 0) > 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="이미 출고한 기록(또는 보류분)이 있어 자재를 바꿀 수 없습니다. 수량·비고만 고칠 수 있습니다.")
+        m = _material_or_400(db, payload.material_id)
+        if db.query(ProjectBomLine.id).filter(ProjectBomLine.project_id == project_id, ProjectBomLine.material_id == m.id).first():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 BOM에 있는 자재입니다.")
+        logger.debug(f"[ProjectBom] 자재 변경: line_id={line_id}, {line.material_id} -> {m.id}")
+        line.material_id = m.id
+        line.item_name = m.name
+    elif payload.material_id is not None and line.material_id is None:  # 미등록 줄을 자재관리에 등록한 뒤 연결
         m = _material_or_400(db, payload.material_id)
         if db.query(ProjectBomLine.id).filter(ProjectBomLine.project_id == project_id, ProjectBomLine.material_id == m.id).first():
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="이미 BOM에 있는 자재입니다.")

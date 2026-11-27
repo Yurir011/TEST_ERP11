@@ -23,6 +23,13 @@ def vat_amount(supply: float | int) -> int:
     return round_half_up(Decimal(str(supply)) * VAT_RATE)
 
 
+def split_vat_included(total: float | int) -> tuple[int, int]:
+    """부가세 포함 금액을 (공급가액, 부가세)로 나눈다: 공급가액 = 합계 ÷ 1.1 (사사오입), 부가세 = 합계 - 공급가액."""
+    t = round_half_up(Decimal(str(total)))
+    supply = round_half_up(Decimal(t) / (1 + VAT_RATE))
+    return supply, t - supply
+
+
 def line_amount(quantity: float | int, unit_price: float | int) -> int:
     """품목 금액 = 수량 x 단가 (원 단위, 사사오입). 단가가 소수(예: 454,545.5)일 수 있다."""
     return round_half_up(Decimal(str(quantity)) * Decimal(str(unit_price)))

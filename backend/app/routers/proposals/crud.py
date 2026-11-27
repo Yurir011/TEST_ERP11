@@ -50,6 +50,7 @@ def create_proposal(payload: ProposalCreate, db: Session = Depends(get_db), curr
         project_id=_valid_project_id(db, payload.project_id),
         amount=payload.amount,
         currency=payload.currency,
+        vat_included=payload.vat_included,
         issue_date=issue_date,
         department_code=DEPARTMENT_CODE,
         department_name=DEPARTMENT_NAME,
@@ -128,6 +129,7 @@ def update_proposal(
     p.project_id = _valid_project_id(db, payload.project_id)
     p.amount = payload.amount
     p.currency = payload.currency
+    p.vat_included = payload.vat_included
     if payload.issue_date:
         p.issue_date = payload.issue_date
     p.is_final_decision = payload.is_final_decision
@@ -181,6 +183,8 @@ def update_proposal_amount(
     if p.status != ProposalStatus.approved or p.delete_requested:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="승인된 품의서만 금액을 변경할 수 있습니다.")
     old_amount = p.amount
+    if payload.vat_included is not None:
+        p.vat_included = payload.vat_included
     if foreign:
         # 외화 금액은 참고용이라 고쳐도 장부는 그대로다. 실결제 원화·환율이 함께 오면 원화 장부를 맞춘다. (장부에는 항상 원화만 기재)
         if payload.settle_amount is not None:

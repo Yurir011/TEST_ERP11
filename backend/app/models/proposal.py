@@ -50,6 +50,7 @@ class Proposal(Base):
     # 외화 구매: amount 는 참고용으로 남기고, 결제 때 수기로 입력한 실결제 원화 금액(제반 비용 포함)·환율로 매입·입출금을 만든다.
     settle_amount: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     settle_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    vat_included: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # 적은 금액이 부가세 포함 (기본은 부가세 별도)
     no_vat: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # 부가세 없음 (해외결제)
     # 이 구매가 속한 프로젝트. 비어 있으면 프로젝트와 상관없는 일반 구매(사무용품 등)
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)

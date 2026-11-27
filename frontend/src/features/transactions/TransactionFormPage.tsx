@@ -144,6 +144,7 @@ export function TransactionFormPage() {
   const [rows, setRows] = useState<ItemRow[]>([{ ...EMPTY_ROW }]); // 품목 줄 (품목명 · 수량 · 단가)
   const [vatAmount, setVatAmount] = useState("0");
   const [vatManuallyEdited, setVatManuallyEdited] = useState(false);
+  const [vatIncluded, setVatIncluded] = useState(false); // 품목 금액이 부가세 포함이면 체크 (기본은 별도)
   const [taxInvoiceNo, setTaxInvoiceNo] = useState("");
   const [memo, setMemo] = useState("");
   const [settled, setSettled] = useState(false);
@@ -199,14 +200,16 @@ export function TransactionFormPage() {
       .catch((err) => logError("TransactionForm", "거래처 목록 불러오기 실패", err));
   }, []);
 
-  const supplyAmount = String(rows.reduce((sum, r) => sum + rowAmount(r), 0)); // 공급가액 = 품목 금액 합계
+  const itemsTotal = rows.reduce((sum, r) => sum + rowAmount(r), 0); // 품목 금액 합계
+  // 부가세 별도(기본)면 합계가 공급가액, 포함이면 합계 ÷ 1.1 이 공급가액이고 나머지가 부가세다.
+  const supplyAmount = String(vatIncluded ? Math.round(itemsTotal / 1.1) : itemsTotal);
 
-  // 부가세를 직접 고치기 전까지는 공급가액이 바뀔 때마다 10%로 자동 계산한다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
-  const vatKey = `${supplyAmount}|${vatManuallyEdited}`;
+  // 부가세를 직접 고치기 전까지는 공급가액이 바뀔 때마다 자동 계산한다 (렌더 중 조정: 효과로 한 번 더 그리지 않는다).
+  const vatKey = `${supplyAmount}|${vatManuallyEdited}|${vatIncluded}`;
   const [prevVatKey, setPrevVatKey] = useState(vatKey);
   if (vatKey !== prevVatKey) {
     setPrevVatKey(vatKey);
-    if (!vatManuallyEdited) setVatAmount(String(calcVat(Number(supplyAmount) || 0)));
+    if (!vatManuallyEdited) setVatAmount(String(vatIncluded ? itemsTotal - (Number(supplyAmount) || 0) : calcVat(Number(supplyAmount) || 0)));
   }
 
   function changeParty(name: string) {
@@ -472,7 +475,21 @@ export function TransactionFormPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-text-muted mb-1.5">공급가액 (품목 금액 합계)</label>
+            <label className="mb-1.5 flex items-center justify-between gap-2 text-xs text-text-muted">
+              <span>{vatIncluded ? "공급가액 (품목 금액 ÷ 1.1)" : "공급가액 (품목 금액 합계)"}</span>
+              <span className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  checked={vatIncluded}
+                  onChange={(e) => {
+                    setVatIncluded(e.target.checked);
+                    setVatManuallyEdited(false);
+                  }}
+                  className="h-3.5 w-3.5 accent-primary"
+                />
+                품목 금액이 부가세 포함
+              </span>
+            </label>
             <div className="w-full rounded-lg border border-border px-3 py-2 text-sm bg-bg text-right tabular-nums">{formatCurrency(Number(supplyAmount) || 0)}</div>
           </div>
           <div>

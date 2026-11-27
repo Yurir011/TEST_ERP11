@@ -62,6 +62,7 @@ export function ProposalFormPage() {
   const [clients, setClients] = useState<Client[]>([]); // 거래처명 검색(자동완성)용 등록 거래처
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState<"KRW" | "USD" | "JPY">("KRW");
+  const [vatIncluded, setVatIncluded] = useState(false); // 기본은 부가세 별도, 포함이면 체크
   const [endTitle, setEndTitle] = useState<ApprovalEndTitle | null>(null);
   const [approverIds, setApproverIds] = useState<string[]>([]);
   const [isFinalDecision, setIsFinalDecision] = useState(false);
@@ -98,6 +99,7 @@ export function ProposalFormPage() {
         setProjectId(source.project_id ? String(source.project_id) : "");
         setAmount(source.amount === null || source.amount === undefined ? "" : String(source.amount));
         setCurrency(source.currency ?? "KRW");
+        setVatIncluded(!!source.vat_included);
       })
       .catch((err) => {
         logError("Proposals", "복사할 품의서 불러오기 실패", err);
@@ -130,6 +132,7 @@ export function ProposalFormPage() {
         setProjectId(target.project_id ? String(target.project_id) : "");
         setAmount(target.amount === null || target.amount === undefined ? "" : String(target.amount));
         setCurrency(target.currency ?? "KRW");
+        setVatIncluded(!!target.vat_included);
       })
       .catch((err) => {
         logError("Proposals", "수정 불러오기 실패", err);
@@ -211,6 +214,7 @@ export function ProposalFormPage() {
         project_id: projectId ? Number(projectId) : null,
         amount: isPurchase && amount.trim() !== "" ? Number(amount) : null,
         currency,
+        vat_included: isPurchase && currency === "KRW" ? vatIncluded : false,
         is_final_decision: isFinalDecision,
         end_title: isFinalDecision ? null : endTitle,
         approver_ids: isFinalDecision ? [] : approverIds.map(Number),
@@ -378,7 +382,7 @@ export function ProposalFormPage() {
             </div>
             <div>
               <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-amount">
-                금액{isPurchase ? " (부가세 별도)" : " (선택)"}
+                금액{isPurchase ? (currency === "KRW" ? (vatIncluded ? " (부가세 포함)" : " (부가세 별도)") : "") : " (선택)"}
               </label>
               <div className="flex gap-2">
                 <select
@@ -402,6 +406,12 @@ export function ProposalFormPage() {
                   className="min-w-0 flex-1 rounded-lg border border-border px-3 py-2 text-sm text-right tabular-nums outline-none focus:border-primary bg-bg"
                 />
               </div>
+              {isPurchase && currency === "KRW" && (
+                <label className="mt-1.5 flex items-center gap-1.5 text-xs text-text-muted">
+                  <input type="checkbox" checked={vatIncluded} onChange={(e) => setVatIncluded(e.target.checked)} className="h-3.5 w-3.5 accent-primary" />
+                  부가세 포함
+                </label>
+              )}
             </div>
           </div>
           )}

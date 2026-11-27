@@ -18,6 +18,7 @@ class ProposalCreate(BaseModel):
     project_id: int | None = None  # 속한 프로젝트 (없으면 일반 구매)
     amount: float | None = Field(default=None, ge=0)  # 금액
     currency: Literal["KRW", "USD", "JPY"] = "KRW"
+    vat_included: bool = False  # 금액이 부가세 포함인가 (기본은 별도)
     issue_date: date | None = None  # 기안일자. 비우면 오늘
     is_final_decision: bool = False
     end_title: JobTitle | None = None  # 결재선 종료 단계 (부서장/팀장/대표). 전결이면 불필요
@@ -36,6 +37,7 @@ class ProposalAmountIn(BaseModel):
     실결제 원화 금액·환율·부가세 없음을 함께 보내면 장부(원화)도 같이 바뀐다."""
 
     amount: float = Field(ge=0)
+    vat_included: bool | None = None  # 비우면 그대로 둔다
     settle_amount: int | None = Field(default=None, gt=0)
     settle_rate: float | None = Field(default=None, gt=0)
     no_vat: bool = True
@@ -161,6 +163,7 @@ class ProposalOut(BaseModel):
     settle_amount: int | None = None  # 외화 구매의 실결제 원화 금액
     settle_rate: float | None = None  # 적용 환율
     no_vat: bool = False
+    vat_included: bool = False
     department_name: str
     issue_date: date
     status: ProposalStatus

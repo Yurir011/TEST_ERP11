@@ -128,3 +128,18 @@ def test_card_purchase_is_pending_with_usage_date_and_settled_at_card_day(client
     assert pay.card_used_date == pay.payment_date  # 사용일 = 입출금 날짜 (카드값은 결제일에 확정)
     assert pay.payment_date == date.today() or pay.payment_date == tx.transaction_date
     assert pay.card_settled_date is None
+
+
+def test_krw_vat_included_splits_supply_and_vat(client, db, make_user, auth_headers):
+    """원화 구매: 기본은 부가세 별도, 부가세 포함으로 적으면 금액 ÷ 1.1 이 공급가액이고 합계는 적은 금액 그대로."""
+    h = auth_headers(make_user(name="기안자"))
+    base = {"kind": "구매", "title": "부품", "topic": "부품", "content": "구매", "issue_date": "2026-11-20", "vendor_name": "한솔", "is_final_decision": True}
+    sep = client.post("/api/proposals", headers=h, json={**base, "amount": 110000}).json()
+    inc = client.post("/api/proposals", headers=h, json={**base, "amount": 110000, "vat_included": True}).json()
+    assert sep["vat_included"] is False and inc["vat_included"] is True
+    for p in (sep, inc):
+        assert client.put(f"/api/proposals/{p['id']}/order-sent", json={"value": True, "online": True}, headers=h).status_code == 200
+    t_sep = db.query(Transaction).filter(Transaction.proposal_id == sep["id"]).one()
+    t_inc = db.query(Transaction).filter(Transaction.proposal_id == inc["id"]).one()
+    assert (t_sep.supply_amount, t_sep.vat_amount, t_sep.total_amount) == (110000, 11000, 121000)
+    assert (t_inc.supply_amount, t_inc.vat_amount, t_inc.total_amount) == (100000, 10000, 110000)
