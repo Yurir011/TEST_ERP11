@@ -1,4 +1,4 @@
-"""프로젝트 회차: 기존 프로젝트 불러오기 + 같은 묶음으로 잇기, 올해 회차만 번호 매기기."""
+"""프로젝트 회차: 기존 프로젝트 불러오기 + 같은 묶음으로 잇기, 해(年)와 상관없이 묶음 전체를 시작일 순으로 번호 매기기."""
 from datetime import date
 
 from app.models.project import Project, ProjectStatus
@@ -18,7 +18,7 @@ def test_standalone_project_has_no_round(client, make_user, make_client, auth_he
     assert p["series_id"] is None and p["round_no"] is None
 
 
-def test_link_series_numbers_this_year_rounds_only(client, db, make_user, make_client, auth_headers):
+def test_link_series_numbers_all_rounds_across_years(client, db, make_user, make_client, auth_headers):
     headers = auth_headers(make_user())
     c = make_client(name="거래처")
     year = date.today().year
@@ -26,13 +26,13 @@ def test_link_series_numbers_this_year_rounds_only(client, db, make_user, make_c
     r1 = _create(client, headers, c.id, "중계기", f"{year}-02-01", from_project_id=old["id"], link_series=True)
     r2 = _create(client, headers, c.id, "중계기", f"{year}-06-01", from_project_id=r1["id"], link_series=True)
     assert r1["series_id"] == r2["series_id"] == old["id"]
-    # 작년 프로젝트는 번호 없이 묶음에만 남고, 올해 둘이 1·2회차
+    # 해가 달라도 같은 묶음이면 시작일 순으로 1·2·3회차 (작년 프로젝트도 탭에 들어온다)
     got = {p["id"]: p for p in client.get(f"/api/projects/{old['id']}/rounds", headers=headers).json()}
-    assert got[old["id"]]["round_no"] is None
-    assert (got[r1["id"]]["round_no"], got[r1["id"]]["round_total"]) == (1, 2)
-    assert (got[r2["id"]]["round_no"], got[r2["id"]]["round_total"]) == (2, 2)
+    assert (got[old["id"]]["round_no"], got[old["id"]]["round_total"]) == (1, 3)
+    assert (got[r1["id"]]["round_no"], got[r1["id"]]["round_total"]) == (2, 3)
+    assert (got[r2["id"]]["round_no"], got[r2["id"]]["round_total"]) == (3, 3)
     listed = {p["id"]: p for p in client.get("/api/projects", headers=headers).json()}
-    assert listed[r2["id"]]["round_no"] == 2
+    assert listed[r2["id"]]["round_no"] == 3
 
 
 def test_import_without_link_keeps_projects_separate(client, make_user, make_client, auth_headers):

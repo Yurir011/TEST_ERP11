@@ -221,7 +221,7 @@ export function ProjectsPage() {
                   <div className={`min-w-0 flex-1 truncate text-sm font-semibold ${overdue ? "text-danger" : "text-text"}`} title={p.name}>
                     {p.name}
                     {rounds.length > 1 && (
-                      <span className="ml-2 inline-flex items-center gap-1 align-middle" title={`올해 ${rounds.length}회차`}>
+                      <span className="ml-2 inline-flex items-center gap-1 align-middle" title={`${rounds.length}회차`}>
                         {rounds.map((r) => (
                           <span
                             key={r.id}

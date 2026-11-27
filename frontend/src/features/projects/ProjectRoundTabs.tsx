@@ -6,7 +6,7 @@ import { logDebug, logError } from "../../lib/logger";
 import { roundPeriod } from "./rounds";
 import type { Project } from "./types";
 
-// 상세 화면 제목 바로 밑의 회차 탭 (올해 회차만, 1회차부터). 진행 중인 회차는 파란색으로 채운다.
+// 상세 화면 제목 바로 밑의 회차 탭 (같은 묶음의 모든 회차, 시작일 순). 진행 중인 회차는 파란색으로 채운다.
 /** 탭에 보이는 이름: 직접 지정한 이름이 있으면 그것, 없으면 "N회차" */
 export function roundName(r: Pick<Project, "round_no" | "round_label">): string {
   return r.round_label?.trim() || `${r.round_no}회차`;

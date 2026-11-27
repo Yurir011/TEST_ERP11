@@ -90,6 +90,10 @@ class ProjectProgressOverviewOut(BaseModel):
     progress_percent: int
     stages: list[ProgressStageOut]
     purchase_steps: list[PurchaseStepOut]
+    # 같은 묶음(회차)은 카드 하나로 합쳐 대표 회차만 보여 준다 (진행 중인 회차, 없으면 가장 최근 회차)
+    round_no: int | None = None
+    round_total: int | None = None  # 같은 묶음의 올해 회차 수
+    round_label: str | None = None  # 직접 지정한 회차 이름
 
 
 class ProjectOut(BaseModel):

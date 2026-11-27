@@ -32,32 +32,19 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 logger = get_logger("Projects")
 
 
-def _round_year(project: Project) -> int:
-    """회차를 매기는 기준 연도: 시작일이 있으면 시작일의 해, 없으면 등록한 해."""
-    return (project.start_date or project.created_at.date()).year
-
-
 def _round_info(db: Session, projects: list[Project]) -> dict[int, tuple[int, int]]:
-    """묶음(series)에 속한 프로젝트의 올해 회차 번호와 올해 회차 수를 {id: (번호, 수)} 로 계산한다.
+    """묶음(series)에 속한 프로젝트의 회차 번호와 묶음의 회차 수를 {id: (번호, 수)} 로 계산한다.
 
-    번호는 저장하지 않는다. 올해 시작한 구성원을 시작일(없으면 등록일) 순으로 세어 1부터 매기므로 해가 바뀌면 다시 1회차부터 시작하고,
-    지난해 이전 구성원은 번호가 없다 (목록에만 남는다).
+    번호는 저장하지 않는다. 묶음의 모든 구성원을 해(年)와 상관없이 시작일(없으면 등록일) 순으로 세어 1부터 매긴다.
+    (연차 과제처럼 해가 다른 회차도 한 묶음의 탭·카드 하나로 보이게 한다. 이름은 round_label 로 따로 붙일 수 있다.)
     """
     series_ids = {p.series_id for p in projects if p.series_id is not None}
     if not series_ids:
         return {}
-    this_year = date.today().year
     members = db.query(Project).filter(Project.series_id.in_(series_ids)).all()
-    # 번호를 매기는 해: 묶음에 올해 시작한 구성원이 있으면 올해, 없으면 그 묶음의 가장 최근 해.
-    # (시작일이 작년인 프로젝트에서 [탭 추가]를 눌러도 탭이 생기도록 — 올해 구성원이 생기면 그 해부터 다시 1회차)
-    latest_year: dict[int, int] = {}
-    for m in members:
-        y = _round_year(m)
-        latest_year[m.series_id] = max(latest_year.get(m.series_id, 0), min(y, this_year))
     by_series: dict[int, list[Project]] = {}
     for m in members:
-        if _round_year(m) == latest_year[m.series_id]:
-            by_series.setdefault(m.series_id, []).append(m)
+        by_series.setdefault(m.series_id, []).append(m)
     info: dict[int, tuple[int, int]] = {}
     for rows in by_series.values():
         rows.sort(key=lambda m: (m.start_date or m.created_at.date(), m.id))
@@ -145,8 +132,23 @@ def progress_overview(db: Session = Depends(get_db), current_user: User = Depend
         .filter(Project.status.in_([ProjectStatus.estimate, ProjectStatus.in_progress]))
         .all()
     )
+    # 같은 묶음(회차)의 프로젝트는 카드 하나로 합친다: 진행 중인 회차(여럿이면 앞 회차), 없으면 가장 최근 회차가 대표.
+    # (탭 추가로 회차가 늘어도 첫 화면 카드는 늘지 않는다. 목록의 합치기와 같은 규칙)
+    info = _round_info(db, projects)
+    chosen: dict[int, Project] = {}
+    for p in sorted(projects, key=lambda x: (info.get(x.id, (0, 0))[0], x.id)):
+        if p.series_id is None or p.id not in info:
+            continue
+        cur = chosen.get(p.series_id)
+        if cur is None:
+            chosen[p.series_id] = p
+        elif cur.status != ProjectStatus.in_progress:
+            # 지금 대표가 진행 중이 아니면: 진행 중인 회차가 나오면 교체하고, 둘 다 아니면 더 최근 회차로 교체
+            chosen[p.series_id] = p
+    keep_ids = {c.id for c in chosen.values()}
+    projects = [p for p in projects if p.series_id is None or p.id not in info or p.id in keep_ids]
     projects.sort(key=lambda p: (p.end_date is None, p.end_date or date.max, p.id))
-    logger.debug(f"[Projects] 진행 현황 조회: 진행 중 {len(projects)}건, by={current_user.id}")
+    logger.debug(f"[Projects] 진행 현황 조회: 카드 {len(projects)}건 (회차 묶음 {len(chosen)}개 합침), by={current_user.id}")
     return [
         ProjectProgressOverviewOut(
             id=p.id,
@@ -157,6 +159,9 @@ def progress_overview(db: Session = Depends(get_db), current_user: User = Depend
             progress_percent=p.progress_percent,
             stages=p.progress_stages,
             purchase_steps=[_purchase_step_out(s) for s in p.purchase_steps],
+            round_no=info[p.id][0] if p.id in info else None,
+            round_total=info[p.id][1] if p.id in info else None,
+            round_label=p.round_label,
         )
         for p in projects
     ]

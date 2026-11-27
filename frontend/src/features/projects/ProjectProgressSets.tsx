@@ -9,6 +9,9 @@ export interface ProgressOverviewItem {
   start_date: string | null;
   end_date: string | null;
   progress_percent: number;
+  round_no?: number | null; // 회차 묶음의 대표 회차 번호 (같은 묶음은 카드 하나로 합쳐 보여 준다)
+  round_total?: number | null;
+  round_label?: string | null;
   stages: ProgressStage[];
   purchase_steps: PurchaseStep[];
 }
@@ -204,7 +207,14 @@ export function ProjectProgressSets({ items }: { items: ProgressOverviewItem[] }
 
             <div className="flex min-w-0 max-w-[710px] flex-col gap-3.5 px-[28px] py-[22px]">
               <div className="flex items-center gap-2.5">
-                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{p.name}</span>
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">
+                  {p.name}
+                  {p.round_no != null && (p.round_total ?? 0) > 1 && (
+                    <span className="ml-2 rounded-full bg-bg px-2 py-0.5 align-middle text-[11px] font-medium text-text-muted" title={`총 ${p.round_total}회차 중 대표 회차`}>
+                      {p.round_label?.trim() || `${p.round_no}회차`}
+                    </span>
+                  )}
+                </span>
                 <span
                   className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ color: `color-mix(in srgb, ${color} 72%, var(--color-text))`, background: mixSurface(color, 15) }}

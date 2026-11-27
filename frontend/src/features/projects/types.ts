@@ -17,9 +17,9 @@ export interface Project {
   created_at: string;
   updated_at: string;
   series_id: number | null; // 같은 프로젝트의 반복(회차) 묶음 번호, 단독이면 null
-  round_no: number | null; // 올해 회차 번호 (묶음에 속하고 올해 시작한 프로젝트만)
+  round_no: number | null; // 회차 번호 (묶음에 속한 프로젝트, 해와 상관없이 시작일 순)
   round_label?: string | null; // 회차 탭 이름(직접 지정). 없으면 "N회차"
-  round_total: number | null; // 같은 묶음의 올해 회차 수
+  round_total: number | null; // 같은 묶음의 회차 수
 }
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
