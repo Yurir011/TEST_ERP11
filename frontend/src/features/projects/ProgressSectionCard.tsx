@@ -1,12 +1,12 @@
-import { ChevronDown, ChevronUp, ListChecks, Pencil, PackageCheck, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListChecks, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { DateTextInput } from "../../components/ui/DateTextInput";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PercentPickerPopover } from "./PercentPickerPopover";
-import { ProjectDeliveryPanel } from "./ProjectDeliveryPanel";
+import { DeliveryDialog, deliveryLabel, deliveryState, isDeliveryStage } from "./DeliveryDialog";
 import { PROGRESS_ROW_STYLES, stageColorIndex } from "./progressRowStyles";
-import { MAX_PROGRESS_STAGES, type Project, type ProgressStage } from "./types";
+import { MAX_PROGRESS_STAGES, type DeliveryList, type Project, type ProgressStage } from "./types";
 import { diffDays, formatMonthDay, labelLayout, parseDate, stageDayRange, todayFraction } from "./timeline";
 
 // 항목 이름 칸 + 간격 뒤부터 연필·삭제 버튼 앞까지가 날짜 그래프가 그려지는 영역이다 (주 눈금·오늘 선·바가 같은 영역을 기준으로 맞춘다).
@@ -28,7 +28,9 @@ export function ProgressSectionCard({
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [openPickerId, setOpenPickerId] = useState<number | null>(null);
-  const [showDelivery, setShowDelivery] = useState(false); // [납품] 입력 패널
+  // "납품" 항목: 진행률 대신 완료/미완료로 보이고, 제목·막대를 누르면 납품 팝업이 열린다
+  const [deliveryStageId, setDeliveryStageId] = useState<number | null>(null);
+  const [deliveries, setDeliveries] = useState<DeliveryList | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -45,6 +47,18 @@ export function ProgressSectionCard({
     loadStages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
+
+  const hasDeliveryStage = (stages ?? []).some(isDeliveryStage);
+  function loadDeliveries() {
+    apiGet<DeliveryList>(`/api/projects/${project.id}/deliveries`)
+      .then(setDeliveries)
+      .catch((err) => logError("ProjectProgress", "납품 내역 조회 실패", err));
+  }
+  useEffect(() => {
+    if (hasDeliveryStage) loadDeliveries();
+    else setDeliveries(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id, hasDeliveryStage]);
 
   async function handleAdd(e: FormEvent) {
     e.preventDefault();
@@ -208,11 +222,22 @@ export function ProgressSectionCard({
             {stages.map((stage, i) => {
               const style = PROGRESS_ROW_STYLES[colorIndexOf(stage.id)];
               const range = hasSchedule ? stageDayRange(stage, project.start_date!, totalWeeks) : null;
+              const delivery = isDeliveryStage(stage);
+              const dState = delivery ? deliveryState(stage, deliveries) : "none";
+              const dLabel = delivery ? deliveryLabel(dState, deliveries) : null;
+              // 납품 항목의 바: 진행률 대신 미완료(점선) / 납품 중(주황) / 완료(초록) 세 가지로만 칠한다
+              const dBarClass =
+                dState === "done"
+                  ? "bg-success text-white border-success"
+                  : dState === "partial"
+                    ? "bg-tile-orange text-tile-orange-fg border-tile-orange-fg/40"
+                    : "bg-transparent text-text-muted border-dashed border-text-muted/60";
+              const dBarText = dState === "done" ? "완료" : dState === "partial" ? "납품 중" : "미완료";
               return (
                 <div key={stage.id} className="flex items-center gap-2 group/stage">
                   <div
-                    onClick={() => setEditingId(editingId === stage.id ? null : stage.id)}
-                    title="클릭하여 기간 수정"
+                    onClick={() => (delivery ? setDeliveryStageId(stage.id) : setEditingId(editingId === stage.id ? null : stage.id))}
+                    title={delivery ? "클릭하여 납품 입력" : "클릭하여 기간 수정"}
                     style={{ width: label.widthPx, fontSize: label.fontPx }}
                     className={`shrink-0 pr-2 font-medium cursor-pointer hover:text-primary ${label.wrap ? "break-all leading-tight" : "whitespace-nowrap"}`}
                   >
@@ -221,7 +246,30 @@ export function ProgressSectionCard({
 
                   {hasSchedule ? (
                     <div className="flex-1 relative h-8">
-                      {range ? (
+                      {range && delivery ? (
+                        <>
+                          <div className="absolute inset-y-0" style={{ left: `${range.left * 100}%`, width: `${range.width * 100}%`, minWidth: 48 }}>
+                            <button
+                              type="button"
+                              onClick={() => setDeliveryStageId(stage.id)}
+                              title="클릭하여 납품 입력"
+                              className={`absolute inset-0 rounded-full border text-[10px] font-semibold whitespace-nowrap ${dBarClass}`}
+                            >
+                              {dBarText}
+                            </button>
+                          </div>
+                          <span
+                            className="absolute top-1/2 -translate-y-1/2 text-[11px] text-text-muted whitespace-nowrap tabular-nums pointer-events-none"
+                            style={
+                              range.left + range.width > 0.62
+                                ? { right: `${(1 - range.left) * 100}%`, marginRight: 6 }
+                                : { left: `${(range.left + range.width) * 100}%`, marginLeft: 6 }
+                            }
+                          >
+                            {dLabel ? <b className="text-text">{dLabel}</b> : `${formatMonthDay(stage.start_date!)} ~ ${formatMonthDay(stage.end_date!)} (${range.days}일)`}
+                          </span>
+                        </>
+                      ) : range ? (
                         <>
                           <div
                             className="absolute inset-y-0"
@@ -274,6 +322,18 @@ export function ProgressSectionCard({
                           <span className="text-[11px] text-text-muted hover:text-primary">기간을 설정해주세요</span>
                         </div>
                       )}
+                    </div>
+                  ) : delivery ? (
+                    <div className="flex-1 relative h-6 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setDeliveryStageId(stage.id)}
+                        title="클릭하여 납품 입력"
+                        className={`h-6 min-w-[5rem] flex-1 rounded-lg border text-[10px] font-semibold ${dBarClass}`}
+                      >
+                        {dBarText}
+                      </button>
+                      {dLabel && <span className="shrink-0 text-[11px] font-bold tabular-nums">{dLabel}</span>}
                     </div>
                   ) : (
                     <div className="flex-1 relative h-6">
@@ -404,32 +464,30 @@ export function ProgressSectionCard({
           </button>
         </form>
       ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowAddForm(true)}
-            disabled={atMax}
-            className="flex items-center gap-1 text-xs border border-dashed border-border rounded-lg px-3 py-2 text-text-muted hover:bg-bg hover:text-text disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus size={14} />
-            항목 추가 ({count}/{MAX_PROGRESS_STAGES})
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowDelivery((v) => !v)}
-            aria-expanded={showDelivery}
-            className={`flex items-center gap-1 text-xs border border-dashed rounded-lg px-3 py-2 hover:bg-bg hover:text-text ${
-              showDelivery ? "border-primary text-primary" : "border-border text-text-muted"
-            }`}
-          >
-            <PackageCheck size={14} aria-hidden />
-            납품
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowAddForm(true)}
+          disabled={atMax}
+          className="flex items-center gap-1 text-xs border border-dashed border-border rounded-lg px-3 py-2 text-text-muted hover:bg-bg hover:text-text disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Plus size={14} />
+          항목 추가 ({count}/{MAX_PROGRESS_STAGES})
+        </button>
       )}
-      {showDelivery && <ProjectDeliveryPanel projectId={project.id} />}
 
       {error && <p className="text-xs text-danger mt-2">{error}</p>}
+
+      {deliveryStageId !== null && (stages ?? []).some((s) => s.id === deliveryStageId) && (
+        <DeliveryDialog
+          projectId={project.id}
+          stage={(stages ?? []).find((s) => s.id === deliveryStageId)!}
+          onClose={() => setDeliveryStageId(null)}
+          onChanged={() => {
+            loadStages();
+            loadDeliveries();
+          }}
+        />
+      )}
     </div>
   );
 }

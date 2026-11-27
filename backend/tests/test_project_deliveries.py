@@ -72,3 +72,52 @@ def test_delivery_stats_year_and_excel(client, db, make_user, auth_headers):
     assert res.status_code == 200
     ws = openpyxl.load_workbook(BytesIO(res.content)).active
     assert ws.cell(row=1, column=1).value == "프로젝트" and ws.cell(row=2, column=1).value == "RF 보드"
+
+
+def test_delivery_stage_complete_split_edit_and_cancel(client, db, make_user, auth_headers):
+    from app.models.project_progress import ProjectProgressStage
+
+    me = make_user(role=UserRole.employee)
+    h = auth_headers(me)
+    c = Client(name="한솔전자", created_by=me.id)
+    db.add(c)
+    db.flush()
+    p = _project(db, me, "RF 보드", c)
+    stage = ProjectProgressStage(project_id=p.id, name="납품", order_index=1)
+    other = ProjectProgressStage(project_id=p.id, name="생산", order_index=2)
+    db.add_all([stage, other])
+    db.flush()
+    today = date.today()
+    url = f"/api/projects/{p.id}/progress-stages/{stage.id}/delivery-status"
+
+    # 납품 기록이 없으면 완료할 수 없다
+    assert client.put(url, json={"completed": True}, headers=h).status_code == 400
+    # 이름이 "납품"이 아닌 항목에는 쓸 수 없다
+    assert client.put(f"/api/projects/{p.id}/progress-stages/{other.id}/delivery-status", json={"completed": True}, headers=h).status_code == 400
+
+    # 분할 납품: 두 번 기록한 뒤 완료
+    d1 = client.post(f"/api/projects/{p.id}/deliveries", json={"delivered_on": (today - timedelta(days=5)).isoformat(), "quantity": 100}, headers=h).json()
+    d2 = client.post(f"/api/projects/{p.id}/deliveries", json={"delivered_on": (today - timedelta(days=1)).isoformat(), "quantity": 150}, headers=h).json()
+    res = client.put(url, json={"completed": True}, headers=h)
+    assert res.status_code == 200, res.text
+    assert res.json()["progress_percent"] == 100 and res.json()["completed_on"] == (today - timedelta(days=1)).isoformat()
+
+    # 완료 뒤 기록을 고치면 완료일이 마지막 납품일을 따라간다
+    client.put(f"/api/projects/{p.id}/deliveries/{d2['id']}", json={"delivered_on": today.isoformat(), "quantity": 150}, headers=h)
+    db.expire_all()
+    assert db.get(ProjectProgressStage, stage.id).completed_on == today
+
+    # 마지막 기록을 지워도 이전 기록이 남아 있으면 완료 유지, 모두 지우면 미완료로 되돌아간다
+    client.delete(f"/api/projects/{p.id}/deliveries/{d2['id']}", headers=h)
+    db.expire_all()
+    assert db.get(ProjectProgressStage, stage.id).progress_percent == 100
+    client.delete(f"/api/projects/{p.id}/deliveries/{d1['id']}", headers=h)
+    db.expire_all()
+    assert db.get(ProjectProgressStage, stage.id).progress_percent == 0
+
+    # 완료 취소: 기록은 남고 항목만 미완료
+    client.post(f"/api/projects/{p.id}/deliveries", json={"delivered_on": today.isoformat(), "quantity": 10}, headers=h)
+    client.put(url, json={"completed": True}, headers=h)
+    res = client.put(url, json={"completed": False}, headers=h)
+    assert res.json()["progress_percent"] == 0 and res.json()["completed_on"] is None
+    assert client.get(f"/api/projects/{p.id}/deliveries", headers=h).json()["total_count"] == 1

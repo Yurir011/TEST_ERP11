@@ -14,6 +14,10 @@ class DeliveryIn(BaseModel):
         return (v or "").strip()[:300] or None
 
 
+class DeliveryStatusIn(BaseModel):
+    completed: bool
+
+
 class DeliveryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

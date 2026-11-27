@@ -148,8 +148,8 @@ export function ProposalFormPage() {
   }, [isEdit, isCopy]);
 
   // 프로젝트 고르기: 회차 탭이 있는 프로젝트는 한 줄로 묶어 보여 주고, 고른 뒤 [회차]에서 회차를 지정한다.
-  // 끝난·폐기된 프로젝트는 고르는 목록에서 빼되, 이미 고른 것(수정 중인 품의서)은 남긴다.
-  const selectable = (p: Project) => (p.status !== "completed" && p.status !== "discarded") || String(p.id) === projectId;
+  // 완료된 프로젝트도 고를 수 있다 (사후·추가 구매). 폐기된 프로젝트만 빼되, 이미 고른 것(수정 중인 품의서)은 남긴다.
+  const selectable = (p: Project) => p.status !== "discarded" || String(p.id) === projectId;
   const groupKey = (p: Project) => (p.series_id !== null ? `s${p.series_id}` : `p${p.id}`);
   const groupMembers = (key: string) =>
     projects.filter((p) => groupKey(p) === key).sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0) || a.id - b.id);
@@ -342,7 +342,7 @@ export function ProposalFormPage() {
               {projectGroups.map(({ key, rep }) => (
                 <option key={key} value={key}>
                   {rep.name} · {rep.client_name}
-                  {rep.series_id === null ? ` (${PROJECT_STATUS_LABELS[rep.status]})` : ""}
+                  {rep.series_id === null || rep.status === "completed" ? ` (${PROJECT_STATUS_LABELS[rep.status]})` : ""}
                 </option>
               ))}
             </select>

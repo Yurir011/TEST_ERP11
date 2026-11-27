@@ -136,7 +136,7 @@ function StageChevrons({ stages, color }: { stages: ProgressStage[]; color: stri
                   : `polygon(0 0, calc(100% - ${NOTCH}px) 0, 100% 50%, calc(100% - ${NOTCH}px) 100%, 0 100%, ${NOTCH}px 50%)`,
               }}
             >
-              {s.progress_percent}%
+              {s.name.trim() === "납품" ? (done ? "완료" : "미완료") : `${s.progress_percent}%`}
             </div>
             <div className={`mt-1.5 truncate text-center text-xs ${i === currentIdx ? "font-bold text-text" : "text-text-muted"}`} title={s.name}>
               {s.name}
