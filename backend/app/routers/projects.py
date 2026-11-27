@@ -109,24 +109,46 @@ def progress_overview(db: Session = Depends(get_db), current_user: User = Depend
         db.query(Project)
         .options(joinedload(Project.client), selectinload(Project.progress_stages), selectinload(Project.purchase_steps))
         # 새 프로젝트는 견적 상태·진행률 0% 로 시작하므로, 견적도 함께 보여 줘야 등록 즉시 카드가 생긴다.
-        .filter(Project.status.in_([ProjectStatus.estimate, ProjectStatus.in_progress]))
+        # 회차 묶음은 완료 상태인 회차도 후보로 읽는다(아래 "지금 진행 중" 규칙으로 거른다).
+        .filter(Project.status.in_([ProjectStatus.estimate, ProjectStatus.in_progress, ProjectStatus.completed]))
         .all()
     )
-    # 같은 묶음(회차)의 프로젝트는 카드 하나로 합친다: 진행 중인 회차(여럿이면 앞 회차), 없으면 가장 최근 회차가 대표.
-    # (탭 추가로 회차가 늘어도 첫 화면 카드는 늘지 않는다. 목록의 합치기와 같은 규칙)
     info = _round_info(db, projects)
+    today = date.today()
+
+    def _active(p: Project) -> bool:
+        # 지금 진행 중: 진행률이 100 미만이거나 진행 기간 안에 있으면 (둘 중 하나만 맞아도). 완료 처리한 회차는 제외.
+        if p.status == ProjectStatus.completed:
+            return False
+        if p.start_date is not None and p.start_date > today:
+            return False  # 진행 예정: 시작일이 되면 그래프에 올린다
+        in_period = (p.start_date is None or p.start_date <= today) and (p.end_date is not None and today <= p.end_date)
+        return p.progress_percent < 100 or in_period
+
+    def _in_period(p: Project) -> bool:
+        return p.start_date is not None and p.end_date is not None and p.start_date <= today <= p.end_date
+
+    # 같은 묶음(회차)의 프로젝트는 카드 하나로 합친다. 대표는 지금 진행 중인 회차 중에서
+    # 기간 안에 있는 것 > 진행 상태인 것 > 앞 회차 순으로 고르고, 진행 중인 회차가 없으면 카드를 만들지 않는다.
     chosen: dict[int, Project] = {}
+    series_ids: set[int] = set()
     for p in sorted(projects, key=lambda x: (info.get(x.id, (0, 0))[0], x.id)):
         if p.series_id is None or p.id not in info:
             continue
+        series_ids.add(p.series_id)
+        if not _active(p):
+            continue
         cur = chosen.get(p.series_id)
-        if cur is None:
-            chosen[p.series_id] = p
-        elif cur.status != ProjectStatus.in_progress:
-            # 지금 대표가 진행 중이 아니면: 진행 중인 회차가 나오면 교체하고, 둘 다 아니면 더 최근 회차로 교체
+        if cur is None or (not _in_period(cur) and _in_period(p)):
             chosen[p.series_id] = p
     keep_ids = {c.id for c in chosen.values()}
-    projects = [p for p in projects if p.series_id is None or p.id not in info or p.id in keep_ids]
+    projects = [
+        p
+        for p in projects
+        if (p.series_id is None or p.id not in info)
+        and p.status in (ProjectStatus.estimate, ProjectStatus.in_progress)
+        or p.id in keep_ids
+    ]
     projects.sort(key=lambda p: (p.end_date is None, p.end_date or date.max, p.id))
     logger.debug(f"[Projects] 진행 현황 조회: 카드 {len(projects)}건 (회차 묶음 {len(chosen)}개 합침), by={current_user.id}")
     return [

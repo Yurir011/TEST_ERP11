@@ -1,5 +1,5 @@
 """프로젝트 메인 화면용 진행 현황: 진행 중·견적(막 등록한 0%) 프로젝트만, 마감 임박순."""
-from datetime import date
+from datetime import date, timedelta
 
 from app.models.client import Client
 from app.models.project import Project, ProjectStatus
@@ -47,11 +47,18 @@ def test_progress_overview_merges_rounds_into_one_card(client, db, make_user, au
     card = next(r for r in rows if r["name"] == "중계기")
     assert card["id"] == r2.id and card["round_no"] == 2 and card["round_total"] == 3  # 진행 중인 회차가 대표
 
-    # 진행 중인 회차가 없으면 가장 최근 회차가 대표
+    # 진행 상태가 아니어도 시작했고 100% 미만이면 활성: 앞 회차가 대표
     r2.status = ProjectStatus.estimate
     db.flush()
     rows = client.get("/api/projects/progress-overview", headers=auth_headers(me)).json()
-    assert next(r for r in rows if r["name"] == "중계기")["id"] == r3.id
+    assert next(r for r in rows if r["name"] == "중계기")["id"] == r2.id
+
+    # 시작 전(진행 예정) 회차는 시작일이 되기 전엔 그래프에 올리지 않고, 활성 회차가 없으면 카드도 없다
+    r2.status = ProjectStatus.completed
+    r3.start_date = date.today() + timedelta(days=30)
+    db.flush()
+    rows = client.get("/api/projects/progress-overview", headers=auth_headers(me)).json()
+    assert [r for r in rows if r["name"] == "중계기"] == []
 
 
 def test_overview_merges_rounds_of_different_years_and_prefers_in_progress(client, db, make_user, auth_headers):
