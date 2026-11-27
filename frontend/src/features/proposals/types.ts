@@ -76,6 +76,7 @@ export interface Proposal {
   vendor_name?: string | null; // 거래처명 (구매 품의서)
   project_id?: number | null; // 속한 프로젝트 (없으면 일반 구매)
   project_name?: string | null;
+  project_round?: string | null; // 회차 탭이 있는 프로젝트에서 지정한 회차 이름
   amount?: number | null; // 금액 (공급가액)
   currency?: "KRW" | "USD" | "JPY";
   settle_amount?: number | null; // 외화 구매의 실결제 원화 금액(제반 비용 포함, 수기 입력). amount 는 참고용

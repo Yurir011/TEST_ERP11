@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload, object_session
 
+from app.services.project_rounds import round_info
 from app.logging_config import get_logger
 from app.models.approval_step import ApprovalStep, ApprovalStepStatus, ApprovalTargetType
 from app.models.payment import Payment, PaymentMethod
@@ -70,6 +71,17 @@ def _payment_out(p: Payment) -> ProposalPaymentOut:
     return ProposalPaymentOut(id=p.id, payment_date=p.payment_date, method=method, account=account, amount=p.amount)
 
 
+def _project_round(session, p: Proposal) -> str | None:
+    """지정한 프로젝트가 회차 묶음(2개 이상)에 속하면 그 회차 이름 (직접 지은 이름이 있으면 그것, 없으면 "N회차")."""
+    proj = p.project
+    if session is None or proj is None or proj.series_id is None:
+        return None
+    no, total = round_info(session, [proj]).get(proj.id, (None, 0))
+    if no is None or total < 2:
+        return None
+    return (proj.round_label or "").strip() or f"{no}회차"
+
+
 def _to_out(p: Proposal) -> ProposalOut:
     session = object_session(p)
     payable_total, payments = payment_summary(session, p) if session is not None else (None, [])
@@ -83,6 +95,7 @@ def _to_out(p: Proposal) -> ProposalOut:
         vendor_name=p.vendor_name,
         project_id=p.project_id,
         project_name=p.project.name if p.project is not None else None,
+        project_round=_project_round(session, p),
         amount=float(p.amount) if p.amount is not None else None,
         currency=p.currency,
         settle_amount=p.settle_amount,

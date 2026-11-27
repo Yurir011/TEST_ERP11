@@ -305,7 +305,7 @@ export function ProposalDetailModal({
               <>
                 <tr>
                   <th scope="row" className={TH}>프로젝트</th>
-                  <td className={TD}>{proposal.project_name || "일반"}</td>
+                  <td className={TD}>{proposal.project_name ? `${proposal.project_name}${proposal.project_round ? ` · ${proposal.project_round}` : ""}` : "일반"}</td>
                   <th scope="row" className={TH}>금액</th>
                   <td className={`${TD} font-bold tabular-nums`}>
                     {editingAmount ? (

@@ -155,6 +155,7 @@ class ProposalOut(BaseModel):
     vendor_name: str | None = None
     project_id: int | None = None
     project_name: str | None = None
+    project_round: str | None = None  # 프로젝트에 회차 탭이 있을 때 지정한 회차 이름 (직접 지은 이름 또는 "N회차")
     amount: float | None = None
     currency: str = "KRW"
     settle_amount: int | None = None  # 외화 구매의 실결제 원화 금액

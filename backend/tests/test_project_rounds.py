@@ -125,3 +125,27 @@ def test_tab_add_on_last_year_project_still_makes_tabs_and_round_can_be_deleted(
     assert client.get(f"/api/projects/{new['id']}", headers=headers).status_code == 404
     # 남은 회차는 단독이 되었으므로 폐기 전에는 삭제할 수 없다
     assert client.delete(f"/api/projects/{src['id']}", headers=headers).status_code == 400
+
+
+def test_proposal_shows_chosen_project_round(client, db, make_user, make_client, auth_headers):
+    """품의서에서 회차를 지정한 프로젝트는 응답에 회차 이름이 같이 온다 (회차 묶음이 아니면 비어 있다)."""
+    headers = auth_headers(make_user())
+    c = make_client(name="거래처")
+    year = date.today().year
+    r1 = _create(client, headers, c.id, "연차 과제", f"{year}-01-01")
+    r2 = _create(client, headers, c.id, "연차 과제", f"{year + 1}-01-01", from_project_id=r1["id"], link_series=True)
+    solo = _create(client, headers, c.id, "단독", f"{year}-03-01")
+    client.put(f"/api/projects/{r2['id']}/round-label", json={"label": "3년차"}, headers=headers)
+
+    def propose(pid):
+        res = client.post(
+            "/api/proposals", headers=headers,
+            json={"kind": "구매", "title": "부품", "topic": "부품", "content": "구매", "issue_date": f"{year}-11-20",
+                  "amount": 1000, "project_id": pid, "is_final_decision": True},
+        )
+        assert res.status_code == 201, res.text
+        return res.json()
+
+    assert propose(r1["id"])["project_round"] == "1회차"
+    assert propose(r2["id"])["project_round"] == "3년차"
+    assert propose(solo["id"])["project_round"] is None

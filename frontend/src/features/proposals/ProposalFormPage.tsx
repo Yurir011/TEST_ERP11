@@ -8,6 +8,7 @@ import { useAuth } from "../../context/useAuth";
 import { ApiError, apiGet, apiPost, apiPut, apiUpload } from "../../lib/api";
 import { logDebug, logError } from "../../lib/logger";
 import { PURCHASE_KIND } from "./purchaseFlow";
+import { roundName } from "../projects/ProjectRoundTabs";
 import { PROJECT_STATUS_LABELS, type Project } from "../projects/types";
 import { ClientCombobox } from "../../components/ui/ClientCombobox";
 import type { Client } from "../clients/types";
@@ -140,11 +141,29 @@ export function ProposalFormPage() {
   // 진행 중인 프로젝트 목록 (프로젝트 관리). 수정 중인 품의서가 이미 고른 프로젝트는 끝났더라도 목록에 남긴다.
   useEffect(() => {
     apiGet<Project[]>("/api/projects")
-      .then((list) => setProjects(list.filter((p) => (p.status !== "completed" && p.status !== "discarded") || String(p.id) === projectId)))
+      .then(setProjects) // 전체를 받아 두고, 고를 수 있는 프로젝트·회차는 아래에서 추린다
       .catch((err) => logError("Proposals", "프로젝트 목록 조회 실패", err));
     // 화면이 열릴 때와 수정 불러오기로 선택값이 정해질 때 한 번씩 다시 조회한다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, isCopy]);
+
+  // 프로젝트 고르기: 회차 탭이 있는 프로젝트는 한 줄로 묶어 보여 주고, 고른 뒤 [회차]에서 회차를 지정한다.
+  // 끝난·폐기된 프로젝트는 고르는 목록에서 빼되, 이미 고른 것(수정 중인 품의서)은 남긴다.
+  const selectable = (p: Project) => (p.status !== "completed" && p.status !== "discarded") || String(p.id) === projectId;
+  const groupKey = (p: Project) => (p.series_id !== null ? `s${p.series_id}` : `p${p.id}`);
+  const groupMembers = (key: string) =>
+    projects.filter((p) => groupKey(p) === key).sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0) || a.id - b.id);
+  /** 묶음의 대표 회차: 진행 중인 회차, 없으면 고를 수 있는 가장 최근 회차 */
+  const representative = (members: Project[]) => {
+    const ok = members.filter(selectable);
+    return ok.find((m) => m.status === "in_progress") ?? ok[ok.length - 1];
+  };
+  const selectedProject = projects.find((p) => String(p.id) === projectId) ?? null;
+  const selectedKey = selectedProject ? groupKey(selectedProject) : "";
+  const projectGroups = Array.from(new Set(projects.filter(selectable).map(groupKey)))
+    .map((key) => ({ key, rep: representative(groupMembers(key)) }))
+    .filter((g): g is { key: string; rep: Project } => !!g.rep);
+  const roundOptions = selectedKey ? groupMembers(selectedKey) : [];
 
   // 거래처 검색: 등록된 거래처를 불러온다. 등록되지 않은 거래처는 이름을 직접 입력할 수 있다.
   useEffect(() => {
@@ -312,17 +331,41 @@ export function ProposalFormPage() {
             </label>
             <select
               id="proposal-project"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
+              value={selectedKey}
+              onChange={(e) => {
+                const g = projectGroups.find((x) => x.key === e.target.value);
+                setProjectId(g ? String(g.rep.id) : "");
+              }}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
             >
               <option value="">일반 (프로젝트와 상관없는 구매)</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} · {p.client_name} ({PROJECT_STATUS_LABELS[p.status]})
+              {projectGroups.map(({ key, rep }) => (
+                <option key={key} value={key}>
+                  {rep.name} · {rep.client_name}
+                  {rep.series_id === null ? ` (${PROJECT_STATUS_LABELS[rep.status]})` : ""}
                 </option>
               ))}
             </select>
+            {roundOptions.length > 1 && (
+              <div className="mt-2">
+                <label className="block text-xs text-text-muted mb-1.5" htmlFor="proposal-round">
+                  회차
+                </label>
+                <select
+                  id="proposal-round"
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-primary bg-bg"
+                >
+                  {roundOptions.map((r) => (
+                    <option key={r.id} value={r.id} disabled={!selectable(r)}>
+                      {roundName(r)}
+                      {r.start_date || r.end_date ? ` · ${r.start_date ?? ""} ~ ${r.end_date ?? ""}` : ""} ({PROJECT_STATUS_LABELS[r.status]})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {isPurchase && (
